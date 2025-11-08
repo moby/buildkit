@@ -2,13 +2,13 @@ package containerd
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func NewContentStore(store content.Store, ns string) *Store {
@@ -44,7 +44,7 @@ func (c *Store) Walk(ctx context.Context, fn content.WalkFunc, filters ...string
 }
 
 func (c *Store) Delete(ctx context.Context, dgst digest.Digest) error {
-	return errors.Errorf("contentstore.Delete usage is forbidden")
+	return errors.New("contentstore.Delete usage is forbidden")
 }
 
 func (c *Store) Status(ctx context.Context, ref string) (content.Status, error) {

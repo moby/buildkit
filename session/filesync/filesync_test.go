@@ -68,7 +68,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 		}
 
 		if _, err := os.ReadFile(filepath.Join(destDir, "foo")); err == nil {
-			return errors.Errorf("expected error reading foo")
+			return errors.New("expected error reading foo")
 		}
 
 		dt, err := os.ReadFile(filepath.Join(destDir, "bar"))

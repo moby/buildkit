@@ -1,10 +1,10 @@
 package instructions
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/moby/buildkit/util/suggest"
-	"github.com/pkg/errors"
 )
 
 // FlagType is the type of the build flag
@@ -88,7 +88,7 @@ func (bf *BFlags) AddStrings(name string) *Flag {
 // Note, any error will be generated when Parse() is called (see Parse).
 func (bf *BFlags) addFlag(name string, flagType FlagType) *Flag {
 	if _, ok := bf.flags[name]; ok {
-		bf.Err = errors.Errorf("Duplicate flag defined: %s", name)
+		bf.Err = fmt.Errorf("Duplicate flag defined: %s", name)
 		return nil
 	}
 
@@ -123,7 +123,7 @@ func (bf *BFlags) Used() []string {
 func (fl *Flag) IsTrue() bool {
 	if fl.flagType != boolType {
 		// Should never get here
-		err := errors.Errorf("Trying to use IsTrue on a non-boolean: %s", fl.name)
+		err := fmt.Errorf("Trying to use IsTrue on a non-boolean: %s", fl.name)
 		panic(err)
 	}
 	return fl.Value == "true"
@@ -144,7 +144,7 @@ func (bf *BFlags) Parse() error {
 	// go ahead and bubble it back up here since we didn't do it
 	// earlier in the processing
 	if bf.Err != nil {
-		return errors.Wrap(bf.Err, "error setting up flags")
+		return fmt.Errorf("error setting up flags"+": %w", bf.Err)
 	}
 
 	for _, a := range bf.Args {
@@ -159,7 +159,7 @@ func (bf *BFlags) Parse() error {
 			return nil
 		}
 		if !strings.HasPrefix(a, "--") {
-			return errors.Errorf("arg should start with -- : %s", a)
+			return fmt.Errorf("arg should start with -- : %s", a)
 		}
 
 		flagName, value, hasValue := strings.Cut(a, "=")
@@ -167,12 +167,12 @@ func (bf *BFlags) Parse() error {
 
 		flag, ok := bf.flags[arg]
 		if !ok {
-			err := errors.Errorf("unknown flag: %s", flagName)
+			err := fmt.Errorf("unknown flag: %s", flagName)
 			return suggest.WrapError(err, arg, allFlags(bf.flags), true)
 		}
 
 		if _, ok = bf.used[arg]; ok && flag.flagType != stringsType {
-			return errors.Errorf("duplicate flag specified: %s", flagName)
+			return fmt.Errorf("duplicate flag specified: %s", flagName)
 		}
 
 		bf.used[arg] = flag
@@ -181,7 +181,7 @@ func (bf *BFlags) Parse() error {
 		case boolType:
 			// value == "" is only ok if no "=" was specified
 			if hasValue && value == "" {
-				return errors.Errorf("missing a value on flag: %s", flagName)
+				return fmt.Errorf("missing a value on flag: %s", flagName)
 			}
 
 			switch strings.ToLower(value) {
@@ -190,18 +190,18 @@ func (bf *BFlags) Parse() error {
 			case "false":
 				flag.Value = "false"
 			default:
-				return errors.Errorf("expecting boolean value for flag %s, not: %s", flagName, value)
+				return fmt.Errorf("expecting boolean value for flag %s, not: %s", flagName, value)
 			}
 
 		case stringType:
 			if !hasValue {
-				return errors.Errorf("missing a value on flag: %s", flagName)
+				return fmt.Errorf("missing a value on flag: %s", flagName)
 			}
 			flag.Value = value
 
 		case stringsType:
 			if !hasValue {
-				return errors.Errorf("missing a value on flag: %s", flagName)
+				return fmt.Errorf("missing a value on flag: %s", flagName)
 			}
 			flag.StringValues = append(flag.StringValues, value)
 

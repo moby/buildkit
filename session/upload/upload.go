@@ -2,11 +2,12 @@ package upload
 
 import (
 	"context"
+	"errors"
 	io "io"
 	"net/url"
 
 	"github.com/moby/buildkit/session"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -27,7 +28,7 @@ func New(ctx context.Context, c session.Caller, url *url.URL) (*Upload, error) {
 
 	cc, err := client.Pull(ctx)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	return &Upload{cc: cc}, nil
@@ -45,12 +46,12 @@ func (u *Upload) WriteTo(w io.Writer) (int64, error) {
 			if errors.Is(err, io.EOF) {
 				return n, nil
 			}
-			return n, errors.WithStack(err)
+			return n, pkgerrors.WithStack(err)
 		}
 		nn, err := w.Write(bm.Data)
 		n += int64(nn)
 		if err != nil {
-			return n, errors.WithStack(err)
+			return n, pkgerrors.WithStack(err)
 		}
 	}
 }

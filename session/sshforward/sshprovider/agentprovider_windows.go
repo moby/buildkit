@@ -3,12 +3,12 @@
 package sshprovider
 
 import (
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -28,7 +28,7 @@ func getFallbackAgentPath() (string, error) {
 	if err != nil {
 		msg := "Windows OpenSSH agent not available at %s." +
 			" Enable the SSH agent service or set SSH_AUTH_SOCK."
-		return "", errors.Errorf(msg, path)
+		return "", fmt.Errorf(msg, path)
 	}
 
 	_ = windows.CloseHandle(handle)

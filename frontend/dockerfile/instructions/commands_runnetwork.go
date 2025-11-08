@@ -1,7 +1,8 @@
 package instructions
 
 import (
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 )
 
 type NetworkMode = string
@@ -40,12 +41,12 @@ func runNetworkPreHook(cmd *RunCommand, req parseRequest) error {
 func runNetworkPostHook(cmd *RunCommand, req parseRequest) error {
 	st := cmd.getExternalValue(networkKey).(*networkState)
 	if st == nil {
-		return errors.Errorf("no network state")
+		return errors.New("no network state")
 	}
 
 	value := st.flag.Value
 	if !isValidNetwork(value) {
-		return errors.Errorf("invalid network mode %q", value)
+		return fmt.Errorf("invalid network mode %q", value)
 	}
 
 	st.networkMode = value

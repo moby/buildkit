@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -62,7 +62,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/sys/userns"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -242,7 +242,7 @@ func main() {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 		cfg, err := config.LoadFile(c.GlobalString("config"))
 		if err != nil {
@@ -261,7 +261,7 @@ func main() {
 		case "text", "":
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		default:
-			return errors.Errorf("unsupported log type %q", logFormat)
+			return fmt.Errorf("unsupported log type %q", logFormat)
 		}
 
 		if cfg.Debug {
@@ -317,7 +317,7 @@ func main() {
 		cfg.Root = root
 
 		if err := os.MkdirAll(root, 0700); err != nil {
-			return errors.Wrapf(err, "failed to create %s", root)
+			return fmt.Errorf("failed to create %s: %w", root, err)
 		}
 
 		// Stop if we are registering or unregistering against Windows SCM.
@@ -333,10 +333,10 @@ func main() {
 		lock := flock.New(lockPath)
 		locked, err := lock.TryLock()
 		if err != nil {
-			return errors.Wrapf(err, "could not lock %s", lockPath)
+			return fmt.Errorf("could not lock %s: %w", lockPath, err)
 		}
 		if !locked {
-			return errors.Errorf("could not lock %s, another instance running?", lockPath)
+			return fmt.Errorf("could not lock %s, another instance running?", lockPath)
 		}
 		defer func() {
 			lock.Unlock()
@@ -353,7 +353,7 @@ func main() {
 		if c.GlobalBool("save-cache-debug") {
 			db, err := cachedigest.NewDB(filepath.Join(cfg.Root, "cache-debug.db"))
 			if err != nil {
-				return errors.Wrap(err, "failed to create cache debug db")
+				return fmt.Errorf("failed to create cache debug db: %w", err)
 			}
 			cachedigest.SetDefaultDB(db)
 			defer db.Close()
@@ -381,7 +381,7 @@ func main() {
 				case "device":
 					cfg.Entitlements = append(cfg.Entitlements, e)
 				default:
-					return errors.Errorf("invalid entitlement : %s", e)
+					return fmt.Errorf("invalid entitlement : %s", e)
 				}
 			}
 		}
@@ -421,7 +421,7 @@ func main() {
 				errs = append(errs, e)
 			}
 		}
-		return stderrors.Join(errs...)
+		return errors.Join(errs...)
 	}
 
 	profiler.Attach(app)
@@ -689,7 +689,7 @@ func groupToGID(group string) (int, error) {
 func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls.Config, warnTLS bool) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
-		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
+		return nil, fmt.Errorf("address %s does not contain proto, you meant unix://%s ?",
 			addr, addr)
 	}
 	proto := addrSlice[0]
@@ -719,7 +719,7 @@ func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls
 		}
 		return tls.NewListener(l, tlsConfig), nil
 	default:
-		return nil, errors.Errorf("addr %s not supported", addr)
+		return nil, fmt.Errorf("addr %s not supported", addr)
 	}
 }
 
@@ -754,7 +754,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	}
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not load server key pair")
+		return nil, fmt.Errorf("could not load server key pair: %w", err)
 	}
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{certificate},
@@ -764,7 +764,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 		certPool := x509.NewCertPool()
 		ca, err := os.ReadFile(caFile)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not read ca certificate")
+			return nil, fmt.Errorf("could not read ca certificate: %w", err)
 		}
 		// Append the client certificates from the CA
 		if ok := certPool.AppendCertsFromPEM(ca); !ok {
@@ -924,7 +924,7 @@ func attrMap(sl []string) (map[string]string, error) {
 	for _, v := range sl {
 		parts := strings.SplitN(v, "=", 2)
 		if len(parts) != 2 {
-			return nil, errors.Errorf("invalid value %s", v)
+			return nil, fmt.Errorf("invalid value %s", v)
 		}
 		m[parts[0]] = parts[1]
 	}
@@ -1011,7 +1011,7 @@ func runTraceController(p string, exp sdktrace.SpanExporter) error {
 	tracev1.RegisterTraceServiceServer(server, &traceCollector{exporter: exp})
 	l, err := getLocalListener(p, "")
 	if err != nil {
-		return errors.Wrap(err, "creating trace controller listener")
+		return fmt.Errorf("creating trace controller listener: %w", err)
 	}
 	go server.Serve(l)
 	return nil
@@ -1091,7 +1091,7 @@ func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 		return cdiCache, nil
 	}()
 	if err != nil {
-		return nil, errors.Wrapf(err, "CDI registry initialization failure")
+		return nil, fmt.Errorf("CDI registry initialization failure: %w", err)
 	}
 	return cdidevices.NewManager(cdiCache, cfg.AutoAllowed), nil
 }

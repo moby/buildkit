@@ -3,6 +3,7 @@ package oci
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const defaultHostname = "buildkitsandbox"
@@ -40,34 +41,34 @@ func makeHostsFile(stateDir string, extraHosts []executor.HostIP, idmap *user.Id
 		return "", func() {}, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	b := &bytes.Buffer{}
 	if _, err := b.Write([]byte(initHostsFile(hostname))); err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	for _, h := range extraHosts {
 		if _, err := b.Write(fmt.Appendf(nil, "%s\t%s\n", h.IP.String(), h.Host)); err != nil {
-			return "", nil, errors.WithStack(err)
+			return "", nil, pkgerrors.WithStack(err)
 		}
 	}
 
 	tmpPath := p + ".tmp"
 	if err := os.WriteFile(tmpPath, b.Bytes(), 0644); err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	if idmap != nil {
 		uid, gid := idmap.RootPair()
 		if err := os.Chown(tmpPath, uid, gid); err != nil {
-			return "", nil, errors.WithStack(err)
+			return "", nil, pkgerrors.WithStack(err)
 		}
 	}
 
 	if err := os.Rename(tmpPath, p); err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 	return p, func() {
 		os.RemoveAll(p)

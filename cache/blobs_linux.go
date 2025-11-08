@@ -5,6 +5,7 @@ package cache
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -16,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/overlay"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 var emptyDesc = ocispecs.Descriptor{}
@@ -40,7 +40,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			MediaType: mediaType, // most contentstore implementations just ignore this
 		}))
 	if err != nil {
-		return emptyDesc, false, errors.Wrap(err, "failed to open writer")
+		return emptyDesc, false, fmt.Errorf("failed to open writer"+": %w", err)
 	}
 
 	defer func() {
@@ -61,7 +61,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	}()
 
 	if err = cw.Truncate(0); err != nil {
-		return emptyDesc, false, errors.Wrap(err, "failed to truncate writer")
+		return emptyDesc, false, fmt.Errorf("failed to truncate writer"+": %w", err)
 	}
 
 	bufW := bufio.NewWriterSize(cw, 128*1024)
@@ -70,27 +70,27 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		dgstr := digest.SHA256.Digester()
 		compressed, err := compressorFunc(bufW, mediaType)
 		if err != nil {
-			return emptyDesc, false, errors.Wrap(err, "failed to get compressed stream")
+			return emptyDesc, false, fmt.Errorf("failed to get compressed stream"+": %w", err)
 		}
 		// Close ensure compressorFunc does some finalization works.
 		defer compressed.Close()
 		if err := overlay.WriteUpperdir(ctx, io.MultiWriter(compressed, dgstr.Hash()), upperdir, lower); err != nil {
-			return emptyDesc, false, errors.Wrap(err, "failed to write compressed diff")
+			return emptyDesc, false, fmt.Errorf("failed to write compressed diff"+": %w", err)
 		}
 		if err := compressed.Close(); err != nil {
-			return emptyDesc, false, errors.Wrap(err, "failed to close compressed diff writer")
+			return emptyDesc, false, fmt.Errorf("failed to close compressed diff writer"+": %w", err)
 		}
 		labels = map[string]string{
 			labelspkg.LabelUncompressed: dgstr.Digest().String(),
 		}
 	} else {
 		if err = overlay.WriteUpperdir(ctx, bufW, upperdir, lower); err != nil {
-			return emptyDesc, false, errors.Wrap(err, "failed to write diff")
+			return emptyDesc, false, fmt.Errorf("failed to write diff"+": %w", err)
 		}
 	}
 
 	if err := bufW.Flush(); err != nil {
-		return emptyDesc, false, errors.Wrap(err, "failed to flush diff")
+		return emptyDesc, false, fmt.Errorf("failed to flush diff"+": %w", err)
 	}
 	var commitopts []content.Opt
 	if labels != nil {
@@ -99,7 +99,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	dgst := cw.Digest()
 	if err := cw.Commit(ctx, 0, dgst, commitopts...); err != nil {
 		if !cerrdefs.IsAlreadyExists(err) {
-			return emptyDesc, false, errors.Wrap(err, "failed to commit")
+			return emptyDesc, false, fmt.Errorf("failed to commit"+": %w", err)
 		}
 	}
 	if err := cw.Close(); err != nil {
@@ -108,7 +108,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	cw = nil
 	cinfo, err := sr.cm.ContentStore.Info(ctx, dgst)
 	if err != nil {
-		return emptyDesc, false, errors.Wrap(err, "failed to get info from content store")
+		return emptyDesc, false, fmt.Errorf("failed to get info from content store"+": %w", err)
 	}
 	if cinfo.Labels == nil {
 		cinfo.Labels = make(map[string]string)
@@ -117,7 +117,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	if _, ok := cinfo.Labels[labelspkg.LabelUncompressed]; !ok {
 		cinfo.Labels[labelspkg.LabelUncompressed] = labels[labelspkg.LabelUncompressed]
 		if _, err := sr.cm.ContentStore.Update(ctx, cinfo, "labels."+labelspkg.LabelUncompressed); err != nil {
-			return emptyDesc, false, errors.Wrap(err, "error setting uncompressed label")
+			return emptyDesc, false, fmt.Errorf("error setting uncompressed label"+": %w", err)
 		}
 	}
 

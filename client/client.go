@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -19,7 +21,6 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/propagation"
@@ -155,7 +156,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, gopts...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
+		return nil, fmt.Errorf("failed to dial %q . make sure buildkitd is running: %w", address, err)
 	}
 
 	c := &Client{
@@ -316,7 +317,7 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	if opts.caCert != "" {
 		ca, err := os.ReadFile(opts.caCert)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not read ca certificate")
+			return nil, fmt.Errorf("could not read ca certificate"+": %w", err)
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(ca); !ok {
 			return nil, errors.New("failed to append ca certs")
@@ -331,7 +332,7 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	if opts.cert != "" || opts.key != "" {
 		cert, err := tls.LoadX509KeyPair(opts.cert, opts.key)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not read certificate/key")
+			return nil, fmt.Errorf("could not read certificate/key"+": %w", err)
 		}
 		cfg.Certificates = append(cfg.Certificates, cert)
 	}

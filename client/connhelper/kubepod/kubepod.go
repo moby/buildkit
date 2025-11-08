@@ -3,13 +3,14 @@ package kubepod
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"regexp"
 
 	"github.com/docker/cli/cli/connhelper/commandconn"
 	"github.com/moby/buildkit/client/connhelper"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -52,16 +53,16 @@ func SpecFromURL(u *url.URL) (*Spec, error) {
 		Container: q.Get("container"),
 	}
 	if sp.Namespace != "" && !validKubeIdentifier(sp.Namespace) {
-		return nil, errors.Errorf("unsupported namespace name: %q", sp.Namespace)
+		return nil, fmt.Errorf("unsupported namespace name: %q", sp.Namespace)
 	}
 	if sp.Pod == "" {
 		return nil, errors.New("url lacks pod name")
 	}
 	if !validKubeIdentifier(sp.Pod) {
-		return nil, errors.Errorf("unsupported pod name: %q", sp.Pod)
+		return nil, fmt.Errorf("unsupported pod name: %q", sp.Pod)
 	}
 	if sp.Container != "" && !validKubeIdentifier(sp.Container) {
-		return nil, errors.Errorf("unsupported container name: %q", sp.Container)
+		return nil, fmt.Errorf("unsupported container name: %q", sp.Container)
 	}
 	return &sp, nil
 }

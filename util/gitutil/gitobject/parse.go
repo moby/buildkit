@@ -5,13 +5,12 @@ import (
 	"crypto/sha1" //nolint:gosec // used for git object hashes
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 type GitObject struct {
@@ -49,7 +48,7 @@ func Parse(raw []byte) (*GitObject, error) {
 	obj := &GitObject{Headers: make(map[string][]string), Raw: raw}
 	lines := strings.Split(string(raw), "\n")
 	if len(lines) == 0 {
-		return nil, errors.Errorf("invalid empty git object")
+		return nil, errors.New("invalid empty git object")
 	}
 
 	isTag := bytes.HasPrefix(raw, []byte("object "))
@@ -131,7 +130,7 @@ func Parse(raw []byte) (*GitObject, error) {
 
 	for _, header := range requiredHeaders {
 		if _, ok := obj.Headers[header]; !ok {
-			return nil, errors.Errorf("invalid %s object: missing %s header", obj.Type, header)
+			return nil, fmt.Errorf("invalid %s object: missing %s header", obj.Type, header)
 		}
 	}
 
@@ -157,21 +156,21 @@ func (obj *GitObject) VerifyChecksum(sha string) error {
 	case 64:
 		hf = sha256.New
 	default:
-		return errors.Errorf("unsupported sha length %d", len(sha))
+		return fmt.Errorf("unsupported sha length %d", len(sha))
 	}
 	sum, err := obj.Checksum(hf)
 	if err != nil {
 		return err
 	}
 	if hexValue := hex.EncodeToString(sum); sha != hexValue {
-		return errors.Errorf("checksum mismatch: expected %s, got %s", sha, hexValue)
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", sha, hexValue)
 	}
 	return nil
 }
 
 func (obj *GitObject) ToCommit() (*Commit, error) {
 	if obj.Type != "commit" {
-		return nil, errors.Errorf("not a commit object")
+		return nil, errors.New("not a commit object")
 	}
 	c := &Commit{}
 	if trees, ok := obj.Headers["tree"]; ok && len(trees) > 0 {
@@ -192,7 +191,7 @@ func (obj *GitObject) ToCommit() (*Commit, error) {
 
 func (obj *GitObject) ToTag() (*Tag, error) {
 	if obj.Type != "tag" {
-		return nil, errors.Errorf("not a tag object")
+		return nil, errors.New("not a tag object")
 	}
 	t := &Tag{}
 	if objects, ok := obj.Headers["object"]; ok && len(objects) > 0 {

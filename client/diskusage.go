@@ -3,11 +3,11 @@ package client
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/pkg/errors"
 )
 
 type UsageInfo struct {
@@ -34,7 +34,7 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 	req := &controlapi.DiskUsageRequest{Filter: info.Filter, AgeLimit: int64(info.AgeLimit)}
 	resp, err := c.ControlClient().DiskUsage(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to call diskusage")
+		return nil, fmt.Errorf("failed to call diskusage"+": %w", err)
 	}
 
 	var du []*UsageInfo

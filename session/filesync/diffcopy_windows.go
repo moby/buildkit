@@ -4,7 +4,7 @@ package filesync
 
 import (
 	"github.com/Microsoft/go-winio"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 )
 
@@ -16,5 +16,5 @@ func sendDiffCopy(stream Stream, fs fsutil.FS, progress progressCb) error {
 	// exploited in any way.
 	winio.EnableProcessPrivileges([]string{winio.SeBackupPrivilege})
 	defer winio.DisableProcessPrivileges([]string{winio.SeBackupPrivilege})
-	return errors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress))
+	return pkgerrors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress))
 }

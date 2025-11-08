@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -52,7 +53,7 @@ func (p *policyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, error)
 	for {
 		max++
 		if max > 10 { // TODO: better loop detection
-			return false, errors.Errorf("too many policy requests")
+			return false, errors.New("too many policy requests")
 		}
 		resp, err := verifier.CheckPolicy(ctx, req)
 		if err != nil {
@@ -65,10 +66,10 @@ func (p *policyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, error)
 				LogName: metareq.LogName,
 			}
 			if metareq.Source.Identifier != source.Identifier {
-				return false, errors.Errorf("policy requested different source identifier: %q != %q", metareq.Source.Identifier, source.Identifier)
+				return false, fmt.Errorf("policy requested different source identifier: %q != %q", metareq.Source.Identifier, source.Identifier)
 			}
 			if err := mapsEqual(source.Attrs, metareq.Source.Attrs); err != nil {
-				return false, errors.Wrap(err, "policy requested different source attrs")
+				return false, fmt.Errorf("policy requested different source attrs"+": %w", err)
 			}
 			if metareq.ResolveMode != "" {
 				if strings.HasPrefix(metareq.Source.Identifier, "docker-image://") {
@@ -90,7 +91,7 @@ func (p *policyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, error)
 			}
 			resp, err := p.resolveSourceMetadata(ctx, metareq.Source, op, false)
 			if err != nil {
-				return false, errors.Wrap(err, "error resolving source metadata from policy request")
+				return false, fmt.Errorf("error resolving source metadata from policy request"+": %w", err)
 			}
 			req.Source = &gatewaypb.ResolveSourceMetaResponse{
 				Source: resp.Op,
@@ -106,13 +107,13 @@ func (p *policyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, error)
 
 		decision := resp.GetDecision()
 		if decision == nil {
-			return false, errors.Errorf("no decision in policy response")
+			return false, errors.New("no decision in policy response")
 		}
 		if decision.Action == spb.PolicyAction_CONVERT {
-			return false, errors.Errorf("convert action not yet supported")
+			return false, errors.New("convert action not yet supported")
 		}
 		if decision.Action != spb.PolicyAction_ALLOW {
-			return false, errors.Errorf("source %q not allowed by policy: action %s", source.Identifier, decision.Action.String())
+			return false, fmt.Errorf("source %q not allowed by policy: action %s", source.Identifier, decision.Action.String())
 		}
 		return ok, nil
 	}
@@ -120,15 +121,15 @@ func (p *policyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, error)
 
 func mapsEqual[K comparable, V comparable](a, b map[K]V) error {
 	if len(a) != len(b) {
-		return errors.Errorf("map length mismatch: %d != %d", len(a), len(b))
+		return fmt.Errorf("map length mismatch: %d != %d", len(a), len(b))
 	}
 	for k, v := range a {
 		vb, ok := b[k]
 		if !ok {
-			return errors.Errorf("key %v missing from second map", k)
+			return fmt.Errorf("key %v missing from second map", k)
 		}
 		if vb != v {
-			return errors.Errorf("value mismatch for key %v: %v != %v", k, v, vb)
+			return fmt.Errorf("value mismatch for key %v: %v != %v", k, v, vb)
 		}
 	}
 	return nil

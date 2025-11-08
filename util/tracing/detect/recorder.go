@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -152,7 +152,7 @@ func (r *TraceRecorder) ExportSpans(ctx context.Context, spans []sdktrace.ReadOn
 
 func (r *TraceRecorder) Shutdown(ctx context.Context) error {
 	// Initiate the shutdown of the gc loop.
-	r.shutdownGC(errors.WithStack(context.Canceled))
+	r.shutdownGC(pkgerrors.WithStack(context.Canceled))
 
 	// Wait for it to be done or the context is canceled.
 	select {

@@ -2,13 +2,13 @@ package config
 
 import (
 	"encoding"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/docker/go-units"
 	"github.com/moby/buildkit/util/disk"
-	"github.com/pkg/errors"
 )
 
 type Duration struct {
@@ -31,7 +31,7 @@ func (d *Duration) UnmarshalText(textb []byte) error {
 		return nil
 	}
 
-	return errors.Errorf("invalid duration %s", text)
+	return fmt.Errorf("invalid duration %s", text)
 }
 
 var _ encoding.TextUnmarshaler = &Duration{}
@@ -63,7 +63,7 @@ func (d *DiskSpace) UnmarshalText(textb []byte) error {
 		return nil
 	}
 
-	return errors.Errorf("invalid disk space %s", text)
+	return fmt.Errorf("invalid disk space %s", text)
 }
 
 const defaultCap int64 = 2e9 // 2GB

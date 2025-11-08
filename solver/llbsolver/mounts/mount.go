@@ -2,6 +2,7 @@ package mounts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +24,6 @@ import (
 	"github.com/moby/locker"
 	"github.com/moby/sys/user"
 	"github.com/moby/sys/userns"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 )
 
@@ -99,7 +99,7 @@ func (g *cacheRefGetter) getRefCacheDir(ctx context.Context, ref cache.Immutable
 	case pb.CacheSharingOpt_LOCKED:
 		return g.getRefCacheDirNoCache(ctx, key, ref, id, true)
 	default:
-		return nil, errors.Errorf("invalid cache sharing option: %s", sharing.String())
+		return nil, fmt.Errorf("invalid cache sharing option: %s", sharing.String())
 	}
 }
 
@@ -165,7 +165,7 @@ func (mm *MountManager) getSSHMountable(ctx context.Context, m *pb.Mount, g sess
 				return nil
 			}
 			if grpcerrors.Code(err) == codes.Unimplemented {
-				return errors.Errorf("no SSH key %q forwarded from the client", m.SSHOpt.ID)
+				return fmt.Errorf("no SSH key %q forwarded from the client", m.SSHOpt.ID)
 			}
 			return err
 		}
@@ -245,12 +245,12 @@ func (sm *sshMountInstance) IdentityMapping() *user.IdentityMapping {
 
 func (mm *MountManager) getSecretMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	if m.SecretOpt == nil {
-		return nil, errors.Errorf("invalid secret mount options")
+		return nil, errors.New("invalid secret mount options")
 	}
 
 	id := m.SecretOpt.ID
 	if id == "" {
-		return nil, errors.Errorf("secret ID missing from mount options")
+		return nil, errors.New("secret ID missing from mount options")
 	}
 	var dt []byte
 	var err error
@@ -289,7 +289,7 @@ type secretMountInstance struct {
 func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
 	dir, err := os.MkdirTemp("", "buildkit-secrets")
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create temp dir")
+		return nil, nil, fmt.Errorf("failed to create temp dir"+": %w", err)
 	}
 	cleanupDir := func() error {
 		return os.RemoveAll(dir)
@@ -317,7 +317,7 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
 
 	if err := mount.All([]mount.Mount{tmpMount}, dir); err != nil {
 		cleanupDir()
-		return nil, nil, errors.Wrap(err, "unable to setup secret mount")
+		return nil, nil, fmt.Errorf("unable to setup secret mount"+": %w", err)
 	}
 	sm.root = dir
 
@@ -369,7 +369,7 @@ func (sm *secretMountInstance) IdentityMapping() *user.IdentityMapping {
 
 func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef, g session.Group) (cache.MutableRef, error) {
 	if m.CacheOpt == nil {
-		return nil, errors.Errorf("missing cache mount options")
+		return nil, errors.New("missing cache mount options")
 	}
 	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing, g)
 }

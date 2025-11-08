@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,7 +10,6 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	rootlessmountopts "github.com/moby/buildkit/util/rootless/mountopts"
 	"github.com/moby/sys/userns"
-	"github.com/pkg/errors"
 )
 
 func (lm *localMounter) Mount() (string, error) {
@@ -52,20 +52,20 @@ func (lm *localMounter) Mount() (string, error) {
 
 	dest, err := os.MkdirTemp("", "buildkit-mount")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create temp dir")
+		return "", fmt.Errorf("failed to create temp dir"+": %w", err)
 	}
 
 	if isFile {
 		dest = filepath.Join(dest, "file")
 		if err := os.WriteFile(dest, []byte{}, 0644); err != nil {
 			os.RemoveAll(dest)
-			return "", errors.Wrap(err, "failed to create temp file")
+			return "", fmt.Errorf("failed to create temp file"+": %w", err)
 		}
 	}
 
 	if err := mount.All(lm.mounts, dest); err != nil {
 		os.RemoveAll(dest)
-		return "", errors.Wrapf(err, "failed to mount %s: %+v", dest, lm.mounts)
+		return "", fmt.Errorf("failed to mount %s: %+v: %w", dest, lm.mounts, err)
 	}
 	lm.target = dest
 	return dest, nil

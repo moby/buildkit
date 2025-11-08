@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strconv"
 
@@ -30,7 +31,6 @@ import (
 	policyimage "github.com/moby/policy-helpers/image"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // TODO: break apart containerd specifics like contentstore so the resolver
@@ -100,7 +100,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	case ResolverTypeRegistry:
 		imageIdentifier, ok := id.(*ImageIdentifier)
 		if !ok {
-			return nil, errors.Errorf("invalid image identifier %v", id)
+			return nil, fmt.Errorf("invalid image identifier %v", id)
 		}
 
 		if imageIdentifier.Platform != nil {
@@ -114,7 +114,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	case ResolverTypeOCILayout:
 		ociIdentifier, ok := id.(*OCIIdentifier)
 		if !ok {
-			return nil, errors.Errorf("invalid OCI layout identifier %v", id)
+			return nil, fmt.Errorf("invalid OCI layout identifier %v", id)
 		}
 
 		if ociIdentifier.Platform != nil {
@@ -128,7 +128,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		ref = ociIdentifier.Reference
 		layerLimit = ociIdentifier.LayerLimit
 	default:
-		return nil, errors.Errorf("unknown resolver type: %v", is.ResolverType)
+		return nil, fmt.Errorf("unknown resolver type: %v", is.ResolverType)
 	}
 	pullerUtil = &pull.Puller{
 		ContentStore: is.ContentStore,
@@ -156,7 +156,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 
 func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier, opt *sourceresolver.ResolveImageOpt, sm *session.Manager, g session.Group) (_ *sourceresolver.ResolveImageResponse, retErr error) {
 	if is.ResolverType != ResolverTypeRegistry {
-		return nil, errors.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
+		return nil, fmt.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
 	}
 	ref := id.Reference.String()
 
@@ -251,7 +251,7 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 		if ret.Digest == "" {
 			ret.Digest = res.Root
 		} else if ret.Digest != res.Root {
-			return nil, errors.Errorf("attestation chain root digest %s does not match image digest %s", res.Root, ret.Digest)
+			return nil, fmt.Errorf("attestation chain root digest %s does not match image digest %s", res.Root, ret.Digest)
 		}
 	}
 	return ret, nil
@@ -259,7 +259,7 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 
 func (is *Source) ResolveOCILayoutMetadata(ctx context.Context, id *OCIIdentifier, opt *sourceresolver.ResolveOCILayoutOpt, sm *session.Manager, g session.Group) (_ *sourceresolver.ResolveImageResponse, retErr error) {
 	if is.ResolverType != ResolverTypeOCILayout {
-		return nil, errors.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
+		return nil, fmt.Errorf("invalid resolver type for image metadata: %v", is.ResolverType)
 	}
 	ref := id.Reference.String()
 
@@ -336,16 +336,16 @@ func (is *Source) registryIdentifier(ref string, attrs map[string]string, platfo
 		case pb.AttrImageLayerLimit:
 			l, err := strconv.Atoi(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid layer limit %s", v)
+				return nil, fmt.Errorf("invalid layer limit %s: %w", v, err)
 			}
 			if l <= 0 {
-				return nil, errors.Errorf("invalid layer limit %s", v)
+				return nil, fmt.Errorf("invalid layer limit %s", v)
 			}
 			id.LayerLimit = &l
 		case pb.AttrImageChecksum:
 			dgst, err := digest.Parse(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid image checksum %s", v)
+				return nil, fmt.Errorf("invalid image checksum %s: %w", v, err)
 			}
 			id.Checksum = dgst
 		}
@@ -381,10 +381,10 @@ func (is *Source) ociIdentifier(ref string, attrs map[string]string, platform *p
 		case pb.AttrOCILayoutLayerLimit:
 			l, err := strconv.Atoi(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid layer limit %s", v)
+				return nil, fmt.Errorf("invalid layer limit %s: %w", v, err)
 			}
 			if l <= 0 {
-				return nil, errors.Errorf("invalid layer limit %s", v)
+				return nil, fmt.Errorf("invalid layer limit %s", v)
 			}
 			id.LayerLimit = &l
 		}
@@ -402,6 +402,6 @@ func parseImageRecordType(v string) (client.UsageRecordType, error) {
 	case client.UsageRecordTypeFrontend:
 		return client.UsageRecordTypeFrontend, nil
 	default:
-		return "", errors.Errorf("invalid record type %s", v)
+		return "", fmt.Errorf("invalid record type %s", v)
 	}
 }

@@ -3,6 +3,7 @@ package cache
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -32,7 +33,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -168,7 +169,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 
 		if p.getChainID() == "" || p.getBlobChainID() == "" {
 			p.Release(context.TODO())
-			return nil, errors.Errorf("failed to get ref by blob on non-addressable parent")
+			return nil, fmt.Errorf("failed to get ref by blob on non-addressable parent")
 		}
 		chainID = imagespecidentity.ChainID([]digest.Digest{p.getChainID(), chainID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{p.getBlobChainID(), blobChainID})
@@ -198,7 +199,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 				// Log the error but continue.
 				bklog.G(ctx).Errorf("missing providers for ref with equivalent blobchain ID %s", blobChainID)
 			} else if !IsNotFound(err) {
-				return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", sis[0].ID())
+				return nil, fmt.Errorf("failed to get record %s by blobchainid: %w", sis[0].ID(), err)
 			}
 		}
 		if ref == nil {
@@ -208,7 +209,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			releaseParent = true
 		}
 		if err := setImageRefMetadata(ref.cacheMetadata, opts...); err != nil {
-			return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", ref.ID())
+			return nil, fmt.Errorf("failed to append image ref metadata to ref %s: %w", ref.ID(), err)
 		}
 		return ref, nil
 	}
@@ -223,7 +224,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		ref, err := cm.get(ctx, si.ID(), nil, opts...)
 		// if the error was NotFound or NeedsRemoteProvider, we can't re-use the snapshot from the blob so just skip it
 		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProviderError{}) {
-			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
+			return nil, fmt.Errorf("failed to get record %s by chainid: %w", si.ID(), err)
 		}
 		if ref != nil {
 			link = ref
@@ -246,7 +247,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create lease")
+		return nil, fmt.Errorf("failed to create lease"+": %w", err)
 	}
 
 	defer func() {
@@ -264,7 +265,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		ID:   snapshotID,
 		Type: "snapshots/" + cm.Snapshotter.Name(),
 	}); err != nil && !cerrdefs.IsAlreadyExists(err) {
-		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
+		return nil, fmt.Errorf("failed to add snapshot %s to lease: %w", id, err)
 	}
 
 	if desc.Digest != "" {
@@ -272,7 +273,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			ID:   desc.Digest.String(),
 			Type: "content",
 		}); err != nil {
-			return nil, errors.Wrapf(err, "failed to add blob %s to lease", id)
+			return nil, fmt.Errorf("failed to add blob %s to lease: %w", id, err)
 		}
 	}
 
@@ -291,7 +292,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	}
 
 	if err := setImageRefMetadata(rec.cacheMetadata, opts...); err != nil {
-		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+		return nil, fmt.Errorf("failed to append image ref metadata to ref %s: %w", rec.ID(), err)
 	}
 
 	rec.queueDiffID(diffID)
@@ -379,7 +380,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, pg progress.Controll
 
 	if rec.mutable {
 		if len(rec.refs) != 0 {
-			return nil, errors.Wrapf(ErrLocked, "%s is locked", id)
+			return nil, fmt.Errorf("%s is locked: %w", id, ErrLocked)
 		}
 		if rec.equalImmutable != nil {
 			return rec.equalImmutable.ref(triggerUpdate, descHandlers, pg), nil
@@ -414,7 +415,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	if rec, ok := cm.records[id]; ok {
 		if rec.isDead() {
-			return nil, errors.Wrapf(errNotFound, "failed to get dead record %s", id)
+			return nil, fmt.Errorf("failed to get dead record %s: %w", id, errNotFound)
 		}
 		if err := checkLazyProviders(rec); err != nil {
 			return nil, err
@@ -424,12 +425,12 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	md, ok := cm.getMetadata(id)
 	if !ok {
-		return nil, errors.Wrap(errNotFound, id)
+		return nil, fmt.Errorf("%s: %w", id, errNotFound)
 	}
 
 	parents, err := cm.parentsOf(ctx, md, opts...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to get parents")
+		return nil, fmt.Errorf("failed to get parents: %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -456,7 +457,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			if _, statErr := cm.Snapshotter.Stat(ctx, md.getSnapshotID()); statErr != nil {
 				// this ref's snapshot also doesn't exist, just remove this record
 				cm.MetadataStore.Clear(id)
-				return nil, errors.Wrap(errNotFound, id)
+				return nil, fmt.Errorf("%s: %w", id, errNotFound)
 			}
 			// Our snapshot exists, so there may have been a crash while finalizing this ref.
 			// Clear the equal mutable field and continue using this ref.
@@ -488,20 +489,20 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		if err := rec.remove(ctx, true); err != nil {
 			return nil, err
 		}
-		return nil, errors.Wrapf(errNotFound, "failed to get deleted record %s", id)
+		return nil, fmt.Errorf("failed to get deleted record %s: %w", id, errNotFound)
 	}
 
 	if rec.mutable {
 		// If the record is mutable, then the snapshot must exist
 		if _, err := cm.Snapshotter.Stat(ctx, rec.ID()); err != nil {
 			if !cerrdefs.IsNotFound(err) {
-				return nil, errors.Wrap(err, "failed to check mutable ref snapshot")
+				return nil, fmt.Errorf("failed to check mutable ref snapshot: %w", err)
 			}
 			// the snapshot doesn't exist, clear this record
 			if err := rec.remove(ctx, true); err != nil {
-				return nil, errors.Wrap(err, "failed to remove mutable rec with missing snapshot")
+				return nil, fmt.Errorf("failed to remove mutable rec with missing snapshot: %w", err)
 			}
-			return nil, errors.Wrap(errNotFound, rec.ID())
+			return nil, fmt.Errorf("%s: %w", rec.ID(), errNotFound)
 		}
 	}
 
@@ -510,7 +511,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	}
 
 	if err := setImageRefMetadata(rec.cacheMetadata, opts...); err != nil {
-		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+		return nil, fmt.Errorf("failed to append image ref metadata to ref %s: %w", rec.ID(), err)
 	}
 
 	cm.records[id] = rec
@@ -602,7 +603,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create lease")
+		return nil, fmt.Errorf("failed to create lease: %w", err)
 	}
 
 	defer func() {
@@ -621,7 +622,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		ID:   snapshotID,
 		Type: "snapshots/" + cm.Snapshotter.Name(),
 	}); err != nil && !cerrdefs.IsAlreadyExists(err) {
-		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", snapshotID)
+		return nil, fmt.Errorf("failed to add snapshot %s to lease: %w", snapshotID, err)
 	}
 
 	if cm.Snapshotter.Name() == "stargz" && parent != nil {
@@ -638,7 +639,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to prepare %v as %s", parentSnapshotID, snapshotID)
+		return nil, fmt.Errorf("failed to prepare %v as %s: %w", parentSnapshotID, snapshotID, err)
 	}
 
 	cm.mu.Lock()
@@ -661,7 +662,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 	}
 
 	if err := setImageRefMetadata(rec.cacheMetadata, opts...); err != nil {
-		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+		return nil, fmt.Errorf("failed to append image ref metadata to ref %s: %w", rec.ID(), err)
 	}
 
 	cm.records[id] = rec // TODO: save to db
@@ -686,16 +687,16 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string, opts ...RefOp
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	if !rec.mutable {
-		return nil, errors.Wrapf(errInvalid, "%s is not mutable", id)
+		return nil, fmt.Errorf("%s is not mutable: %w", id, errInvalid)
 	}
 
 	if len(rec.refs) != 0 {
-		return nil, errors.Wrapf(ErrLocked, "%s is locked", id)
+		return nil, fmt.Errorf("%s is locked: %w", id, ErrLocked)
 	}
 
 	if rec.equalImmutable != nil {
 		if len(rec.equalImmutable.refs) != 0 {
-			return nil, errors.Wrapf(ErrLocked, "%s is locked", id)
+			return nil, fmt.Errorf("%s is locked: %w", id, ErrLocked)
 		}
 		delete(cm.records, rec.equalImmutable.ID())
 		if err := rec.equalImmutable.remove(ctx, false); err != nil {
@@ -774,7 +775,7 @@ func (cm *cacheManager) createMergeRef(ctx context.Context, parents parentRefs, 
 
 	for _, parent := range parents.mergeParents {
 		if err := parent.Finalize(ctx); err != nil {
-			return nil, errors.Wrapf(err, "failed to finalize parent during merge")
+			return nil, fmt.Errorf("failed to finalize parent during merge: %w", err)
 		}
 	}
 
@@ -807,7 +808,7 @@ func (cm *cacheManager) createMergeRef(ctx context.Context, parents parentRefs, 
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create lease")
+		return nil, fmt.Errorf("failed to create lease"+": %w", err)
 	}
 	defer func() {
 		if rerr != nil {
@@ -942,11 +943,11 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, pg 
 func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, dhs DescHandlers, pg progress.Controller, opts ...RefOption) (ir *immutableRef, rerr error) {
 	dps := parents.diffParents
 	if err := dps.lower.Finalize(ctx); err != nil {
-		return nil, errors.Wrapf(err, "failed to finalize lower parent during diff")
+		return nil, fmt.Errorf("failed to finalize lower parent during diff: %w", err)
 	}
 	if dps.upper != nil {
 		if err := dps.upper.Finalize(ctx); err != nil {
-			return nil, errors.Wrapf(err, "failed to finalize upper parent during diff")
+			return nil, fmt.Errorf("failed to finalize upper parent during diff: %w", err)
 		}
 	}
 
@@ -962,7 +963,7 @@ func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, d
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create lease")
+		return nil, fmt.Errorf("failed to create lease: %w", err)
 	}
 	defer func() {
 		if rerr != nil {
@@ -1036,14 +1037,14 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
 	filter, err := filters.ParseAll(opt.Filter...)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse prune filters %v", opt.Filter)
+		return fmt.Errorf("failed to parse prune filters %v: %w", opt.Filter, err)
 	}
 
 	var check ExternalRefChecker
 	if f := cm.PruneRefChecker; f != nil && (!opt.All || len(opt.Filter) > 0) {
 		c, err := f()
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		check = c
 	}
@@ -1330,7 +1331,7 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 	}
 	c, err := cm.PruneRefChecker()
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	var markAllParentsShared func(...string)
@@ -1375,7 +1376,7 @@ type cacheUsageInfo struct {
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
 	filter, err := filters.ParseAll(opt.Filter...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse diskusage filters %v", opt.Filter)
+		return nil, fmt.Errorf("failed to parse diskusage filters %v: %w", opt.Filter, err)
 	}
 
 	cm.mu.Lock()
@@ -1729,11 +1730,11 @@ func sortDeleteRecords(toDelete []*deleteRecord) {
 func diffIDFromDescriptor(desc ocispecs.Descriptor) (digest.Digest, error) {
 	diffIDStr, ok := desc.Annotations[labels.LabelUncompressed]
 	if !ok {
-		return "", errors.Errorf("missing uncompressed annotation for %s", desc.Digest)
+		return "", fmt.Errorf("missing uncompressed annotation for %s", desc.Digest)
 	}
 	diffID, err := digest.Parse(diffIDStr)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse diffID %q for %s", diffIDStr, desc.Digest)
+		return "", fmt.Errorf("failed to parse diffID %q for %s: %w", diffIDStr, desc.Digest, err)
 	}
 	return diffID, nil
 }

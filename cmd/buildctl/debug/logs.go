@@ -1,6 +1,8 @@
 package debug
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 
@@ -13,7 +15,6 @@ import (
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -37,7 +38,7 @@ var LogsCommand = cli.Command{
 func logs(clicontext *cli.Context) error {
 	args := clicontext.Args()
 	if len(args) == 0 {
-		return errors.Errorf("build ref must be specified")
+		return errors.New("build ref must be specified")
 	}
 	ref := args[0]
 
@@ -58,12 +59,12 @@ func logs(clicontext *cli.Context) error {
 		he, err := cl.Recv()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return errors.Errorf("ref %s not found", ref)
+				return fmt.Errorf("ref %s not found", ref)
 			}
 			return err
 		}
 		if he.Record.Trace == nil {
-			return errors.Errorf("ref %s does not have trace", ref)
+			return fmt.Errorf("ref %s does not have trace", ref)
 		}
 		store := proxy.NewContentStore(c.ContentClient())
 		dgst, err := digest.Parse(he.Record.Trace.Digest)

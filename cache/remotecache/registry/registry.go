@@ -2,6 +2,8 @@ package registry
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"strconv"
 
@@ -22,7 +24,6 @@ import (
 	"github.com/moby/buildkit/util/resolver/limited"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func canonicalizeRef(rawRef string) (reference.Named, error) {
@@ -67,7 +68,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if v, ok := attrs[attrOCIMediatypes]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", attrOCIMediatypes)
+				return nil, fmt.Errorf("failed to parse %s: %w", attrOCIMediatypes, err)
 			}
 			ociMediatypes = b
 		}
@@ -75,7 +76,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if v, ok := attrs[attrImageManifest]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", attrImageManifest)
+				return nil, fmt.Errorf("failed to parse %s: %w", attrImageManifest, err)
 			}
 			imageManifest = b
 		} else if !ociMediatypes {
@@ -85,7 +86,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if v, ok := attrs[attrInsecure]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", attrInsecure)
+				return nil, fmt.Errorf("failed to parse %s: %w", attrInsecure, err)
 			}
 			insecure = b
 		}
@@ -111,7 +112,7 @@ func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, hosts docke
 		if v, ok := attrs[attrInsecure]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, ocispecs.Descriptor{}, errors.Wrapf(err, "failed to parse %s", attrInsecure)
+				return nil, ocispecs.Descriptor{}, fmt.Errorf("failed to parse %s: %w", attrInsecure, err)
 			}
 			insecure = b
 		}

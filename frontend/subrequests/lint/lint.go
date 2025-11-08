@@ -3,6 +3,7 @@ package lint
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -13,7 +14,6 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/pkg/errors"
 )
 
 type SourceInfoMap func(*pb.SourceInfo) *pb.SourceInfo
@@ -202,12 +202,12 @@ func (results *LintResults) PrintErrorTo(w io.Writer, scb SourceInfoMap) {
 func (results *LintResults) validateWarnings() error {
 	for _, warning := range results.Warnings {
 		if int(warning.Location.SourceIndex) >= len(results.Sources) {
-			return errors.Errorf("sourceIndex is out of range")
+			return errors.New("sourceIndex is out of range")
 		}
 		if warning.Location.SourceIndex > 0 {
 			warningSource := results.Sources[warning.Location.SourceIndex]
 			if warningSource == nil {
-				return errors.Errorf("sourceIndex points to nil source")
+				return errors.New("sourceIndex points to nil source")
 			}
 		}
 	}

@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	_ "crypto/sha256"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -15,7 +16,7 @@ import (
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -493,7 +494,7 @@ func TestSingleCancelCache(t *testing.T) {
 		Vertex: vtx(vtxOpt{
 			name: "v0",
 			cachePreFunc: func(ctx context.Context) error {
-				cancel(errors.WithStack(context.Canceled))
+				cancel(pkgerrors.WithStack(context.Canceled))
 				<-ctx.Done()
 				return nil // error should still come from context
 			},
@@ -535,7 +536,7 @@ func TestSingleCancelExec(t *testing.T) {
 		Vertex: vtx(vtxOpt{
 			name: "v2",
 			execPreFunc: func(ctx context.Context) error {
-				cancel(errors.WithStack(context.Canceled))
+				cancel(pkgerrors.WithStack(context.Canceled))
 				<-ctx.Done()
 				return nil // error should still come from context
 			},
@@ -580,7 +581,7 @@ func TestSingleCancelParallel(t *testing.T) {
 		}()
 
 		ctx, cancel := context.WithCancelCause(ctx)
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 		g := Edge{
 			Vertex: vtx(vtxOpt{
@@ -589,7 +590,7 @@ func TestSingleCancelParallel(t *testing.T) {
 				cachePreFunc: func(ctx context.Context) error {
 					close(firstReady)
 					time.Sleep(200 * time.Millisecond)
-					cancel(errors.WithStack(context.Canceled))
+					cancel(pkgerrors.WithStack(context.Canceled))
 					<-firstErrored
 					return nil
 				},
@@ -1194,7 +1195,7 @@ func TestErrorReturns(t *testing.T) {
 					cacheKeySeed: "seed1",
 					value:        "result1",
 					cachePreFunc: func(ctx context.Context) error {
-						return errors.Errorf("error-from-test")
+						return errors.New("error-from-test")
 					},
 				})},
 				{Vertex: vtx(vtxOpt{
@@ -1281,7 +1282,7 @@ func TestErrorReturns(t *testing.T) {
 					cacheKeySeed: "seed3",
 					value:        "result2",
 					execPreFunc: func(ctx context.Context) error {
-						return errors.Errorf("exec-error-from-test")
+						return errors.New("exec-error-from-test")
 					},
 				})},
 			},
@@ -3768,7 +3769,7 @@ func (v *vertex) CacheMap(ctx context.Context, jobCtx JobContext, index int) (*C
 
 func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	if len(inputs) != len(v.Inputs()) {
-		return errors.Errorf("invalid number of inputs")
+		return errors.New("invalid number of inputs")
 	}
 	if f := v.opt.execPreFunc; f != nil {
 		if err := f(ctx); err != nil {
@@ -3883,7 +3884,7 @@ func (v *vertexSum) Exec(ctx context.Context, jobCtx JobContext, inputs []Result
 	for _, inp := range inputs {
 		r, ok := inp.Sys().(*dummyResult)
 		if !ok {
-			return nil, errors.Errorf("invalid input type: %T", inp.Sys())
+			return nil, fmt.Errorf("invalid input type: %T", inp.Sys())
 		}
 		s += r.intValue
 	}
@@ -3923,7 +3924,7 @@ func (v *vertexAdd) Exec(ctx context.Context, jobCtx JobContext, inputs []Result
 	for _, inp := range inputs {
 		r, ok := inp.Sys().(*dummyResult)
 		if !ok {
-			return nil, errors.Errorf("invalid input type: %T", inp.Sys())
+			return nil, fmt.Errorf("invalid input type: %T", inp.Sys())
 		}
 		outputs = append(outputs, &dummyResult{id: identity.NewID(), intValue: r.intValue + v.value})
 	}
@@ -3998,7 +3999,7 @@ func testOpResolver(v Vertex, b Builder) (Op, error) {
 		return op, nil
 	}
 
-	return nil, errors.Errorf("invalid vertex")
+	return nil, errors.New("invalid vertex")
 }
 
 func unwrap(res Result) string {
@@ -4042,7 +4043,7 @@ type trackingCacheManager struct {
 func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, error) {
 	atomic.AddInt64(&cm.loadCounter, 1)
 	if cm.forceFail {
-		return nil, errors.Errorf("force fail")
+		return nil, errors.New("force fail")
 	}
 	return cm.CacheManager.Load(ctx, rec)
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,14 +42,14 @@ func (bc *Client) Build(ctx context.Context, fn BuildFunc) (*ResultBuilder, erro
 
 			config, err := json.Marshal(img)
 			if err != nil {
-				return errors.Wrapf(err, "failed to marshal image config")
+				return fmt.Errorf("failed to marshal image config: %w", err)
 			}
 
 			var baseConfig []byte
 			if baseImg != nil {
 				baseConfig, err = json.Marshal(baseImg)
 				if err != nil {
-					return errors.Wrapf(err, "failed to marshal source image config")
+					return fmt.Errorf("failed to marshal source image config: %w", err)
 				}
 			}
 

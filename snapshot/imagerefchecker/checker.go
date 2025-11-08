@@ -3,6 +3,7 @@ package imagerefchecker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/cache"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type Opt struct {
@@ -123,7 +123,7 @@ func layersHandler(provider content.Provider, f func([]ocispecs.Descriptor)) ima
 
 			return index.Manifests, nil
 		default:
-			return nil, errors.Errorf("encountered unknown type %v", desc.MediaType)
+			return nil, fmt.Errorf("encountered unknown type %v", desc.MediaType)
 		}
 	}
 }

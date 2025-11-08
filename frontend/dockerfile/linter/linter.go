@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
-	"github.com/pkg/errors"
 )
 
 type Config struct {
@@ -84,7 +83,7 @@ func (lc *Linter) Error() error {
 	for r := range uniqueRules {
 		rules = append(rules, r)
 	}
-	return errors.Errorf("lint violation found for rules: %s", strings.Join(rules, ", "))
+	return fmt.Errorf("lint violation found for rules: %s", strings.Join(rules, ", "))
 }
 
 type LinterRuleI interface {
@@ -145,7 +144,7 @@ func ParseLintOptions(checkStr string) (*Config, error) {
 	for _, p := range parts {
 		k, v, ok := strings.Cut(p, "=")
 		if !ok {
-			return nil, errors.Errorf("invalid check option %q", p)
+			return nil, fmt.Errorf("invalid check option %q", p)
 		}
 		k = strings.TrimSpace(k)
 		switch k {
@@ -172,11 +171,11 @@ func ParseLintOptions(checkStr string) (*Config, error) {
 		case "error":
 			v, err := strconv.ParseBool(strings.TrimSpace(v))
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse check option %q", p)
+				return nil, fmt.Errorf("failed to parse check option %q: %w", p, err)
 			}
 			errorOnWarn = v
 		default:
-			return nil, errors.Errorf("invalid check option %q", k)
+			return nil, fmt.Errorf("invalid check option %q", k)
 		}
 	}
 	return &Config{

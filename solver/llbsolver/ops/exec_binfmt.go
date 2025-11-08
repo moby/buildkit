@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/sys/user"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
@@ -106,7 +106,7 @@ func getEmulator(ctx context.Context, p *pb.Platform) (*emulator, error) {
 					supported = append(supported, platforms.Format(p))
 				}
 			}
-			return nil, errors.Errorf("no support for running processes with %s platform, supported: %s", platforms.Format(pp), strings.Join(supported, ", "))
+			return nil, fmt.Errorf("no support for running processes with %s platform, supported: %s", platforms.Format(pp), strings.Join(supported, ", "))
 		}
 	}
 

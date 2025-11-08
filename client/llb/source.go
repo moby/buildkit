@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
+	"errors"
 	"os"
 	"path"
 	"strconv"
@@ -16,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 type SourceOp struct {
@@ -43,7 +43,7 @@ func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
 		return s.err
 	}
 	if s.id == "" {
-		return errors.Errorf("source identifier can't be empty")
+		return errors.New("source identifier can't be empty")
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )

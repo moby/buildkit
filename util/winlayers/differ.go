@@ -19,7 +19,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -66,7 +65,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 	case ocispecs.MediaTypeImageLayerGzip:
 		isCompressed = true
 	default:
-		return emptyDesc, errors.Wrapf(cerrdefs.ErrNotImplemented, "unsupported diff media type: %v", config.MediaType)
+		return emptyDesc, fmt.Errorf("unsupported diff media type: %v: %w", config.MediaType, cerrdefs.ErrNotImplemented)
 	}
 
 	var ocidesc ocispecs.Descriptor
@@ -84,7 +83,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 					MediaType: config.MediaType, // most contentstore implementations just ignore this
 				}))
 			if err != nil {
-				return errors.Wrap(err, "failed to open writer")
+				return fmt.Errorf("failed to open writer"+": %w", err)
 			}
 			defer func() {
 				if err != nil {
@@ -106,7 +105,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 				dgstr := digest.SHA256.Digester()
 				compressed, err := compression.CompressStream(cw, compression.Gzip)
 				if err != nil {
-					return errors.Wrap(err, "failed to get compressed stream")
+					return fmt.Errorf("failed to get compressed stream"+": %w", err)
 				}
 				w, discard, done := makeWindowsLayer(ctx, io.MultiWriter(compressed, dgstr.Hash()))
 				err = archive.WriteDiff(ctx, w, lowerRoot, upperRoot)
@@ -116,7 +115,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 				<-done
 				compressed.Close()
 				if err != nil {
-					return errors.Wrap(err, "failed to write compressed diff")
+					return fmt.Errorf("failed to write compressed diff"+": %w", err)
 				}
 
 				if config.Labels == nil {
@@ -127,7 +126,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 				w, discard, done := makeWindowsLayer(ctx, cw)
 				if err = archive.WriteDiff(ctx, w, lowerRoot, upperRoot); err != nil {
 					discard(err)
-					return errors.Wrap(err, "failed to write diff")
+					return fmt.Errorf("failed to write diff"+": %w", err)
 				}
 				<-done
 			}
@@ -139,12 +138,12 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 
 			dgst := cw.Digest()
 			if err := cw.Commit(ctx, 0, dgst, commitopts...); err != nil {
-				return errors.Wrap(err, "failed to commit")
+				return fmt.Errorf("failed to commit"+": %w", err)
 			}
 
 			info, err := s.store.Info(ctx, dgst)
 			if err != nil {
-				return errors.Wrap(err, "failed to get info from content store")
+				return fmt.Errorf("failed to get info from content store"+": %w", err)
 			}
 
 			ocidesc = ocispecs.Descriptor{

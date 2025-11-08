@@ -3,6 +3,7 @@ package azblob
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -23,7 +24,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,12 +33,12 @@ func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
-			return nil, ocispecs.Descriptor{}, errors.Wrap(err, "failed to create azblob config")
+			return nil, ocispecs.Descriptor{}, fmt.Errorf("failed to create azblob config"+": %w", err)
 		}
 
 		containerClient, err := createContainerClient(ctx, config)
 		if err != nil {
-			return nil, ocispecs.Descriptor{}, errors.Wrap(err, "failed to create container client")
+			return nil, ocispecs.Descriptor{}, fmt.Errorf("failed to create container client"+": %w", err)
 		}
 
 		importer := &importer{
@@ -65,7 +66,7 @@ func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id strin
 			eg.Go(func() error {
 				cc, err := ci.loadManifest(ctx, name)
 				if err != nil {
-					return errors.Wrapf(err, "failed to load cache manifest %s", name)
+					return fmt.Errorf("failed to load cache manifest %s: %w", name, err)
 				}
 				ccs[i] = cc
 				return nil
@@ -107,21 +108,21 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 
 	res, err := blobClient.DownloadStream(ctx, &blob.DownloadStreamOptions{})
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	reader := res.Body
 	defer reader.Close()
 	bytes, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	bklog.G(ctx).Debugf("imported config: %s", string(bytes))
 
 	var config cacheimporttypes.CacheConfig
 	if err := json.Unmarshal(bytes, &config); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	allLayers := v1.DescriptorProvider{}
@@ -145,17 +146,17 @@ func (ci *importer) loadManifest(ctx context.Context, name string) (*v1.CacheCha
 
 func (ci *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
-		return nil, errors.Errorf("cache layer with missing annotations")
+		return nil, errors.New("cache layer with missing annotations")
 	}
 	annotations := map[string]string{}
 	if l.Annotations.DiffID == "" {
-		return nil, errors.Errorf("cache layer with missing diffid")
+		return nil, errors.New("cache layer with missing diffid")
 	}
 	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
 	if !l.Annotations.CreatedAt.IsZero() {
 		txt, err := l.Annotations.CreatedAt.MarshalText()
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 		annotations["buildkit/createdat"] = string(txt)
 	}
@@ -191,7 +192,7 @@ func (f *fetcher) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadC
 	}
 
 	if !exists {
-		return nil, errors.Errorf("blob %s not found", desc.Digest)
+		return nil, fmt.Errorf("blob %s not found", desc.Digest)
 	}
 
 	bklog.G(ctx).Debugf("reading layer from cache: %s", key)
@@ -216,7 +217,7 @@ type ciProvider struct {
 
 func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	if dgst != p.desc.Digest {
-		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
+		return content.Info{}, fmt.Errorf("blob %s: %w", dgst, cerrdefs.ErrNotFound)
 	}
 
 	if p.checked {
@@ -236,7 +237,7 @@ func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info
 	}
 
 	if !exists {
-		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
+		return content.Info{}, fmt.Errorf("blob %s: %w", dgst, cerrdefs.ErrNotFound)
 	}
 
 	p.checked = true

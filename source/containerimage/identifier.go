@@ -1,6 +1,8 @@
 package containerimage
 
 import (
+	"fmt"
+
 	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
@@ -10,7 +12,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type ImageIdentifier struct {
@@ -25,11 +27,11 @@ type ImageIdentifier struct {
 func NewImageIdentifier(str string) (*ImageIdentifier, error) {
 	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	if ref.Object == "" {
-		return nil, errors.WithStack(reference.ErrObjectRequired)
+		return nil, pkgerrors.WithStack(reference.ErrObjectRequired)
 	}
 	return &ImageIdentifier{Reference: ref}, nil
 }
@@ -43,7 +45,7 @@ func (*ImageIdentifier) Scheme() string {
 func (id *ImageIdentifier) Capture(c *provenance.Capture, pin string) error {
 	dgst, err := digest.Parse(pin)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse image digest %s", pin)
+		return fmt.Errorf("failed to parse image digest %s: %w", pin, err)
 	}
 	c.AddImage(provenancetypes.ImageSource{
 		Ref:      id.Reference.String(),
@@ -64,11 +66,11 @@ type OCIIdentifier struct {
 func NewOCIIdentifier(str string) (*OCIIdentifier, error) {
 	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	if ref.Object == "" {
-		return nil, errors.WithStack(reference.ErrObjectRequired)
+		return nil, pkgerrors.WithStack(reference.ErrObjectRequired)
 	}
 	return &OCIIdentifier{Reference: ref}, nil
 }
@@ -82,7 +84,7 @@ func (*OCIIdentifier) Scheme() string {
 func (id *OCIIdentifier) Capture(c *provenance.Capture, pin string) error {
 	dgst, err := digest.Parse(pin)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse OCI digest %s", pin)
+		return fmt.Errorf("failed to parse OCI digest %s: %w", pin, err)
 	}
 	c.AddImage(provenancetypes.ImageSource{
 		Ref:      id.Reference.String(),

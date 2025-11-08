@@ -3,6 +3,7 @@
 package cniprovider
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/moby/buildkit/util/bklog"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -95,7 +95,7 @@ func setNetNS(s *specs.Spec, nsPath string) error {
 func unmountNetNS(nsPath string) error {
 	if err := unix.Unmount(nsPath, unix.MNT_DETACH); err != nil {
 		if !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOENT) {
-			return errors.Wrap(err, "error unmounting network namespace")
+			return fmt.Errorf("error unmounting network namespace"+": %w", err)
 		}
 	}
 	return nil
@@ -103,7 +103,7 @@ func unmountNetNS(nsPath string) error {
 
 func deleteNetNS(nsPath string) error {
 	if err := os.Remove(nsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Wrapf(err, "error removing network namespace %s", nsPath)
+		return fmt.Errorf("error removing network namespace %s: %w", nsPath, err)
 	}
 	return nil
 }

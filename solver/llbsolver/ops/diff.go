@@ -3,9 +3,10 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver"
@@ -73,7 +74,7 @@ func (d *diffOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		if lowerInp := inputs[curInput]; lowerInp != nil {
 			wref, ok := lowerInp.Sys().(*worker.WorkerRef)
 			if !ok {
-				return nil, errors.Errorf("invalid lower reference for diff op %T", lowerInp.Sys())
+				return nil, fmt.Errorf("invalid lower reference for diff op %T", lowerInp.Sys())
 			}
 			lowerRef = wref.ImmutableRef
 		} else {
@@ -87,7 +88,7 @@ func (d *diffOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		if upperInp := inputs[curInput]; upperInp != nil {
 			wref, ok := upperInp.Sys().(*worker.WorkerRef)
 			if !ok {
-				return nil, errors.Errorf("invalid upper reference for diff op %T", upperInp.Sys())
+				return nil, fmt.Errorf("invalid upper reference for diff op %T", upperInp.Sys())
 			}
 			upperRef = wref.ImmutableRef
 		} else {

@@ -20,7 +20,6 @@ import (
 	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	_ "github.com/moby/buildkit/util/tracing/env"
 	"github.com/moby/buildkit/version"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/otel"
@@ -122,7 +121,7 @@ func main() {
 		case "text", "":
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		default:
-			return errors.Errorf("unsupported log type %q", logFormat)
+			return fmt.Errorf("unsupported log type %q", logFormat)
 		}
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)

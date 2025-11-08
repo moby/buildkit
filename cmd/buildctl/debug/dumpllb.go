@@ -10,7 +10,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -71,7 +70,7 @@ func loadLLB(r io.Reader) ([]llbOp, error) {
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := op.UnmarshalVT(dt); err != nil {
-			return nil, errors.Wrap(err, "failed to parse op")
+			return nil, fmt.Errorf("failed to parse op"+": %w", err)
 		}
 		dgst := digest.FromBytes(dt)
 		ent := llbOp{Op: &op, Digest: dgst, OpMetadata: def.Metadata[dgst].ToPB()}

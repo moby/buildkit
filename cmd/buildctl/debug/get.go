@@ -1,6 +1,7 @@
 package debug
 
 import (
+	"errors"
 	"io"
 	"os"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -23,7 +23,7 @@ var GetCommand = cli.Command{
 func get(clicontext *cli.Context) error {
 	args := clicontext.Args()
 	if len(args) == 0 {
-		return errors.Errorf("blob digest must be specified")
+		return errors.New("blob digest must be specified")
 	}
 
 	dgst, err := digest.Parse(args[0])

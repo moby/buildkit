@@ -2,7 +2,7 @@ package base
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,7 +50,6 @@ import (
 	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -242,7 +241,7 @@ func (w *Worker) Close() error {
 			errs = append(errs, err)
 		}
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (w *Worker) ContentStore() *containerdsnapshot.Store {
@@ -328,7 +327,7 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 		}
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load ref")
+		return nil, fmt.Errorf("failed to load ref"+": %w", err)
 	}
 	return ref, nil
 }
@@ -357,10 +356,10 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 		case *pb.Op_Diff:
 			return ops.NewDiffOp(v, op, w)
 		default:
-			return nil, errors.Errorf("no support for %T", op)
+			return nil, fmt.Errorf("no support for %T", op)
 		}
 	}
-	return nil, errors.Errorf("could not resolve %v", v)
+	return nil, fmt.Errorf("could not resolve %v", v)
 }
 
 func (w *Worker) PruneCacheMounts(ctx context.Context, ids map[string]bool) error {
@@ -540,7 +539,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			LeaseManager:   w.LeaseManager(),
 		})
 	default:
-		return nil, errors.Errorf("exporter %q could not be found", name)
+		return nil, fmt.Errorf("exporter %q could not be found", name)
 	}
 }
 

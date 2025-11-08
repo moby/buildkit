@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/containerd/containerd/v2/core/leases"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/sys/userns"
-	"github.com/pkg/errors"
 )
 
 // hardlinkMergeSnapshotters are the names of snapshotters that support merges implemented by
@@ -132,26 +132,26 @@ func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff,
 
 	ctx, done, err := leaseutil.WithLease(ctx, sn.lm, leaseutil.MakeTemporary)
 	if err != nil {
-		return errors.Wrap(err, "failed to create temporary lease for view mounts during merge")
+		return fmt.Errorf("failed to create temporary lease for view mounts during merge"+": %w", err)
 	}
 	defer done(context.TODO())
 
 	// Make the snapshot that will be merged into
 	prepareKey := identity.NewID()
 	if err := sn.Prepare(ctx, prepareKey, baseKey); err != nil {
-		return errors.Wrapf(err, "failed to prepare %q", key)
+		return fmt.Errorf("failed to prepare %q: %w", key, err)
 	}
 	applyMounts, err := sn.Mounts(ctx, prepareKey)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get mounts of %q", key)
+		return fmt.Errorf("failed to get mounts of %q: %w", key, err)
 	}
 
 	usage, err := sn.diffApply(ctx, applyMounts, diffs...)
 	if err != nil {
-		return errors.Wrap(err, "failed to apply diffs")
+		return fmt.Errorf("failed to apply diffs"+": %w", err)
 	}
 	if err := sn.Commit(ctx, key, prepareKey, withMergeUsage(usage)); err != nil {
-		return errors.Wrapf(err, "failed to commit %q", key)
+		return fmt.Errorf("failed to commit %q: %w", key, err)
 	}
 	return nil
 }

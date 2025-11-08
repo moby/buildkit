@@ -1,13 +1,14 @@
 package resources
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -135,7 +136,7 @@ func getCgroupMemoryStat(path string) (*resourcestypes.MemoryStat, error) {
 func parseKeyValueFile(filePath string, callback func(key string, value uint64)) error {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read %s", filePath)
+		return fmt.Errorf("failed to read %s: %w", filePath, err)
 	}
 
 	lines := strings.SplitSeq(string(content), "\n")
@@ -149,7 +150,7 @@ func parseKeyValueFile(filePath string, callback func(key string, value uint64))
 		valueStr := fields[1]
 		value, err := strconv.ParseUint(valueStr, 10, 64)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse value for %s", key)
+			return fmt.Errorf("failed to parse value for %s: %w", key, err)
 		}
 
 		callback(key, value)

@@ -3,6 +3,7 @@ package cache
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -29,14 +30,14 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 var g flightcontrol.Group[*leaseutil.LeaseRef]
 var gFileList flightcontrol.Group[[]string]
 
-var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
+var ErrNoBlobs = errors.New("no blobs for snapshot")
 
 // computeBlobChain ensures every ref in a parent chain has an associated blob in the content store. If
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
@@ -44,7 +45,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // If forceCompression is specified but the blob of compressionType doesn't exist, this function creates it.
 func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group) error {
 	if _, ok := leases.FromContext(ctx); !ok {
-		return errors.Errorf("missing lease requirement for computeBlobChain")
+		return errors.New("missing lease requirement for computeBlobChain")
 	}
 	if !createIfNeeded {
 		sr.mu.Lock()
@@ -100,7 +101,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, nil
 				}
 				if !createIfNeeded {
-					return nil, errors.WithStack(ErrNoBlobs)
+					return nil, pkgerrors.WithStack(ErrNoBlobs)
 				}
 
 				l, ctx, err := leaseutil.NewLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
@@ -168,7 +169,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				if forceOvlStr := os.Getenv("BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF"); forceOvlStr != "" && sr.kind() != Diff {
 					enableOverlay, err = strconv.ParseBool(forceOvlStr)
 					if err != nil {
-						return nil, errors.Wrapf(err, "invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF")
+						return nil, fmt.Errorf("invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF: %w", err)
 					}
 					fallback = false // prohibit fallback on debug
 				} else if !isTypeWindows(sr) {
@@ -190,7 +191,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				if sr.cm.Snapshotter.Name() == "overlaybd" {
 					snStat, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID())
 					if err != nil {
-						return nil, errors.Wrapf(err, "failed to Stat overlaybd")
+						return nil, fmt.Errorf("failed to Stat overlaybd: %w", err)
 					}
 					if bdPath := snStat.Labels[obdlabel.LocalOverlayBDPath]; bdPath != "" {
 						if err := commitOverlayBD(ctx, sr, &desc); err != nil {
@@ -205,10 +206,10 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					if !ok || err != nil {
 						if !fallback {
 							if !ok {
-								return nil, errors.Errorf("overlay mounts not detected (lower=%+v,upper=%+v)", lower, upper)
+								return nil, fmt.Errorf("overlay mounts not detected (lower=%+v,upper=%+v)", lower, upper)
 							}
 							if err != nil {
-								return nil, errors.Wrapf(err, "failed to compute overlay diff")
+								return nil, fmt.Errorf("failed to compute overlay diff: %w", err)
 							}
 						}
 						if logWarnOnErr {
@@ -251,7 +252,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				if finalize != nil {
 					a, err := finalize(ctx, sr.cm.ContentStore)
 					if err != nil {
-						return nil, errors.Wrapf(err, "failed to finalize compression")
+						return nil, fmt.Errorf("failed to finalize compression: %w", err)
 					}
 					maps.Copy(desc.Annotations, a)
 				}
@@ -265,7 +266,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				} else if mediaType == ocispecs.MediaTypeImageLayer {
 					desc.Annotations[labels.LabelUncompressed] = desc.Digest.String()
 				} else {
-					return nil, errors.Errorf("unknown layer compression type")
+					return nil, errors.New("unknown layer compression type")
 				}
 
 				if err := sr.setBlob(ctx, desc); err != nil {
@@ -285,7 +286,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 
 			if comp.Force {
 				if err := ensureCompression(ctx, sr, comp, s); err != nil {
-					return errors.Wrapf(err, "failed to ensure compression type of %q", comp.Type)
+					return fmt.Errorf("failed to ensure compression type of %q: %w", comp.Type, err)
 				}
 			}
 			return nil
@@ -302,7 +303,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 // A lease must be held for the blob when calling this function
 func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (rerr error) {
 	if _, ok := leases.FromContext(ctx); !ok {
-		return errors.Errorf("missing lease requirement for setBlob")
+		return errors.New("missing lease requirement for setBlob")
 	}
 	defer func() {
 		if rerr == nil {
@@ -350,7 +351,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 
 func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[string]struct{}) error {
 	if _, ok := leases.FromContext(ctx); !ok {
-		return errors.Errorf("missing lease requirement for computeChainMetadata")
+		return errors.New("missing lease requirement for computeChainMetadata")
 	}
 
 	sr.mu.Lock()
@@ -379,12 +380,12 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			if parentChainID := sr.layerParent.getChainID(); parentChainID != "" {
 				chainID = parentChainID
 			} else {
-				return errors.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+				return fmt.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 			}
 			if parentBlobChainID := sr.layerParent.getBlobChainID(); parentBlobChainID != "" {
 				blobChainID = parentBlobChainID
 			} else {
-				return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+				return fmt.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 			}
 		}
 		diffID := sr.getDiffID()
@@ -498,12 +499,12 @@ func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.
 		}
 		newDesc, err := layerConvertFunc(ctx, ref.cm.ContentStore, desc)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to convert")
+			return nil, fmt.Errorf("failed to convert: %w", err)
 		}
 
 		// Start to track converted layer
 		if err := ref.linkBlob(ctx, *newDesc); err != nil {
-			return nil, errors.Wrapf(err, "failed to add compression blob")
+			return nil, fmt.Errorf("failed to add compression blob: %w", err)
 		}
 		return l, nil
 	})
@@ -521,7 +522,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.
 func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descriptor) error {
 	snStat, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID())
 	if err != nil {
-		return errors.Wrapf(err, "failed to Stat overlaybd")
+		return fmt.Errorf("failed to Stat overlaybd: %w", err)
 	}
 	bdPath := snStat.Labels[obdlabel.LocalOverlayBDPath]
 	if bdPath == "" {
@@ -531,19 +532,19 @@ func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descr
 	commitPath := path.Join(dir, "overlaybd.commit")
 	err = obdcmd.Commit(ctx, dir, dir, true, "-t", "-z", "-f")
 	if err != nil {
-		return errors.Wrapf(err, "failed to overlaybd-commit")
+		return fmt.Errorf("failed to overlaybd-commit: %w", err)
 	}
 	cw, err := sr.cm.ContentStore.Writer(ctx, content.WithRef(sr.ID()))
 	if err != nil {
-		return errors.Wrapf(err, "failed to open writer")
+		return fmt.Errorf("failed to open writer: %w", err)
 	}
 	fi, err := os.Open(commitPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open overlaybd commit file")
+		return fmt.Errorf("failed to open overlaybd commit file: %w", err)
 	}
 	sz, err := io.Copy(cw, bufio.NewReader(fi))
 	if err != nil {
-		return errors.Wrapf(err, "failed to do io.Copy()")
+		return fmt.Errorf("failed to do io.Copy(): %w", err)
 	}
 	dgst := cw.Digest()
 	labels := map[string]string{
@@ -553,7 +554,7 @@ func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descr
 	}
 	err = cw.Commit(ctx, sz, dgst, content.WithLabels(labels))
 	if err != nil {
-		return errors.Wrapf(err, "failed to do cw.Commit")
+		return fmt.Errorf("failed to do cw.Commit: %w", err)
 	}
 	desc.Digest = dgst
 	desc.Size = sz

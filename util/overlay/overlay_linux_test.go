@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/continuity/fs/fstest"
-	"github.com/pkg/errors"
 )
 
 // This test file contains tests that are required in continuity project.
@@ -338,7 +337,7 @@ func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestCh
 	t1 := t.TempDir()
 
 	if err := base.Apply(t1); err != nil {
-		return errors.Wrap(err, "failed to apply base filesystem")
+		return fmt.Errorf("failed to apply base filesystem"+": %w", err)
 	}
 
 	tupper := t.TempDir()
@@ -352,10 +351,10 @@ func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestCh
 		},
 	}, func(overlayRoot string) error {
 		if err := diff.Apply(overlayRoot); err != nil {
-			return errors.Wrapf(err, "failed to apply diff to overlayRoot")
+			return fmt.Errorf("failed to apply diff to overlayRoot: %w", err)
 		}
 		if err := collectAndCheckChanges(t, t1, tupper, expected); err != nil {
-			return errors.Wrap(err, "failed to collect changes")
+			return fmt.Errorf("failed to collect changes"+": %w", err)
 		}
 		return nil
 	})
@@ -363,30 +362,30 @@ func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestCh
 
 func checkChanges(root string, changes, expected []TestChange) error {
 	if len(changes) != len(expected) {
-		return errors.Errorf("Unexpected number of changes:\n%s", diffString(changes, expected))
+		return fmt.Errorf("Unexpected number of changes:\n%s", diffString(changes, expected))
 	}
 	for i := range changes {
 		if changes[i].Path != expected[i].Path || changes[i].Kind != expected[i].Kind {
-			return errors.Errorf("Unexpected change at %d:\n%s", i, diffString(changes, expected))
+			return fmt.Errorf("Unexpected change at %d:\n%s", i, diffString(changes, expected))
 		}
 		if changes[i].Kind != fs.ChangeKindDelete {
 			filename := filepath.Join(root, changes[i].Path)
 			efi, err := os.Stat(filename)
 			if err != nil {
-				return errors.Wrapf(err, "failed to stat %q", filename)
+				return fmt.Errorf("failed to stat %q: %w", filename, err)
 			}
 			afi := changes[i].FileInfo
 			if afi.Size() != efi.Size() {
-				return errors.Errorf("Unexpected change size %d, %q has size %d", afi.Size(), filename, efi.Size())
+				return fmt.Errorf("Unexpected change size %d, %q has size %d", afi.Size(), filename, efi.Size())
 			}
 			if afi.Mode() != efi.Mode() {
-				return errors.Errorf("Unexpected change mode %s, %q has mode %s", afi.Mode(), filename, efi.Mode())
+				return fmt.Errorf("Unexpected change mode %s, %q has mode %s", afi.Mode(), filename, efi.Mode())
 			}
 			if afi.ModTime() != efi.ModTime() {
-				return errors.Errorf("Unexpected change modtime %s, %q has modtime %s", afi.ModTime(), filename, efi.ModTime())
+				return fmt.Errorf("Unexpected change modtime %s, %q has modtime %s", afi.ModTime(), filename, efi.ModTime())
 			}
 			if expected := filepath.Join(root, changes[i].Path); changes[i].Source != expected {
-				return errors.Errorf("Unexpected source path %s, expected %s", changes[i].Source, expected)
+				return fmt.Errorf("Unexpected source path %s, expected %s", changes[i].Source, expected)
 			}
 		}
 	}
@@ -429,7 +428,7 @@ func collectAndCheckChanges(t *testing.T, base, upperdir string, expected []Test
 			return err
 		}
 		if err := checkChanges(upperViewRoot, changes, expected); err != nil {
-			return errors.Wrapf(err, "change check falied")
+			return fmt.Errorf("change check falied: %w", err)
 		}
 		return nil
 	})

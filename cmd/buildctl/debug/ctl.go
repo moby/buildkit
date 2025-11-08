@@ -1,10 +1,11 @@
 package debug
 
 import (
+	"errors"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -31,7 +32,7 @@ var CtlCommand = cli.Command{
 func ctl(clicontext *cli.Context) error {
 	args := clicontext.Args()
 	if len(args) == 0 {
-		return errors.Errorf("build ref must be specified")
+		return errors.New("build ref must be specified")
 	}
 	ref := args[0]
 
@@ -47,15 +48,15 @@ func ctl(clicontext *cli.Context) error {
 	del := clicontext.Bool("delete")
 
 	if !pin && !unpin && !del {
-		return errors.Errorf("must specify one of --pin, --unpin, --delete")
+		return errors.New("must specify one of --pin, --unpin, --delete")
 	}
 
 	if pin && unpin {
-		return errors.Errorf("cannot specify both --pin and --unpin")
+		return errors.New("cannot specify both --pin and --unpin")
 	}
 
 	if del && (pin || unpin) {
-		return errors.Errorf("cannot specify --delete with --pin or --unpin")
+		return errors.New("cannot specify --delete with --pin or --unpin")
 	}
 
 	_, err = c.ControlClient().UpdateBuildHistory(ctx, &controlapi.UpdateBuildHistoryRequest{

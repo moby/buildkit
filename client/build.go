@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/moby/buildkit/client/buildid"
@@ -10,7 +11,6 @@ import (
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/apicaps"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -31,7 +31,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 
 	workers, err := c.ListWorkers(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "listing workers for Build")
+		return nil, fmt.Errorf("listing workers for Build"+": %w", err)
 	}
 	var gworkers []gateway.WorkerInfo
 	for _, w := range workers {
@@ -57,7 +57,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		gwClient.caps = &caps
 
 		if err := g.Run(ctx, buildFunc); err != nil {
-			return errors.Wrap(err, "failed to run Build function")
+			return fmt.Errorf("failed to run Build function"+": %w", err)
 		}
 		return nil
 	}

@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-
-	"github.com/pkg/errors"
 )
 
 func main() {
@@ -43,12 +41,12 @@ func main() {
 			}
 			err = cmd.Start()
 			if err != nil {
-				err = errors.Wrapf(err, "could not start command %s", groups[1])
+				err = fmt.Errorf("could not start command %s: %w", groups[1], err)
 				return nil
 			}
 			err = cmd.Wait()
 			if err != nil {
-				err = errors.Wrapf(err, "could not run command %s", groups[1])
+				err = fmt.Errorf("could not run command %s: %w", groups[1], err)
 				return nil
 			}
 			fmt.Fprintf(stdout, "```\n")

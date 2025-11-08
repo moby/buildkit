@@ -22,6 +22,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -95,7 +96,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 			}
 		}
 	default:
-		err = errors.Wrapf(err, "unsupported or uninferrable manifest type")
+		err = fmt.Errorf("unsupported or uninferrable manifest type: %w", err)
 		return nil, err
 	}
 
@@ -132,7 +133,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {
 	maxBlobSize := int64(1 << 20)
 	if desc.Size > maxBlobSize {
-		return nil, errors.Errorf("blob %s is too large (%d > %d)", desc.Digest, desc.Size, maxBlobSize)
+		return nil, fmt.Errorf("blob %s is too large (%d > %d)", desc.Digest, desc.Size, maxBlobSize)
 	}
 	dt, err := content.ReadBlob(ctx, provider, desc)
 	if err != nil {
@@ -147,7 +148,7 @@ func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Desc
 			}
 		}
 	}
-	return dt, errors.WithStack(err)
+	return dt, pkgerrors.WithStack(err)
 }
 
 func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte, id string, w worker.Worker) (solver.CacheManager, error) {
@@ -167,7 +168,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 				var m ocispecs.Manifest
 
 				if err := json.Unmarshal(dt, &m); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 
 				if m.Config.Digest == "" || len(m.Layers) == 0 {
@@ -184,13 +185,13 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 
 				p, err := content.ReadBlob(ctx, ci.provider, m.Config)
 				if err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 
 				var img image
 
 				if err := json.Unmarshal(p, &img); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 
 				if len(img.Rootfs.DiffIDs) != len(m.Layers) {
@@ -204,7 +205,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 
 				var config cacheimporttypes.CacheConfig
 				if err := json.Unmarshal(img.Cache, &config.Records); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 
 				createdDates, createdMsg, err := parseCreatedLayerInfo(img)
@@ -236,7 +237,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 
 				dt, err = json.Marshal(config)
 				if err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 				cc := v1.NewCacheChains()
 				if err := v1.ParseConfig(config, layers, cc); err != nil {
@@ -279,7 +280,7 @@ func (ci *contentCacheImporter) allDistributionManifests(ctx context.Context, dt
 	case images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 		var index ocispecs.Index
 		if err := json.Unmarshal(dt, &index); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 
 		for _, d := range index.Manifests {
@@ -288,7 +289,7 @@ func (ci *contentCacheImporter) allDistributionManifests(ctx context.Context, dt
 			}
 			p, err := content.ReadBlob(ctx, ci.provider, d)
 			if err != nil {
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 			if err := ci.allDistributionManifests(ctx, p, m); err != nil {
 				return err

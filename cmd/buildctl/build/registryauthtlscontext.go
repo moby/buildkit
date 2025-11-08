@@ -1,11 +1,12 @@
 package build
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/session/auth/authprovider"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -26,7 +27,7 @@ func parseRegistryAuthTLSContextCSV(s string) (authTLSContextEntry, error) {
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
 		if !ok {
-			return authTLSContext, errors.Errorf("invalid value %s", field)
+			return authTLSContext, fmt.Errorf("invalid value %s", field)
 		}
 		key = strings.ToLower(key)
 		switch key {

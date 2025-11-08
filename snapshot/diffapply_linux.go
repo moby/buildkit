@@ -2,7 +2,8 @@ package snapshot
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
+	"fmt"
 	gofs "io/fs"
 	"os"
 	"path/filepath"
@@ -19,7 +20,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/overlay"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -29,12 +29,12 @@ import (
 func (sn *mergeSnapshotter) diffApply(ctx context.Context, dest Mountable, diffs ...Diff) (_ snapshots.Usage, rerr error) {
 	a, err := applierFor(dest, sn.tryCrossSnapshotLink, sn.userxattr)
 	if err != nil {
-		return snapshots.Usage{}, errors.Wrapf(err, "failed to create applier")
+		return snapshots.Usage{}, fmt.Errorf("failed to create applier: %w", err)
 	}
 	defer func() {
 		releaseErr := a.Release()
 		if releaseErr != nil {
-			rerr = stderrors.Join(rerr, errors.Wrapf(releaseErr, "failed to release applier"))
+			rerr = errors.Join(rerr, fmt.Errorf("failed to release applier: %w", releaseErr))
 		}
 	}()
 
@@ -44,55 +44,55 @@ func (sn *mergeSnapshotter) diffApply(ctx context.Context, dest Mountable, diffs
 		var lowerMntable Mountable
 		if diff.Lower != "" {
 			if info, err := sn.Stat(ctx, diff.Lower); err != nil {
-				return snapshots.Usage{}, errors.Wrapf(err, "failed to stat lower snapshot %s", diff.Lower)
+				return snapshots.Usage{}, fmt.Errorf("failed to stat lower snapshot %s: %w", diff.Lower, err)
 			} else if info.Kind == snapshots.KindCommitted {
 				lowerMntable, err = sn.View(ctx, identity.NewID(), diff.Lower)
 				if err != nil {
-					return snapshots.Usage{}, errors.Wrapf(err, "failed to mount lower snapshot view %s", diff.Lower)
+					return snapshots.Usage{}, fmt.Errorf("failed to mount lower snapshot view %s: %w", diff.Lower, err)
 				}
 			} else {
 				lowerMntable, err = sn.Mounts(ctx, diff.Lower)
 				if err != nil {
-					return snapshots.Usage{}, errors.Wrapf(err, "failed to mount lower snapshot %s", diff.Lower)
+					return snapshots.Usage{}, fmt.Errorf("failed to mount lower snapshot %s: %w", diff.Lower, err)
 				}
 			}
 		}
 		var upperMntable Mountable
 		if diff.Upper != "" {
 			if info, err := sn.Stat(ctx, diff.Upper); err != nil {
-				return snapshots.Usage{}, errors.Wrapf(err, "failed to stat upper snapshot %s", diff.Upper)
+				return snapshots.Usage{}, fmt.Errorf("failed to stat upper snapshot %s: %w", diff.Upper, err)
 			} else if info.Kind == snapshots.KindCommitted {
 				upperMntable, err = sn.View(ctx, identity.NewID(), diff.Upper)
 				if err != nil {
-					return snapshots.Usage{}, errors.Wrapf(err, "failed to mount upper snapshot view %s", diff.Upper)
+					return snapshots.Usage{}, fmt.Errorf("failed to mount upper snapshot view %s: %w", diff.Upper, err)
 				}
 			} else {
 				upperMntable, err = sn.Mounts(ctx, diff.Upper)
 				if err != nil {
-					return snapshots.Usage{}, errors.Wrapf(err, "failed to mount upper snapshot %s", diff.Upper)
+					return snapshots.Usage{}, fmt.Errorf("failed to mount upper snapshot %s: %w", diff.Upper, err)
 				}
 			}
 		} else {
 			// create an empty view
 			upperMntable, err = sn.View(ctx, identity.NewID(), "")
 			if err != nil {
-				return snapshots.Usage{}, errors.Wrapf(err, "failed to mount empty upper snapshot view %s", diff.Upper)
+				return snapshots.Usage{}, fmt.Errorf("failed to mount empty upper snapshot view %s: %w", diff.Upper, err)
 			}
 		}
 		d, err := differFor(lowerMntable, upperMntable)
 		if err != nil {
-			return snapshots.Usage{}, errors.Wrapf(err, "failed to create differ")
+			return snapshots.Usage{}, fmt.Errorf("failed to create differ: %w", err)
 		}
 		defer func() {
-			rerr = stderrors.Join(rerr, d.Release())
+			rerr = errors.Join(rerr, d.Release())
 		}()
 		if err := d.HandleChanges(ctx, a.Apply); err != nil {
-			return snapshots.Usage{}, errors.Wrapf(err, "failed to handle changes")
+			return snapshots.Usage{}, fmt.Errorf("failed to handle changes: %w", err)
 		}
 	}
 
 	if err := a.Flush(); err != nil {
-		return snapshots.Usage{}, errors.Wrapf(err, "failed to flush changes")
+		return snapshots.Usage{}, fmt.Errorf("failed to flush changes: %w", err)
 	}
 	return a.Usage()
 }
@@ -146,7 +146,7 @@ func applierFor(dest Mountable, tryCrossSnapshotLink, userxattr bool) (_ *applie
 	}
 	defer func() {
 		if rerr != nil {
-			rerr = stderrors.Join(rerr, a.Release())
+			rerr = errors.Join(rerr, a.Release())
 		}
 	}()
 	if tryCrossSnapshotLink {
@@ -160,7 +160,7 @@ func applierFor(dest Mountable, tryCrossSnapshotLink, userxattr bool) (_ *applie
 	a.release = release
 
 	if len(mnts) != 1 {
-		return nil, errors.Errorf("expected exactly one mount, got %d", len(mnts))
+		return nil, fmt.Errorf("expected exactly one mount, got %d", len(mnts))
 	}
 	mnt := mnts[0]
 
@@ -173,10 +173,10 @@ func applierFor(dest Mountable, tryCrossSnapshotLink, userxattr bool) (_ *applie
 			}
 		}
 		if a.root == "" {
-			return nil, errors.Errorf("could not find upperdir in mount options %v", mnt.Options)
+			return nil, fmt.Errorf("could not find upperdir in mount options %v", mnt.Options)
 		}
 		if len(a.lowerdirs) == 0 {
-			return nil, errors.Errorf("could not find lowerdir in mount options %v", mnt.Options)
+			return nil, fmt.Errorf("could not find lowerdir in mount options %v", mnt.Options)
 		}
 		a.createWhiteoutDelete = true
 	} else if mnt.Type == "bind" || mnt.Type == "rbind" {
@@ -191,13 +191,13 @@ func applierFor(dest Mountable, tryCrossSnapshotLink, userxattr bool) (_ *applie
 		prevRelease := a.release
 		a.release = func() error {
 			err := mnter.Unmount()
-			return stderrors.Join(err, prevRelease())
+			return errors.Join(err, prevRelease())
 		}
 	}
 
 	a.root, err = filepath.EvalSymlinks(a.root)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to resolve symlinks in %s", a.root)
+		return nil, fmt.Errorf("failed to resolve symlinks in %s: %w", a.root, err)
 	}
 	return a, nil
 }
@@ -213,17 +213,17 @@ func (a *applier) Apply(ctx context.Context, c *change) error {
 
 	dstPath, err := safeJoin(a.root, c.subPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to join paths %q and %q", a.root, c.subPath)
+		return fmt.Errorf("failed to join paths %q and %q: %w", a.root, c.subPath, err)
 	}
 	var dstStat *syscall.Stat_t
 	if dstfi, err := os.Lstat(dstPath); err == nil {
 		stat, ok := dstfi.Sys().(*syscall.Stat_t)
 		if !ok {
-			return errors.Errorf("failed to get stat_t for %T", dstStat)
+			return fmt.Errorf("failed to get stat_t for %T", dstStat)
 		}
 		dstStat = stat
 	} else if !os.IsNotExist(err) {
-		return errors.Wrap(err, "failed to stat during copy apply")
+		return fmt.Errorf("failed to stat during copy apply"+": %w", err)
 	}
 
 	ca := &changeApply{
@@ -233,19 +233,19 @@ func (a *applier) Apply(ctx context.Context, c *change) error {
 	}
 
 	if done, err := a.applyDelete(ca); err != nil {
-		return errors.Wrap(err, "failed to delete during apply")
+		return fmt.Errorf("failed to delete during apply"+": %w", err)
 	} else if done {
 		return nil
 	}
 
 	if done, err := a.applyHardlink(ctx, ca); err != nil {
-		return errors.Wrapf(err, "failed to hardlink during apply")
+		return fmt.Errorf("failed to hardlink during apply: %w", err)
 	} else if done {
 		return nil
 	}
 
 	if err := a.applyCopy(ctx, ca); err != nil {
-		return errors.Wrapf(err, "failed to copy during apply")
+		return fmt.Errorf("failed to copy during apply: %w", err)
 	}
 	return nil
 }
@@ -263,7 +263,7 @@ func (a *applier) applyDelete(ca *changeApply) (bool, error) {
 	}
 
 	if err := os.RemoveAll(ca.dstPath); err != nil {
-		return false, errors.Wrap(err, "failed to remove during apply")
+		return false, fmt.Errorf("failed to remove during apply"+": %w", err)
 	}
 	ca.dstStat = nil
 
@@ -280,13 +280,13 @@ func (a *applier) applyDelete(ca *changeApply) (bool, error) {
 		for _, lowerdir := range a.lowerdirs {
 			lowerPath, err := safeJoin(lowerdir, ca.subPath)
 			if err != nil {
-				return false, errors.Wrapf(err, "failed to join lowerdir %q and subPath %q", lowerdir, ca.subPath)
+				return false, fmt.Errorf("failed to join lowerdir %q and subPath %q: %w", lowerdir, ca.subPath, err)
 			}
 			if _, err := os.Lstat(lowerPath); err == nil {
 				foundLower = true
 				break
 			} else if !errors.Is(err, unix.ENOENT) && !errors.Is(err, unix.ENOTDIR) {
-				return false, errors.Wrapf(err, "failed to stat lowerPath %q", lowerPath)
+				return false, fmt.Errorf("failed to stat lowerPath %q: %w", lowerPath, err)
 			}
 		}
 		if foundLower {
@@ -318,7 +318,7 @@ func (a *applier) applyHardlink(ctx context.Context, ca *changeApply) (bool, err
 			// there's an already applied path that we should link from
 			path, err := safeJoin(a.root, ca.linkSubPath)
 			if err != nil {
-				return false, errors.Errorf("failed to get hardlink source path: %v", err)
+				return false, fmt.Errorf("failed to get hardlink source path: %v", err)
 			}
 			linkSrcPath = path
 		} else if a.crossSnapshotLinks != nil {
@@ -340,7 +340,7 @@ func (a *applier) applyHardlink(ctx context.Context, ca *changeApply) (bool, err
 			}
 			return false, nil
 		} else if err != nil {
-			return false, errors.Wrap(err, "failed to hardlink during apply")
+			return false, fmt.Errorf("failed to hardlink during apply"+": %w", err)
 		}
 
 		return true, nil
@@ -351,46 +351,46 @@ func (a *applier) applyCopy(ctx context.Context, ca *changeApply) error {
 	switch ca.srcStat.Mode & unix.S_IFMT {
 	case unix.S_IFREG:
 		if err := fs.CopyFile(ca.dstPath, ca.srcPath); err != nil {
-			return errors.Wrapf(err, "failed to copy from %s to %s during apply", ca.srcPath, ca.dstPath)
+			return fmt.Errorf("failed to copy from %s to %s during apply: %w", ca.srcPath, ca.dstPath, err)
 		}
 	case unix.S_IFDIR:
 		if ca.dstStat == nil {
 			// dstPath doesn't exist, make it a dir
 			if err := unix.Mkdir(ca.dstPath, ca.srcStat.Mode); err != nil {
-				return errors.Wrapf(err, "failed to create applied dir at %q from %q", ca.dstPath, ca.srcPath)
+				return fmt.Errorf("failed to create applied dir at %q from %q: %w", ca.dstPath, ca.srcPath, err)
 			}
 		}
 	case unix.S_IFLNK:
 		if target, err := os.Readlink(ca.srcPath); err != nil {
-			return errors.Wrap(err, "failed to read symlink during apply")
+			return fmt.Errorf("failed to read symlink during apply"+": %w", err)
 		} else if err := os.Symlink(target, ca.dstPath); err != nil {
-			return errors.Wrap(err, "failed to create symlink during apply")
+			return fmt.Errorf("failed to create symlink during apply"+": %w", err)
 		}
 	case unix.S_IFBLK, unix.S_IFCHR, unix.S_IFIFO, unix.S_IFSOCK:
 		if err := unix.Mknod(ca.dstPath, ca.srcStat.Mode, int(ca.srcStat.Rdev)); err != nil {
-			return errors.Wrap(err, "failed to mknod during apply")
+			return fmt.Errorf("failed to mknod during apply"+": %w", err)
 		}
 	default:
 		// should never be here, all types should be handled
-		return errors.Errorf("unhandled file type %d during merge at path %q", ca.srcStat.Mode&unix.S_IFMT, ca.srcPath)
+		return fmt.Errorf("unhandled file type %d during merge at path %q", ca.srcStat.Mode&unix.S_IFMT, ca.srcPath)
 	}
 
 	// NOTE: it's important that chown happens before setting xattrs due to the fact that chown will
 	// reset the security.capabilities xattr which results in file capabilities being lost.
 	if err := os.Lchown(ca.dstPath, int(ca.srcStat.Uid), int(ca.srcStat.Gid)); err != nil {
-		return errors.Wrap(err, "failed to chown during apply")
+		return fmt.Errorf("failed to chown during apply"+": %w", err)
 	}
 
 	if ca.srcStat.Mode&unix.S_IFMT != unix.S_IFLNK {
 		if err := unix.Chmod(ca.dstPath, ca.srcStat.Mode); err != nil {
-			return errors.Wrapf(err, "failed to chmod path %q during apply", ca.dstPath)
+			return fmt.Errorf("failed to chmod path %q during apply: %w", ca.dstPath, err)
 		}
 	}
 
 	if ca.srcPath != "" {
 		xattrs, err := sysx.LListxattr(ca.srcPath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to list xattrs of src path %s", ca.srcPath)
+			return fmt.Errorf("failed to list xattrs of src path %s: %w", ca.srcPath, err)
 		}
 		for _, xattr := range xattrs {
 			if isOpaqueXattr(xattr) {
@@ -401,7 +401,7 @@ func (a *applier) applyCopy(ctx context.Context, ca *changeApply) error {
 			}
 			xattrVal, err := sysx.LGetxattr(ca.srcPath, xattr)
 			if err != nil {
-				return errors.Wrapf(err, "failed to get xattr %s of src path %s", xattr, ca.srcPath)
+				return fmt.Errorf("failed to get xattr %s of src path %s: %w", xattr, ca.srcPath, err)
 			}
 			if err := sysx.LSetxattr(ca.dstPath, xattr, xattrVal, 0); err != nil {
 				// This can often fail, so just log it: https://github.com/moby/buildkit/issues/1189
@@ -414,7 +414,7 @@ func (a *applier) applyCopy(ctx context.Context, ca *changeApply) error {
 		// This is set in the case where we are creating a directory that is replacing a whiteout device
 		xattr := opaqueXattr(a.userxattr)
 		if err := sysx.LSetxattr(ca.dstPath, xattr, []byte{'y'}, 0); err != nil {
-			return errors.Wrapf(err, "failed to set opaque xattr %q of path %s", xattr, ca.dstPath)
+			return fmt.Errorf("failed to set opaque xattr %q of path %s: %w", xattr, ca.dstPath, err)
 		}
 	}
 
@@ -523,7 +523,7 @@ func differFor(lowerMntable, upperMntable Mountable) (_ *differ, rerr error) {
 	}
 	defer func() {
 		if rerr != nil {
-			rerr = stderrors.Join(rerr, d.Release())
+			rerr = errors.Join(rerr, d.Release())
 		}
 	}()
 
@@ -541,7 +541,7 @@ func differFor(lowerMntable, upperMntable Mountable) (_ *differ, rerr error) {
 		d.lowerRoot = root
 		lowerMnts = mnts
 		d.releaseLower = func() error {
-			return stderrors.Join(mounter.Unmount(), release())
+			return errors.Join(mounter.Unmount(), release())
 		}
 	}
 
@@ -559,7 +559,7 @@ func differFor(lowerMntable, upperMntable Mountable) (_ *differ, rerr error) {
 		d.upperRoot = root
 		upperMnts = mnts
 		d.releaseUpper = func() error {
-			return stderrors.Join(mounter.Unmount(), release())
+			return errors.Join(mounter.Unmount(), release())
 		}
 	}
 
@@ -569,7 +569,7 @@ func differFor(lowerMntable, upperMntable Mountable) (_ *differ, rerr error) {
 		} else if overlay.IsOverlayMountType(upperMnts[0]) {
 			overlayDirs, err := overlay.GetOverlayLayers(upperMnts[0])
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to get overlay layers from mount %+v", upperMnts[0])
+				return nil, fmt.Errorf("failed to get overlay layers from mount %+v: %w", upperMnts[0], err)
 			}
 			d.upperOverlayDirs = overlayDirs
 		}
@@ -609,7 +609,7 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 		// that would make us incompatible with the image exporter code:
 		// https://github.com/containerd/containerd/pull/2095
 		if err := d.checkParent(ctx, subPath, handle); err != nil {
-			return errors.Wrapf(err, "failed to check parent for %s", subPath)
+			return fmt.Errorf("failed to check parent for %s: %w", subPath, err)
 		}
 
 		c := &change{
@@ -624,20 +624,20 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 			case !srcfi.IsDir() && d.upperBindSource != "":
 				srcPath, err := safeJoin(d.upperBindSource, c.subPath)
 				if err != nil {
-					return errors.Wrapf(err, "failed to join %s and %s", d.upperBindSource, c.subPath)
+					return fmt.Errorf("failed to join %s and %s: %w", d.upperBindSource, c.subPath, err)
 				}
 				c.srcPath = srcPath
 				if fi, err := os.Lstat(c.srcPath); err == nil {
 					srcfi = fi
 				} else {
-					return errors.Wrap(err, "failed to stat underlying file from bind mount")
+					return fmt.Errorf("failed to stat underlying file from bind mount"+": %w", err)
 				}
 			case !srcfi.IsDir() && len(d.upperOverlayDirs) > 0:
 				for i := range d.upperOverlayDirs {
 					dir := d.upperOverlayDirs[len(d.upperOverlayDirs)-1-i]
 					path, err := safeJoin(dir, c.subPath)
 					if err != nil {
-						return errors.Wrapf(err, "failed to join %s and %s", dir, c.subPath)
+						return fmt.Errorf("failed to join %s and %s: %w", dir, c.subPath, err)
 					}
 					if stat, err := os.Lstat(path); err == nil {
 						c.srcPath = path
@@ -646,26 +646,26 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 					} else if errors.Is(err, unix.ENOENT) {
 						continue
 					} else {
-						return errors.Wrap(err, "failed to lstat when finding direct path of overlay file")
+						return fmt.Errorf("failed to lstat when finding direct path of overlay file"+": %w", err)
 					}
 				}
 			default:
 				srcPath, err := safeJoin(d.upperRoot, subPath)
 				if err != nil {
-					return errors.Wrapf(err, "failed to join %s and %s", d.upperRoot, subPath)
+					return fmt.Errorf("failed to join %s and %s: %w", d.upperRoot, subPath, err)
 				}
 				c.srcPath = srcPath
 				if fi, err := os.Lstat(c.srcPath); err == nil {
 					srcfi = fi
 				} else {
-					return errors.Wrap(err, "failed to stat srcPath from differ")
+					return fmt.Errorf("failed to stat srcPath from differ"+": %w", err)
 				}
 			}
 
 			var ok bool
 			c.srcStat, ok = srcfi.Sys().(*syscall.Stat_t)
 			if !ok {
-				return errors.Errorf("unhandled stat type for %+v", srcfi)
+				return fmt.Errorf("unhandled stat type for %+v", srcfi)
 			}
 
 			if !srcfi.IsDir() && c.srcStat.Nlink > 1 {
@@ -698,12 +698,12 @@ func (d *differ) overlayChanges(ctx context.Context, handle func(context.Context
 		}
 
 		if err := d.checkParent(ctx, subPath, handle); err != nil {
-			return errors.Wrapf(err, "failed to check parent for %s", subPath)
+			return fmt.Errorf("failed to check parent for %s: %w", subPath, err)
 		}
 
 		srcPath, err := safeJoin(d.upperdir, subPath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to join %s and %s", d.upperdir, subPath)
+			return fmt.Errorf("failed to join %s and %s: %w", d.upperdir, subPath, err)
 		}
 
 		c := &change{
@@ -716,7 +716,7 @@ func (d *differ) overlayChanges(ctx context.Context, handle func(context.Context
 			var ok bool
 			c.srcStat, ok = srcfi.Sys().(*syscall.Stat_t)
 			if !ok {
-				return errors.Errorf("unhandled stat type for %+v", srcfi)
+				return fmt.Errorf("unhandled stat type for %+v", srcfi)
 			}
 
 			// Changes with Delete kind may share the same inode even if they are unrelated.
@@ -758,7 +758,7 @@ func (d *differ) checkParent(ctx context.Context, subPath string, handle func(co
 	}
 	parentSrcStat, ok := srcfi.Sys().(*syscall.Stat_t)
 	if !ok {
-		return errors.Errorf("unexpected type %T", srcfi)
+		return fmt.Errorf("unexpected type %T", srcfi)
 	}
 	return handle(ctx, &change{
 		kind:    fs.ChangeKindModify,
@@ -777,7 +777,7 @@ func (d *differ) Release() error {
 		}
 	}
 	if d.releaseUpper != nil {
-		err = stderrors.Join(err, d.releaseUpper())
+		err = errors.Join(err, d.releaseUpper())
 		if err == nil {
 			d.releaseUpper = nil
 		}
@@ -825,7 +825,7 @@ func needsUserXAttr(ctx context.Context, sn Snapshotter, lm leases.Manager) (boo
 
 	ctx, done, err := leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to create lease for checking user xattr")
+		return false, fmt.Errorf("failed to create lease for checking user xattr"+": %w", err)
 	}
 	defer done(context.TODO())
 

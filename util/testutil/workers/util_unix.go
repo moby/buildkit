@@ -4,13 +4,13 @@ package workers
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 )
 
 const buildkitdNetworkProtocol = "unix"
@@ -21,7 +21,7 @@ func applyBuildkitdPlatformFlags(args []string) []string {
 
 func requireRoot() error {
 	if os.Getuid() != 0 {
-		return errors.Wrap(integration.ErrRequirements, "requires root")
+		return fmt.Errorf("requires root"+": %w", integration.ErrRequirements)
 	}
 	return nil
 }
@@ -55,13 +55,13 @@ func getContainerdDebugSock(tmpdir string) string {
 func mountInfo(tmpdir string) error {
 	f, err := os.Open("/proc/self/mountinfo")
 	if err != nil {
-		return errors.Wrap(err, "failed to open mountinfo")
+		return fmt.Errorf("failed to open mountinfo"+": %w", err)
 	}
 	defer f.Close()
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		if strings.Contains(s.Text(), tmpdir) {
-			return errors.Errorf("leaked mountpoint for %s", tmpdir)
+			return fmt.Errorf("leaked mountpoint for %s", tmpdir)
 		}
 	}
 	return s.Err()

@@ -13,7 +13,6 @@ import (
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/result"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -54,7 +53,7 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 	args = append(args, cfg.Config.Entrypoint...)
 	args = append(args, cfg.Config.Cmd...)
 	if len(args) == 0 {
-		return nil, errors.Errorf("scanner %s does not have cmd", scanner)
+		return nil, fmt.Errorf("scanner %s does not have cmd", scanner)
 	}
 
 	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[*llb.State], error) {

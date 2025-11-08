@@ -14,7 +14,6 @@ import (
 
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 )
 
 func InitContainerdWorker() {
@@ -29,7 +28,7 @@ func InitContainerdWorker() {
 		for entry := range entries {
 			pair := strings.Split(strings.TrimSpace(entry), "=")
 			if len(pair) != 2 {
-				panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
+				panic(fmt.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
 			}
 			name, bin := pair[0], pair[1]
 			integration.Register(&Containerd{
@@ -116,7 +115,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	rootless := false
 	if c.UID != 0 {
 		if c.GID == 0 {
-			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", c.UID, c.GID)
+			return nil, nil, fmt.Errorf("unsupported id pair: uid=%d, gid=%d", c.UID, c.GID)
 		}
 		rootless = true
 	}
@@ -200,7 +199,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 	}
 	if err := integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
 		ctdStop()
-		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", integration.FormatLogs(cfg.Logs))
+		return nil, nil, fmt.Errorf("containerd did not start up: %s: %w", integration.FormatLogs(cfg.Logs), err)
 	}
 	deferF.Append(ctdStop)
 
@@ -288,7 +287,7 @@ func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl fu
 	}
 	if err = integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
 		snStop()
-		return "", nil, errors.Wrapf(err, "containerd-stargz-grpc did not start up: %s", integration.FormatLogs(cfg.Logs))
+		return "", nil, fmt.Errorf("containerd-stargz-grpc did not start up: %s: %w", integration.FormatLogs(cfg.Logs), err)
 	}
 	deferF.Append(snStop)
 

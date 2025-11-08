@@ -2,6 +2,7 @@ package contentutil
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // NewMultiProvider creates a new mutable provider with a base provider
@@ -60,7 +60,7 @@ func (mp *MultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor)
 	}
 	mp.mu.RUnlock()
 	if mp.base == nil {
-		return nil, errors.Wrapf(cerrdefs.ErrNotFound, "content %v", desc.Digest)
+		return nil, fmt.Errorf("content %v: %w", desc.Digest, cerrdefs.ErrNotFound)
 	}
 	return mp.base.ReaderAt(ctx, desc)
 }
@@ -74,7 +74,7 @@ func (mp *MultiProvider) Info(ctx context.Context, dgst digest.Digest) (content.
 	}
 	mp.mu.RUnlock()
 	if mp.base == nil {
-		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "content %v", dgst)
+		return content.Info{}, fmt.Errorf("content %v: %w", dgst, cerrdefs.ErrNotFound)
 	}
 	return mp.base.Info(ctx, dgst)
 }

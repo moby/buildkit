@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/iohelper"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const (
@@ -63,16 +64,16 @@ func (r *ociLayoutResolver) Fetch(ctx context.Context, desc ocispecs.Descriptor)
 func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (string, ocispecs.Descriptor, error) {
 	ref, err := reference.Parse(refString)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "invalid reference %q", refString)
+		return "", ocispecs.Descriptor{}, fmt.Errorf("invalid reference %q: %w", refString, err)
 	}
 	dgst := ref.Digest()
 	if dgst == "" {
-		return "", ocispecs.Descriptor{}, errors.Errorf("reference %q must have digest", refString)
+		return "", ocispecs.Descriptor{}, fmt.Errorf("reference %q must have digest", refString)
 	}
 
 	info, err := r.info(ctx, ref)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to get info about digest")
+		return "", ocispecs.Descriptor{}, fmt.Errorf("unable to get info about digest"+": %w", err)
 	}
 
 	// Create the descriptor, then use that to read the actual root manifest/
@@ -84,16 +85,16 @@ func (r *ociLayoutResolver) Resolve(ctx context.Context, refString string) (stri
 	}
 	rc, err := r.Fetch(ctx, desc)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to get root manifest")
+		return "", ocispecs.Descriptor{}, fmt.Errorf("unable to get root manifest"+": %w", err)
 	}
 	b, err := io.ReadAll(io.LimitReader(rc, maxReadSize))
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrap(err, "unable to read root manifest")
+		return "", ocispecs.Descriptor{}, fmt.Errorf("unable to read root manifest"+": %w", err)
 	}
 
 	mediaType, err := imageutil.DetectManifestBlobMediaType(b)
 	if err != nil {
-		return "", ocispecs.Descriptor{}, errors.Wrapf(err, "reference %q contains neither an index nor a manifest", refString)
+		return "", ocispecs.Descriptor{}, fmt.Errorf("reference %q contains neither an index nor a manifest: %w", refString, err)
 	}
 	desc.MediaType = mediaType
 
@@ -107,7 +108,7 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 
 		dgst := ref.Digest()
 		if dgst == "" {
-			return errors.Errorf("reference %q does not contain a digest", ref.String())
+			return fmt.Errorf("reference %q does not contain a digest", ref.String())
 		}
 		in, err := store.Info(ctx, dgst)
 		info = &in
@@ -117,7 +118,7 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 		return content.Info{}, err
 	}
 	if info == nil {
-		return content.Info{}, errors.Errorf("reference %q did not match any content", ref.String())
+		return content.Info{}, fmt.Errorf("reference %q did not match any content", ref.String())
 	}
 	return *info, nil
 }
@@ -125,8 +126,8 @@ func (r *ociLayoutResolver) info(ctx context.Context, ref reference.Spec) (conte
 func (r *ociLayoutResolver) withCaller(ctx context.Context, f func(context.Context, session.Caller) error) error {
 	if r.store.SessionID != "" {
 		timeoutCtx, cancel := context.WithCancelCause(ctx)
-		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 		caller, err := r.sm.Get(timeoutCtx, r.store.SessionID, false)
 		if err != nil {

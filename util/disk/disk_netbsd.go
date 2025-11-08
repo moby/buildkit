@@ -3,14 +3,15 @@
 package disk
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	"golang.org/x/sys/unix"
 )
 
 func GetDiskStat(root string) (DiskStat, error) {
 	var st unix.Statvfs_t
 	if err := unix.Statvfs(root, &st); err != nil {
-		return DiskStat{}, errors.Wrapf(err, "could not stat fs at %s", root)
+		return DiskStat{}, fmt.Errorf("could not stat fs at %s: %w", root, err)
 	}
 
 	return DiskStat{

@@ -2,6 +2,8 @@ package flightcontrol
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"slices"
@@ -9,15 +11,15 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/progress"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 // flightcontrol is like singleflight but with support for cancellation and
 // nested progress reporting
 
 var (
-	errRetry        = errors.Errorf("retry")
-	errRetryTimeout = errors.Errorf("exceeded retry timeout")
+	errRetry        = errors.New("retry")
+	errRetryTimeout = errors.New("exceeded retry timeout")
 )
 
 type contextKeyT string
@@ -40,7 +42,7 @@ func (g *Group[T]) Do(ctx context.Context, key string, fn func(ctx context.Conte
 		}
 		// backoff logic
 		if backoff >= 15*time.Second {
-			err = errors.Wrapf(errRetryTimeout, "flightcontrol")
+			err = fmt.Errorf("flightcontrol: %w", errRetryTimeout)
 			return v, err
 		}
 		if backoff > 0 {
@@ -116,9 +118,9 @@ func newCall[T any](fn func(ctx context.Context) (T, error)) *call[T] {
 }
 
 func (c *call[T]) run() {
-	defer c.closeProgressWriter(errors.WithStack(context.Canceled))
+	defer c.closeProgressWriter(pkgerrors.WithStack(context.Canceled))
 	ctx, cancel := context.WithCancelCause(c.ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 	v, err := c.fn(ctx)
 	c.mu.Lock()
 	c.result = v
@@ -157,7 +159,7 @@ func (c *call[T]) wait(ctx context.Context) (v T, err error) {
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	c.ctxs = append(c.ctxs, ctx)
 

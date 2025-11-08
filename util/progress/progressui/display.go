@@ -5,6 +5,7 @@ import (
 	"container/ring"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,7 +19,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/units"
 	"github.com/tonistiigi/vt100"
 	"golang.org/x/time/rate"
@@ -150,7 +150,7 @@ func NewDisplay(out io.Writer, mode DisplayMode, opts ...DisplayOpt) (Display, e
 		if c, err := consoleFromWriter(out); err == nil {
 			return newConsoleDisplay(c, opts...), nil
 		} else if mode == "tty" {
-			return Display{}, errors.Wrap(err, "failed to get console")
+			return Display{}, fmt.Errorf("failed to get console"+": %w", err)
 		}
 		fallthrough
 	case PlainMode:
@@ -160,7 +160,7 @@ func NewDisplay(out io.Writer, mode DisplayMode, opts ...DisplayOpt) (Display, e
 	case QuietMode:
 		return newDiscardDisplay(), nil
 	default:
-		return Display{}, errors.Errorf("invalid progress mode %s", mode)
+		return Display{}, fmt.Errorf("invalid progress mode %s", mode)
 	}
 }
 

@@ -2,6 +2,8 @@ package containerd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -24,7 +26,6 @@ import (
 	"github.com/moby/buildkit/worker/base"
 	wlabel "github.com/moby/buildkit/worker/label"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -53,19 +54,19 @@ func NewWorkerOpt(workerOpts WorkerOptions, opts ...ctd.Opt) (base.WorkerOpt, er
 	opts = append(opts, ctd.WithDefaultNamespace(workerOpts.Namespace))
 	client, err := ctd.New(workerOpts.Address, opts...)
 	if err != nil {
-		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", workerOpts.Address)
+		return base.WorkerOpt{}, fmt.Errorf("failed to connect client to %q . make sure containerd is running: %w", workerOpts.Address, err)
 	}
 	return newContainerd(client, workerOpts)
 }
 
 func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt, error) {
 	if strings.Contains(workerOpts.SnapshotterName, "/") {
-		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", workerOpts.SnapshotterName)
+		return base.WorkerOpt{}, fmt.Errorf("bad snapshotter name: %q", workerOpts.SnapshotterName)
 	}
 	name := "containerd-" + workerOpts.SnapshotterName
 	root := filepath.Join(workerOpts.Root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
-		return base.WorkerOpt{}, errors.Wrapf(err, "failed to create %s", root)
+		return base.WorkerOpt{}, fmt.Errorf("failed to create %s: %w", root, err)
 	}
 
 	df := client.DiffService()
@@ -117,7 +118,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 
 	resp, err := client.IntrospectionService().Plugins(context.TODO(), "type==io.containerd.runtime.v1", "type==io.containerd.runtime.v2")
 	if err != nil {
-		return base.WorkerOpt{}, errors.Wrap(err, "failed to list runtime plugin")
+		return base.WorkerOpt{}, fmt.Errorf("failed to list runtime plugin"+": %w", err)
 	}
 	if len(resp.Plugins) == 0 {
 		return base.WorkerOpt{}, errors.New("failed to find any runtime plugins")

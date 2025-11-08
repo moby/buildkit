@@ -16,10 +16,11 @@ package otlptracegrpc
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
@@ -66,14 +67,14 @@ func (c *client) Stop(ctx context.Context) error {
 // UploadTraces sends a batch of spans to the collector.
 func (c *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
 	if !c.connection.Connected() {
-		return errors.Wrap(c.connection.LastConnectError(), "traces exporter is disconnected from the server")
+		return fmt.Errorf("traces exporter is disconnected from the server"+": %w", c.connection.LastConnectError())
 	}
 
 	ctx, cancel := c.connection.ContextWithStop(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 	ctx, tCancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 30*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer tCancel(errors.WithStack(context.Canceled))
+	ctx, _ = context.WithTimeoutCause(ctx, 30*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer tCancel(pkgerrors.WithStack(context.Canceled))
 
 	ctx = c.connection.ContextWithMetadata(ctx)
 	err := func() error {

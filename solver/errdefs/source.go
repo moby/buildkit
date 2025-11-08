@@ -1,13 +1,13 @@
 package errdefs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	pb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/pkg/errors"
 )
 
 func WithSource(err error, src *Source) error {

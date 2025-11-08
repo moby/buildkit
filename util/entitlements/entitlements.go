@@ -1,9 +1,9 @@
 package entitlements
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -51,13 +51,13 @@ func ParseDevicesConfig(s string) (*DevicesConfig, error) {
 	for _, field := range fields[1:] {
 		k, v, ok := strings.Cut(field, "=")
 		if !ok {
-			return nil, errors.Errorf("invalid device config %q", field)
+			return nil, fmt.Errorf("invalid device config %q", field)
 		}
 		switch k {
 		case "alias":
 			deviceAlias = v
 		default:
-			return nil, errors.Errorf("unknown device config key %q", k)
+			return nil, fmt.Errorf("unknown device config key %q", k)
 		}
 	}
 
@@ -74,7 +74,7 @@ func ParseDevicesConfig(s string) (*DevicesConfig, error) {
 func (c *DevicesConfig) Merge(in EntitlementsConfig) error {
 	c2, ok := in.(*DevicesConfig)
 	if !ok {
-		return errors.Errorf("cannot merge %T into %T", in, c)
+		return fmt.Errorf("cannot merge %T into %T", in, c)
 	}
 
 	if c2.All {
@@ -107,7 +107,7 @@ func Parse(s string) (Entitlement, EntitlementsConfig, error) {
 
 	_, ok := all[Entitlement(s)]
 	if !ok {
-		return "", nil, errors.Errorf("unknown entitlement %s", s)
+		return "", nil, fmt.Errorf("unknown entitlement %s", s)
 	}
 	return Entitlement(s), cfg, nil
 }
@@ -131,7 +131,7 @@ func WhiteList(allowed, supported []Entitlement) (Set, error) {
 		}
 		if supported != nil {
 			if !supm.Allowed(e) {
-				return nil, errors.Errorf("granting entitlement %s is not allowed by build daemon configuration", e)
+				return nil, fmt.Errorf("granting entitlement %s is not allowed by build daemon configuration", e)
 			}
 		}
 		if prev, ok := m[e]; ok && prev != nil {
@@ -156,13 +156,13 @@ func (s Set) Allowed(e Entitlement) bool {
 func (s Set) Check(v Values) error {
 	if v.NetworkHost {
 		if !s.Allowed(EntitlementNetworkHost) {
-			return errors.Errorf("%s is not allowed", EntitlementNetworkHost)
+			return fmt.Errorf("%s is not allowed", EntitlementNetworkHost)
 		}
 	}
 
 	if v.SecurityInsecure {
 		if !s.Allowed(EntitlementSecurityInsecure) {
-			return errors.Errorf("%s is not allowed", EntitlementSecurityInsecure)
+			return fmt.Errorf("%s is not allowed", EntitlementSecurityInsecure)
 		}
 	}
 	return nil

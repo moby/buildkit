@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"testing"
@@ -17,7 +18,7 @@ import (
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/worker/base"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -176,7 +177,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	require.Empty(t, stderr.String())
 
 	// stop pid1
-	cancel(errors.WithStack(context.Canceled))
+	cancel(pkgerrors.WithStack(context.Canceled))
 
 	err = eg.Wait()
 	// we expect pid1 to get canceled after we test the exec
@@ -274,7 +275,7 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 	started := make(chan struct{})
 
 	pid1Ctx, pid1Cancel := context.WithCancelCause(ctx)
-	defer pid1Cancel(errors.WithStack(context.Canceled))
+	defer pid1Cancel(pkgerrors.WithStack(context.Canceled))
 
 	var (
 		pid1Err, pid2Err error
@@ -299,7 +300,7 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 	}
 
 	pid2Ctx, pid2Cancel := context.WithCancelCause(ctx)
-	defer pid2Cancel(errors.WithStack(context.Canceled))
+	defer pid2Cancel(pkgerrors.WithStack(context.Canceled))
 
 	started = make(chan struct{})
 
@@ -324,11 +325,11 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 		t.Error("Unexpected timeout waiting for pid2 to start")
 	}
 
-	pid2Cancel(errors.WithStack(context.Canceled))
+	pid2Cancel(pkgerrors.WithStack(context.Canceled))
 	<-pid2Done
 	require.Contains(t, pid2Err.Error(), "exit code: 137", "pid2 exits with sigkill")
 
-	pid1Cancel(errors.WithStack(context.Canceled))
+	pid1Cancel(pkgerrors.WithStack(context.Canceled))
 	<-pid1Done
 	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
 }

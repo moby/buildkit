@@ -3,6 +3,7 @@ package inline
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 
 	"github.com/containerd/containerd/v2/pkg/labels"
@@ -14,7 +15,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
@@ -127,7 +127,7 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 				for _, resultBlob := range resultBlobs {
 					idx, ok := blobIndexes[resultBlob]
 					if !ok {
-						return nil, errors.Errorf("failed to find blob %s in layers", resultBlob)
+						return nil, fmt.Errorf("failed to find blob %s in layers", resultBlob)
 					}
 					chainedResult.LayerIndexes = append(chainedResult.LayerIndexes, idx)
 				}

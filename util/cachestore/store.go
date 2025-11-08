@@ -3,13 +3,14 @@ package cachestore
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 type Record struct {
@@ -48,7 +49,7 @@ func Records(ctx context.Context, store solver.CacheKeyStorage) ([]*Record, erro
 		}
 		return nil
 	}); err != nil {
-		return nil, errors.Wrap(err, "failed to walk cache keys")
+		return nil, fmt.Errorf("failed to walk cache keys"+": %w", err)
 	}
 
 	records := map[string]*Record{}
@@ -63,7 +64,7 @@ func Records(ctx context.Context, store solver.CacheKeyStorage) ([]*Record, erro
 	for _, rec := range roots {
 		r, ok := records[rec]
 		if !ok {
-			return nil, errors.Errorf("record %s not found in cache", rec)
+			return nil, fmt.Errorf("record %s not found in cache", rec)
 		}
 		arr = setIndex(r, arr)
 	}
@@ -111,7 +112,7 @@ func setIndex(rec *Record, arr []*Record) []*Record {
 func loadRecord(ctx context.Context, store storeWithLinks, id string, out map[string]*Record) (*Record, error) {
 	if r, ok := out[id]; ok {
 		if r == nil {
-			return nil, errors.Errorf("circular dependency detected for %s", id)
+			return nil, fmt.Errorf("circular dependency detected for %s", id)
 		}
 		return r, nil
 	}
@@ -129,7 +130,7 @@ func loadRecord(ctx context.Context, store storeWithLinks, id string, out map[st
 	err := store.WalkLinksAll(id, func(linkID string, link solver.CacheInfoLink) error {
 		child, err := loadRecord(ctx, store, linkID, out)
 		if err != nil {
-			return errors.Wrapf(err, "failed to load link %s for %s", linkID, id)
+			return fmt.Errorf("failed to load link %s for %s: %w", linkID, id, err)
 		}
 		child.Parents = append(child.Parents, Link{
 			Input:    int(link.Input),
@@ -151,7 +152,7 @@ func loadRecord(ctx context.Context, store storeWithLinks, id string, out map[st
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to walk links for %s", id)
+		return nil, fmt.Errorf("failed to walk links for %s: %w", id, err)
 	}
 	out[id] = rec
 	return rec, nil

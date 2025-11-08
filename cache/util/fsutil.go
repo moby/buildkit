@@ -2,13 +2,15 @@ package util
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
@@ -54,7 +56,7 @@ func ReadFile(ctx context.Context, mount snapshot.Mountable, req ReadRequest) ([
 	err := withMount(mount, func(root string) error {
 		fp, err := fs.RootPath(root, req.Filename)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 
 		f, err := os.Open(fp)
@@ -66,7 +68,7 @@ func ReadFile(ctx context.Context, mount snapshot.Mountable, req ReadRequest) ([
 			if errors.As(err, &pe) {
 				pe.Path = req.Filename
 			}
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		defer f.Close()
 
@@ -76,7 +78,7 @@ func ReadFile(ctx context.Context, mount snapshot.Mountable, req ReadRequest) ([
 		}
 		dt, err = io.ReadAll(rdr)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return nil
 	})
@@ -99,16 +101,16 @@ func ReadDir(ctx context.Context, mount snapshot.Mountable, req ReadDirRequest) 
 	err := withMount(mount, func(root string) error {
 		fp, err := fs.RootPath(root, req.Path)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return fsutil.Walk(ctx, fp, &fo, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return errors.Wrapf(err, "walking %q", root)
+				return fmt.Errorf("walking %q: %w", root, err)
 			}
 			stat, ok := info.Sys().(*fstypes.Stat)
 			if !ok {
 				// This "can't happen(tm)".
-				return errors.Errorf("expected a *fsutil.Stat but got %T", info.Sys())
+				return fmt.Errorf("expected a *fsutil.Stat but got %T", info.Sys())
 			}
 			rd = append(rd, stat)
 
@@ -126,14 +128,14 @@ func StatFile(ctx context.Context, mount snapshot.Mountable, path string) (*fsty
 	err := withMount(mount, func(root string) error {
 		fp, err := fs.RootPath(root, path)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if st, err = fsutil.Stat(fp); err != nil {
 			// The filename here is internal to the mount, so we can restore
 			// the request base path for error reporting.
 			// See os.DirFS.Open for details.
 			replaceErrorPath(err, path)
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return nil
 	})

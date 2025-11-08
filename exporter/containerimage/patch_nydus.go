@@ -4,13 +4,13 @@ package containerimage
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // patchImageLayers appends an extra nydus bootstrap layer
@@ -25,7 +25,7 @@ func patchImageLayers(ctx context.Context, remote *solver.Remote, history []ocis
 
 	desc, err := cache.MergeNydus(ctx, ref, opts.RefCfg.Compression, sg)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "merge nydus layer")
+		return nil, nil, fmt.Errorf("merge nydus layer"+": %w", err)
 	}
 	remote.Descriptors = append(remote.Descriptors, *desc)
 

@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,7 +11,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	gwapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/errdefs"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -36,7 +38,7 @@ func (gwf *GatewayForwarder) RegisterBuild(ctx context.Context, id string, bridg
 	defer gwf.mu.Unlock()
 
 	if _, ok := gwf.builds[id]; ok {
-		return errors.Errorf("build ID %s exists", id)
+		return fmt.Errorf("build ID %s exists", id)
 	}
 
 	gwf.builds[id] = bridge
@@ -60,8 +62,8 @@ func (gwf *GatewayForwarder) lookupForwarder(ctx context.Context) (gateway.LLBBr
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 3*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	ctx, _ = context.WithTimeoutCause(ctx, 3*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	go func() {
 		<-ctx.Done()
@@ -90,7 +92,7 @@ func (gwf *GatewayForwarder) lookupForwarder(ctx context.Context) (gateway.LLBBr
 func (gwf *GatewayForwarder) ResolveImageConfig(ctx context.Context, req *gwapi.ResolveImageConfigRequest) (*gwapi.ResolveImageConfigResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding ResolveImageConfig")
+		return nil, fmt.Errorf("forwarding ResolveImageConfig"+": %w", err)
 	}
 
 	return fwd.ResolveImageConfig(ctx, req)
@@ -99,7 +101,7 @@ func (gwf *GatewayForwarder) ResolveImageConfig(ctx context.Context, req *gwapi.
 func (gwf *GatewayForwarder) ResolveSourceMeta(ctx context.Context, req *gwapi.ResolveSourceMetaRequest) (*gwapi.ResolveSourceMetaResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding ResolveSourceMeta")
+		return nil, fmt.Errorf("forwarding ResolveSourceMeta"+": %w", err)
 	}
 
 	return fwd.ResolveSourceMeta(ctx, req)
@@ -108,7 +110,7 @@ func (gwf *GatewayForwarder) ResolveSourceMeta(ctx context.Context, req *gwapi.R
 func (gwf *GatewayForwarder) Solve(ctx context.Context, req *gwapi.SolveRequest) (*gwapi.SolveResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Solve")
+		return nil, fmt.Errorf("forwarding Solve"+": %w", err)
 	}
 
 	return fwd.Solve(ctx, req)
@@ -117,7 +119,7 @@ func (gwf *GatewayForwarder) Solve(ctx context.Context, req *gwapi.SolveRequest)
 func (gwf *GatewayForwarder) ReadFile(ctx context.Context, req *gwapi.ReadFileRequest) (*gwapi.ReadFileResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding ReadFile")
+		return nil, fmt.Errorf("forwarding ReadFile"+": %w", err)
 	}
 	return fwd.ReadFile(ctx, req)
 }
@@ -125,7 +127,7 @@ func (gwf *GatewayForwarder) ReadFile(ctx context.Context, req *gwapi.ReadFileRe
 func (gwf *GatewayForwarder) Evaluate(ctx context.Context, req *gwapi.EvaluateRequest) (*gwapi.EvaluateResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Evaluate")
+		return nil, fmt.Errorf("forwarding Evaluate"+": %w", err)
 	}
 	return fwd.Evaluate(ctx, req)
 }
@@ -133,7 +135,7 @@ func (gwf *GatewayForwarder) Evaluate(ctx context.Context, req *gwapi.EvaluateRe
 func (gwf *GatewayForwarder) Ping(ctx context.Context, req *gwapi.PingRequest) (*gwapi.PongResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Ping")
+		return nil, fmt.Errorf("forwarding Ping"+": %w", err)
 	}
 	return fwd.Ping(ctx, req)
 }
@@ -141,7 +143,7 @@ func (gwf *GatewayForwarder) Ping(ctx context.Context, req *gwapi.PingRequest) (
 func (gwf *GatewayForwarder) Return(ctx context.Context, req *gwapi.ReturnRequest) (*gwapi.ReturnResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Return")
+		return nil, fmt.Errorf("forwarding Return"+": %w", err)
 	}
 	res, err := fwd.Return(ctx, req)
 	return res, err
@@ -150,7 +152,7 @@ func (gwf *GatewayForwarder) Return(ctx context.Context, req *gwapi.ReturnReques
 func (gwf *GatewayForwarder) Inputs(ctx context.Context, req *gwapi.InputsRequest) (*gwapi.InputsResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Inputs")
+		return nil, fmt.Errorf("forwarding Inputs"+": %w", err)
 	}
 	res, err := fwd.Inputs(ctx, req)
 	return res, err
@@ -159,7 +161,7 @@ func (gwf *GatewayForwarder) Inputs(ctx context.Context, req *gwapi.InputsReques
 func (gwf *GatewayForwarder) ReadDir(ctx context.Context, req *gwapi.ReadDirRequest) (*gwapi.ReadDirResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding ReadDir")
+		return nil, fmt.Errorf("forwarding ReadDir"+": %w", err)
 	}
 	return fwd.ReadDir(ctx, req)
 }
@@ -167,7 +169,7 @@ func (gwf *GatewayForwarder) ReadDir(ctx context.Context, req *gwapi.ReadDirRequ
 func (gwf *GatewayForwarder) StatFile(ctx context.Context, req *gwapi.StatFileRequest) (*gwapi.StatFileResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding StatFile")
+		return nil, fmt.Errorf("forwarding StatFile"+": %w", err)
 	}
 	return fwd.StatFile(ctx, req)
 }
@@ -175,7 +177,7 @@ func (gwf *GatewayForwarder) StatFile(ctx context.Context, req *gwapi.StatFileRe
 func (gwf *GatewayForwarder) NewContainer(ctx context.Context, req *gwapi.NewContainerRequest) (*gwapi.NewContainerResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding NewContainer")
+		return nil, fmt.Errorf("forwarding NewContainer"+": %w", err)
 	}
 	return fwd.NewContainer(ctx, req)
 }
@@ -183,7 +185,7 @@ func (gwf *GatewayForwarder) NewContainer(ctx context.Context, req *gwapi.NewCon
 func (gwf *GatewayForwarder) ReleaseContainer(ctx context.Context, req *gwapi.ReleaseContainerRequest) (*gwapi.ReleaseContainerResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding ReleaseContainer")
+		return nil, fmt.Errorf("forwarding ReleaseContainer"+": %w", err)
 	}
 	return fwd.ReleaseContainer(ctx, req)
 }
@@ -191,7 +193,7 @@ func (gwf *GatewayForwarder) ReleaseContainer(ctx context.Context, req *gwapi.Re
 func (gwf *GatewayForwarder) ExecProcess(srv gwapi.LLBBridge_ExecProcessServer) error {
 	fwd, err := gwf.lookupForwarder(srv.Context())
 	if err != nil {
-		return errors.Wrap(err, "forwarding ExecProcess")
+		return fmt.Errorf("forwarding ExecProcess"+": %w", err)
 	}
 	return fwd.ExecProcess(srv)
 }
@@ -199,7 +201,7 @@ func (gwf *GatewayForwarder) ExecProcess(srv gwapi.LLBBridge_ExecProcessServer) 
 func (gwf *GatewayForwarder) Warn(ctx context.Context, req *gwapi.WarnRequest) (*gwapi.WarnResponse, error) {
 	fwd, err := gwf.lookupForwarder(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "forwarding Warn")
+		return nil, fmt.Errorf("forwarding Warn"+": %w", err)
 	}
 	return fwd.Warn(ctx, req)
 }

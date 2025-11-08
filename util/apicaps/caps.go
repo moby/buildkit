@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	pb "github.com/moby/buildkit/util/apicaps/pb"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type PBCap = pb.APICap
@@ -108,16 +108,16 @@ func (s *CapSet) Supports(id CapID) error {
 	err := &CapError{ID: id}
 	c, ok := s.list.m[id]
 	if !ok {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	err.Definition = &c
 	state, ok := s.set[string(id)]
 	if !ok {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	err.State = state
 	if !state.Enabled {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	return nil
 }

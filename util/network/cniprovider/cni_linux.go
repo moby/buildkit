@@ -2,6 +2,8 @@ package cniprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,7 +13,6 @@ import (
 	"github.com/containernetworking/plugins/pkg/ns"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 )
 
 func (ns *cniNS) sample() (*resourcestypes.NetworkSample, error) {
@@ -30,7 +31,7 @@ func (ns *cniNS) sample() (*resourcestypes.NetworkSample, error) {
 	for _, name := range []string{"tx_bytes", "rx_bytes", "tx_packets", "rx_packets", "tx_errors", "rx_errors", "tx_dropped", "rx_dropped"} {
 		n, err := readFileAt(dirfd, name, buf)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read %s", name)
+			return nil, fmt.Errorf("failed to read %s: %w", name, err)
 		}
 		switch name {
 		case "tx_bytes":

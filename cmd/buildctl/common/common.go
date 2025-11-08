@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,7 +15,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/tracing/delegated"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -74,9 +76,9 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	timeout := time.Duration(c.GlobalInt("timeout")) * time.Second
 	if timeout > 0 {
 		ctx2, cancel := context.WithCancelCause(ctx)
-		ctx2, _ = context.WithTimeoutCause(ctx2, timeout, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+		ctx2, _ = context.WithTimeoutCause(ctx2, timeout, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
 		ctx = ctx2
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 	}
 
 	cl, err := client.New(ctx, c.GlobalString("addr"), opts...)
@@ -127,7 +129,7 @@ func resolveTLSFilesFromDir(tlsDir string) (caCert, cert, key string, err error)
 				return "", err
 			}
 		}
-		return "", errors.Errorf("directory did not contain one of the needed files: %s or %s", either, or)
+		return "", fmt.Errorf("directory did not contain one of the needed files: %s or %s", either, or)
 	}
 
 	if caCert, err = oneOf("ca.pem", "ca.crt"); err != nil {

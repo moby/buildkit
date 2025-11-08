@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/containerd/typeurl/v2"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 var helpers map[string]struct{}
@@ -64,7 +64,7 @@ func traces(err error) []*Stack {
 	}
 
 	switch ste := err.(type) { //nolint:errorlint
-	case interface{ StackTrace() errors.StackTrace }:
+	case interface{ StackTrace() pkgerrors.StackTrace }:
 		st = append(st, convertStack(ste.StackTrace()))
 	case interface{ StackTrace() *Stack }:
 		st = append(st, ste.StackTrace())
@@ -79,7 +79,7 @@ func Enable(err error) error {
 	}
 	Helper()
 	if !hasLocalStackTrace(err) {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	return err
 }
@@ -97,7 +97,7 @@ func hasLocalStackTrace(err error) bool {
 	}
 
 	_, ok = err.(interface {
-		StackTrace() errors.StackTrace
+		StackTrace() pkgerrors.StackTrace
 	})
 	return ok
 }
@@ -136,7 +136,7 @@ func (w *formatter) Format(s fmt.State, verb rune) {
 	}
 }
 
-func convertStack(s errors.StackTrace) *Stack {
+func convertStack(s pkgerrors.StackTrace) *Stack {
 	var out Stack
 	helpersMu.RLock()
 	defer helpersMu.RUnlock()

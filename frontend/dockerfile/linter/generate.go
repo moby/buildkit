@@ -14,8 +14,6 @@ import (
 	"strings"
 	"text/template"
 	"unicode"
-
-	"github.com/pkg/errors"
 )
 
 type Rule struct {
@@ -74,7 +72,7 @@ func run(destDir string) error {
 	}
 	for _, rule := range rules {
 		if ok, err := genRuleDoc(rule, tmplRule); err != nil {
-			return errors.Wrapf(err, "Error generating docs for %s", rule.Name)
+			return fmt.Errorf("Error generating docs for %s: %w", rule.Name, err)
 		} else if ok {
 			log.Printf("Docs generated for %s\n", rule.Name)
 		}
@@ -162,7 +160,7 @@ func listRules() ([]Rule, error) {
 										ruleURL := strings.Trim(basicLit.Value, `"`)
 										u, err := url.Parse(ruleURL)
 										if err != nil {
-											inspectErr = errors.Wrapf(err, "cannot parse URL %s", ruleURL)
+											inspectErr = fmt.Errorf("cannot parse URL %s: %w", ruleURL, err)
 											return false
 										}
 										rule.URL = u
@@ -180,13 +178,13 @@ func listRules() ([]Rule, error) {
 						continue
 					}
 					if rule.URL == nil {
-						inspectErr = errors.Errorf("URL not set for %q", rule.Name)
+						inspectErr = fmt.Errorf("URL not set for %q", rule.Name)
 						return false
 					}
 					if strings.HasPrefix(rule.URL.String(), `https://docs.docker.com/go/`) {
 						lastEntry := path.Base(rule.URL.Path)
 						if lastEntry != camelToKebab(rule.Name) {
-							inspectErr = errors.Errorf("Last entry %q in URL is malformed, should be: %q", lastEntry, camelToKebab(rule.Name))
+							inspectErr = fmt.Errorf("Last entry %q in URL is malformed, should be: %q", lastEntry, camelToKebab(rule.Name))
 							return false
 						}
 						rule.URLAlias = strings.TrimPrefix(rule.URL.String(), `https://docs.docker.com`)

@@ -5,18 +5,18 @@ package cache
 import (
 	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/containerd/nydus-snapshotter/pkg/converter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
-
-	"github.com/containerd/nydus-snapshotter/pkg/converter"
 )
 
 func init() {
@@ -33,11 +33,11 @@ func init() {
 func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, s session.Group) (*ocispecs.Descriptor, error) {
 	iref, ok := ref.(*immutableRef)
 	if !ok {
-		return nil, errors.Errorf("unsupported ref type %T", ref)
+		return nil, fmt.Errorf("unsupported ref type %T", ref)
 	}
 	refs := iref.layerChain()
 	if len(refs) == 0 {
-		return nil, errors.Errorf("refs can't be empty")
+		return nil, errors.New("refs can't be empty")
 	}
 
 	// Extracts nydus bootstrap from nydus format for each layer.
@@ -46,11 +46,11 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 	for _, ref := range refs {
 		blobDesc, err := getBlobWithCompressionWithRetry(ctx, ref, comp, s)
 		if err != nil {
-			return nil, errors.Wrapf(err, "get compression blob %q", comp.Type)
+			return nil, fmt.Errorf("get compression blob %q: %w", comp.Type, err)
 		}
 		ra, err := ref.cm.ContentStore.ReaderAt(ctx, blobDesc)
 		if err != nil {
-			return nil, errors.Wrapf(err, "get reader for compression blob %q", comp.Type)
+			return nil, fmt.Errorf("get reader for compression blob %q: %w", comp.Type, err)
 		}
 		defer ra.Close()
 		if cm == nil {
@@ -69,14 +69,14 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 		if _, err := converter.Merge(ctx, layers, pw, converter.MergeOption{
 			WithTar: true,
 		}); err != nil {
-			pw.CloseWithError(errors.Wrapf(err, "merge nydus bootstrap"))
+			pw.CloseWithError(fmt.Errorf("merge nydus bootstrap: %w", err))
 		}
 	}()
 
 	// Compress final nydus bootstrap to tar.gz and write into content store.
 	cw, err := content.OpenWriter(ctx, cm.ContentStore, content.WithRef("nydus-merge-"+iref.getChainID().String()))
 	if err != nil {
-		return nil, errors.Wrap(err, "open content store writer")
+		return nil, fmt.Errorf("open content store writer"+": %w", err)
 	}
 	defer cw.Close()
 
@@ -84,10 +84,10 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 	uncompressedDgst := digest.SHA256.Digester()
 	compressed := io.MultiWriter(gw, uncompressedDgst.Hash())
 	if _, err := io.Copy(compressed, pr); err != nil {
-		return nil, errors.Wrapf(err, "copy bootstrap targz into content store")
+		return nil, fmt.Errorf("copy bootstrap targz into content store: %w", err)
 	}
 	if err := gw.Close(); err != nil {
-		return nil, errors.Wrap(err, "close gzip writer")
+		return nil, fmt.Errorf("close gzip writer"+": %w", err)
 	}
 
 	compressedDgst := cw.Digest()
@@ -95,16 +95,16 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 		labels.LabelUncompressed: uncompressedDgst.Digest().String(),
 	})); err != nil {
 		if !cerrdefs.IsAlreadyExists(err) {
-			return nil, errors.Wrap(err, "commit to content store")
+			return nil, fmt.Errorf("commit to content store"+": %w", err)
 		}
 	}
 	if err := cw.Close(); err != nil {
-		return nil, errors.Wrap(err, "close content store writer")
+		return nil, fmt.Errorf("close content store writer"+": %w", err)
 	}
 
 	info, err := cm.ContentStore.Info(ctx, compressedDgst)
 	if err != nil {
-		return nil, errors.Wrap(err, "get info from content store")
+		return nil, fmt.Errorf("get info from content store"+": %w", err)
 	}
 
 	desc := ocispecs.Descriptor{

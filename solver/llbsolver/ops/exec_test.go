@@ -2,13 +2,13 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -305,7 +305,7 @@ func (j *jobCtx) Session() session.Group {
 }
 
 func (j *jobCtx) Cleanup(f func() error) error {
-	return errors.Errorf("cleanup not implemented for %T", j)
+	return fmt.Errorf("cleanup not implemented for %T", j)
 }
 
 func (j *jobCtx) ResolverCache() solver.ResolverCache {

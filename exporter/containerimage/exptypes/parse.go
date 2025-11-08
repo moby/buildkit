@@ -2,11 +2,11 @@ package exptypes
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/containerd/platforms"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func ParsePlatforms(meta map[string][]byte) (Platforms, error) {
@@ -14,18 +14,18 @@ func ParsePlatforms(meta map[string][]byte) (Platforms, error) {
 		var ps Platforms
 		if len(platformsBytes) > 0 {
 			if err := json.Unmarshal(platformsBytes, &ps); err != nil {
-				return Platforms{}, errors.Wrapf(err, "failed to parse platforms passed to provenance processor")
+				return Platforms{}, fmt.Errorf("failed to parse platforms passed to provenance processor: %w", err)
 			}
 		}
 		if len(ps.Platforms) == 0 {
-			return Platforms{}, errors.Errorf("invalid empty platforms index for exporter")
+			return Platforms{}, errors.New("invalid empty platforms index for exporter")
 		}
 		for i, p := range ps.Platforms {
 			if p.ID == "" {
-				return Platforms{}, errors.Errorf("invalid empty platform key for exporter")
+				return Platforms{}, errors.New("invalid empty platform key for exporter")
 			}
 			if p.Platform.OS == "" || p.Platform.Architecture == "" {
-				return Platforms{}, errors.Errorf("invalid platform value %v for exporter", p.Platform)
+				return Platforms{}, fmt.Errorf("invalid platform value %v for exporter", p.Platform)
 			}
 			ps.Platforms[i].Platform = platforms.Normalize(p.Platform)
 		}
@@ -49,7 +49,7 @@ func ParsePlatforms(meta map[string][]byte) (Platforms, error) {
 				Variant:      img.Variant,
 			}
 		} else if img.OS != "" || img.Architecture != "" {
-			return Platforms{}, errors.Errorf("invalid image config: os and architecture must be specified together")
+			return Platforms{}, errors.New("invalid image config: os and architecture must be specified together")
 		}
 	} else {
 		p = platforms.DefaultSpec()

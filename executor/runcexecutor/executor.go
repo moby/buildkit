@@ -5,6 +5,8 @@ package runcexecutor
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -14,10 +16,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/moby/buildkit/util/bklog"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
@@ -31,12 +29,15 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Opt struct {
@@ -98,13 +99,13 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		}
 	}
 	if !found {
-		return nil, errors.Errorf("failed to find %s binary", cmd)
+		return nil, fmt.Errorf("failed to find %s binary", cmd)
 	}
 
 	root := opt.Root
 
 	if err := os.MkdirAll(root, 0o711); err != nil {
-		return nil, errors.Wrapf(err, "failed to create %s", root)
+		return nil, fmt.Errorf("failed to create %s: %w", root, err)
 	}
 
 	root, err := filepath.Abs(root)
@@ -178,7 +179,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
-		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
+		return nil, fmt.Errorf("unknown network mode %s", meta.NetMode)
 	}
 	namespace, err := provider.New(ctx, meta.Hostname)
 	if err != nil {
@@ -223,7 +224,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0o711); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	defer os.RemoveAll(bundle)
 
@@ -234,10 +235,10 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	rootFSPath := filepath.Join(bundle, "rootfs")
 	if err := user.MkdirAllAndChown(rootFSPath, 0o700, rootUID, rootGID); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	if err := mount.All(rootMount, rootFSPath); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
@@ -245,12 +246,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	f, err := os.Create(filepath.Join(bundle, "config.json"))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	defer f.Close()
 
@@ -281,11 +282,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	newp, err := fs.RootPath(rootFSPath, meta.Cwd)
 	if err != nil {
-		return nil, errors.Wrapf(err, "working dir %s points to invalid target", newp)
+		return nil, fmt.Errorf("working dir %s points to invalid target: %w", newp, err)
 	}
 	if _, err := os.Stat(newp); err != nil {
 		if err := user.MkdirAllAndChown(newp, 0o755, rootUID, rootGID); err != nil {
-			return nil, errors.Wrapf(err, "failed to create working directory %s", newp)
+			return nil, fmt.Errorf("failed to create working directory %s: %w", newp, err)
 		}
 	}
 
@@ -298,7 +299,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	bklog.G(ctx).Debugf("> creating %s %v", id, meta.Args)
@@ -385,7 +386,7 @@ func exitError(ctx context.Context, cgroupPath string, err error, validExitCodes
 
 	select {
 	case <-ctx.Done():
-		exitErr.Err = errors.Wrap(context.Cause(ctx), exitErr.Error())
+		exitErr.Err = errors.Join(context.Cause(ctx), exitErr.Error())
 		return exitErr
 	default:
 		return stack.Enable(exitErr)
@@ -402,7 +403,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		done, ok := w.running[id]
 		w.mu.Unlock()
 		if !ok {
-			return errors.Errorf("container %s not found", id)
+			return fmt.Errorf("container %s not found", id)
 		}
 
 		state, _ = w.runc.State(ctx, id)
@@ -414,9 +415,9 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 			return context.Cause(ctx)
 		case err, ok := <-done:
 			if !ok || err == nil {
-				return errors.Errorf("container %s has stopped", id)
+				return fmt.Errorf("container %s has stopped", id)
 			}
-			return errors.Wrapf(err, "container %s has exited with error", id)
+			return fmt.Errorf("container %s has exited with error: %w", id, err)
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -424,7 +425,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	// load default process spec (for Env, Cwd etc) from bundle
 	f, err := os.Open(filepath.Join(state.Bundle, "config.json"))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	defer f.Close()
 
@@ -434,7 +435,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		return err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return errors.Errorf("unexpected data after JSON spec object")
+		return errors.New("unexpected data after JSON spec object")
 	}
 
 	if process.Meta.User != "" {
@@ -503,7 +504,7 @@ func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
 	// the process
 	tdir, err := os.MkdirTemp("", "runc")
 	if err != nil {
-		return procKiller{}, errors.Wrap(err, "failed to create directory for runc pidfile")
+		return procKiller{}, fmt.Errorf("failed to create directory for runc pidfile"+": %w", err)
 	}
 
 	return procKiller{
@@ -546,8 +547,8 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	// this timeout is generally a no-op, the Kill ctx should already have a
 	// shorter timeout but here as a fail-safe for future refactoring.
 	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	if k.pidfile == "" {
 		// for `runc run` process we use `runc kill` to terminate the process
@@ -570,18 +571,18 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 					continue
 				}
 			}
-			return errors.Wrap(err, "failed to read pidfile from runc")
+			return fmt.Errorf("failed to read pidfile from runc"+": %w", err)
 		}
 		break
 	}
 	pid, err := strconv.Atoi(string(pidData))
 	if err != nil {
-		return errors.Wrap(err, "read invalid pid from pidfile")
+		return fmt.Errorf("read invalid pid from pidfile"+": %w", err)
 	}
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		// error only possible on non-unix hosts
-		return errors.Wrapf(err, "failed to find process for pid %d from pidfile", pid)
+		return fmt.Errorf("failed to find process for pid %d from pidfile: %w", pid, err)
 	}
 	defer process.Release()
 	return process.Signal(syscall.SIGKILL)
@@ -634,17 +635,17 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 		for {
 			select {
 			case <-ctx.Done():
-				killCtx, timeout := context.WithCancelCause(context.Background())                                         //nolint:govet
-				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+				killCtx, timeout := context.WithCancelCause(context.Background())                                            //nolint:govet
+				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
 				if err := p.killer.Kill(killCtx); err != nil {
 					select {
 					case <-killCtx.Done():
-						cancel(errors.WithStack(context.Cause(ctx)))
+						cancel(pkgerrors.WithStack(context.Cause(ctx)))
 						return //nolint:govet
 					default:
 					}
 				}
-				timeout(errors.WithStack(context.Canceled))
+				timeout(pkgerrors.WithStack(context.Canceled))
 				select {
 				case <-time.After(50 * time.Millisecond):
 				case <-p.ended:
@@ -672,7 +673,7 @@ func (p *procHandle) Release() {
 // goroutines.
 func (p *procHandle) Shutdown() {
 	if p.shutdown != nil {
-		p.shutdown(errors.WithStack(context.Canceled))
+		p.shutdown(pkgerrors.WithStack(context.Canceled))
 	}
 }
 
@@ -693,8 +694,8 @@ func (p *procHandle) WaitForReady(ctx context.Context) error {
 // callback is non-nil it will be called after receiving the pid.
 func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, started func()) error {
 	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 	select {
 	case <-ctx.Done():
 		return errors.New("go-runc started message never received")
@@ -709,7 +710,7 @@ func (p *procHandle) WaitForStart(ctx context.Context, startedCh <-chan int, sta
 		p.monitorProcess, err = os.FindProcess(runcPid)
 		if err != nil {
 			// error only possible on non-unix hosts
-			return errors.Wrapf(err, "failed to find runc process %d", runcPid)
+			return fmt.Errorf("failed to find runc process %d: %w", runcPid, err)
 		}
 		close(p.ready)
 	}

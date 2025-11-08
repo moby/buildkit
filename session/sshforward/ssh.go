@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/moby/buildkit/session"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/metadata"
 )
@@ -65,7 +65,7 @@ type SocketOpt struct {
 func MountSSHSocket(ctx context.Context, c session.Caller, opt SocketOpt) (sockPath string, closer func() error, err error) {
 	dir, err := os.MkdirTemp("", ".buildkit-ssh-sock")
 	if err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	defer func() {
@@ -75,23 +75,23 @@ func MountSSHSocket(ctx context.Context, c session.Caller, opt SocketOpt) (sockP
 	}()
 
 	if err := os.Chmod(dir, 0711); err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	sockPath = filepath.Join(dir, "ssh_auth_sock")
 
 	l, err := net.Listen("unix", sockPath)
 	if err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	if err := os.Chown(sockPath, opt.UID, opt.GID); err != nil {
 		l.Close()
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 	if err := os.Chmod(sockPath, os.FileMode(opt.Mode)); err != nil {
 		l.Close()
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	s := &server{caller: c}
@@ -106,12 +106,12 @@ func MountSSHSocket(ctx context.Context, c session.Caller, opt SocketOpt) (sockP
 	return sockPath, func() error {
 		err := l.Close()
 		os.RemoveAll(sockPath)
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}, nil
 }
 
 func CheckSSHID(ctx context.Context, c session.Caller, id string) error {
 	client := NewSSHClient(c.Conn())
 	_, err := client.CheckAgent(ctx, &CheckAgentRequest{ID: id})
-	return errors.WithStack(err)
+	return pkgerrors.WithStack(err)
 }

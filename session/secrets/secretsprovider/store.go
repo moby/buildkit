@@ -2,10 +2,12 @@ package secretsprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/moby/buildkit/session/secrets"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/units"
 )
 
@@ -19,7 +21,7 @@ func NewStore(files []Source) (secrets.SecretStore, error) {
 	m := map[string]Source{}
 	for _, f := range files {
 		if f.ID == "" {
-			return nil, errors.Errorf("secret missing ID")
+			return nil, errors.New("secret missing ID")
 		}
 		if f.Env == "" && f.FilePath == "" {
 			if _, ok := os.LookupEnv(f.ID); ok {
@@ -31,10 +33,10 @@ func NewStore(files []Source) (secrets.SecretStore, error) {
 		if f.FilePath != "" {
 			fi, err := os.Stat(f.FilePath)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to stat %s", f.FilePath)
+				return nil, fmt.Errorf("failed to stat %s: %w", f.FilePath, err)
 			}
 			if fi.Size() > MaxSecretSize {
-				return nil, errors.Errorf("secret %s too big. max size %#.f", f.ID, MaxSecretSize*units.B)
+				return nil, fmt.Errorf("secret %s too big. max size %#.f", f.ID, MaxSecretSize*units.B)
 			}
 		}
 		m[f.ID] = f
@@ -51,7 +53,7 @@ type fileStore struct {
 func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
 	v, ok := fs.m[id]
 	if !ok {
-		return nil, errors.WithStack(secrets.ErrNotFound)
+		return nil, pkgerrors.WithStack(secrets.ErrNotFound)
 	}
 	if v.Env != "" {
 		return []byte(os.Getenv(v.Env)), nil

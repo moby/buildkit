@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -12,7 +14,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const (
@@ -47,7 +49,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if v, ok := attrs[attrOCIMediatypes]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", attrOCIMediatypes)
+				return nil, fmt.Errorf("failed to parse %s: %w", attrOCIMediatypes, err)
 			}
 			ociMediatypes = b
 		}
@@ -55,7 +57,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if v, ok := attrs[attrImageManifest]; ok {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", attrImageManifest)
+				return nil, fmt.Errorf("failed to parse %s: %w", attrImageManifest, err)
 			}
 			imageManifest = b
 		} else if !ociMediatypes {
@@ -109,8 +111,8 @@ func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, 
 		return nil, errors.New("local cache exporter/importer requires session")
 	}
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	caller, err := sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {

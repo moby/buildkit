@@ -1,12 +1,12 @@
 package build
 
 import (
+	"errors"
 	"os"
 	"strconv"
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 )
 
 // loadGithubEnv verify that url and token attributes exists in the

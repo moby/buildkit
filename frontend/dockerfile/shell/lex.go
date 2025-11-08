@@ -2,14 +2,13 @@ package shell
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strings"
 	"text/scanner"
 	"unicode"
-
-	"github.com/pkg/errors"
 )
 
 type EnvGetter interface {
@@ -114,7 +113,7 @@ type shellWord struct {
 func (sw *shellWord) process(source string) (string, []string, error) {
 	word, words, err := sw.processStopOn(scanner.EOF, sw.rawEscapes)
 	if err != nil {
-		err = errors.Wrapf(err, "failed to process %q", source)
+		err = fmt.Errorf("failed to process %q: %w", source, err)
 	}
 	return word, words, err
 }
@@ -238,7 +237,7 @@ func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []st
 		}
 	}
 	if stopChar != scanner.EOF {
-		return "", []string{}, errors.Errorf("unexpected end of statement while looking for matching %s", string(stopChar))
+		return "", []string{}, fmt.Errorf("unexpected end of statement while looking for matching %s", string(stopChar))
 	}
 	return result.String(), words.getWords(), nil
 }
@@ -380,7 +379,7 @@ func (sw *shellWord) processDollar() (string, error) {
 	case '+', '-', '?', '#', '%':
 		rawEscapes := ch == '#' || ch == '%'
 		if nullIsUnset && rawEscapes {
-			return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
+			return "", fmt.Errorf("unsupported modifier (%s) in substitution", chs)
 		}
 		word, _, err := sw.processStopOn('}', rawEscapes)
 		if err != nil {
@@ -414,14 +413,14 @@ func (sw *shellWord) processDollar() (string, error) {
 				if word != "" {
 					message = word
 				}
-				return "", errors.Errorf("%s: %s", name, message)
+				return "", fmt.Errorf("%s: %s", name, message)
 			}
 			if nullIsUnset && value == "" {
 				message := "is not allowed to be empty"
 				if word != "" {
 					message = word
 				}
-				return "", errors.Errorf("%s: %s", name, message)
+				return "", fmt.Errorf("%s: %s", name, message)
 			}
 			return value, nil
 		case '%', '#':
@@ -438,7 +437,7 @@ func (sw *shellWord) processDollar() (string, error) {
 			}
 			return trimPrefix(word, value, greedy)
 		default:
-			return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
+			return "", fmt.Errorf("unsupported modifier (%s) in substitution", chs)
 		}
 	case '/':
 		replaceAll := sw.scanner.Peek() == '/'
@@ -469,7 +468,7 @@ func (sw *shellWord) processDollar() (string, error) {
 
 		re, err := convertShellPatternToRegex(pattern, true, false)
 		if err != nil {
-			return "", errors.Errorf("invalid pattern (%s) in substitution: %s", pattern, err)
+			return "", fmt.Errorf("invalid pattern (%s) in substitution: %s", pattern, err)
 		}
 		if replaceAll {
 			value = re.ReplaceAllString(value, replacement)
@@ -480,7 +479,7 @@ func (sw *shellWord) processDollar() (string, error) {
 		}
 		return value, nil
 	default:
-		return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
+		return "", fmt.Errorf("unsupported modifier (%s) in substitution", chs)
 	}
 }
 
@@ -633,7 +632,7 @@ func convertShellPatternToRegex(pattern string, greedy bool, anchored bool) (*re
 			out.WriteRune('\\')
 			tok = s.Next()
 			if tok != '*' && tok != '?' && tok != '\\' {
-				return nil, errors.Errorf("invalid escape '\\%c'", tok)
+				return nil, fmt.Errorf("invalid escape '\\%c'", tok)
 			}
 		// regex characters that need to be escaped
 		// escaping closing is optional, but done for consistency
@@ -648,7 +647,7 @@ func convertShellPatternToRegex(pattern string, greedy bool, anchored bool) (*re
 func trimPrefix(word, value string, greedy bool) (string, error) {
 	re, err := convertShellPatternToRegex(word, greedy, true)
 	if err != nil {
-		return "", errors.Errorf("invalid pattern (%s) in substitution: %s", word, err)
+		return "", fmt.Errorf("invalid pattern (%s) in substitution: %s", word, err)
 	}
 
 	if idx := re.FindStringIndex(value); idx != nil {

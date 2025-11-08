@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -27,7 +28,7 @@ import (
 	"github.com/moby/sys/signal"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -46,8 +47,8 @@ type GrpcClient interface {
 
 func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
 	pingCtx, pingCancel := context.WithCancelCause(ctx)
-	pingCtx, _ = context.WithTimeoutCause(pingCtx, 15*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer pingCancel(errors.WithStack(context.Canceled))
+	pingCtx, _ = context.WithTimeoutCause(pingCtx, 15*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer pingCancel(pkgerrors.WithStack(context.Canceled))
 	resp, err := c.Ping(pingCtx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	}
 	r, ok := ref.(*reference)
 	if !ok {
-		return nil, errors.Errorf("invalid return reference type %T", ref)
+		return nil, fmt.Errorf("invalid return reference type %T", ref)
 	}
 	return &pb.Ref{Id: r.id, Def: r.def}, nil
 }
@@ -101,7 +102,7 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
 	client, err := current()
 	if err != nil {
-		return errors.Wrapf(err, "failed to initialize client from environment")
+		return fmt.Errorf("failed to initialize client from environment: %w", err)
 	}
 	return client.Run(ctx, f)
 }
@@ -229,19 +230,19 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 	if !export {
 		exportedAttrBytes, err := json.Marshal(res.Metadata)
 		if err != nil {
-			return errors.Wrapf(err, "failed to marshal return metadata")
+			return fmt.Errorf("failed to marshal return metadata: %w", err)
 		}
 
 		req, err := c.requestForRef(res.Ref)
 		if err != nil {
-			return errors.Wrapf(err, "failed to find return ref")
+			return fmt.Errorf("failed to find return ref: %w", err)
 		}
 
 		req.Final = true
 		req.ExporterAttr = exportedAttrBytes
 
 		if _, err := c.client.Solve(ctx, req); err != nil {
-			return errors.Wrapf(err, "failed to solve")
+			return fmt.Errorf("failed to solve: %w", err)
 		}
 	}
 
@@ -316,14 +317,14 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 	}
 	r, ok := ref.(*reference)
 	if !ok {
-		return nil, errors.Errorf("return reference has invalid type %T", ref)
+		return nil, fmt.Errorf("return reference has invalid type %T", ref)
 	}
 	if r.id == "" {
 		return emptyReq, nil
 	}
 	req, ok := c.requests[r.id]
 	if !ok {
-		return nil, errors.Errorf("did not find request for return reference %s", r.id)
+		return nil, fmt.Errorf("did not find request for return reference %s", r.id)
 	}
 	return req, nil
 }
@@ -558,7 +559,7 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 	if resp.HTTP != nil {
 		dgst, err := digest.Parse(resp.HTTP.Checksum)
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid http checksum digest %q", resp.HTTP.Checksum)
+			return nil, fmt.Errorf("invalid http checksum digest %q: %w", resp.HTTP.Checksum, err)
 		}
 
 		r.HTTP = &sourceresolver.ResolveHTTPResponse{
@@ -899,14 +900,14 @@ func (m *messageForwarder) Send(msg *pb.ExecMessage) error {
 	_, ok := m.pids[msg.ProcessID]
 	defer m.mu.Unlock()
 	if !ok {
-		return errors.Errorf("process %s has ended, not sending message %#v", msg.ProcessID, msg.Input)
+		return fmt.Errorf("process %s has ended, not sending message %#v", msg.ProcessID, msg.Input)
 	}
 	bklog.G(m.ctx).Debugf("|---> %s", debugMessage(msg))
 	return m.stream.Send(msg)
 }
 
 func (m *messageForwarder) Release() error {
-	m.cancel(errors.WithStack(context.Canceled))
+	m.cancel(pkgerrors.WithStack(context.Canceled))
 	return m.eg.Wait()
 }
 
@@ -963,7 +964,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 		if m.Ref != nil {
 			ref, ok := m.Ref.(*reference)
 			if !ok {
-				return nil, errors.Errorf("unexpected type for reference, got %T", m.Ref)
+				return nil, fmt.Errorf("unexpected type for reference, got %T", m.Ref)
 			}
 			resultID = ref.id
 		}
@@ -1059,11 +1060,11 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 
 	msg, _ := msgs.Recv(ctx)
 	if msg == nil {
-		return nil, errors.Errorf("failed to receive started message")
+		return nil, errors.New("failed to receive started message")
 	}
 	started := msg.GetStarted()
 	if started == nil {
-		return nil, errors.Errorf("expecting started message, got %T", msg.GetInput())
+		return nil, fmt.Errorf("expecting started message, got %T", msg.GetInput())
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -1149,7 +1150,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				}
 				if out == nil {
 					// if things are plumbed correctly this should never happen
-					return errors.Errorf("missing writer for output fd %d", file.Fd)
+					return fmt.Errorf("missing writer for output fd %d", file.Fd)
 				}
 				if len(file.Data) > 0 {
 					_, err := out.Write(file.Data)
@@ -1177,7 +1178,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 			} else if serverDone := msg.GetDone(); serverDone != nil {
 				return exitError
 			} else {
-				return errors.Errorf("unexpected Exec Message for pid %s: %T", pid, msg.GetInput())
+				return fmt.Errorf("unexpected Exec Message for pid %s: %T", pid, msg.GetInput())
 			}
 		}
 	})
@@ -1227,7 +1228,7 @@ func init() {
 func (ctrProc *containerProcess) Signal(_ context.Context, sig syscall.Signal) error {
 	name := sigToName[sig]
 	if name == "" {
-		return errors.Errorf("unknown signal %v", sig)
+		return fmt.Errorf("unknown signal %v", sig)
 	}
 	return ctrProc.execMsgs.Send(&pb.ExecMessage{
 		ProcessID: ctrProc.id,
@@ -1256,7 +1257,7 @@ func (r *reference) ToState() (st llb.State, err error) {
 	}
 
 	if r.def == nil {
-		return st, errors.Errorf("gateway did not return reference with definition")
+		return st, errors.New("gateway did not return reference with definition")
 	}
 
 	defop, err := llb.NewDefinitionOp(r.def)
@@ -1337,7 +1338,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 	//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
 	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
 	if err != nil {
-		return ctx, nil, errors.Wrap(err, "failed to create grpc client")
+		return ctx, nil, fmt.Errorf("failed to create grpc client"+": %w", err)
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)

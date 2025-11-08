@@ -1,6 +1,7 @@
 package debug
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -9,7 +10,6 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 

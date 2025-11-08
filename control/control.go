@@ -2,7 +2,7 @@ package control
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"runtime/trace"
 	"strconv"
@@ -47,7 +47,7 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -103,7 +103,7 @@ func NewController(opt Opt) (*Controller, error) {
 		GracefulStop:   opt.GracefulStop,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create history queue")
+		return nil, fmt.Errorf("failed to create history queue"+": %w", err)
 	}
 
 	s, err := llbsolver.New(llbsolver.Opt{
@@ -118,7 +118,7 @@ func NewController(opt Opt) (*Controller, error) {
 		ProvenanceEnv:    opt.ProvenanceEnv,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create solver")
+		return nil, fmt.Errorf("failed to create solver"+": %w", err)
 	}
 
 	c := &Controller{
@@ -153,7 +153,7 @@ func (c *Controller) Close() error {
 	if err := c.solver.Close(); err != nil {
 		errs = append(errs, err)
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (c *Controller) Register(server *grpc.Server) {
@@ -219,7 +219,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	eg, ctx := errgroup.WithContext(stream.Context())
 	workers, err := c.opt.WorkerController.List()
 	if err != nil {
-		return errors.Wrap(err, "failed to list workers for prune")
+		return fmt.Errorf("failed to list workers for prune"+": %w", err)
 	}
 
 	didPrune := false
@@ -433,19 +433,19 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		for _, c := range dupes {
 			types = append(types, c.Type)
 		}
-		return nil, errors.Errorf("duplicate cache exports %s", types)
+		return nil, fmt.Errorf("duplicate cache exports %s", types)
 	}
 	req.Cache.Exports = rest
 	var cacheExporters []llbsolver.RemoteCacheExporter
 	for _, e := range req.Cache.Exports {
 		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
 		if !ok {
-			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
+			return nil, fmt.Errorf("unknown cache exporter: %q", e.Type)
 		}
 		var exp llbsolver.RemoteCacheExporter
 		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
+			return nil, fmt.Errorf("failed to configure %v cache exporter: %w", e.Type, err)
 		}
 		if exp.Exporter == nil {
 			bklog.G(ctx).Debugf("cache exporter resolver for %v returned nil, skipping exporter", e.Type)
@@ -490,11 +490,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		for k, v := range attrs {
 			if k == "generator" {
 				if v == "" {
-					return nil, errors.Errorf("sbom generator cannot be empty")
+					return nil, fmt.Errorf("sbom generator cannot be empty")
 				}
 				ref, err = reference.ParseNormalizedNamed(v)
 				if err != nil {
-					return nil, errors.Wrapf(err, "failed to parse sbom generator %s", v)
+					return nil, fmt.Errorf("failed to parse sbom generator %s: %w", v, err)
 				}
 				ref = reference.TagNameOnly(ref)
 			} else {
@@ -592,7 +592,7 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	ctx, cancel := context.WithCancelCause(stream.Context())
 	go func() {
 		<-closeCh
-		cancel(errors.WithStack(context.Canceled))
+		cancel(pkgerrors.WithStack(context.Canceled))
 	}()
 
 	err := c.opt.SessionManager.HandleConn(ctx, conn, opts)
@@ -782,19 +782,19 @@ type roContentStore struct {
 }
 
 func (cs *roContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
-	return nil, errors.Errorf("read-only content store")
+	return nil, fmt.Errorf("read-only content store")
 }
 
 func (cs *roContentStore) Delete(ctx context.Context, dgst digest.Digest) error {
-	return errors.Errorf("read-only content store")
+	return fmt.Errorf("read-only content store")
 }
 
 func (cs *roContentStore) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
-	return content.Info{}, errors.Errorf("read-only content store")
+	return content.Info{}, fmt.Errorf("read-only content store")
 }
 
 func (cs *roContentStore) Abort(ctx context.Context, ref string) error {
-	return errors.Errorf("read-only content store")
+	return fmt.Errorf("read-only content store")
 }
 
 const timestampKey = "buildkit-current-timestamp"

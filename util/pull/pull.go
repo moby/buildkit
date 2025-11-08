@@ -2,6 +2,8 @@ package pull
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -21,7 +23,7 @@ import (
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type SessionResolver func(g session.Group) remotes.Resolver
@@ -93,7 +95,7 @@ func (p *Puller) tryLocalResolve(ctx context.Context) error {
 	}
 
 	if ok, err := contentutil.HasSource(info, p.Src); err != nil || !ok {
-		return errors.Errorf("no matching source")
+		return errors.New("no matching source")
 	}
 
 	desc.Size = info.Size
@@ -135,7 +137,7 @@ func (p *Puller) PullManifests(ctx context.Context, getResolver SessionResolver)
 	if p.desc.MediaType == images.MediaTypeDockerSchema1Manifest {
 		errMsg := "support Docker Image manifest version 2, schema 1 has been removed. " +
 			"More information at https://docs.docker.com/go/deprecated-image-specs/"
-		return nil, errors.WithStack(cerrdefs.ErrConflict.WithMessage(errMsg))
+		return nil, pkgerrors.WithStack(cerrdefs.ErrConflict.WithMessage(errMsg))
 	}
 	// Get all the children for a descriptor
 	childrenHandler := images.ChildrenHandler(p.ContentStore)
@@ -235,15 +237,15 @@ func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Lo
 func getLayers(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor, platform platforms.MatchComparer) ([]ocispecs.Descriptor, error) {
 	manifest, err := images.Manifest(ctx, provider, desc, platform)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	image := images.Image{Target: desc}
 	diffIDs, err := image.RootFS(ctx, provider, platform)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to resolve rootfs")
+		return nil, fmt.Errorf("failed to resolve rootfs"+": %w", err)
 	}
 	if len(diffIDs) != len(manifest.Layers) {
-		return nil, errors.Errorf("mismatched image rootfs and manifest layers %+v %+v", diffIDs, manifest.Layers)
+		return nil, fmt.Errorf("mismatched image rootfs and manifest layers %+v %+v", diffIDs, manifest.Layers)
 	}
 	layers := make([]ocispecs.Descriptor, len(diffIDs))
 	for i := range diffIDs {

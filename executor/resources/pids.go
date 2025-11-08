@@ -1,13 +1,14 @@
 package resources
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -32,13 +33,13 @@ func getCgroupPIDsStat(path string) (*resourcestypes.PIDsStat, error) {
 func parseSingleValueFile(filePath string) (uint64, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to read %s", filePath)
+		return 0, fmt.Errorf("failed to read %s: %w", filePath, err)
 	}
 
 	valueStr := strings.TrimSpace(string(content))
 	value, err := strconv.ParseUint(valueStr, 10, 64)
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to parse value: %s", valueStr)
+		return 0, fmt.Errorf("failed to parse value: %s: %w", valueStr, err)
 	}
 
 	return value, nil

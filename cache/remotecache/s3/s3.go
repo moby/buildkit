@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -29,7 +30,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -71,7 +72,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 	if !ok {
 		bucket, ok = os.LookupEnv("AWS_BUCKET")
 		if !ok {
-			return Config{}, errors.Errorf("bucket ($AWS_BUCKET) not set for s3 cache")
+			return Config{}, fmt.Errorf("bucket ($AWS_BUCKET) not set for s3 cache")
 		}
 	}
 
@@ -79,7 +80,7 @@ func getConfig(attrs map[string]string) (Config, error) {
 	if !ok {
 		region, ok = os.LookupEnv("AWS_REGION")
 		if !ok {
-			return Config{}, errors.Errorf("region ($AWS_REGION) not set for s3 cache")
+			return Config{}, fmt.Errorf("region ($AWS_REGION) not set for s3 cache")
 		}
 	}
 
@@ -133,10 +134,10 @@ func getConfig(attrs map[string]string) (Config, error) {
 	if ok {
 		uploadParallelismInt, err := strconv.Atoi(uploadParallelismStr)
 		if err != nil {
-			return Config{}, errors.Errorf("upload_parallelism must be a positive integer")
+			return Config{}, errors.New("upload_parallelism must be a positive integer")
 		}
 		if uploadParallelismInt <= 0 {
-			return Config{}, errors.Errorf("upload_parallelism must be a positive integer")
+			return Config{}, errors.New("upload_parallelism must be a positive integer")
 		}
 		uploadParallelism = uploadParallelismInt
 	}
@@ -220,30 +221,30 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 				blob := cacheConfig.Layers[index].Blob
 				dgstPair, ok := descs[blob]
 				if !ok {
-					return errors.Errorf("missing blob %s", blob)
+					return fmt.Errorf("missing blob %s", blob)
 				}
 				if dgstPair.Descriptor.Annotations == nil {
-					return errors.Errorf("invalid descriptor without annotations")
+					return errors.New("invalid descriptor without annotations")
 				}
 				v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 				if !ok {
-					return errors.Errorf("invalid descriptor without uncompressed annotation")
+					return errors.New("invalid descriptor without uncompressed annotation")
 				}
 				diffID, err := digest.Parse(v)
 				if err != nil {
-					return errors.Wrapf(err, "failed to parse uncompressed annotation")
+					return fmt.Errorf("failed to parse uncompressed annotation: %w", err)
 				}
 
 				key := e.s3Client.blobKey(dgstPair.Descriptor.Digest)
 				exists, size, err := e.s3Client.exists(groupCtx, key)
 				if err != nil {
-					return errors.Wrapf(err, "failed to check file presence in cache")
+					return fmt.Errorf("failed to check file presence in cache: %w", err)
 				}
 				if exists != nil {
 					if time.Since(*exists) > e.config.TouchRefresh {
 						err = e.s3Client.touch(groupCtx, key, size)
 						if err != nil {
-							return errors.Wrapf(err, "failed to touch file")
+							return fmt.Errorf("failed to touch file: %w", err)
 						}
 					}
 				} else {
@@ -253,11 +254,11 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 					// currently inline data should never happen.
 					ra, err := dgstPair.Provider.ReaderAt(groupCtx, dgstPair.Descriptor)
 					if err != nil {
-						return layerDone(errors.Wrap(err, "error reading layer blob from provider"))
+						return layerDone(fmt.Errorf("error reading layer blob from provider"+": %w", err))
 					}
 					defer ra.Close()
 					if err := e.s3Client.saveMutableAt(groupCtx, key, &nopCloserSectionReader{io.NewSectionReader(ra, 0, ra.Size())}); err != nil {
-						return layerDone(errors.Wrap(err, "error writing layer blob"))
+						return layerDone(fmt.Errorf("error writing layer blob"+": %w", err))
 					}
 					layerDone(nil)
 				}
@@ -291,7 +292,7 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 
 	for _, name := range e.config.Names {
 		if err := e.s3Client.saveMutableAt(ctx, e.s3Client.manifestKey(name), bytes.NewReader(dt)); err != nil {
-			return nil, errors.Wrapf(err, "error writing manifest: %s", name)
+			return nil, fmt.Errorf("error writing manifest: %s: %w", name, err)
 		}
 	}
 	return nil, nil
@@ -319,10 +320,10 @@ type importer struct {
 
 func (i *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
-		return nil, errors.Errorf("cache layer with missing annotations")
+		return nil, errors.New("cache layer with missing annotations")
 	}
 	if l.Annotations.DiffID == "" {
-		return nil, errors.Errorf("cache layer with missing diffid")
+		return nil, errors.New("cache layer with missing diffid")
 	}
 	annotations := map[string]string{}
 	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
@@ -406,7 +407,7 @@ type s3Client struct {
 func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	cfg, err := aws_config.LoadDefaultConfig(ctx, aws_config.WithRegion(config.Region))
 	if err != nil {
-		return nil, errors.Errorf("Unable to load AWS SDK config, %v", err)
+		return nil, fmt.Errorf("Unable to load AWS SDK config, %v", err)
 	}
 	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		if config.AccessKeyID != "" && config.SecretAccessKey != "" {
@@ -445,10 +446,10 @@ func (s3Client *s3Client) getManifest(ctx context.Context, key string, config *c
 
 	decoder := json.NewDecoder(output.Body)
 	if err := decoder.Decode(config); err != nil {
-		return false, errors.WithStack(err)
+		return false, pkgerrors.WithStack(err)
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return false, errors.Errorf("unexpected data after JSON object")
+		return false, errors.New("unexpected data after JSON object")
 	}
 
 	return true, nil

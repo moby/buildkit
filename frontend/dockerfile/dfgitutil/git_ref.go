@@ -2,13 +2,15 @@
 package dfgitutil
 
 import (
+	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/util/gitutil"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 // GitRef represents a git ref.
@@ -68,7 +70,7 @@ func ParseGitRef(ref string) (*GitRef, bool, error) {
 	)
 
 	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") {
-		return nil, false, errors.WithStack(cerrdefs.ErrInvalidArgument)
+		return nil, false, pkgerrors.WithStack(cerrdefs.ErrInvalidArgument)
 	} else if strings.HasPrefix(ref, "github.com/") {
 		res.IndistinguishableFromLocal = true // Deprecated
 		u, err := url.Parse(ref)
@@ -98,7 +100,7 @@ func ParseGitRef(ref string) (*GitRef, bool, error) {
 		// An HTTP(S) URL is considered to be a valid git ref only when it has the ".git[...]" suffix.
 		case gitutil.HTTPProtocol, gitutil.HTTPSProtocol:
 			if !strings.HasSuffix(remote.Path, ".git") {
-				return nil, false, errors.WithStack(cerrdefs.ErrInvalidArgument)
+				return nil, false, pkgerrors.WithStack(cerrdefs.ErrInvalidArgument)
 			}
 		}
 	}
@@ -134,17 +136,17 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 				case "submodules", "keep-git-dir":
 					v = nil
 				default:
-					return errors.Errorf("query %q has no value", k)
+					return fmt.Errorf("query %q has no value", k)
 				}
 			}
 			// NOP
 		default:
-			return errors.Errorf("query %q has multiple values", k)
+			return fmt.Errorf("query %q has multiple values", k)
 		}
 		switch k {
 		case "ref":
 			if gf.Ref != "" && gf.Ref != v[0] {
-				return errors.Errorf("ref conflicts: %q vs %q", gf.Ref, v[0])
+				return fmt.Errorf("ref conflicts: %q vs %q", gf.Ref, v[0])
 			}
 			gf.Ref = v[0]
 		case "tag":
@@ -153,7 +155,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			branch = v[0]
 		case "subdir":
 			if gf.SubDir != "" && gf.SubDir != v[0] {
-				return errors.Errorf("subdir conflicts: %q vs %q", gf.SubDir, v[0])
+				return fmt.Errorf("subdir conflicts: %q vs %q", gf.SubDir, v[0])
 			}
 			gf.SubDir = v[0]
 		case "checksum", "commit":
@@ -166,7 +168,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 				var err error
 				vv, err = strconv.ParseBool(v[0])
 				if err != nil {
-					return errors.Errorf("invalid keep-git-dir value: %q", v[0])
+					return fmt.Errorf("invalid keep-git-dir value: %q", v[0])
 				}
 			}
 			gf.KeepGitDir = &vv
@@ -178,12 +180,12 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 				var err error
 				vv, err = strconv.ParseBool(v[0])
 				if err != nil {
-					return errors.Errorf("invalid submodules value: %q", v[0])
+					return fmt.Errorf("invalid submodules value: %q", v[0])
 				}
 			}
 			gf.Submodules = &vv
 		default:
-			return errors.Errorf("unexpected query %q", k)
+			return fmt.Errorf("unexpected query %q", k)
 		}
 	}
 	if tag != "" {
@@ -192,7 +194,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			tag = tagPrefix + tag
 		}
 		if gf.Ref != "" && gf.Ref != tag {
-			return errors.Errorf("ref conflicts: %q vs %q", gf.Ref, tag)
+			return fmt.Errorf("ref conflicts: %q vs %q", gf.Ref, tag)
 		}
 		gf.Ref = tag
 	}
@@ -206,7 +208,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			branch = branchPrefix + branch
 		}
 		if gf.Ref != "" && gf.Ref != branch {
-			return errors.Errorf("ref conflicts: %q vs %q", gf.Ref, branch)
+			return fmt.Errorf("ref conflicts: %q vs %q", gf.Ref, branch)
 		}
 		gf.Ref = branch
 	}

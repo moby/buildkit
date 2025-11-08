@@ -2,13 +2,12 @@ package progress
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"maps"
 	"slices"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // Progress package provides utility functions for using the context to capture
@@ -224,7 +223,7 @@ type progressWriter struct {
 
 func (pw *progressWriter) Write(id string, v any) error {
 	if pw.done {
-		return errors.Errorf("writing %s to closed progress writer", id)
+		return fmt.Errorf("writing %s to closed progress writer", id)
 	}
 	return pw.writeRawProgress(&Progress{
 		ID:        id,

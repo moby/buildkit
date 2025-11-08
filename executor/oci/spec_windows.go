@@ -35,7 +35,7 @@ func withGetUserInfoMount() oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		execPath, err := os.Executable()
 		if err != nil {
-			return errors.Wrap(err, "getting executable path")
+			return fmt.Errorf("getting executable path"+": %w", err)
 		}
 		// The buildkit binary registers a re-exec function that is invoked when called with
 		// get-user-info as the name. We mount the binary as read-only inside the container. This

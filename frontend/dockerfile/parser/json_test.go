@@ -1,9 +1,8 @@
 package parser
 
 import (
+	"errors"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 var invalidJSONArraysOfStrings = []string{

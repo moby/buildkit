@@ -2,12 +2,13 @@ package solver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func NewInMemoryCacheStorage() CacheKeyStorage {
@@ -91,11 +92,11 @@ func (s *inMemoryStore) Load(id string, resultID string) (CacheResult, error) {
 	defer s.mu.RUnlock()
 	k, ok := s.byID[id]
 	if !ok {
-		return CacheResult{}, errors.Wrapf(ErrNotFound, "no such key %s", id)
+		return CacheResult{}, fmt.Errorf("no such key %s: %w", id, ErrNotFound)
 	}
 	r, ok := k.results[resultID]
 	if !ok {
-		return CacheResult{}, errors.WithStack(ErrNotFound)
+		return CacheResult{}, pkgerrors.WithStack(ErrNotFound)
 	}
 	return r, nil
 }
@@ -294,7 +295,7 @@ func (s *inMemoryResultStore) Save(r Result, createdAt time.Time) (CacheResult, 
 func (s *inMemoryResultStore) Load(ctx context.Context, res CacheResult) (Result, error) {
 	v, ok := s.m.Load(res.ID)
 	if !ok {
-		return nil, errors.WithStack(ErrNotFound)
+		return nil, pkgerrors.WithStack(ErrNotFound)
 	}
 	return v.(Result), nil
 }

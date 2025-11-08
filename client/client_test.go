@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -75,7 +76,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -3162,7 +3163,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 					}
 					config, err := json.Marshal(img)
 					if err != nil {
-						return nil, errors.Wrapf(err, "failed to marshal image config")
+						return nil, fmt.Errorf("failed to marshal image config: %w", err)
 					}
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
 
@@ -9011,7 +9012,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 // moby/buildkit#492
 func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -9061,7 +9062,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 
 func testMetadataOnlyLocal(t *testing.T, sb integration.Sandbox) {
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -10494,7 +10495,7 @@ EOF
 		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal image config")
+			return nil, fmt.Errorf("failed to marshal image config: %w", err)
 		}
 		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
 
@@ -10841,7 +10842,7 @@ EOF
 		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal image config")
+			return nil, fmt.Errorf("failed to marshal image config: %w", err)
 		}
 		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
 
@@ -10894,7 +10895,7 @@ EOF
 		img.Platform = p
 		config, err := json.Marshal(img)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal image config")
+			return nil, fmt.Errorf("failed to marshal image config: %w", err)
 		}
 		res.AddMeta(exptypes.ExporterImageConfigKey, config)
 
@@ -11609,7 +11610,7 @@ func readImageTimestamps(dt []byte) (*imageTimestamps, error) {
 	}
 
 	if _, ok := m["oci-layout"]; !ok {
-		return nil, errors.Errorf("no oci-layout")
+		return nil, errors.New("no oci-layout")
 	}
 
 	var index ocispecs.Index
@@ -11617,7 +11618,7 @@ func readImageTimestamps(dt []byte) (*imageTimestamps, error) {
 		return nil, err
 	}
 	if len(index.Manifests) != 1 {
-		return nil, errors.Errorf("invalid manifest count %d", len(index.Manifests))
+		return nil, fmt.Errorf("invalid manifest count %d", len(index.Manifests))
 	}
 
 	var res imageTimestamps
@@ -12753,7 +12754,7 @@ func runInDir(dir string, cmds ...string) error {
 		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "error running %v", args)
+			return fmt.Errorf("error running %v: %w", args, err)
 		}
 	}
 	return nil

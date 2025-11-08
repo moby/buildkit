@@ -1,6 +1,7 @@
 package wildcard
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 func New(s string) (*Wildcard, error) {
 	reStr, err := Wildcard2Regexp(s)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to translate wildcard %q to regexp", s)
+		return nil, fmt.Errorf("failed to translate wildcard %q to regexp: %w", s, err)
 	}
 	re, err := regexp.Compile(reStr)
 	if err != nil {

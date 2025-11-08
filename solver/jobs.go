@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync"
@@ -17,7 +18,7 @@ import (
 	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
@@ -605,7 +606,7 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 			st.parents[parent.Digest()] = struct{}{}
 			parentState, ok := jl.actives[parent.Digest()]
 			if !ok {
-				return nil, errors.Errorf("inactive parent %s", parent.Digest())
+				return nil, fmt.Errorf("inactive parent %s", parent.Digest())
 			}
 			parentState.childVtx[dgst] = struct{}{}
 
@@ -645,7 +646,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 	defer jl.mu.Unlock()
 
 	if _, ok := jl.jobs[id]; ok {
-		return nil, errors.Errorf("job ID %s exists", id)
+		return nil, fmt.Errorf("job ID %s exists", id)
 	}
 
 	pr, ctx, progressCloser := progress.NewContext(context.Background())
@@ -672,8 +673,8 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 
 func (jl *Solver) Get(id string) (*Job, error) {
 	ctx, cancel := context.WithCancelCause(context.Background())
-	ctx, _ = context.WithTimeoutCause(ctx, 6*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	ctx, _ = context.WithTimeoutCause(ctx, 6*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	go func() {
 		<-ctx.Done()
@@ -802,7 +803,7 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 }
 
 func (j *Job) CloseProgress() {
-	j.progressCloser(errors.WithStack(context.Canceled))
+	j.progressCloser(pkgerrors.WithStack(context.Canceled))
 	j.pw.Close()
 }
 
@@ -1011,7 +1012,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		if p != nil {
 			st := s.st.solver.getState(s.st.vtx.Inputs()[index])
 			if st == nil {
-				return "", errors.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
+				return "", fmt.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
 			}
 			ctx2 := progress.WithProgress(ctx, st.mpw)
 			if st.execSpan != nil {
@@ -1040,7 +1041,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
-					err = errors.Wrap(context.Cause(ctx), err.Error())
+					err = errors.Join(context.Cause(ctx), err)
 				}
 			default:
 			}
@@ -1106,7 +1107,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
-					err = errors.Wrap(context.Cause(ctx), err.Error())
+					err = errors.Join(context.Cause(ctx), err)
 				}
 			default:
 			}
@@ -1159,7 +1160,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		}
 		release, err := op.Acquire(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "acquire op resources")
+			return nil, fmt.Errorf("acquire op resources"+": %w", err)
 		}
 		defer release()
 
@@ -1186,7 +1187,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 				if errdefs.IsCanceled(ctx, err) {
 					complete = false
 					releaseError(err)
-					err = errors.Wrap(context.Cause(ctx), err.Error())
+					err = errors.Join(context.Cause(ctx), err)
 				}
 			default:
 			}

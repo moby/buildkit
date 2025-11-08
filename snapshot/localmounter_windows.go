@@ -1,6 +1,8 @@
 package snapshot
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -8,7 +10,6 @@ import (
 	"github.com/Microsoft/go-winio/pkg/bindfilter"
 	"github.com/containerd/containerd/v2/core/mount"
 	cerrdefs "github.com/containerd/errdefs"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -28,13 +29,13 @@ func (lm *localMounter) Mount() (string, error) {
 	// Windows can only mount a single mount at a given location.
 	// Parent layers are carried in Options, opaquely to localMounter.
 	if len(lm.mounts) != 1 {
-		return "", errors.Wrapf(cerrdefs.ErrNotImplemented, "request to mount %d layers, only 1 is supported", len(lm.mounts))
+		return "", fmt.Errorf("request to mount %d layers, only 1 is supported: %w", len(lm.mounts, cerrdefs.ErrNotImplemented))
 	}
 
 	m := lm.mounts[0]
 	dir, err := os.MkdirTemp("", "buildkit-mount")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create temp dir")
+		return "", fmt.Errorf("failed to create temp dir"+": %w", err)
 	}
 
 	if m.Type == "bind" || m.Type == "rbind" {
@@ -48,7 +49,7 @@ func (lm *localMounter) Mount() (string, error) {
 		// The Windows snapshotter does not have any notion of bind mounts. We emulate
 		// bind mounts here using the bind filter.
 		if err := bindfilter.ApplyFileBinding(dir, m.Source, m.ReadOnly()); err != nil {
-			return "", errors.Wrapf(err, "failed to mount %v", m)
+			return "", fmt.Errorf("failed to mount %v: %w", m, err)
 		}
 	} else {
 		// see https://github.com/moby/buildkit/issues/5807
@@ -56,7 +57,7 @@ func (lm *localMounter) Mount() (string, error) {
 		// should adjust the retries if this persists but 1 retry
 		// seems to be enough.
 		if err := mountWithRetries(m, dir, 2); err != nil {
-			return "", errors.Wrapf(err, "failed to mount %v", m)
+			return "", fmt.Errorf("failed to mount %v: %w", m, err)
 		}
 	}
 
@@ -93,7 +94,7 @@ func (lm *localMounter) Unmount() error {
 	// Calling Mount() would fail on an instance of the localMounter where mounts contains
 	// anything other than 1 mount.
 	if len(lm.mounts) != 1 {
-		return errors.Wrapf(cerrdefs.ErrNotImplemented, "request to mount %d layers, only 1 is supported", len(lm.mounts))
+		return fmt.Errorf("request to mount %d layers, only 1 is supported: %w", len(lm.mounts, cerrdefs.ErrNotImplemented))
 	}
 	m := lm.mounts[0]
 
@@ -102,7 +103,7 @@ func (lm *localMounter) Unmount() error {
 			if err := bindfilter.RemoveFileBinding(lm.target); err != nil {
 				// The following two errors denote that lm.target is not a mount point.
 				if !errors.Is(err, windows.ERROR_INVALID_PARAMETER) && !errors.Is(err, windows.ERROR_NOT_FOUND) {
-					return errors.Wrapf(err, "failed to unmount %v: %+v", lm.target, err)
+					return fmt.Errorf("failed to unmount %v: %+v: %w", lm.target, err, err)
 				}
 			}
 		} else {
@@ -113,7 +114,7 @@ func (lm *localMounter) Unmount() error {
 			// assumption that the internal implementation in containerd will always be based on the
 			// bind filter, which feels brittle.
 			if err := mount.Unmount(lm.target, 0); err != nil {
-				return errors.Wrapf(err, "failed to unmount %v: %+v", lm.target, err)
+				return fmt.Errorf("failed to unmount %v: %+v: %w", lm.target, err, err)
 			}
 		}
 		os.RemoveAll(lm.target)

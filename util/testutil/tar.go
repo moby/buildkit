@@ -4,9 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
+	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 )
 
 type TarItem struct {
@@ -20,7 +20,7 @@ func ReadTarToMap(dt []byte, compressed bool) (map[string]*TarItem, error) {
 	if compressed {
 		gz, err := gzip.NewReader(r)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error creating gzip reader")
+			return nil, fmt.Errorf("error creating gzip reader: %w", err)
 		}
 		defer gz.Close()
 		r = gz
@@ -32,17 +32,17 @@ func ReadTarToMap(dt []byte, compressed bool) (map[string]*TarItem, error) {
 			if errors.Is(err, io.EOF) {
 				return m, nil
 			}
-			return nil, errors.Wrap(err, "error reading tar")
+			return nil, fmt.Errorf("error reading tar"+": %w", err)
 		}
 		if _, ok := m[h.Name]; ok {
-			return nil, errors.Errorf("duplicate entries for %s", h.Name)
+			return nil, fmt.Errorf("duplicate entries for %s", h.Name)
 		}
 
 		var dt []byte
 		if h.Typeflag == tar.TypeReg {
 			dt, err = io.ReadAll(tr)
 			if err != nil {
-				return nil, errors.Wrapf(err, "error reading file")
+				return nil, fmt.Errorf("error reading file: %w", err)
 			}
 		}
 		m[h.Name] = &TarItem{Header: h, Data: dt}

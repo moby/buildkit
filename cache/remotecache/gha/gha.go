@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,7 +29,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	actionscache "github.com/tonistiigi/go-actions-cache"
 	"golang.org/x/sync/errgroup"
 )
@@ -68,14 +69,14 @@ func getConfig(attrs map[string]string) (*Config, error) {
 	}
 	token, ok := attrs[attrToken]
 	if !ok {
-		return nil, errors.Errorf("token not set for github actions cache")
+		return nil, errors.New("token not set for github actions cache")
 	}
 	var apiVersionInt int
 	apiVersion, ok := attrs[attrAPIVersion]
 	if ok {
 		i, err := strconv.ParseInt(apiVersion, 10, 64)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse api version %q, expected positive integer", apiVersion)
+			return nil, fmt.Errorf("failed to parse api version %q, expected positive integer: %w", apiVersion, err)
 		}
 		apiVersionInt = int(i)
 	}
@@ -90,7 +91,7 @@ func getConfig(attrs map[string]string) (*Config, error) {
 		url = v
 	}
 	if url == "" {
-		return nil, errors.Errorf("url not set for github actions cache")
+		return nil, errors.New("url not set for github actions cache")
 	}
 	// best effort on old clients
 	if apiVersionInt == 0 {
@@ -106,7 +107,7 @@ func getConfig(attrs map[string]string) (*Config, error) {
 		var err error
 		timeout, err = time.ParseDuration(v)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse timeout for github actions cache")
+			return nil, fmt.Errorf("failed to parse timeout for github actions cache"+": %w", err)
 		}
 	}
 	return &Config{
@@ -222,19 +223,19 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	for i, l := range config.Layers {
 		dgstPair, ok := descs[l.Blob]
 		if !ok {
-			return nil, errors.Errorf("missing blob %s", l.Blob)
+			return nil, fmt.Errorf("missing blob %s", l.Blob)
 		}
 		if dgstPair.Descriptor.Annotations == nil {
-			return nil, errors.Errorf("invalid descriptor without annotations")
+			return nil, errors.New("invalid descriptor without annotations")
 		}
 		var diffID digest.Digest
 		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 		if !ok {
-			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
+			return nil, errors.New("invalid descriptor without uncompressed annotation")
 		}
 		dgst, err := digest.Parse(v)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse uncompressed annotation")
+			return nil, fmt.Errorf("failed to parse uncompressed annotation: %w", err)
 		}
 		diffID = dgst
 		ce.initActiveKeyMap(ctx)
@@ -263,7 +264,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			}
 			if err := ce.cache.Save(ctx, key, ra); err != nil {
 				if !errors.Is(err, os.ErrExist) {
-					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+					return nil, layerDone(fmt.Errorf("error writing layer blob"+": %w", err))
 				}
 			}
 			layerDone(nil)
@@ -331,11 +332,11 @@ func NewImporter(c *Config) (remotecache.Importer, error) {
 
 func (ci *importer) makeDescriptorProviderPair(l cacheimporttypes.CacheLayer) (*v1.DescriptorProviderPair, error) {
 	if l.Annotations == nil {
-		return nil, errors.Errorf("cache layer with missing annotations")
+		return nil, errors.New("cache layer with missing annotations")
 	}
 	annotations := map[string]string{}
 	if l.Annotations.DiffID == "" {
-		return nil, errors.Errorf("cache layer with missing diffid")
+		return nil, errors.New("cache layer with missing diffid")
 	}
 	annotations[labels.LabelUncompressed] = l.Annotations.DiffID.String()
 	if !l.Annotations.CreatedAt.IsZero() {
@@ -379,7 +380,7 @@ func (ci *importer) loadScope(ctx context.Context, scope string) (*v1.CacheChain
 
 	var config cacheimporttypes.CacheConfig
 	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	allLayers := v1.DescriptorProvider{}
@@ -442,7 +443,7 @@ type ciProvider struct {
 
 func (p *ciProvider) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	if dgst != p.desc.Digest {
-		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
+		return content.Info{}, fmt.Errorf("blob %s: %w", dgst, cerrdefs.ErrNotFound)
 	}
 
 	if _, err := p.loadEntry(ctx, p.desc); err != nil {
@@ -467,7 +468,7 @@ func (p *ciProvider) loadEntry(ctx context.Context, desc ocispecs.Descriptor) (*
 		return nil, err
 	}
 	if ce == nil {
-		return nil, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", desc.Digest)
+		return nil, fmt.Errorf("blob %s: %w", desc.Digest, cerrdefs.ErrNotFound)
 	}
 	if p.entries == nil {
 		p.entries = make(map[digest.Digest]*actionscache.Entry)

@@ -3,12 +3,13 @@ package ssh
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/url"
 
 	"github.com/docker/cli/cli/connhelper/commandconn"
 	"github.com/moby/buildkit/client/connhelper"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -66,13 +67,13 @@ func SpecFromURL(u *url.URL) (*Spec, error) {
 		}
 	}
 	if sp.Host == "" {
-		return nil, errors.Errorf("no host specified")
+		return nil, errors.New("no host specified")
 	}
 	if u.RawQuery != "" {
-		return nil, errors.Errorf("extra query after the host: %q", u.RawQuery)
+		return nil, fmt.Errorf("extra query after the host: %q", u.RawQuery)
 	}
 	if u.Fragment != "" {
-		return nil, errors.Errorf("extra fragment after the host: %q", u.Fragment)
+		return nil, fmt.Errorf("extra fragment after the host: %q", u.Fragment)
 	}
 	return &sp, nil
 }

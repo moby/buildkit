@@ -3,6 +3,8 @@ package attestation
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -15,7 +17,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -46,7 +47,7 @@ func Unbundle(ctx context.Context, s session.Group, bundled []exporter.Attestati
 					return errors.New("attestation bundle cannot have callback")
 				}
 				if att.Ref == nil {
-					return errors.Errorf("no ref provided for attestation bundle")
+					return errors.New("no ref provided for attestation bundle")
 				}
 
 				mount, err := att.Ref.Mount(ctx, true, s)
@@ -140,13 +141,13 @@ func unbundle(root string, bundle exporter.Attestation) ([]exporter.Attestation,
 		dec := json.NewDecoder(f)
 		var stmt intoto.Statement
 		if err := dec.Decode(&stmt); err != nil {
-			return nil, errors.Wrap(err, "cannot decode in-toto statement")
+			return nil, fmt.Errorf("cannot decode in-toto statement"+": %w", err)
 		}
 		if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 			return nil, errors.New("in-toto statement is not a single JSON object")
 		}
 		if bundle.InToto.PredicateType != "" && stmt.PredicateType != bundle.InToto.PredicateType {
-			return nil, errors.Errorf("bundle entry %s does not match required predicate type %s", stmt.PredicateType, bundle.InToto.PredicateType)
+			return nil, fmt.Errorf("bundle entry %s does not match required predicate type %s", stmt.PredicateType, bundle.InToto.PredicateType)
 		}
 
 		predicate, err := json.Marshal(stmt.Predicate)

@@ -3,6 +3,8 @@ package resolver
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -15,10 +17,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
-	"github.com/pkg/errors"
-
 	"github.com/moby/buildkit/util/resolver/config"
 	"github.com/moby/buildkit/util/tracing"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const (
@@ -74,7 +75,7 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 	for _, d := range c.TLSConfigDir {
 		fs, err := os.ReadDir(d)
 		if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, os.ErrPermission) {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 		for _, f := range fs {
 			if strings.HasSuffix(f.Name(), ".crt") {
@@ -96,7 +97,7 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 			if runtime.GOOS == "windows" {
 				systemPool = x509.NewCertPool()
 			} else {
-				return nil, errors.Wrapf(err, "unable to get system cert pool")
+				return nil, fmt.Errorf("unable to get system cert pool: %w", err)
 			}
 		}
 		tc.RootCAs = systemPool
@@ -105,7 +106,7 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 	for _, p := range c.RootCAs {
 		dt, err := os.ReadFile(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read %s", p)
+			return nil, fmt.Errorf("failed to read %s: %w", p, err)
 		}
 		tc.RootCAs.AppendCertsFromPEM(dt)
 	}
@@ -113,7 +114,7 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 	for _, kp := range c.KeyPairs {
 		cert, err := tls.LoadX509KeyPair(kp.Certificate, kp.Key)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to load keypair for %s", kp.Certificate)
+			return nil, fmt.Errorf("failed to load keypair for %s: %w", kp.Certificate, err)
 		}
 		tc.Certificates = append(tc.Certificates, cert)
 	}

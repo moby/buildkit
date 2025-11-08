@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -15,7 +17,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -80,8 +82,8 @@ func (e *localExporter) Config() *exporter.Config {
 
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	if e.opts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
@@ -99,7 +101,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	isMap := len(inp.Refs) > 0
 
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
-		return nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, nil, errors.New("unable to export multiple refs, missing platforms mapping")
 	}
 	p, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
@@ -107,7 +109,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	if !isMap && len(p.Platforms) > 1 {
-		return nil, nil, errors.Errorf("unable to export multiple platforms without map")
+		return nil, nil, errors.New("unable to export multiple platforms without map")
 	}
 
 	now := time.Now().Truncate(time.Second)
@@ -138,7 +140,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 					visitedMu.Lock()
 					defer visitedMu.Unlock()
 					if vp, ok := visitedPath[p]; ok {
-						return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
+						return fmt.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
 					}
 					visitedPath[p] = k
 					return nil
@@ -175,7 +177,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		for _, p := range p.Platforms {
 			r, ok := inp.FindRef(p.ID)
 			if !ok {
-				return nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+				return nil, nil, fmt.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			eg.Go(export(ctx, p.ID, r, inp.Attestations[p.ID]))
 		}

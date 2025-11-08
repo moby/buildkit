@@ -214,7 +214,7 @@ func loadCacheAll(ctx context.Context) ([]*cachedigest.Record, error) {
 		if err := rec.LoadSubRecords(func(d digest.Digest) (cachedigest.Type, []cachedigest.Frame, error) {
 			rec, ok := m[d]
 			if !ok {
-				return "", nil, errors.Errorf("digest %s not found in cache", d)
+				return "", nil, fmt.Errorf("digest %s not found in cache", d)
 			}
 			return rec.Type, rec.Data, nil
 		}); err != nil {
@@ -246,7 +246,7 @@ func handleCacheLoad(w http.ResponseWriter, r *http.Request) {
 func loadCacheFromReader(ctx context.Context, rdr io.Reader) ([]*recordWithDebug, error) {
 	dt, err := io.ReadAll(rdr)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to read body")
+		return nil, fmt.Errorf("failed to read body"+": %w", err)
 	}
 
 	allLayers := cacheimport.DescriptorProvider{}
@@ -262,7 +262,7 @@ func loadCacheFromReader(ctx context.Context, rdr io.Reader) ([]*recordWithDebug
 
 	recs, err := debugCacheStore(ctx, keyStorage)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to debug cache store")
+		return nil, fmt.Errorf("failed to debug cache store"+": %w", err)
 	}
 
 	return recs, nil
@@ -354,7 +354,7 @@ type recordWithDebug struct {
 func debugCacheStore(ctx context.Context, store solver.CacheKeyStorage) ([]*recordWithDebug, error) {
 	recs, err := cachestore.Records(ctx, store)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get cache records")
+		return nil, fmt.Errorf("failed to get cache records"+": %w", err)
 	}
 
 	recsWithDebug := make([]*recordWithDebug, len(recs))

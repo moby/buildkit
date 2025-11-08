@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,7 +18,6 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/moby/patternmatcher/ignorefile"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -63,7 +63,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 
 	vv := strings.SplitN(nc.input, ":", 2)
 	if len(vv) != 2 {
-		return nil, nil, errors.Errorf("invalid context specifier %s for %s", nc.input, nc.nameWithPlatform)
+		return nil, nil, fmt.Errorf("invalid context specifier %s for %s", nc.input, nc.nameWithPlatform)
 	}
 
 	// allow git@ without protocol for SSH URLs for backwards compatibility
@@ -105,7 +105,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 			if errors.As(err, &e) {
 				before, after, ok := strings.Cut(e.Updated, "://")
 				if !ok {
-					return nil, nil, errors.Errorf("could not parse ref: %s", e.Updated)
+					return nil, nil, fmt.Errorf("could not parse ref: %s", e.Updated)
 				}
 
 				nc.bc.bopts.Opts[contextPrefix+nc.nameWithPlatform] = before + ":" + after
@@ -140,7 +140,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 	case "git":
 		st, ok, err := DetectGitContext(nc.input, nil)
 		if !ok {
-			return nil, nil, errors.Errorf("invalid git context %s", nc.input)
+			return nil, nil, fmt.Errorf("invalid git context %s", nc.input)
 		}
 		if err != nil {
 			return nil, nil, err
@@ -160,26 +160,26 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		refSpec := strings.TrimPrefix(vv[1], "//")
 		ref, err := reference.Parse(refSpec)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "could not parse oci-layout reference %q", refSpec)
+			return nil, nil, fmt.Errorf("could not parse oci-layout reference %q: %w", refSpec, err)
 		}
 		named, ok := ref.(reference.Named)
 		if !ok {
-			return nil, nil, errors.Errorf("oci-layout reference %q has no name", ref.String())
+			return nil, nil, fmt.Errorf("oci-layout reference %q has no name", ref.String())
 		}
 		dgstd, ok := named.(reference.Digested)
 		if !ok {
-			return nil, nil, errors.Errorf("oci-layout reference %q has no digest", named.String())
+			return nil, nil, fmt.Errorf("oci-layout reference %q has no digest", named.String())
 		}
 
 		// for the dummy ref primarily used in log messages, we can use the
 		// original name, since the store key may not be significant
 		dummyRef, err := reference.ParseNormalizedNamed(nc.name)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "could not parse oci-layout reference %q", nc.name)
+			return nil, nil, fmt.Errorf("could not parse oci-layout reference %q: %w", nc.name, err)
 		}
 		dummyRef, err = reference.WithDigest(dummyRef, dgstd.Digest())
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "could not wrap %q with digest", nc.name)
+			return nil, nil, fmt.Errorf("could not wrap %q with digest: %w", nc.name, err)
 		}
 
 		_, dgst, data, err := nc.bc.client.ResolveImageConfig(ctx, dummyRef.String(), sourceresolver.Opt{
@@ -198,7 +198,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 
 		var img dockerspec.DockerOCIImage
 		if err := json.Unmarshal(data, &img); err != nil {
-			return nil, nil, errors.Wrap(err, "could not parse oci-layout image config")
+			return nil, nil, fmt.Errorf("could not parse oci-layout image config"+": %w", err)
 		}
 
 		ociOpt := []llb.OCILayoutOption{
@@ -256,7 +256,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 			if len(dt) != 0 {
 				excludes, err = ignorefile.ReadAll(bytes.NewBuffer(dt))
 				if err != nil {
-					return nil, nil, errors.Wrapf(err, "failed parsing %s", DefaultDockerignoreName)
+					return nil, nil, fmt.Errorf("failed parsing %s: %w", DefaultDockerignoreName, err)
 				}
 			}
 		}
@@ -277,13 +277,13 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		}
 		st, ok := inputs[vv[1]]
 		if !ok {
-			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], nc.nameWithPlatform)
+			return nil, nil, fmt.Errorf("invalid input %s for %s", vv[1], nc.nameWithPlatform)
 		}
 		md, ok := nc.bc.bopts.Opts[inputMetadataPrefix+vv[1]]
 		if ok {
 			m := make(map[string][]byte)
 			if err := json.Unmarshal([]byte(md), &m); err != nil {
-				return nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
+				return nil, nil, fmt.Errorf("failed to parse input metadata %s: %w", md, err)
 			}
 			var img *dockerspec.DockerOCIImage
 			if dtic, ok := m[exptypes.ExporterImageConfigKey]; ok {
@@ -292,14 +292,14 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 					return nil, nil, err
 				}
 				if err := json.Unmarshal(dtic, &img); err != nil {
-					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", nc.nameWithPlatform)
+					return nil, nil, fmt.Errorf("failed to parse image config for %s: %w", nc.nameWithPlatform, err)
 				}
 			}
 			return &st, img, nil
 		}
 		return &st, nil, nil
 	default:
-		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], nc.nameWithPlatform)
+		return nil, nil, fmt.Errorf("unsupported context source %s for %s", vv[0], nc.nameWithPlatform)
 	}
 }
 

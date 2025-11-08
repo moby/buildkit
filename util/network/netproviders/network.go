@@ -1,13 +1,14 @@
 package netproviders
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/cniprovider"
-	"github.com/pkg/errors"
 )
 
 type Opt struct {
@@ -60,7 +61,7 @@ func Providers(opt Opt) (providers map[pb.NetMode]network.Provider, resolvedMode
 			defaultProvider, resolvedMode = getFallback()
 		}
 	default:
-		return nil, resolvedMode, errors.Errorf("invalid network mode: %q", opt.Mode)
+		return nil, resolvedMode, fmt.Errorf("invalid network mode: %q", opt.Mode)
 	}
 
 	providers = map[pb.NetMode]network.Provider{

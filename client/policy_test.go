@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -19,7 +21,6 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,7 +122,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 
 			p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 				if callCounter >= len(tc.callbacks) {
-					return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+					return nil, nil, fmt.Errorf("too many calls to policy callback %d", callCounter)
 				}
 				cb := tc.callbacks[callCounter]
 				callCounter++
@@ -206,7 +207,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 
 			p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 				if callCounter >= len(tc.callbacks) {
-					return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+					return nil, nil, fmt.Errorf("too many calls to policy callback %d", callCounter)
 				}
 				cb := tc.callbacks[callCounter]
 				callCounter++
@@ -281,7 +282,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 				Action: sourcepolicpb.PolicyAction_ALLOW,
 			}, nil, nil
 		}
-		return nil, nil, errors.Errorf("unexpected source %q", req.Source.Source.Identifier)
+		return nil, nil, fmt.Errorf("unexpected source %q", req.Source.Source.Identifier)
 	})
 
 	_, err = c.Solve(ctx, def, SolveOpt{

@@ -2,6 +2,8 @@ package containerdexecutor
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,10 +11,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/moby/buildkit/util/bklog"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/mount"
@@ -24,8 +22,11 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type containerdExecutor struct {
@@ -145,7 +146,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
-		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
+		return nil, fmt.Errorf("unknown network mode %s", meta.NetMode)
 	}
 
 	resolvConf, hostsFile, releasers, err := w.prepareExecutionEnv(ctx, root, mounts, meta, details, meta.NetMode)
@@ -188,7 +189,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	defer func() {
 		if err1 := container.Delete(context.WithoutCancel(ctx)); err == nil && err1 != nil {
-			err = errors.Wrapf(err1, "failed to delete container %s", id)
+			err = fmt.Errorf("failed to delete container %s: %w", id, err1)
 		}
 	}()
 
@@ -212,7 +213,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 
 	defer func() {
 		if _, err1 := task.Delete(context.WithoutCancel(ctx), ctd.WithProcessKill); err == nil && err1 != nil {
-			err = errors.Wrapf(err1, "failed to delete task %s", id)
+			err = fmt.Errorf("failed to delete task %s: %w", id, err1)
 		}
 	}()
 
@@ -246,7 +247,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	w.mu.Unlock()
 
 	if !ok {
-		return errors.Errorf("container %s not found", id)
+		return fmt.Errorf("container %s not found", id)
 	}
 	var container ctd.Container
 	var task ctd.Task
@@ -268,9 +269,9 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 			return context.Cause(ctx)
 		case err, ok := <-details.done:
 			if !ok || err == nil {
-				return errors.Errorf("container %s has stopped", id)
+				return fmt.Errorf("container %s has stopped", id)
 			}
-			return errors.Wrapf(err, "container %s has exited with error", id)
+			return fmt.Errorf("container %s has exited with error: %w", id, err)
 		case <-time.After(100 * time.Millisecond):
 			continue
 		}
@@ -278,14 +279,14 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 
 	spec, err := container.Spec(ctx)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	proc := spec.Process
 	if meta.User != "" {
 		userSpec, err := getUserSpec(meta.User, details.rootfsPath)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		proc.User = userSpec
 	}
@@ -311,7 +312,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 
 	taskProcess, err := task.Exec(ctx, identity.NewID(), proc, cio.NewCreator(cioOpts...))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	err = w.runProcess(ctx, taskProcess, process.Resize, process.Signal, process.Meta.ValidExitCodes, nil)
@@ -359,7 +360,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 	// handle signals (and resize) in separate go loop so it does not
 	// potentially block the container cancel/exit status loop below.
 	eventCtx, eventCancel := context.WithCancelCause(ctx)
-	defer eventCancel(errors.WithStack(context.Canceled))
+	defer eventCancel(pkgerrors.WithStack(context.Canceled))
 	go func() {
 		for {
 			select {
@@ -402,13 +403,13 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 			ctxDone = nil
 			var killCtx context.Context
 			killCtx, cancel = context.WithCancelCause(context.Background())
-			killCtx, _ = context.WithTimeoutCause(killCtx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+			killCtx, _ = context.WithTimeoutCause(killCtx, 10*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
 			killCtxDone = killCtx.Done()
 			p.Kill(killCtx, syscall.SIGKILL)
 			io.Cancel()
 		case status := <-statusCh:
 			if cancel != nil {
-				cancel(errors.WithStack(context.Canceled))
+				cancel(pkgerrors.WithStack(context.Canceled))
 			}
 			trace.SpanFromContext(ctx).AddEvent(
 				"Container exited",
@@ -432,20 +433,20 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 				Err:      status.Error(),
 			}
 			if status.ExitCode() == gatewayapi.UnknownExitStatus && status.Error() != nil {
-				exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
+				exitErr.Err = fmt.Errorf("failure waiting for process"+": %w", status.Error())
 			}
 			select {
 			case <-ctx.Done():
-				exitErr.Err = errors.Wrap(context.Cause(ctx), exitErr.Error())
+				exitErr.Err = errors.Join(context.Cause(ctx), exitErr)
 			default:
 			}
 			return exitErr
 		case <-killCtxDone:
 			if cancel != nil {
-				cancel(errors.WithStack(context.Canceled))
+				cancel(pkgerrors.WithStack(context.Canceled))
 			}
 			io.Cancel()
-			return errors.Errorf("failed to kill process on cancel")
+			return errors.New("failed to kill process on cancel")
 		}
 	}
 }

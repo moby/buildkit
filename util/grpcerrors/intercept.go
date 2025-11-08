@@ -2,11 +2,11 @@ package grpcerrors
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/moby/buildkit/util/stack"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -18,7 +18,7 @@ func UnaryServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServer
 		err = ToGRPC(ctx, err)
 	}
 	if oldErr != nil && err == nil {
-		logErr := errors.Wrap(err, "invalid grpc error conversion")
+		logErr := fmt.Errorf("invalid grpc error conversion"+": %w", err)
 		if os.Getenv("BUILDKIT_DEBUG_PANIC_ON_ERROR") == "1" {
 			panic(logErr)
 		}

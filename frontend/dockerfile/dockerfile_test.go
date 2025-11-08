@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -22,13 +23,6 @@ import (
 	"testing"
 	"time"
 
-	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
-	"github.com/tonistiigi/fsutil"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/content/proxy"
@@ -39,6 +33,7 @@ import (
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
@@ -61,10 +56,15 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tonistiigi/fsutil"
+	"golang.org/x/sync/errgroup"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func init() {
@@ -3886,8 +3886,8 @@ COPY . .
 	)
 
 	ctx, cancel := context.WithCancelCause(sb.Context())
-	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	ctx, _ = context.WithTimeoutCause(ctx, 15*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -8522,7 +8522,7 @@ COPY --from=build /foo /out /
 
 		dt, ok := res.Metadata["containerimage.config"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 
 		dt, err = json.Marshal(map[string][]byte{
@@ -8628,7 +8628,7 @@ COPY --from=build /foo /out /
 		}
 
 		if len(res.Refs) != 2 {
-			return nil, errors.Errorf("expected 2 refs, got %d", len(res.Refs))
+			return nil, fmt.Errorf("expected 2 refs, got %d", len(res.Refs))
 		}
 
 		inputs := map[string]*pb.Definition{}
@@ -8661,7 +8661,7 @@ COPY --from=build /foo /out /
 
 		dt, ok := res.Metadata["containerimage.config/linux/amd64"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 		dt, err = json.Marshal(map[string][]byte{
 			"containerimage.config": dt,
@@ -8673,7 +8673,7 @@ COPY --from=build /foo /out /
 
 		dt, ok = res.Metadata["containerimage.config/linux/arm64"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 		dt, err = json.Marshal(map[string][]byte{
 			"containerimage.config": dt,
@@ -8787,9 +8787,9 @@ func testNamedFilteredContext(t *testing.T, sb integration.Sandbox) {
 				}
 
 				if foo := transferred["foo"]; foo < min {
-					return errors.Errorf("not enough data was transferred, %d < %d", foo, min)
+					return fmt.Errorf("not enough data was transferred, %d < %d", foo, min)
 				} else if foo > max {
-					return errors.Errorf("too much data was transferred, %d > %d", foo, max)
+					return fmt.Errorf("too much data was transferred, %d > %d", foo, max)
 				}
 				return nil
 			})
@@ -10447,7 +10447,7 @@ func runShell(dir string, cmds ...string) error {
 		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "error running %v", args)
+			return fmt.Errorf("error running %v: %w", args, err)
 		}
 	}
 	return nil

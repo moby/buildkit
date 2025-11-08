@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"syscall"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
 )
 
 // Constants for well-known SIDs in the Windows container.
@@ -74,7 +75,7 @@ func ResolveUsernameToSID(ctx context.Context, exec executor.Executor, rootMount
 	// TODO(gsamfira): Should we use a snapshot of the rootMount?
 	ident, err := GetUserIdentFromContainer(ctx, exec, rootMount, userName)
 	if err != nil {
-		return "", errors.Wrap(err, "getting account SID from container")
+		return "", fmt.Errorf("getting account SID from container"+": %w", err)
 	}
 	return ident, nil
 }
@@ -85,7 +86,7 @@ func GetUserIdentFromContainer(ctx context.Context, exec executor.Executor, root
 	}
 
 	if len(rootMounts) > 1 {
-		return "", errors.Errorf("unexpected number of root mounts: %d", len(rootMounts))
+		return "", fmt.Errorf("unexpected number of root mounts: %d", len(rootMounts))
 	}
 
 	stdout := &bytesReadWriteCloser{
@@ -110,12 +111,12 @@ func GetUserIdentFromContainer(ctx context.Context, exec executor.Executor, root
 	}
 
 	if _, err := exec.Run(ctx, "", newStubMountable(rootMounts), nil, procInfo, nil); err != nil {
-		return "", errors.Wrap(err, "executing command")
+		return "", fmt.Errorf("executing command"+": %w", err)
 	}
 
 	data := stdout.bw.Bytes()
 	if err := json.Unmarshal(data, &ident); err != nil {
-		return "", errors.Wrap(err, "reading user info")
+		return "", fmt.Errorf("reading user info"+": %w", err)
 	}
 
 	return ident.SID, nil
@@ -127,7 +128,7 @@ type bytesReadWriteCloser struct {
 
 func (b *bytesReadWriteCloser) Write(p []byte) (int, error) {
 	if b.bw == nil {
-		return 0, errors.Errorf("invalid bytes buffer")
+		return 0, errors.New("invalid bytes buffer")
 	}
 	return b.bw.Write(p)
 }

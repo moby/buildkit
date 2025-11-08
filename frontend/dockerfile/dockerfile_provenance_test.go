@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,7 +39,6 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
@@ -1602,7 +1602,7 @@ COPY bar bar2
 
 		dt, ok := res.Metadata["containerimage.config"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 
 		dt, err = json.Marshal(map[string][]byte{

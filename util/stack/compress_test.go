@@ -1,24 +1,25 @@
 package stack
 
 import (
+	"errors"
 	"testing"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func testcall1() error {
-	return errors.Errorf("error1")
+	return errors.New("error1")
 }
 
 func testcall2() error {
-	return errors.WithStack(testcall1())
+	return pkgerrors.WithStack(testcall1())
 }
 
 func testcall3() error {
 	err := testcall2()
 	// this is from a different line
-	return errors.WithStack(err)
+	return pkgerrors.WithStack(err)
 }
 
 func TestCompressStacks(t *testing.T) {

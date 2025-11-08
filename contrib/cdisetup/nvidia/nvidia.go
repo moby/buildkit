@@ -19,7 +19,6 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 // This is example of experimental on-demand setup of a CDI devices.
@@ -50,7 +49,7 @@ func (s *setup) Validate() error {
 		return err
 	}
 	if !b {
-		return errors.Errorf("no NVIDIA devices found")
+		return fmt.Errorf("no NVIDIA devices found")
 	}
 	return nil
 }
@@ -94,7 +93,7 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	} else if osr.ID != "debian" && osr.ID != "ubuntu" {
-		return errors.Errorf("NVIDIA setup is currently only supported on Debian/Ubuntu")
+		return fmt.Errorf("NVIDIA setup is currently only supported on Debian/Ubuntu")
 	}
 
 	needsDriver := true
@@ -107,21 +106,21 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	}
 	if needsDriver {
 		if hasWSLGPU() {
-			return errors.Errorf("NVIDIA drivers are required for WSL with non PCI-based GPUs")
+			return fmt.Errorf("NVIDIA drivers are required for WSL with non PCI-based GPUs")
 		}
-		return errors.Errorf("NVIDIA drivers are required. Try loading NVIDIA kernel module with \"modprobe nvidia\" command")
+		return fmt.Errorf("NVIDIA drivers are required. Try loading NVIDIA kernel module with \"modprobe nvidia\" command")
 	}
 
 	var dv string
 	if !hasLibsInstalled() && !hasWSLGPU() {
 		version, err := readVersion()
 		if err != nil {
-			return errors.Wrapf(err, "failed to read NVIDIA driver version")
+			return fmt.Errorf("failed to read NVIDIA driver version: %w", err)
 		}
 		var ok bool
 		dv, _, ok = strings.Cut(version, ".")
 		if !ok {
-			return errors.Errorf("failed to parse NVIDIA driver version %q", version)
+			return fmt.Errorf("failed to parse NVIDIA driver version %q", version)
 		}
 	}
 
@@ -138,7 +137,7 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	}
 
 	if err := os.MkdirAll("/etc/cdi", 0700); err != nil {
-		return errors.Wrapf(err, "failed to create /etc/cdi")
+		return fmt.Errorf("failed to create /etc/cdi: %w", err)
 	}
 
 	buf := &bytes.Buffer{}
@@ -147,15 +146,15 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	cmd.Stdout = buf
 	cmd.Stderr = newStream(pw, 2, dgst)
 	if err := cmd.Run(); err != nil {
-		return errors.Wrapf(err, "failed to generate CDI spec")
+		return fmt.Errorf("failed to generate CDI spec: %w", err)
 	}
 
 	if len(buf.Bytes()) == 0 {
-		return errors.Errorf("nvidia-ctk output is empty")
+		return fmt.Errorf("nvidia-ctk output is empty")
 	}
 
 	if err := os.WriteFile("/etc/cdi/nvidia.yaml", buf.Bytes(), 0644); err != nil {
-		return errors.Wrapf(err, "failed to write /etc/cdi/nvidia.yaml")
+		return fmt.Errorf("failed to write /etc/cdi/nvidia.yaml: %w", err)
 	}
 
 	return nil
@@ -193,7 +192,7 @@ func installPackages(ctx context.Context, osr *osrelease, dv string, pw progress
 		// for non-sbsa could use https://nvidia.github.io/libnvidia-container/stable/deb
 	}
 	if arch == "" {
-		return errors.Errorf("unsupported architecture: %s", runtime.GOARCH)
+		return fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
 	}
 
 	aptURL := "https://developer.download.nvidia.com/compute/cuda/repos/" + aptDistro + "/" + arch + "/"
@@ -204,25 +203,25 @@ func installPackages(ctx context.Context, osr *osrelease, dv string, pw progress
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, aptURL+"3bf863cc.pub", nil)
 		if err != nil {
-			return errors.Wrapf(err, "failed to create request for NVIDIA GPG key")
+			return fmt.Errorf("failed to create request for NVIDIA GPG key: %w", err)
 		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return errors.Wrapf(err, "failed to download NVIDIA GPG key")
+			return fmt.Errorf("failed to download NVIDIA GPG key: %w", err)
 		}
 
 		cmd := exec.CommandContext(ctx, "gpg", "--dearmor", "-o", keyTarget)
 		cmd.Stdin = resp.Body
 		cmd.Stderr = newStream(pw, 2, dgst)
 		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "failed to install NVIDIA GPG key")
+			return fmt.Errorf("failed to install NVIDIA GPG key: %w", err)
 		}
 		resp.Body.Close()
 	}
 
 	if err := os.WriteFile("/etc/apt/sources.list.d/nvidia-cuda.list", []byte("deb [signed-by="+keyTarget+"] "+aptURL+" /"), 0644); err != nil {
-		return errors.Wrapf(err, "failed to add NVIDIA apt repo")
+		return fmt.Errorf("failed to add NVIDIA apt repo: %w", err)
 	}
 
 	if err := run(ctx, []string{"apt-get", "update"}, pw, dgst); err != nil {
@@ -254,7 +253,7 @@ func parseVersion(dt string) (string, error) {
 	re := regexp.MustCompile(`NVIDIA .* Kernel Module(?:[\s\w\d]+)?\s+(\d+\.\d+)`)
 	matches := re.FindStringSubmatch(dt)
 	if len(matches) < 2 {
-		return "", errors.Errorf("could not parse NVIDIA driver version")
+		return "", fmt.Errorf("could not parse NVIDIA driver version")
 	}
 	return matches[1], nil
 }
@@ -316,7 +315,7 @@ func getOSRelease() (*osrelease, error) {
 	}
 
 	if id == "" {
-		return nil, errors.Errorf("ID not found in /etc/os-release")
+		return nil, fmt.Errorf("ID not found in /etc/os-release")
 	}
 
 	return &osrelease{ID: id, VersionID: versionID}, nil

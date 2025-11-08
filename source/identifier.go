@@ -1,8 +1,9 @@
 package source
 
 import (
+	"errors"
+
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
-	"github.com/pkg/errors"
 )
 
 var (

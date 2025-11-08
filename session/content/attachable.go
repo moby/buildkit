@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"fmt"
 
 	api "github.com/containerd/containerd/api/services/content/v1"
 	"github.com/containerd/containerd/v2/core/content"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -25,17 +25,17 @@ type attachableContentStore struct {
 func (cs *attachableContentStore) choose(ctx context.Context) (content.Store, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, errors.Wrap(cerrdefs.ErrInvalidArgument, "request lacks metadata")
+		return nil, fmt.Errorf("request lacks metadata"+": %w", cerrdefs.ErrInvalidArgument)
 	}
 
 	values := md[GRPCHeaderID]
 	if len(values) == 0 {
-		return nil, errors.Wrapf(cerrdefs.ErrInvalidArgument, "request lacks metadata %q", GRPCHeaderID)
+		return nil, fmt.Errorf("request lacks metadata %q: %w", GRPCHeaderID, cerrdefs.ErrInvalidArgument)
 	}
 	id := values[0]
 	store, ok := cs.stores[id]
 	if !ok {
-		return nil, errors.Wrapf(cerrdefs.ErrNotFound, "unknown store %s", id)
+		return nil, fmt.Errorf("unknown store %s: %w", id, cerrdefs.ErrNotFound)
 	}
 	return store, nil
 }

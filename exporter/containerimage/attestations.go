@@ -3,6 +3,7 @@ package containerimage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -19,7 +20,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	spdx_json "github.com/spdx/tools-golang/json"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/spdx/tools-golang/spdx/v2/common"
@@ -126,7 +126,7 @@ func supplementSBOM(ctx context.Context, s session.Group, target cache.Immutable
 func decodeSPDX(dt []byte) (s *spdx.Document, err error) {
 	doc, err := spdx_json.Read(bytes.NewReader(dt))
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to decode spdx")
+		return nil, fmt.Errorf("unable to decode spdx"+": %w", err)
 	}
 	if doc == nil {
 		return nil, errors.New("decoding produced empty spdx document")
@@ -138,7 +138,7 @@ func encodeSPDX(s *spdx.Document) (dt []byte, err error) {
 	w := bytes.NewBuffer(nil)
 	err = spdx_json.Write(s, w)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to encode spdx")
+		return nil, fmt.Errorf("unable to encode spdx"+": %w", err)
 	}
 	return w.Bytes(), nil
 }

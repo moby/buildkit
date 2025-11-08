@@ -30,7 +30,7 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 		// Get layer directories of upper snapshot
 		upperM := upper[0]
 		if upperM.Type != "bind" {
-			return "", errors.Errorf("bottommost upper must be bind mount but %q", upperM.Type)
+			return "", fmt.Errorf("bottommost upper must be bind mount but %q", upperM.Type)
 		}
 		upperdir = upperM.Source
 	} else if len(lower) == 1 && len(upper) == 1 {
@@ -48,13 +48,13 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 				return "", err
 			}
 		} else {
-			return "", errors.Errorf("cannot get layer information from mount option (type = %q)", lowerM.Type)
+			return "", fmt.Errorf("cannot get layer information from mount option (type = %q)", lowerM.Type)
 		}
 
 		// Get layer directories of upper snapshot
 		upperM := upper[0]
 		if !IsOverlayMountType(upperM) {
-			return "", errors.Errorf("upper snapshot isn't overlay mounted (type = %q)", upperM.Type)
+			return "", fmt.Errorf("upper snapshot isn't overlay mounted (type = %q)", upperM.Type)
 		}
 		upperlayers, err := GetOverlayLayers(upperM)
 		if err != nil {
@@ -63,19 +63,19 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 
 		// Check if the diff directory can be determined
 		if len(upperlayers) != len(lowerlayers)+1 {
-			return "", errors.Errorf("cannot determine diff of more than one upper directories")
+			return "", errors.New("cannot determine diff of more than one upper directories")
 		}
 		for i := range lowerlayers {
 			if upperlayers[i] != lowerlayers[i] {
-				return "", errors.Errorf("layer %d must be common between upper and lower snapshots", i)
+				return "", fmt.Errorf("layer %d must be common between upper and lower snapshots", i)
 			}
 		}
 		upperdir = upperlayers[len(upperlayers)-1] // get the topmost layer that indicates diff
 	} else {
-		return "", errors.Errorf("multiple mount configurations are not supported")
+		return "", errors.New("multiple mount configurations are not supported")
 	}
 	if upperdir == "" {
-		return "", errors.Errorf("cannot determine upperdir from mount option")
+		return "", errors.New("cannot determine upperdir from mount option")
 	}
 	return upperdir, nil
 }
@@ -99,7 +99,7 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 		} else {
 			// encountering an unknown option. return error and fallback to walking differ
 			// to avoid unexpected diff.
-			return nil, errors.Errorf("unknown option %q specified by snapshotter", o)
+			return nil, fmt.Errorf("unknown option %q specified by snapshotter", o)
 		}
 	}
 	if uFound {
@@ -113,7 +113,7 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mount.Mount) error {
 	emptyLower, err := os.MkdirTemp("", "buildkit") // empty directory used for the lower of diff view
 	if err != nil {
-		return errors.Wrapf(err, "failed to create temp dir")
+		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.Remove(emptyLower)
 	upperView := []mount.Mount{
@@ -130,7 +130,7 @@ func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mo
 				if err2 := cw.Close(); err2 != nil {
 					return errors.Wrapf(err, "failed to record upperdir changes (close error: %v)", err2)
 				}
-				return errors.Wrapf(err, "failed to record upperdir changes")
+				return fmt.Errorf("failed to record upperdir changes: %w", err)
 			}
 			return cw.Close()
 		})
@@ -214,7 +214,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 			// File doesn't exist in the base layer. Thus this is added.
 			kind = fs.ChangeKindAdd
 		} else {
-			return errors.Wrap(err, "failed to stat base file during overlay diff")
+			return fmt.Errorf("failed to stat base file during overlay diff"+": %w", err)
 		}
 
 		if !skipRecord {
@@ -249,13 +249,13 @@ func checkDelete(path string, base string, f os.FileInfo) (delete, skip bool, _ 
 		if _, ok := f.Sys().(*syscall.Stat_t); ok {
 			maj, min, err := devices.DeviceInfo(f)
 			if err != nil {
-				return false, false, errors.Wrapf(err, "failed to get device info")
+				return false, false, fmt.Errorf("failed to get device info: %w", err)
 			}
 			if maj == 0 && min == 0 {
 				// This file is a whiteout (char 0/0) that indicates this is deleted from the base
 				if _, err := os.Lstat(filepath.Join(base, path)); err != nil {
 					if !os.IsNotExist(err) {
-						return false, false, errors.Wrapf(err, "failed to lstat")
+						return false, false, fmt.Errorf("failed to lstat: %w", err)
 					}
 					// This file doesn't exist even in the base dir.
 					// We don't need whiteout. Just skip this file.
@@ -274,12 +274,12 @@ func checkOpaque(upperdir string, path string, base string, f os.FileInfo) (isOp
 		for _, oKey := range []string{"trusted.overlay.opaque", "user.overlay.opaque"} {
 			opaque, err := sysx.LGetxattr(filepath.Join(upperdir, path), oKey)
 			if err != nil && !errors.Is(err, unix.ENODATA) {
-				return false, errors.Wrapf(err, "failed to retrieve %s attr", oKey)
+				return false, fmt.Errorf("failed to retrieve %s attr: %w", oKey, err)
 			} else if len(opaque) == 1 && opaque[0] == 'y' {
 				// This is an opaque whiteout directory.
 				if _, err := os.Lstat(filepath.Join(base, path)); err != nil {
 					if !os.IsNotExist(err) {
-						return false, errors.Wrapf(err, "failed to lstat")
+						return false, fmt.Errorf("failed to lstat: %w", err)
 					}
 					// This file doesn't exist even in the base dir. We don't need treat this as an opaque.
 					return false, nil
@@ -297,7 +297,7 @@ func checkRedirect(upperdir string, path string, f os.FileInfo) (bool, error) {
 		rKey := "trusted.overlay.redirect"
 		redirect, err := sysx.LGetxattr(filepath.Join(upperdir, path), rKey)
 		if err != nil && !errors.Is(err, unix.ENODATA) {
-			return false, errors.Wrapf(err, "failed to retrieve %s attr", rKey)
+			return false, fmt.Errorf("failed to retrieve %s attr: %w", rKey, err)
 		}
 		return len(redirect) > 0, nil
 	}
@@ -380,11 +380,11 @@ func compareSysStat(s1, s2 any) (bool, error) {
 func compareCapabilities(p1, p2 string) (bool, error) {
 	c1, err := sysx.LGetxattr(p1, "security.capability")
 	if err != nil && !errors.Is(err, sysx.ENODATA) {
-		return false, errors.Wrapf(err, "failed to get xattr for %s", p1)
+		return false, fmt.Errorf("failed to get xattr for %s: %w", p1, err)
 	}
 	c2, err := sysx.LGetxattr(p2, "security.capability")
 	if err != nil && !errors.Is(err, sysx.ENODATA) {
-		return false, errors.Wrapf(err, "failed to get xattr for %s", p2)
+		return false, fmt.Errorf("failed to get xattr for %s: %w", p2, err)
 	}
 	return bytes.Equal(c1, c2), nil
 }
@@ -423,7 +423,7 @@ func compareFileContent(p1, p2 string) (bool, error) {
 	if stat, err := f1.Stat(); err != nil {
 		return false, err
 	} else if !stat.Mode().IsRegular() {
-		return false, errors.Errorf("%s is not a regular file", p1)
+		return false, fmt.Errorf("%s is not a regular file", p1)
 	}
 
 	f2, err := os.Open(p2)
@@ -434,7 +434,7 @@ func compareFileContent(p1, p2 string) (bool, error) {
 	if stat, err := f2.Stat(); err != nil {
 		return false, err
 	} else if !stat.Mode().IsRegular() {
-		return false, errors.Errorf("%s is not a regular file", p2)
+		return false, fmt.Errorf("%s is not a regular file", p2)
 	}
 
 	b1 := bufPool.Get().(*[]byte)

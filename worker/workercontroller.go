@@ -1,12 +1,12 @@
 package worker
 
 import (
-	stderrors "errors"
+	"errors"
+	"fmt"
 
 	"github.com/containerd/containerd/v2/pkg/filters"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
-	"github.com/pkg/errors"
 )
 
 // Controller holds worker instances.
@@ -23,7 +23,7 @@ func (c *Controller) Close() error {
 			errs = append(errs, err)
 		}
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 // Add adds a local worker.
@@ -53,7 +53,7 @@ func (c *Controller) List(filterStrings ...string) ([]Worker, error) {
 // GetDefault returns the default local worker
 func (c *Controller) GetDefault() (Worker, error) {
 	if len(c.workers) == 0 {
-		return nil, errors.Errorf("no default worker")
+		return nil, fmt.Errorf("no default worker")
 	}
 	return c.workers[0], nil
 }
@@ -64,7 +64,7 @@ func (c *Controller) Get(id string) (Worker, error) {
 			return w, nil
 		}
 	}
-	return nil, errors.Errorf("worker %s not found", id)
+	return nil, fmt.Errorf("worker %s not found", id)
 }
 
 // TODO: add Get(Constraint) (*Worker, error)

@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -23,7 +24,7 @@ type RefManager struct {
 func (rm *RefManager) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly bool, g session.Group) (_ fileoptypes.Mount, rerr error) {
 	ir, ok := ref.(cache.ImmutableRef)
 	if !ok && ref != nil {
-		return nil, errors.Errorf("invalid ref type: %T", ref)
+		return nil, fmt.Errorf("invalid ref type: %T", ref)
 	}
 
 	if ir != nil && readonly {
@@ -63,10 +64,10 @@ func (rm *RefManager) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly
 func (rm *RefManager) Commit(ctx context.Context, mount fileoptypes.Mount) (fileoptypes.Ref, error) {
 	m, ok := mount.(*Mount)
 	if !ok {
-		return nil, errors.Errorf("invalid mount type %T", mount)
+		return nil, fmt.Errorf("invalid mount type %T", mount)
 	}
 	if m.mr == nil {
-		return nil, errors.Errorf("invalid mount without active ref for commit")
+		return nil, errors.New("invalid mount without active ref for commit")
 	}
 	defer func() {
 		m.mr = nil

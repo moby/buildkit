@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1429,7 +1429,7 @@ func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
 			_, err := client.ContentStore().Info(ctx, desc.Digest)
 			require.NoError(t, err)
 			if _, ok := layerBlobs[desc.Digest]; !ok {
-				return nil, errors.Errorf("unexpected layer blob %s", desc.Digest)
+				return nil, fmt.Errorf("unexpected layer blob %s", desc.Digest)
 			}
 		}
 		return images.Children(ctx, client.ContentStore(), desc)

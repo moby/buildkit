@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -73,7 +74,7 @@ func TestCancelOne(t *testing.T) {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-time.After(30 * time.Millisecond):
-			cancel(errors.WithStack(context.Canceled))
+			cancel(pkgerrors.WithStack(context.Canceled))
 			return nil
 		}
 	})
@@ -127,7 +128,7 @@ func TestCancelRace(t *testing.T) {
 	go func() {
 		defer close(wait)
 		<-kick
-		cancel(errors.WithStack(context.Canceled))
+		cancel(pkgerrors.WithStack(context.Canceled))
 		time.Sleep(5 * time.Millisecond)
 		_, err := g.Do(context.Background(), "foo", f)
 		assert.NoError(t, err)
@@ -171,7 +172,7 @@ func TestCancelBoth(t *testing.T) {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-time.After(20 * time.Millisecond):
-			cancel2(errors.WithStack(context.Canceled))
+			cancel2(pkgerrors.WithStack(context.Canceled))
 			return nil
 		}
 	})
@@ -180,7 +181,7 @@ func TestCancelBoth(t *testing.T) {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-time.After(50 * time.Millisecond):
-			cancel3(errors.WithStack(context.Canceled))
+			cancel3(pkgerrors.WithStack(context.Canceled))
 			return nil
 		}
 	})
@@ -230,7 +231,7 @@ func TestMassiveParallel(t *testing.T) {
 	for range 1000 {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {
-				return "", errors.Errorf("always fail")
+				return "", errors.New("always fail")
 			})
 			if errors.Is(err, errRetryTimeout) {
 				atomic.AddInt64(&retryCount, 1)

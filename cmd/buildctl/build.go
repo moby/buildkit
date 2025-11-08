@@ -121,13 +121,13 @@ var buildCommand = cli.Command{
 func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
 	def, err := llb.ReadFrom(r)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse input")
+		return nil, fmt.Errorf("failed to parse input"+": %w", err)
 	}
 	if clicontext.Bool("no-cache") {
 		for _, dt := range def.Def {
 			var op pb.Op
 			if err := op.UnmarshalVT(dt); err != nil {
-				return nil, errors.Wrap(err, "failed to parse llb proto op")
+				return nil, fmt.Errorf("failed to parse llb proto op"+": %w", err)
 			}
 			dgst := digest.FromBytes(dt)
 			c := llb.Constraints{Metadata: def.Metadata[dgst]}
@@ -239,7 +239,7 @@ func buildAction(clicontext *cli.Context) error {
 		}
 		var srcPolStruct spb.Policy
 		if err := json.Unmarshal(b, &srcPolStruct); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal source-policy-file %q", srcPolFile)
+			return fmt.Errorf("failed to unmarshal source-policy-file %q: %w", srcPolFile, err)
 		}
 		srcPol = &srcPolStruct
 	}
@@ -264,30 +264,30 @@ func buildAction(clicontext *cli.Context) error {
 
 	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))
 	if err != nil {
-		return errors.Wrap(err, "invalid opt")
+		return fmt.Errorf("invalid opt"+": %w", err)
 	}
 
 	solveOpt.LocalMounts, err = build.ParseLocal(clicontext.StringSlice("local"))
 	if err != nil {
-		return errors.Wrap(err, "invalid local")
+		return fmt.Errorf("invalid local"+": %w", err)
 	}
 
 	solveOpt.OCIStores, err = build.ParseOCILayout(clicontext.StringSlice("oci-layout"))
 	if err != nil {
-		return errors.Wrap(err, "invalid oci-layout")
+		return fmt.Errorf("invalid oci-layout"+": %w", err)
 	}
 
 	var def *llb.Definition
 	if clicontext.String("frontend") == "" {
 		if fi, _ := os.Stdin.Stat(); (fi.Mode() & os.ModeCharDevice) != 0 {
-			return errors.Errorf("please specify --frontend or pipe LLB definition to stdin")
+			return errors.New("please specify --frontend or pipe LLB definition to stdin")
 		}
 		def, err = read(os.Stdin, clicontext)
 		if err != nil {
 			return err
 		}
 		if len(def.Def) == 0 {
-			return errors.Errorf("empty definition sent to build. Specify --frontend instead?")
+			return errors.New("empty definition sent to build. Specify --frontend instead?")
 		}
 	} else if clicontext.Bool("no-cache") {
 		solveOpt.FrontendAttrs["no-cache"] = ""

@@ -1,10 +1,9 @@
 package iohelper
 
 import (
+	"fmt"
 	"io"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 type NopWriteCloser struct {
@@ -27,7 +26,7 @@ func WithCloser(r io.ReadCloser, closer func() error) io.ReadCloser {
 		err1 := r.Close()
 		err2 := closer()
 		if err1 != nil {
-			return errors.Wrapf(err1, "failed to close: %v", err2)
+			return fmt.Errorf("failed to close: %v: %w", err2, err1)
 		}
 		return err2
 	}
@@ -46,7 +45,7 @@ func (wc *WriteCloser) Close() error {
 	err1 := wc.WriteCloser.Close()
 	err2 := wc.CloseFunc()
 	if err1 != nil {
-		return errors.Wrapf(err1, "failed to close: %v", err2)
+		return fmt.Errorf("failed to close: %v: %w", err2, err1)
 	}
 	return err2
 }

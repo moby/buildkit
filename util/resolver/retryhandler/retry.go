@@ -2,6 +2,7 @@ package retryhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,7 +12,6 @@ import (
 	"github.com/containerd/containerd/v2/core/images"
 	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // MaxRetryBackoff is the maximum backoff time before giving up. This is a

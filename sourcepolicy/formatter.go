@@ -1,11 +1,11 @@
 package sourcepolicy
 
 import (
+	"fmt"
 	"regexp"
 
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/wildcard"
-	"github.com/pkg/errors"
 )
 
 // Source wraps a protobuf source in order to store cached state such as the compiled regexes.
@@ -43,7 +43,7 @@ func (s *selectorCache) Format(match, format string) (string, error) {
 
 		return m.Format(format)
 	}
-	return "", errors.Errorf("unknown match type: %s", s.MatchType)
+	return "", fmt.Errorf("unknown match type: %s", s.MatchType)
 }
 
 // wildcardCache wraps a wildcard.Wildcard to cache returned matches by ref.

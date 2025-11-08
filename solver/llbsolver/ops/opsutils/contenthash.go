@@ -3,6 +3,7 @@ package opsutils
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path"
 
 	"github.com/moby/buildkit/cache/contenthash"
@@ -32,7 +33,7 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 	return func(ctx context.Context, res solver.Result, s session.Group) (digest.Digest, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
-			return "", errors.Errorf("invalid reference: %T", res)
+			return "", fmt.Errorf("invalid reference: %T", res)
 		}
 
 		if len(selectors) == 0 {

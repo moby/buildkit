@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -31,7 +32,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type llbBridge struct {
@@ -89,7 +89,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if srcPol != nil || len(pol) > 0 {
 		for _, p := range pol {
 			if p == nil {
-				return nil, errors.Errorf("invalid nil policy")
+				return nil, errors.New("invalid nil policy")
 			}
 			if err := validateSourcePolicy(p); err != nil {
 				return nil, err
@@ -115,7 +115,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 					if err := inBuilderContext(context.TODO(), b.builder, "importing cache manifest from "+cmID, "", func(ctx context.Context, jobCtx solver.JobContext) error {
 						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
 						if !ok {
-							return errors.Errorf("unknown cache importer: %s", im.Type)
+							return fmt.Errorf("unknown cache importer: %s", im.Type)
 						}
 						var g session.Group
 						if jobCtx != nil {
@@ -123,7 +123,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 						}
 						ci, desc, err := resolveCI(ctx, g, im.Attrs)
 						if err != nil {
-							return errors.Wrapf(err, "failed to configure %v cache importer", im.Type)
+							return fmt.Errorf("failed to configure %v cache importer: %w", im.Type, err)
 						}
 						cmNew, err = ci.Resolve(ctx, desc, cmID, w)
 						return err
@@ -145,7 +145,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 
 	edge, err := Load(ctx, def, b.policy(polEngine), dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load LLB")
+		return nil, fmt.Errorf("failed to load LLB"+": %w", err)
 	}
 
 	if len(dpc.ids) > 0 {
@@ -313,7 +313,7 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 		rp.mu.Lock()
 		if rp.released {
 			rp.mu.Unlock()
-			return nil, errors.Errorf("accessing released result")
+			return nil, errors.New("accessing released result")
 		}
 		if rp.v != nil || rp.err != nil {
 			rp.mu.Unlock()
@@ -336,13 +336,13 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 				v.Release(context.TODO())
 			}
 			rp.mu.Unlock()
-			return nil, errors.Errorf("evaluating released result")
+			return nil, errors.New("evaluating released result")
 		}
 		if err == nil {
 			var capture *provenance.Capture
 			capture, err = captureProvenance(ctx, v)
 			if err != nil {
-				err = errors.Errorf("failed to capture provenance: %v", err)
+				err = fmt.Errorf("failed to capture provenance: %v", err)
 				v.Release(context.TODO())
 				v = nil
 			}
@@ -394,7 +394,7 @@ func (b *llbBridge) resolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 
 	if !withPolicy {
 		if _, err := engine.Evaluate(ctx, op); err != nil {
-			return nil, errors.Wrap(err, "could not resolve image due to policy")
+			return nil, fmt.Errorf("could not resolve image due to policy"+": %w", err)
 		}
 	} else {
 		var p *ocispecs.Platform
@@ -407,7 +407,7 @@ func (b *llbBridge) resolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 			Op:       &pb.Op_Source{Source: op},
 			Platform: toPBPlatform(p),
 		}); err != nil {
-			return nil, errors.Wrap(err, "could not resolve image due to policy")
+			return nil, fmt.Errorf("could not resolve image due to policy"+": %w", err)
 		}
 	}
 

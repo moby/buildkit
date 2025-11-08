@@ -5,6 +5,7 @@
 package instructions
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -17,7 +18,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/util/suggest"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type parseRequest struct {
@@ -152,7 +152,7 @@ func ParseCommand(node *parser.Node) (Command, error) {
 	if c, ok := s.(Command); ok {
 		return c, nil
 	}
-	return nil, parser.WithLocation(errors.Errorf("%T is not a command type", s), node.Location())
+	return nil, parser.WithLocation(fmt.Errorf("%T is not a command type", s), node.Location())
 }
 
 // UnknownInstructionError represents an error occurring when a command is unresolvable
@@ -203,7 +203,7 @@ func Parse(ast *parser.Node, lint *linter.Linter) (stages []Stage, metaArgs []Ar
 			}
 			stage.AddCommand(c)
 		default:
-			return nil, nil, parser.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
+			return nil, nil, parser.WithLocation(fmt.Errorf("%T is not a command type", cmd), n.Location())
 		}
 	}
 	return stages, metaArgs, nil
@@ -421,7 +421,7 @@ func parseBuildStageName(args []string) (stageName string, err error) {
 	case len(args) == 3 && strings.EqualFold(args[1], "as"):
 		stageName = strings.ToLower(args[2])
 		if !validStageName.MatchString(stageName) {
-			return "", errors.Errorf("invalid name for build stage: %q, name can't start with a number or contain symbols", args[2])
+			return "", fmt.Errorf("invalid name for build stage: %q, name can't start with a number or contain symbols", args[2])
 		}
 	case len(args) != 1:
 		return "", errors.New("FROM requires either one or three arguments")
@@ -443,7 +443,7 @@ func parseOnBuild(req parseRequest) (*OnbuildCommand, error) {
 	case "ONBUILD":
 		return nil, errors.New("Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed")
 	case "MAINTAINER", "FROM":
-		return nil, errors.Errorf("%s isn't allowed as an ONBUILD trigger", triggerInstruction)
+		return nil, fmt.Errorf("%s isn't allowed as an ONBUILD trigger", triggerInstruction)
 	}
 
 	original := regexp.MustCompile(`(?i)^\s*ONBUILD\s*`).ReplaceAllString(req.original, "")
@@ -574,7 +574,7 @@ func parseOptInterval(f *Flag) (time.Duration, error) {
 
 	const minimumDuration = time.Millisecond
 	if d < minimumDuration {
-		return 0, errors.Errorf("Interval %#v cannot be less than %s", f.name, minimumDuration)
+		return 0, fmt.Errorf("Interval %#v cannot be less than %s", f.name, minimumDuration)
 	}
 	return d, nil
 }
@@ -622,7 +622,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 
 			healthcheck.Test = append([]string{typ}, cmdSlice...)
 		default:
-			return nil, errors.Errorf("Unknown type %#v in HEALTHCHECK (try CMD)", typ)
+			return nil, fmt.Errorf("Unknown type %#v in HEALTHCHECK (try CMD)", typ)
 		}
 
 		interval, err := parseOptInterval(flInterval)
@@ -655,7 +655,7 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 				return nil, err
 			}
 			if retries < 0 {
-				return nil, errors.Errorf("--retries cannot be negative (%d)", retries)
+				return nil, fmt.Errorf("--retries cannot be negative (%d)", retries)
 			}
 			healthcheck.Retries = int(retries)
 		} else {
@@ -794,27 +794,27 @@ func parseShell(req parseRequest) (*ShellCommand, error) {
 }
 
 func errAtLeastOneArgument(command string) error {
-	return errors.Errorf("%s requires at least one argument", command)
+	return fmt.Errorf("%s requires at least one argument", command)
 }
 
 func errExactlyOneArgument(command string) error {
-	return errors.Errorf("%s requires exactly one argument", command)
+	return fmt.Errorf("%s requires exactly one argument", command)
 }
 
 func errNoDestinationArgument(command string) error {
-	return errors.Errorf("%s requires at least two arguments, but only one was provided. Destination could not be determined", command)
+	return fmt.Errorf("%s requires at least two arguments, but only one was provided. Destination could not be determined", command)
 }
 
 func errBadHeredoc(command string, option string) error {
-	return errors.Errorf("%s cannot accept a heredoc as %s", command, option)
+	return fmt.Errorf("%s cannot accept a heredoc as %s", command, option)
 }
 
 func errBlankCommandNames(command string) error {
-	return errors.Errorf("%s names can not be blank", command)
+	return fmt.Errorf("%s names can not be blank", command)
 }
 
 func errTooManyArguments(command string) error {
-	return errors.Errorf("Bad input to %s, too many arguments", command)
+	return fmt.Errorf("Bad input to %s, too many arguments", command)
 }
 
 func getComment(comments []string, name string) string {

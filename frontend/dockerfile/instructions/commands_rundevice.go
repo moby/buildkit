@@ -1,11 +1,12 @@
 package instructions
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/util/suggest"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -30,7 +31,7 @@ func runDevicePostHook(cmd *RunCommand, req parseRequest) error {
 func setDeviceState(cmd *RunCommand) error {
 	st := getDeviceState(cmd)
 	if st == nil {
-		return errors.Errorf("no device state")
+		return errors.New("no device state")
 	}
 	devices := make([]*Device, len(st.flag.StringValues))
 	for i, str := range st.flag.StringValues {
@@ -69,7 +70,7 @@ type Device struct {
 func ParseDevice(val string) (*Device, error) {
 	fields, err := csvvalue.Fields(val, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse csv devices")
+		return nil, fmt.Errorf("failed to parse csv devices"+": %w", err)
 	}
 
 	d := &Device{}
@@ -89,20 +90,20 @@ func ParseDevice(val string) (*Device, error) {
 					continue
 				}
 				// any other option requires a value.
-				return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
+				return nil, fmt.Errorf("invalid field '%s' must be a key=value pair", field)
 			}
 		}
 
 		switch key {
 		case "name":
 			if d.Name != "" {
-				return nil, errors.Errorf("device name already set to %s", d.Name)
+				return nil, fmt.Errorf("device name already set to %s", d.Name)
 			}
 			d.Name = value
 		case "required":
 			d.Required, err = strconv.ParseBool(value)
 			if err != nil {
-				return nil, errors.Errorf("invalid value for %s: %s", key, value)
+				return nil, fmt.Errorf("invalid value for %s: %s", key, value)
 			}
 		default:
 			if d.Name == "" {
@@ -110,7 +111,7 @@ func ParseDevice(val string) (*Device, error) {
 				continue
 			}
 			allKeys := []string{"name", "required"}
-			return nil, suggest.WrapError(errors.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
+			return nil, suggest.WrapError(fmt.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
 		}
 	}
 

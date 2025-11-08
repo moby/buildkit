@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -40,7 +41,6 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/package-url/packageurl-go"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -65,7 +65,7 @@ type ImageWriter struct {
 
 func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, sessionID string, inlineCache exptypes.InlineCache, opts *ImageCommitOpts) (*ocispecs.Descriptor, error) {
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; len(inp.Refs) > 0 && !ok {
-		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, errors.New("unable to export multiple refs, missing platforms mapping")
 	}
 
 	isMap := len(inp.Refs) > 0
@@ -104,7 +104,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	for pk, a := range opts.Annotations {
 		if pk != "" {
 			if _, ok := inp.FindRef(pk); !ok {
-				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
+				return nil, fmt.Errorf("invalid annotation: no platform %s found in source", pk)
 			}
 		}
 		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
@@ -114,7 +114,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	if !isMap {
 		if len(ps.Platforms) > 1 {
-			return nil, errors.Errorf("cannot export multiple platforms without multi-platform enabled")
+			return nil, errors.New("cannot export multiple platforms without multi-platform enabled")
 		}
 
 		var ref cache.ImmutableRef
@@ -133,7 +133,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if len(baseImgConfig) > 0 {
 			var baseImgX dockerspec.DockerOCIImage
 			if err := json.Unmarshal(baseImgConfig, &baseImgX); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal base image config")
+				return nil, fmt.Errorf("failed to unmarshal base image config"+": %w", err)
 			}
 			baseImg = &baseImgX
 		}
@@ -152,7 +152,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 		annotations := opts.Annotations.Platform(nil)
 		if len(annotations.Index) > 0 || len(annotations.IndexDescriptor) > 0 {
-			return nil, errors.Errorf("index annotations not supported for single platform export")
+			return nil, errors.New("index annotations not supported for single platform export")
 		}
 
 		var inlineCacheEntry *exptypes.InlineCacheEntry
@@ -194,7 +194,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	for _, p := range ps.Platforms {
 		r, ok := inp.FindRef(p.ID)
 		if !ok {
-			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+			return nil, fmt.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		remotesMap[p.ID] = len(refs)
 		refs = append(refs, r)
@@ -232,7 +232,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	for i, p := range ps.Platforms {
 		r, ok := inp.FindRef(p.ID)
 		if !ok {
-			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+			return nil, fmt.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		config := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageConfigKey, &p)
 		baseImgConfig := exptypes.ParseKey(inp.Metadata, exptypes.ExporterImageBaseConfigKey, &p)
@@ -240,7 +240,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		if len(baseImgConfig) > 0 {
 			var baseImgX dockerspec.DockerOCIImage
 			if err := json.Unmarshal(baseImgConfig, &baseImgX); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal base image config")
+				return nil, fmt.Errorf("failed to unmarshal base image config"+": %w", err)
 			}
 			baseImg = &baseImgX
 		}
@@ -330,7 +330,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 
 	idxBytes, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal index")
+		return nil, fmt.Errorf("failed to marshal index"+": %w", err)
 	}
 
 	idxDigest := digest.FromBytes(idxBytes)
@@ -343,7 +343,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	idxDone := progress.OneOff(ctx, "exporting manifest list "+idxDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
-		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
+		return nil, idxDone(fmt.Errorf("error writing manifest list blob %s: %w", idxDigest, err))
 	}
 	idxDone(nil)
 
@@ -520,7 +520,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to marshal manifest")
+		return nil, nil, fmt.Errorf("failed to marshal manifest"+": %w", err)
 	}
 
 	mfstDigest := digest.FromBytes(mfstJSON)
@@ -531,7 +531,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	mfstDone := progress.OneOff(ctx, "exporting manifest "+mfstDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
-		return nil, nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
+		return nil, nil, mfstDone(fmt.Errorf("error writing manifest blob %s: %w", mfstDigest, err))
 	}
 	mfstDone(nil)
 
@@ -543,7 +543,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	configDone := progress.OneOff(ctx, "exporting config "+configDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), configDesc); err != nil {
-		return nil, nil, configDone(errors.Wrap(err, "error writing config blob"))
+		return nil, nil, configDone(fmt.Errorf("error writing config blob"+": %w", err))
 	}
 	configDone(nil)
 
@@ -571,7 +571,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 
 		data, err := json.Marshal(statement)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal attestation")
+			return nil, fmt.Errorf("failed to marshal attestation"+": %w", err)
 		}
 		digest := digest.FromBytes(data)
 		desc := ocispecs.Descriptor{
@@ -585,7 +585,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 		}
 
 		if err := content.WriteBlob(ctx, ic.opt.ContentStore, digest.String(), bytes.NewReader(data), desc); err != nil {
-			return nil, errors.Wrapf(err, "error writing data blob %s", digest)
+			return nil, fmt.Errorf("error writing data blob %s: %w", digest, err)
 		}
 		layers[i] = desc
 	}
@@ -635,7 +635,7 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "  ")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal manifest")
+		return nil, fmt.Errorf("failed to marshal manifest"+": %w", err)
 	}
 
 	mfstDigest := digest.FromBytes(mfstJSON)
@@ -646,10 +646,10 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 
 	done := progress.OneOff(ctx, "exporting attestation manifest "+mfstDigest.String())
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
-		return nil, done(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
+		return nil, done(fmt.Errorf("error writing manifest blob %s: %w", mfstDigest, err))
 	}
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDesc.Digest.String(), bytes.NewReader(config), configDesc); err != nil {
-		return nil, done(errors.Wrap(err, "error writing config blob"))
+		return nil, done(fmt.Errorf("error writing config blob"+": %w", err))
 	}
 	done(nil)
 
@@ -692,7 +692,7 @@ func defaultImageConfig() ([]byte, error) {
 		img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
 	}
 	dt, err := json.Marshal(img)
-	return dt, errors.Wrap(err, "failed to create empty image config")
+	return dt, fmt.Errorf("failed to create empty image config"+": %w", err)
 }
 
 func attestationsConfig(layers []ocispecs.Descriptor) ([]byte, error) {
@@ -707,7 +707,7 @@ func attestationsConfig(layers []ocispecs.Descriptor) ([]byte, error) {
 		img.RootFS.DiffIDs = append(img.RootFS.DiffIDs, digest.Digest(layer.Annotations[labels.LabelUncompressed]))
 	}
 	dt, err := json.Marshal(img)
-	return dt, errors.Wrap(err, "failed to create attestations image config")
+	return dt, fmt.Errorf("failed to create attestations image config"+": %w", err)
 }
 
 func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
@@ -715,7 +715,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 		History []ocispecs.History
 	}
 	if err := json.Unmarshal(dt, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal history from config")
+		return nil, fmt.Errorf("failed to unmarshal history from config"+": %w", err)
 	}
 	return config.History, nil
 }
@@ -723,23 +723,23 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache *exptypes.InlineCacheEntry, epoch *time.Time, baseImg *dockerspec.DockerOCIImage) ([]byte, error) {
 	var img ocispecs.Image
 	if err := json.Unmarshal(dt, &img); err != nil {
-		return nil, errors.Wrap(err, "invalid image config for export")
+		return nil, fmt.Errorf("invalid image config for export"+": %w", err)
 	}
 
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
-		return nil, errors.Wrap(err, "failed to parse image config for patch")
+		return nil, fmt.Errorf("failed to parse image config for patch"+": %w", err)
 	}
 
 	if m == nil {
-		return nil, errors.Errorf("invalid null image config for export")
+		return nil, errors.New("invalid null image config for export")
 	}
 
 	if img.OS == "" {
-		return nil, errors.Errorf("invalid image config for export: missing os")
+		return nil, errors.New("invalid image config for export: missing os")
 	}
 	if img.Architecture == "" {
-		return nil, errors.Errorf("invalid image config for export: missing architecture")
+		return nil, errors.New("invalid image config for export: missing architecture")
 	}
 
 	var rootFS ocispecs.RootFS
@@ -749,7 +749,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	}
 	dt, err := json.Marshal(rootFS)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal rootfs")
+		return nil, fmt.Errorf("failed to marshal rootfs"+": %w", err)
 	}
 	m["rootfs"] = dt
 
@@ -770,7 +770,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 
 	dt, err = json.Marshal(history)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal history")
+		return nil, fmt.Errorf("failed to marshal history"+": %w", err)
 	}
 	m["history"] = dt
 
@@ -778,12 +778,12 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	if v, ok := m["created"]; ok && epoch != nil {
 		var tm time.Time
 		if err := json.Unmarshal(v, &tm); err != nil {
-			return nil, errors.Wrapf(err, "failed to unmarshal creation time %q", m["created"])
+			return nil, fmt.Errorf("failed to unmarshal creation time %q: %w", m["created"], err)
 		}
 		if tm.After(*epoch) {
 			dt, err = json.Marshal(&epoch)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to marshal creation time")
+				return nil, fmt.Errorf("failed to marshal creation time"+": %w", err)
 			}
 			m["created"] = dt
 		}
@@ -798,7 +798,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 		}
 		dt, err = json.Marshal(&tm)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal creation time")
+			return nil, fmt.Errorf("failed to marshal creation time"+": %w", err)
 		}
 		m["created"] = dt
 	}
@@ -812,7 +812,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 	}
 
 	dt, err = json.Marshal(m)
-	return dt, errors.Wrap(err, "failed to marshal config after patch")
+	return dt, fmt.Errorf("failed to marshal config after patch"+": %w", err)
 }
 
 func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, history []ocispecs.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispecs.History) {

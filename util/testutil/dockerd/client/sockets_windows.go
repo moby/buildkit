@@ -2,12 +2,12 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/pkg/errors"
 )
 
 func configureUnixTransport(_ *http.Transport, _, _ string) error {

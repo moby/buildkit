@@ -2,13 +2,13 @@ package contentutil
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/remotes"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type ReferrersProvider interface {
@@ -38,7 +38,7 @@ func (p *fetchedProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor
 func (p *fetchedProvider) FetchReferrers(ctx context.Context, dgst digest.Digest, opts ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
 	refs, ok := p.f.(remotes.ReferrersFetcher)
 	if !ok {
-		return nil, errors.Errorf("fetcher does not support referrers")
+		return nil, errors.New("fetcher does not support referrers")
 	}
 	return refs.FetchReferrers(ctx, dgst, opts...)
 }
@@ -62,7 +62,7 @@ func (r *readerAt) ReadAt(b []byte, off int64) (int, error) {
 			}
 			r.offset = off
 		} else {
-			return 0, errors.Errorf("unsupported offset")
+			return 0, errors.New("unsupported offset")
 		}
 	}
 

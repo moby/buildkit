@@ -3,13 +3,13 @@ package contenthash
 import (
 	"archive/tar"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/moby/buildkit/util/cachedigest"
-	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
@@ -48,7 +48,7 @@ func NewFromStat(stat *fstypes.Stat) (hash.Hash, error) {
 	fi := &statInfo{stat}
 	hdr, err := tar.FileInfoHeader(fi, stat.Linkname)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to checksum file %s", stat.Path)
+		return nil, fmt.Errorf("failed to checksum file %s: %w", stat.Path, err)
 	}
 	hdr.Name = "" // note: empty name is different from current has in docker build. Name is added on recursive directory scan instead
 	hdr.Devmajor = stat.Devmajor

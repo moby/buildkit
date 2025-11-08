@@ -2,6 +2,7 @@ package proc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -13,7 +14,6 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/pkg/errors"
 )
 
 func SBOMProcessor(scannerRef string, useCache bool, resolveMode string, params map[string]string) llbsolver.Processor {
@@ -46,7 +46,7 @@ func SBOMProcessor(scannerRef string, useCache bool, resolveMode string, params 
 		for _, p := range ps.Platforms {
 			ref, ok := res.FindRef(p.ID)
 			if !ok {
-				return nil, errors.Errorf("could not find ref %s", p.ID)
+				return nil, fmt.Errorf("could not find ref %s", p.ID)
 			}
 			if ref == nil {
 				continue

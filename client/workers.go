@@ -2,13 +2,13 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // WorkerInfo contains information about a worker
@@ -31,7 +31,7 @@ func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]
 	req := &controlapi.ListWorkersRequest{Filter: info.Filter}
 	resp, err := c.ControlClient().ListWorkers(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list workers")
+		return nil, fmt.Errorf("failed to list workers"+": %w", err)
 	}
 
 	var wi []*WorkerInfo

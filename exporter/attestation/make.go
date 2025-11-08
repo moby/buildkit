@@ -3,6 +3,8 @@ package attestation
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/containerd/continuity/fs"
@@ -12,7 +14,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,7 +44,7 @@ func ReadAll(ctx context.Context, s session.Group, att exporter.Attestation) ([]
 		}
 		content, err = os.ReadFile(p)
 		if err != nil {
-			return nil, errors.Wrap(err, "cannot read in-toto attestation")
+			return nil, fmt.Errorf("cannot read in-toto attestation"+": %w", err)
 		}
 	} else {
 		return nil, errors.New("no available content for attestation")
@@ -122,7 +123,7 @@ func makeInTotoStatement(content []byte, attestation exporter.Attestation, defau
 				Digest: result.ToDigestMap(subject.Digest...),
 			})
 		default:
-			return nil, errors.Errorf("unknown attestation subject type %T", subject)
+			return nil, fmt.Errorf("unknown attestation subject type %T", subject)
 		}
 	}
 

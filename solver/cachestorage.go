@@ -2,15 +2,15 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
-var ErrNotFound = errors.Errorf("not found")
+var ErrNotFound = errors.New("not found")
 
 // CacheKeyStorage is interface for persisting cache metadata
 type CacheKeyStorage interface {

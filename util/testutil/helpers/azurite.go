@@ -88,7 +88,7 @@ func waitAzurite(ctx context.Context, address string, d time.Duration) error {
 		}
 		i++
 		if time.Duration(i)*step > d {
-			return errors.Errorf("failed dialing: %s", address)
+			return fmt.Errorf("failed dialing: %s", address)
 		}
 		time.Sleep(step)
 	}

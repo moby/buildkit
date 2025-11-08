@@ -2,12 +2,12 @@ package http
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/upload"
-	"github.com/pkg/errors"
 )
 
 func newTransport(rt http.RoundTripper, sm *session.Manager, g session.Group) http.RoundTripper {
@@ -26,7 +26,7 @@ func (h *sessionHandler) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	if req.Method != http.MethodGet {
-		return nil, errors.Errorf("invalid request")
+		return nil, errors.New("invalid request")
 	}
 
 	var resp *http.Response

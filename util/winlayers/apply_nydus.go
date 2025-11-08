@@ -4,6 +4,7 @@ package winlayers
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/diff"
@@ -11,7 +12,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/archive"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 
 	nydusify "github.com/containerd/nydus-snapshotter/pkg/converter"
 )
@@ -35,7 +35,7 @@ func (s *winApplier) apply(ctx context.Context, desc ocispecs.Descriptor, mounts
 	if err := mount.WithTempMount(ctx, mounts, func(root string) error {
 		ra, err := s.cs.ReaderAt(ctx, desc)
 		if err != nil {
-			return errors.Wrap(err, "get reader from content store")
+			return fmt.Errorf("get reader from content store"+": %w", err)
 		}
 		defer ra.Close()
 
@@ -43,7 +43,7 @@ func (s *winApplier) apply(ctx context.Context, desc ocispecs.Descriptor, mounts
 		go func() {
 			defer pw.Close()
 			if err := nydusify.Unpack(ctx, ra, pw, nydusify.UnpackOption{}); err != nil {
-				pw.CloseWithError(errors.Wrap(err, "unpack nydus blob"))
+				pw.CloseWithError(fmt.Errorf("unpack nydus blob"+": %w", err))
 			}
 		}()
 		defer pr.Close()
@@ -54,7 +54,7 @@ func (s *winApplier) apply(ctx context.Context, desc ocispecs.Descriptor, mounts
 		}
 
 		if _, err := archive.Apply(ctx, root, rc); err != nil {
-			return errors.Wrap(err, "apply nydus blob")
+			return fmt.Errorf("apply nydus blob"+": %w", err)
 		}
 
 		ocidesc = ocispecs.Descriptor{

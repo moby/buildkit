@@ -8,11 +8,11 @@ package parser
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/pkg/errors"
 )
 
 var (
@@ -153,7 +153,7 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 	if !strings.Contains(words[0], "=") {
 		parts := reWhitespace.Split(rest, 2)
 		if len(parts) < 2 {
-			return nil, errors.Errorf("%s must have two arguments", key)
+			return nil, fmt.Errorf("%s must have two arguments", key)
 		}
 		return newKeyValueNode(parts[0], parts[1], ""), nil
 	}
@@ -162,7 +162,7 @@ func parseNameVal(rest string, key string, d *directives) (*Node, error) {
 	var prevNode *Node
 	for _, word := range words {
 		if !strings.Contains(word, "=") {
-			return nil, errors.Errorf("Syntax error - can't find = in %q. Must be of the form: name=value", word)
+			return nil, fmt.Errorf("Syntax error - can't find = in %q. Must be of the form: name=value", word)
 		}
 
 		parts := strings.SplitN(word, "=", 2)

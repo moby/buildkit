@@ -3,13 +3,13 @@ package contentutil
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/content"
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

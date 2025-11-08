@@ -3,14 +3,15 @@
 package disk
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	"golang.org/x/sys/windows"
 )
 
 func GetDiskStat(root string) (DiskStat, error) {
 	rootUTF16, err := windows.UTF16FromString(root)
 	if err != nil {
-		return DiskStat{}, errors.Wrapf(err, "could not encode %s", root)
+		return DiskStat{}, fmt.Errorf("could not encode %s: %w", root, err)
 	}
 	var (
 		totalBytes         uint64
@@ -22,7 +23,7 @@ func GetDiskStat(root string) (DiskStat, error) {
 		&freeAvailableBytes,
 		&totalBytes,
 		&totalFreeBytes); err != nil {
-		return DiskStat{}, errors.Wrapf(err, "could not stat fs at %s", root)
+		return DiskStat{}, fmt.Errorf("could not stat fs at %s: %w", root, err)
 	}
 
 	return DiskStat{

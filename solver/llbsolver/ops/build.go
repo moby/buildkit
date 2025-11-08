@@ -3,6 +3,8 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/containerd/continuity/fs"
@@ -15,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 const buildCacheType = "buildkit.build.v0"
@@ -67,24 +68,24 @@ func (b *BuildOp) CacheMap(ctx context.Context, job solver.JobContext, index int
 
 func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solver.Result) (outputs []solver.Result, retErr error) {
 	if b.op.Builder != int64(pb.LLBBuilder) {
-		return nil, errors.Errorf("only LLB builder is currently allowed")
+		return nil, errors.New("only LLB builder is currently allowed")
 	}
 
 	builderInputs := b.op.Inputs
 	llbDef, ok := builderInputs[pb.LLBDefinitionInput]
 	if !ok {
-		return nil, errors.Errorf("no llb definition input %s found", pb.LLBDefinitionInput)
+		return nil, fmt.Errorf("no llb definition input %s found", pb.LLBDefinitionInput)
 	}
 
 	i := int(llbDef.Input)
 	if i >= len(inputs) {
-		return nil, errors.Errorf("invalid index %v", i) // TODO: this should be validated before
+		return nil, fmt.Errorf("invalid index %v", i) // TODO: this should be validated before
 	}
 	inp := inputs[i]
 
 	ref, ok := inp.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid reference for build %T", inp.Sys())
+		return nil, fmt.Errorf("invalid reference for build %T", inp.Sys())
 	}
 
 	g := job.Session()
@@ -113,12 +114,12 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 
 	newfn, err := fs.RootPath(root, fn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "working dir %s points to invalid target", fn)
+		return nil, fmt.Errorf("working dir %s points to invalid target: %w", fn, err)
 	}
 
 	f, err := os.Open(newfn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open %s", newfn)
+		return nil, fmt.Errorf("failed to open %s: %w", newfn, err)
 	}
 
 	def, err := llb.ReadFrom(f)

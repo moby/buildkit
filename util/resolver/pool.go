@@ -19,7 +19,7 @@ import (
 	log "github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/version"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -264,7 +264,7 @@ func getImageByRef(ctx context.Context, is images.Store, ref string) (images.Ima
 	}
 	if c, ok := named.(distreference.Canonical); ok {
 		if img.Target.Digest != c.Digest() {
-			return images.Image{}, errors.WithStack(cerrdefs.ErrNotFound)
+			return images.Image{}, pkgerrors.WithStack(cerrdefs.ErrNotFound)
 		}
 	}
 	return img, nil
@@ -300,6 +300,6 @@ func ParseImageResolveMode(v string) (ResolveMode, error) {
 	case pb.AttrImageResolveModePreferLocal:
 		return ResolveModePreferLocal, nil
 	default:
-		return 0, errors.Errorf("invalid resolvemode: %s", v)
+		return 0, fmt.Errorf("invalid resolvemode: %s", v)
 	}
 }

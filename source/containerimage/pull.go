@@ -3,6 +3,7 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"runtime"
 	"time"
@@ -33,7 +34,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type puller struct {
@@ -136,12 +136,12 @@ func (p *puller) CacheKey(ctx context.Context, jobCtx solver.JobContext, index i
 		}
 
 		if p.checksum != "" && p.manifest.MainManifestDesc.Digest != p.checksum {
-			return struct{}{}, errors.Errorf("image digest %s for %s does not match expected checksum %s", p.manifest.MainManifestDesc.Digest, p.Ref, p.checksum)
+			return struct{}{}, fmt.Errorf("image digest %s for %s does not match expected checksum %s", p.manifest.MainManifestDesc.Digest, p.Ref, p.checksum)
 		}
 
 		if ll := p.layerLimit; ll != nil {
 			if *ll > len(p.manifest.Descriptors) {
-				return struct{}{}, errors.Errorf("layer limit %d is greater than the number of layers in the image %d", *ll, len(p.manifest.Descriptors))
+				return struct{}{}, fmt.Errorf("layer limit %d is greater than the number of layers in the image %d", *ll, len(p.manifest.Descriptors))
 			}
 			p.manifest.Descriptors = p.manifest.Descriptors[:*ll]
 		}
@@ -304,14 +304,14 @@ func cacheKeyFromConfig(dt []byte, layerLimit *int) (digest.Digest, error) {
 	err := json.Unmarshal(dt, &img)
 	if err != nil {
 		if layerLimit != nil {
-			return "", errors.Wrap(err, "failed to parse image config")
+			return "", fmt.Errorf("failed to parse image config"+": %w", err)
 		}
 		return cachedigest.FromBytes(dt, cachedigest.TypeJSON) // digest of config
 	}
 	if layerLimit != nil {
 		l := *layerLimit
 		if len(img.RootFS.DiffIDs) < l {
-			return "", errors.Errorf("image has %d layers, limit is %d", len(img.RootFS.DiffIDs), l)
+			return "", fmt.Errorf("image has %d layers, limit is %d", len(img.RootFS.DiffIDs), l)
 		}
 		img.RootFS.DiffIDs = img.RootFS.DiffIDs[:l]
 	}

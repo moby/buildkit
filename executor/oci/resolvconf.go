@@ -2,6 +2,8 @@ package oci
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -11,7 +13,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/resolvconf"
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const (
@@ -75,7 +77,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *user.IdentityMap
 			fi, err := os.Stat(p)
 			if err != nil {
 				if !errors.Is(err, os.ErrNotExist) {
-					return struct{}{}, errors.WithStack(err)
+					return struct{}{}, pkgerrors.WithStack(err)
 				}
 				generate = true
 			}
@@ -101,7 +103,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *user.IdentityMap
 
 		rc, err := resolvconf.Load(resolvconfPath(netMode))
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return struct{}{}, errors.WithStack(err)
+			return struct{}{}, pkgerrors.WithStack(err)
 		}
 
 		if dns != nil {
@@ -110,7 +112,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *user.IdentityMap
 				for _, addr := range dns.Nameservers {
 					ipAddr, err := netip.ParseAddr(addr)
 					if err != nil {
-						return struct{}{}, errors.WithStack(errors.Wrap(err, "bad nameserver address"))
+						return struct{}{}, pkgerrors.WithStack(fmt.Errorf("bad nameserver address"+": %w", err))
 					}
 					ns = append(ns, ipAddr)
 				}
@@ -132,23 +134,23 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *user.IdentityMap
 
 		dt, err := rc.Generate(false)
 		if err != nil {
-			return struct{}{}, errors.WithStack(err)
+			return struct{}{}, pkgerrors.WithStack(err)
 		}
 
 		if err := os.WriteFile(tmpPath, dt, 0644); err != nil {
-			return struct{}{}, errors.WithStack(err)
+			return struct{}{}, pkgerrors.WithStack(err)
 		}
 
 		if idmap != nil {
 			uid, gid := idmap.RootPair()
 			if err := os.Chown(tmpPath, uid, gid); err != nil {
-				return struct{}{}, errors.WithStack(err)
+				return struct{}{}, pkgerrors.WithStack(err)
 			}
 		}
 
 		// TODO(thaJeztah): can we avoid the write -> chown -> rename?
 		if err := os.Rename(tmpPath, p); err != nil {
-			return struct{}{}, errors.WithStack(err)
+			return struct{}{}, pkgerrors.WithStack(err)
 		}
 		return struct{}{}, nil
 	})

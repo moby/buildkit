@@ -2,12 +2,12 @@ package leaseutil
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
-	"github.com/pkg/errors"
 )
 
 func WithLease(ctx context.Context, ls leases.Manager, opts ...leases.Opt) (context.Context, func(context.Context) error, error) {
@@ -65,7 +65,7 @@ func (l *LeaseRef) Adopt(ctx context.Context) error {
 	}
 	currentID, ok := leases.FromContext(ctx)
 	if !ok {
-		return errors.Errorf("missing lease requirement for adopt")
+		return errors.New("missing lease requirement for adopt")
 	}
 	for _, r := range l.resources {
 		if err := l.lm.AddResource(ctx, leases.Lease{ID: currentID}, r); err != nil {

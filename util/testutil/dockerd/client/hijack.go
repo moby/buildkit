@@ -3,11 +3,10 @@ package client
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
-
-	"github.com/pkg/errors"
 )
 
 // DialHijack returns a hijacked connection with negotiated protocol proto.
@@ -29,7 +28,7 @@ func (cli *Client) setupHijackConn(req *http.Request, proto string) (_ net.Conn,
 	dialer := cli.Dialer()
 	conn, err := dialer(ctx)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "cannot connect to the Docker daemon. Is 'docker daemon' running on this host?")
+		return nil, "", fmt.Errorf("cannot connect to the Docker daemon. Is 'docker daemon' running on this host?"+": %w", err)
 	}
 	defer func() {
 		if retErr != nil {
@@ -56,7 +55,7 @@ func (cli *Client) setupHijackConn(req *http.Request, proto string) (_ net.Conn,
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		_ = resp.Body.Close()
-		return nil, "", errors.Errorf("unable to upgrade to %s, received %d", proto, resp.StatusCode)
+		return nil, "", fmt.Errorf("unable to upgrade to %s, received %d", proto, resp.StatusCode)
 	}
 
 	if hc.r.Buffered() > 0 {

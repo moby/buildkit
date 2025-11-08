@@ -2,6 +2,8 @@ package cacheimport
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorage, solver.CacheResultStorage, error) {
@@ -47,7 +49,7 @@ func addItemToStorage(k *cacheKeyStorage, it *item, visited map[*item]*itemWithO
 
 	if id, ok := k.byItem[it]; ok {
 		if id == "" {
-			return nil, errors.Errorf("invalid loop")
+			return nil, errors.New("invalid loop")
 		}
 		return k.byID[id], nil
 	}
@@ -153,7 +155,7 @@ func (cs *cacheKeyStorage) Load(id string, resultID string) (solver.CacheResult,
 		}
 		return nil
 	}); err != nil {
-		return solver.CacheResult{}, errors.Wrapf(err, "failed to load cache result for %s", id)
+		return solver.CacheResult{}, fmt.Errorf("failed to load cache result for %s: %w", id, err)
 	}
 	return res, nil
 }
@@ -256,7 +258,7 @@ type cacheResultStorage struct {
 }
 
 func (cs *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solver.CacheResult, error) {
-	return solver.CacheResult{}, errors.Errorf("importer is immutable")
+	return solver.CacheResult{}, errors.New("importer is immutable")
 }
 
 func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.CacheResult) (map[string]solver.Result, error) {
@@ -266,7 +268,7 @@ func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.Ca
 
 	ids, ok := cs.byResult[res.ID]
 	if !ok || len(ids) == 0 {
-		return nil, errors.WithStack(solver.ErrNotFound)
+		return nil, pkgerrors.WithStack(solver.ErrNotFound)
 	}
 
 	for id := range ids {
@@ -316,11 +318,11 @@ func (cs *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) 
 		}
 		ref, err := cs.w.FromRemote(ctx, r.Result)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to load result from remote")
+			return nil, fmt.Errorf("failed to load result from remote"+": %w", err)
 		}
 		return worker.NewWorkerRefResult(ref, cs.w), nil
 	}
-	return nil, errors.WithStack(solver.ErrNotFound)
+	return nil, pkgerrors.WithStack(solver.ErrNotFound)
 }
 
 func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopts *compression.Config, _ session.Group) ([]*solver.Remote, error) {
@@ -349,7 +351,7 @@ func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheR
 		}
 		return nil, nil // return nil as it's best effort.
 	}
-	return nil, errors.WithStack(solver.ErrNotFound)
+	return nil, pkgerrors.WithStack(solver.ErrNotFound)
 }
 
 func (cs *cacheResultStorage) Exists(ctx context.Context, id string) bool {

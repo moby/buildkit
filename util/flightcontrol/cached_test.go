@@ -2,10 +2,10 @@ package flightcontrol
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +37,7 @@ func TestCached(t *testing.T) {
 
 	// by default, errors are not cached
 	_, err = g.Do(ctx, "33", func(ctx context.Context) (int, error) {
-		return 0, errors.Errorf("some error")
+		return 0, errors.New("some error")
 	})
 
 	require.Error(t, err)
@@ -58,7 +58,7 @@ func TestCachedError(t *testing.T) {
 	ctx := context.TODO()
 
 	_, err := g.Do(ctx, "11", func(ctx context.Context) (string, error) {
-		return "", errors.Errorf("first error")
+		return "", errors.New("first error")
 	})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "first error")
@@ -77,7 +77,7 @@ func TestCachedError(t *testing.T) {
 		case <-ctx.Done():
 			return "", context.Cause(ctx)
 		case <-time.After(10 * time.Second):
-			return "", errors.Errorf("unexpected error")
+			return "", errors.New("unexpected error")
 		}
 	})
 	require.Error(t, err)

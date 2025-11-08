@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // New returns converter function according to the specified compression type.
@@ -35,7 +34,7 @@ func New(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, comp c
 func NewWithRewriteTimestamp(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, comp compression.Config, rewriteTimestamp *time.Time, immDiffIDs map[digest.Digest]struct{}) (converter.ConvertFunc, error) {
 	needs, err := comp.Type.NeedsConversion(ctx, cs, desc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to determine conversion needs")
+		return nil, fmt.Errorf("failed to determine conversion needs: %w", err)
 	}
 	if !needs && rewriteTimestamp != nil {
 		needs = desc.Annotations[labelRewrittenTimestamp] != fmt.Sprintf("%d", rewriteTimestamp.UTC().Unix())
@@ -138,7 +137,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 		return nil, err
 	}
 	if err := bufW.Flush(); err != nil { // Flush the buffer
-		return nil, errors.Wrap(err, "failed to flush diff during conversion")
+		return nil, fmt.Errorf("failed to flush diff during conversion"+": %w", err)
 	}
 	origDiffIDVal := origDiffID.Digest()
 	if _, ok := c.immDiffIDs[origDiffIDVal]; ok {
@@ -171,7 +170,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	if c.finalize != nil {
 		a, err := c.finalize(ctx, cs)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed finalize compression")
+			return nil, fmt.Errorf("failed finalize compression: %w", err)
 		}
 		maps.Copy(newDesc.Annotations, a)
 	}

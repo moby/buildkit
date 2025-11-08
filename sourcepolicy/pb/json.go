@@ -1,8 +1,9 @@
 package moby_buildkit_v1_sourcepolicy //nolint:revive,staticcheck
 
 import (
+	"fmt"
+
 	"github.com/moby/buildkit/util/gogo/proto"
-	"github.com/pkg/errors"
 )
 
 // MarshalJSON implements json.Marshaler with custom marshaling for PolicyAction.
@@ -19,7 +20,7 @@ func (a *PolicyAction) UnmarshalJSON(data []byte) error {
 
 	_, ok := PolicyAction_name[val]
 	if !ok {
-		return errors.Errorf("invalid PolicyAction value: %d", val)
+		return fmt.Errorf("invalid PolicyAction value: %d", val)
 	}
 	*a = PolicyAction(val)
 	return nil
@@ -37,7 +38,7 @@ func (a *AttrMatch) UnmarshalJSON(data []byte) error {
 
 	_, ok := AttrMatch_name[val]
 	if !ok {
-		return errors.Errorf("invalid AttrMatch value: %d", val)
+		return fmt.Errorf("invalid AttrMatch value: %d", val)
 	}
 	*a = AttrMatch(val)
 	return nil
@@ -55,7 +56,7 @@ func (a *MatchType) UnmarshalJSON(data []byte) error {
 
 	_, ok := AttrMatch_name[val]
 	if !ok {
-		return errors.Errorf("invalid MatchType value: %d", val)
+		return fmt.Errorf("invalid MatchType value: %d", val)
 	}
 	*a = MatchType(val)
 	return nil

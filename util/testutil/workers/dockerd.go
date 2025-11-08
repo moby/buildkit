@@ -3,6 +3,8 @@ package workers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -14,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/testutil/dockerd"
 	"github.com/moby/buildkit/util/testutil/dockerd/client"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -106,7 +107,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 
 	bkcfg, err := config.LoadFile(cfgFile)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to load buildkit config file %s", cfgFile)
+		return nil, nil, fmt.Errorf("failed to load buildkit config file %s: %w", cfgFile, err)
 	}
 
 	dcfg := dockerd.Config{
@@ -135,7 +136,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 
 	dcfgdt, err := json.Marshal(dcfg)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "failed to marshal dockerd config")
+		return nil, nil, fmt.Errorf("failed to marshal dockerd config: %w", err)
 	}
 
 	var proxyGroup errgroup.Group
@@ -154,7 +155,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	}
 	d, err := dockerd.NewDaemon(workDir, dockerdOpts...)
 	if err != nil {
-		return nil, nil, errors.Errorf("new daemon error: %q, %s", err, integration.FormatLogs(cfg.Logs))
+		return nil, nil, fmt.Errorf("new daemon error: %q, %s", err, integration.FormatLogs(cfg.Logs))
 	}
 
 	dockerdConfigFile := filepath.Join(workDir, "daemon.json")
@@ -182,7 +183,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	deferF.Append(d.StopWithError)
 
 	if err := integration.WaitSocket(d.Sock(), 5*time.Second, nil); err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd did not start up: %s", integration.FormatLogs(cfg.Logs))
+		return nil, nil, fmt.Errorf("dockerd did not start up: %s: %w", integration.FormatLogs(cfg.Logs), err)
 	}
 
 	dockerAPI, err := client.NewClientWithOpts(client.WithHost(d.Sock()))
@@ -193,7 +194,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 
 	err = waitForAPI(ctx, dockerAPI, 5*time.Second)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd client api timed out: %s", integration.FormatLogs(cfg.Logs))
+		return nil, nil, fmt.Errorf("dockerd client api timed out: %s: %w", integration.FormatLogs(cfg.Logs), err)
 	}
 
 	// Create a file descriptor to be used as a Unix domain socket.
@@ -209,7 +210,7 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 
 	listener, err := net.Listen(buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", integration.FormatLogs(cfg.Logs))
+		return nil, nil, fmt.Errorf("dockerd listener error: %s: %w", integration.FormatLogs(cfg.Logs), err)
 	}
 	deferF.Append(listener.Close)
 

@@ -1,6 +1,7 @@
 package dockerui
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -20,7 +20,7 @@ func parsePlatforms(v string) ([]ocispecs.Platform, error) {
 	for v := range strings.SplitSeq(v, ",") {
 		p, err := platforms.Parse(v)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse target platform %s", v)
+			return nil, fmt.Errorf("failed to parse target platform %s: %w", v, err)
 		}
 		pp = append(pp, platforms.Normalize(p))
 	}
@@ -36,7 +36,7 @@ func parseResolveMode(v string) (llb.ResolveMode, error) {
 	case pb.AttrImageResolveModePreferLocal:
 		return llb.ResolveModePreferLocal, nil
 	default:
-		return 0, errors.Errorf("invalid image-resolve-mode: %s", v)
+		return 0, fmt.Errorf("invalid image-resolve-mode: %s", v)
 	}
 }
 
@@ -52,11 +52,11 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 	for _, field := range fields {
 		key, val, ok := strings.Cut(strings.ToLower(field), "=")
 		if !ok {
-			return nil, errors.Errorf("invalid key-value pair %s", field)
+			return nil, fmt.Errorf("invalid key-value pair %s", field)
 		}
 		ip := net.ParseIP(val)
 		if ip == nil {
-			return nil, errors.Errorf("failed to parse IP %s", val)
+			return nil, fmt.Errorf("failed to parse IP %s", val)
 		}
 		out = append(out, llb.HostIP{Host: key, IP: ip})
 	}
@@ -109,7 +109,7 @@ func parseNetMode(v string) (pb.NetMode, error) {
 	case "sandbox":
 		return llb.NetModeSandbox, nil
 	default:
-		return 0, errors.Errorf("invalid netmode %s", v)
+		return 0, fmt.Errorf("invalid netmode %s", v)
 	}
 }
 
@@ -119,7 +119,7 @@ func parseSourceDateEpoch(v string) (*time.Time, error) {
 	}
 	sde, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
+		return nil, fmt.Errorf("invalid SOURCE_DATE_EPOCH: %s: %w", v, err)
 	}
 	tm := time.Unix(sde, 0).UTC()
 	return &tm, nil

@@ -4,11 +4,11 @@ package snapshot
 
 import (
 	"context"
+	"errors"
 	"runtime"
 
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/snapshots"
-	"github.com/pkg/errors"
 )
 
 func (sn *mergeSnapshotter) diffApply(_ context.Context, _ Mountable, _ ...Diff) (_ snapshots.Usage, rerr error) {

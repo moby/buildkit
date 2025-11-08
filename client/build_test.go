@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -28,7 +29,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
@@ -100,12 +101,12 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		if c.BuildOpts().Product != product {
-			return nil, errors.Errorf("expected product %q, got %q", product, c.BuildOpts().Product)
+			return nil, fmt.Errorf("expected product %q, got %q", product, c.BuildOpts().Product)
 		}
 		opts := c.BuildOpts().Opts
 		testStr, ok := opts[optKey]
 		if !ok {
-			return nil, errors.Errorf(`build option %q missing`, optKey)
+			return nil, fmt.Errorf(`build option %q missing`, optKey)
 		}
 
 		run := llb.Image("busybox:latest").Run(
@@ -116,24 +117,24 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		read, err := r.Ref.ReadFile(ctx, client.ReadRequest{
 			Filename: "/foo",
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to read result")
+			return nil, fmt.Errorf("failed to read result"+": %w", err)
 		}
 		if testStr != string(read) {
-			return nil, errors.Errorf("read back %q, expected %q", string(read), testStr)
+			return nil, fmt.Errorf("read back %q, expected %q", string(read), testStr)
 		}
 		return r, nil
 	}
@@ -178,7 +179,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		dgst, _, _, _, err := st.Output().Vertex(ctx, def.Constraints).Marshal(ctx, def.Constraints)
@@ -190,7 +191,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		require.NoError(t, c.Warn(ctx, dgst, "this is warning", client.WarnOpts{
@@ -269,10 +270,10 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		r, err := c.Solve(ctx, client.SolveRequest{})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 		if r.Ref != nil || r.Refs != nil || r.Metadata != nil {
-			return nil, errors.Errorf("got unexpected non-empty result %+v", r)
+			return nil, fmt.Errorf("got unexpected non-empty result %+v", r)
 		}
 		return r, nil
 	}
@@ -330,14 +331,14 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -405,14 +406,14 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -527,14 +528,14 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -590,14 +591,14 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -717,14 +718,14 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		for mountpoint, st := range mounts {
 			def, err := st.Marshal(ctx)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to marshal state")
+				return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 			}
 
 			r, err := c.Solve(ctx, client.SolveRequest{
 				Definition: def.ToPB(),
 			})
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to solve")
+				return nil, fmt.Errorf("failed to solve"+": %w", err)
 			}
 			containerMounts = append(containerMounts, client.Mount{
 				Dest:      mountpoint,
@@ -837,14 +838,14 @@ func testClientGatewayContainerSecretEnv(t *testing.T, sb integration.Sandbox) {
 		for mountpoint, st := range mounts {
 			def, err := st.Marshal(ctx)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to marshal state")
+				return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 			}
 
 			r, err := c.Solve(ctx, client.SolveRequest{
 				Definition: def.ToPB(),
 			})
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to solve")
+				return nil, fmt.Errorf("failed to solve"+": %w", err)
 			}
 			containerMounts = append(containerMounts, client.Mount{
 				Dest:      mountpoint,
@@ -909,14 +910,14 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -991,14 +992,14 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -1116,14 +1117,14 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -1208,14 +1209,14 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -1236,7 +1237,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		defer ctr.Release(ctx)
 
 		execCtx, cancel := context.WithCancelCause(ctx)
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 		prompt := newTestPrompt(execCtx, t, inputW, output)
 		pid2, err := ctr.Start(execCtx, client.StartRequest{
@@ -1250,7 +1251,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 		require.NoError(t, err)
 
 		prompt.SendExpect("echo hi", "hi")
-		cancel(errors.WithStack(context.Canceled))
+		cancel(pkgerrors.WithStack(context.Canceled))
 
 		err = pid2.Wait()
 		require.ErrorIs(t, err, context.Canceled)
@@ -1878,14 +1879,14 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -1965,14 +1966,14 @@ func testClientGatewayContainerExtraHosts(t *testing.T, sb integration.Sandbox) 
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -2067,14 +2068,14 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
@@ -2150,14 +2151,14 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
+			return nil, fmt.Errorf("failed to marshal state"+": %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
+			return nil, fmt.Errorf("failed to solve"+": %w", err)
 		}
 
 		ctr1, err := c.NewContainer(ctx, client.NewContainerRequest{

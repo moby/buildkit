@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,7 +27,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type resultWithBridge struct {
@@ -77,7 +77,7 @@ func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error)
 	if r.Ref != nil {
 		ref, ok := b.findByResult(r.Ref)
 		if !ok {
-			return nil, errors.Errorf("could not find request for ref %s", r.Ref.ID())
+			return nil, fmt.Errorf("could not find request for ref %s", r.Ref.ID())
 		}
 		reqs.ref = ref
 	}
@@ -88,7 +88,7 @@ func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error)
 		}
 		r, ok := b.findByResult(ref)
 		if !ok {
-			return nil, errors.Errorf("could not find request for ref %s", ref.ID())
+			return nil, fmt.Errorf("could not find request for ref %s", ref.ID())
 		}
 		reqs.refs[k] = r
 	}
@@ -100,7 +100,7 @@ func (b *provenanceBridge) requests(r *frontend.Result) (*resultRequests, error)
 			}
 			r, ok := b.findByResult(att.Ref)
 			if !ok {
-				return nil, errors.Errorf("could not find request for ref %s", att.Ref.ID())
+				return nil, fmt.Errorf("could not find request for ref %s", att.Ref.ID())
 			}
 			reqs.atts[k] = append(reqs.atts[k], r)
 		}
@@ -177,7 +177,7 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
-			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
+			return nil, fmt.Errorf("invalid frontend: %s", req.Frontend)
 		}
 		wb := &provenanceBridge{llbBridge: b.llbBridge, req: &req}
 		res, err = f.Solve(ctx, wb, b.llbBridge, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
@@ -349,7 +349,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 	if v, ok := attrs["reproducible"]; ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse reproducible flag %q", v)
+			return nil, fmt.Errorf("failed to parse reproducible flag %q: %w", v, err)
 		}
 		reproducible = b
 	}
@@ -362,7 +362,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 		case "max", "min":
 			mode = v
 		default:
-			return nil, errors.Errorf("invalid mode %q", v)
+			return nil, fmt.Errorf("invalid mode %q", v)
 		}
 	}
 
@@ -413,7 +413,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 
 		wref, ok := r.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid worker ref %T", r.Sys())
+			return nil, fmt.Errorf("invalid worker ref %T", r.Sys())
 		}
 
 		addLayers = func(ctx context.Context) error {
@@ -453,7 +453,7 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 			return nil
 		}
 	default:
-		return nil, errors.Errorf("invalid mode %q", mode)
+		return nil, fmt.Errorf("invalid mode %q", mode)
 	}
 
 	pr.Invocation.Environment.ProvenanceCustomEnv = customEnv
@@ -546,7 +546,7 @@ type cacheRecord struct {
 func resolveRemotes(ctx context.Context, res solver.Result) ([]*solver.Remote, error) {
 	ref, ok := res.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid result: %T", res.Sys())
+		return nil, fmt.Errorf("invalid result: %T", res.Sys())
 	}
 
 	remotes, err := ref.GetRemotes(ctx, false, config.RefConfig{}, true, nil)
@@ -633,7 +633,7 @@ func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := op.UnmarshalVT(dt); err != nil {
-			return nil, nil, errors.Wrap(err, "failed to parse llb proto op")
+			return nil, nil, fmt.Errorf("failed to parse llb proto op"+": %w", err)
 		}
 		if src := op.GetSource(); src != nil {
 			for k := range src.Attrs {
@@ -656,11 +656,11 @@ func toBuildSteps(def *pb.Definition, c *provenance.Capture, withUsage bool) ([]
 	op := ops[dgst]
 
 	if op.Op != nil {
-		return nil, nil, errors.Errorf("invalid last vertex: %T", op.Op)
+		return nil, nil, fmt.Errorf("invalid last vertex: %T", op.Op)
 	}
 
 	if len(op.Inputs) != 1 {
-		return nil, nil, errors.Errorf("invalid last vertex inputs: %v", len(op.Inputs))
+		return nil, nil, fmt.Errorf("invalid last vertex inputs: %v", len(op.Inputs))
 	}
 
 	visited := map[digest.Digest]struct{}{}
@@ -700,10 +700,10 @@ func walkDigests(dgsts []digest.Digest, ops map[digest.Digest]*pb.Op, dgst diges
 	}
 	op, ok := ops[dgst]
 	if !ok {
-		return nil, errors.Errorf("failed to find input %v", dgst)
+		return nil, fmt.Errorf("failed to find input %v", dgst)
 	}
 	if op == nil {
-		return nil, errors.Errorf("invalid nil input %v", dgst)
+		return nil, fmt.Errorf("invalid nil input %v", dgst)
 	}
 	visited[dgst] = struct{}{}
 	for _, inp := range op.Inputs {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -20,7 +21,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type ResolveCacheExporterFunc func(ctx context.Context, g session.Group, attrs map[string]string) (Exporter, error)
@@ -84,7 +84,7 @@ func NewExportableCache(oci bool, imageManifest bool) (*ExportableCache, error) 
 	if imageManifest {
 		mediaType = ocispecs.MediaTypeImageManifest
 		if !oci {
-			return nil, errors.Errorf("invalid configuration for remote cache, OCI mediatypes are required for image-manifest cache format")
+			return nil, errors.New("invalid configuration for remote cache, OCI mediatypes are required for image-manifest cache format")
 		}
 	} else {
 		if oci {
@@ -118,7 +118,7 @@ func NewExportableCache(oci bool, imageManifest bool) (*ExportableCache, error) 
 			OCI:       oci,
 		}, nil
 	default:
-		return nil, errors.Errorf("exportable cache type not set")
+		return nil, errors.New("exportable cache type not set")
 	}
 }
 
@@ -200,11 +200,11 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	for _, l := range config.Layers {
 		dgstPair, ok := descs[l.Blob]
 		if !ok {
-			return nil, errors.Errorf("missing blob %s", l.Blob)
+			return nil, fmt.Errorf("missing blob %s", l.Blob)
 		}
 		layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
 		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, dgstPair.Descriptor, ce.ref, logs.LoggerFromContext(ctx)); err != nil {
-			return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+			return nil, layerDone(fmt.Errorf("error writing layer blob"+": %w", err))
 		}
 		layerDone(nil)
 		cache.AddCacheBlob(dgstPair.Descriptor)
@@ -224,7 +224,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 	configDone := progress.OneOff(ctx, fmt.Sprintf("writing config %s", dgst))
 	if err := content.WriteBlob(ctx, ce.ingester, dgst.String(), bytes.NewReader(dt), desc); err != nil {
-		return nil, configDone(errors.Wrap(err, "error writing config blob"))
+		return nil, configDone(fmt.Errorf("error writing config blob"+": %w", err))
 	}
 	configDone(nil)
 
@@ -232,7 +232,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 
 	dt, err = cache.MarshalJSON()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal manifest")
+		return nil, fmt.Errorf("failed to marshal manifest"+": %w", err)
 	}
 	dgst = digest.FromBytes(dt)
 
@@ -248,7 +248,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 	mfstDone := progress.OneOff(ctx, mfstLog)
 	if err := content.WriteBlob(ctx, ce.ingester, dgst.String(), bytes.NewReader(dt), desc); err != nil {
-		return nil, mfstDone(errors.Wrap(err, "error writing manifest blob"))
+		return nil, mfstDone(fmt.Errorf("error writing manifest blob"+": %w", err))
 	}
 	descJSON, err := json.Marshal(desc)
 	if err != nil {

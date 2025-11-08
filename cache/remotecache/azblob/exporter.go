@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -25,7 +26,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 // ResolveCacheExporterFunc for "azblob" cache exporter.
@@ -33,12 +34,12 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create azblob config")
+			return nil, fmt.Errorf("failed to create azblob config"+": %w", err)
 		}
 
 		containerClient, err := createContainerClient(ctx, config)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create container client")
+			return nil, fmt.Errorf("failed to create container client"+": %w", err)
 		}
 
 		cc := v1.NewCacheChains()
@@ -73,19 +74,19 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	for i, l := range config.Layers {
 		dgstPair, ok := descs[l.Blob]
 		if !ok {
-			return nil, errors.Errorf("missing blob %s", l.Blob)
+			return nil, fmt.Errorf("missing blob %s", l.Blob)
 		}
 		if dgstPair.Descriptor.Annotations == nil {
-			return nil, errors.Errorf("invalid descriptor without annotations")
+			return nil, errors.New("invalid descriptor without annotations")
 		}
 		var diffID digest.Digest
 		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 		if !ok {
-			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
+			return nil, errors.New("invalid descriptor without uncompressed annotation")
 		}
 		dgst, err := digest.Parse(v)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse uncompressed annotation")
+			return nil, fmt.Errorf("failed to parse uncompressed annotation"+": %w", err)
 		}
 		diffID = dgst
 
@@ -102,7 +103,7 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
 			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
 			if err != nil {
-				err = errors.Wrapf(err, "failed to get reader for %s", dgstPair.Descriptor.Digest)
+				err = fmt.Errorf("failed to get reader for %s: %w", dgstPair.Descriptor.Digest, err)
 				return nil, layerDone(err)
 			}
 			if err := ce.uploadBlobIfNotExists(ctx, key, content.NewReader(ra)); err != nil {
@@ -128,12 +129,12 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 
 	dt, err := json.Marshal(config)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal config")
+		return nil, fmt.Errorf("failed to marshal config"+": %w", err)
 	}
 
 	for _, name := range ce.config.Names {
 		if innerError := ce.uploadManifest(ctx, manifestKey(ce.config, name), bytesToReadSeekCloser(dt)); innerError != nil {
-			return nil, errors.Wrapf(innerError, "error writing manifest %s", name)
+			return nil, fmt.Errorf("error writing manifest %s: %w", name, innerError)
 		}
 	}
 
@@ -154,12 +155,12 @@ func (ce *exporter) uploadManifest(ctx context.Context, manifestKey string, read
 	blobClient := ce.containerClient.NewBlockBlobClient(manifestKey)
 
 	ctx, cnclFn := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer cnclFn(errors.WithStack(context.Canceled))
+	ctx, _ = context.WithTimeoutCause(ctx, time.Minute*5, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer cnclFn(pkgerrors.WithStack(context.Canceled))
 
 	_, err := blobClient.Upload(ctx, reader, &blockblob.UploadOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "failed to upload blob %s: %v", manifestKey, err)
+		return fmt.Errorf("failed to upload blob %s: %v: %w", manifestKey, err, err)
 	}
 
 	return nil
@@ -172,8 +173,8 @@ func (ce *exporter) uploadBlobIfNotExists(ctx context.Context, blobKey string, r
 	blobClient := ce.containerClient.NewBlockBlobClient(blobKey)
 
 	uploadCtx, cnclFn := context.WithCancelCause(ctx)
-	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer cnclFn(errors.WithStack(context.Canceled))
+	uploadCtx, _ = context.WithTimeoutCause(uploadCtx, time.Minute*5, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer cnclFn(pkgerrors.WithStack(context.Canceled))
 
 	// Only upload if the blob doesn't exist
 	_, err := blobClient.UploadStream(uploadCtx, reader, &blockblob.UploadStreamOptions{
@@ -194,7 +195,7 @@ func (ce *exporter) uploadBlobIfNotExists(ctx context.Context, blobKey string, r
 		return nil
 	}
 
-	return errors.Wrapf(err, "failed to upload blob %s: %v", blobKey, err)
+	return fmt.Errorf("failed to upload blob %s: %v: %w", blobKey, err, err)
 }
 
 var _ io.ReadSeekCloser = &readSeekCloser{}

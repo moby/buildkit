@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 

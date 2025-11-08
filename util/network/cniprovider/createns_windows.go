@@ -3,16 +3,17 @@
 package cniprovider
 
 import (
+	"fmt"
+
 	"github.com/Microsoft/hcsshim/hcn"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 func createNetNS(_ *cniProvider, _ string) (string, error) {
 	nsTemplate := hcn.NewNamespace(hcn.NamespaceTypeGuest)
 	ns, err := nsTemplate.Create()
 	if err != nil {
-		return "", errors.Wrapf(err, "HostComputeNamespace.Create failed for %s", nsTemplate.Id)
+		return "", fmt.Errorf("HostComputeNamespace.Create failed for %s: %w", nsTemplate.Id, err)
 	}
 
 	return ns.Id, nil
@@ -41,7 +42,7 @@ func unmountNetNS(_ string) error {
 func deleteNetNS(nativeID string) error {
 	ns, err := hcn.GetNamespaceByID(nativeID)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get namespace %s", nativeID)
+		return fmt.Errorf("failed to get namespace %s: %w", nativeID, err)
 	}
 
 	return ns.Delete()

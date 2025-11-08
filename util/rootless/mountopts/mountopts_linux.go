@@ -1,10 +1,11 @@
 package mountopts
 
 import (
+	"fmt"
+
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/moby/buildkit/util/strutil"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -57,7 +58,7 @@ func FixUp(mounts []mount.Mount) ([]mount.Mount, error) {
 		}
 		unpriv, err := UnprivilegedMountFlags(m.Source)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get unprivileged mount flags for %+v", m)
+			return nil, fmt.Errorf("failed to get unprivileged mount flags for %+v: %w", m, err)
 		}
 		m.Options = strutil.DedupeSlice(append(m.Options, unpriv...))
 		mounts[i] = m
@@ -79,7 +80,7 @@ func FixUpOCI(mounts []specs.Mount) ([]specs.Mount, error) {
 		}
 		unpriv, err := UnprivilegedMountFlags(m.Source)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get unprivileged mount flags for %+v", m)
+			return nil, fmt.Errorf("failed to get unprivileged mount flags for %+v: %w", m, err)
 		}
 		m.Options = strutil.DedupeSlice(append(m.Options, unpriv...))
 		mounts[i] = m

@@ -2,6 +2,7 @@ package cdidevices
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/locker"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"tags.cncf.io/container-device-interface/pkg/cdi"
 	"tags.cncf.io/container-device-interface/pkg/parser"
 )
@@ -199,7 +199,7 @@ func (m *Manager) parseDevice(dev *pb.CDIDevice, all []string) ([]string, error)
 
 	if len(out) == 0 {
 		if !dev.Optional {
-			return nil, errors.Errorf("required device %q is not registered", dev.Name)
+			return nil, fmt.Errorf("required device %q is not registered", dev.Name)
 		}
 		bklog.G(context.TODO()).Warnf("Optional device %q is not registered", dev.Name)
 	}
@@ -237,15 +237,15 @@ func (m *Manager) OnDemandInstaller(name string) (func(context.Context) error, b
 		}
 
 		if err := installer.Validate(); err != nil {
-			return errors.Wrapf(err, "failed to find preconditions for %s device", name)
+			return fmt.Errorf("failed to find preconditions for %s device: %w", name, err)
 		}
 
 		if err := installer.Run(ctx); err != nil {
-			return errors.Wrapf(err, "failed to create %s device", name)
+			return fmt.Errorf("failed to create %s device: %w", name, err)
 		}
 
 		if err := m.cache.Refresh(); err != nil {
-			return errors.Wrapf(err, "failed to refresh CDI cache")
+			return fmt.Errorf("failed to refresh CDI cache: %w", err)
 		}
 
 		// TODO: this needs to be set as annotation to survive reboot

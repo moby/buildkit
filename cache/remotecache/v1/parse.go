@@ -2,18 +2,20 @@ package cacheimport
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func Parse(configJSON []byte, provider DescriptorProvider, t solver.CacheExporterTarget) error {
 	var config cacheimporttypes.CacheConfig
 	if err := json.Unmarshal(configJSON, &config); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	return ParseConfig(config, provider, t)
@@ -33,14 +35,14 @@ func ParseConfig(config cacheimporttypes.CacheConfig, provider DescriptorProvide
 func parseRecord(cc cacheimporttypes.CacheConfig, idx int, provider DescriptorProvider, t solver.CacheExporterTarget, cache map[int]solver.CacheExporterRecord) (solver.CacheExporterRecord, error) {
 	if r, ok := cache[idx]; ok {
 		if r == nil {
-			return nil, errors.Errorf("invalid looping record")
+			return nil, errors.New("invalid looping record")
 		}
 		return r, nil
 	}
 
 	cache[idx] = nil
 	if idx < 0 || idx >= len(cc.Records) {
-		return nil, errors.Errorf("invalid record ID: %d", idx)
+		return nil, fmt.Errorf("invalid record ID: %d", idx)
 	}
 	rec := cc.Records[idx]
 
@@ -48,7 +50,7 @@ func parseRecord(cc cacheimporttypes.CacheConfig, idx int, provider DescriptorPr
 
 	for i, inputs := range rec.Inputs {
 		if len(inputs) == 0 {
-			return nil, errors.Errorf("invalid empty input for record %d", idx)
+			return nil, fmt.Errorf("invalid empty input for record %d", idx)
 		}
 		links[i] = make([]solver.CacheLink, len(inputs))
 		for j, inp := range inputs {
@@ -82,7 +84,7 @@ func parseRecord(cc cacheimporttypes.CacheConfig, idx int, provider DescriptorPr
 		mp := contentutil.NewMultiProvider(nil)
 		for _, diff := range res.LayerIndexes {
 			if diff < 0 || diff >= len(cc.Layers) {
-				return nil, errors.Errorf("invalid layer index %d", diff)
+				return nil, fmt.Errorf("invalid layer index %d", diff)
 			}
 
 			l := cc.Layers[diff]
@@ -107,7 +109,7 @@ func parseRecord(cc cacheimporttypes.CacheConfig, idx int, provider DescriptorPr
 
 	r, _, err := t.Add(rec.Digest, links, results)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to add record %d", idx)
+		return nil, fmt.Errorf("failed to add record %d: %w", idx, err)
 	}
 	cache[idx] = r
 	return r, nil
@@ -115,12 +117,12 @@ func parseRecord(cc cacheimporttypes.CacheConfig, idx int, provider DescriptorPr
 
 func getRemoteChain(layers []cacheimporttypes.CacheLayer, idx int, provider DescriptorProvider, visited map[int]struct{}) (*solver.Remote, error) {
 	if _, ok := visited[idx]; ok {
-		return nil, errors.Errorf("invalid looping layer")
+		return nil, errors.New("invalid looping layer")
 	}
 	visited[idx] = struct{}{}
 
 	if idx < 0 || idx >= len(layers) {
-		return nil, errors.Errorf("invalid layer index %d", idx)
+		return nil, fmt.Errorf("invalid layer index %d", idx)
 	}
 
 	l := layers[idx]

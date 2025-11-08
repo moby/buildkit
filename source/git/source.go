@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -33,7 +34,6 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -65,7 +65,7 @@ type MetadataOpts struct {
 // Supported returns nil if the system supports Git source
 func Supported() error {
 	if err := exec.Command("git", "version").Run(); err != nil {
-		return errors.Wrap(err, "failed to find git binary")
+		return fmt.Errorf("failed to find git binary"+": %w", err)
 	}
 	return nil
 }
@@ -123,7 +123,7 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
+		return "", nil, fmt.Errorf("failed to search metadata for %s: %w", urlutil.RedactCredentials(remote), err)
 	}
 
 	var remoteRef cache.MutableRef
@@ -140,7 +140,7 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 					bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", urlutil.RedactCredentials(remote), si.ID(), err)
 					continue
 				}
-				return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
+				return "", nil, fmt.Errorf("failed to get mutable ref for %s: %w", urlutil.RedactCredentials(remote), err)
 			}
 			break
 		}
@@ -150,7 +150,7 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 	if remoteRef == nil {
 		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", urlutil.RedactCredentials(remote))))
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(remote))
+			return "", nil, fmt.Errorf("failed to create new mutable for %s: %w", urlutil.RedactCredentials(remote), err)
 		}
 		initializeRepo = true
 	}
@@ -197,11 +197,11 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 			args = append(args, "--object-format=sha256")
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
-			return "", nil, errors.Wrapf(err, "failed to init repo at %s", dir)
+			return "", nil, fmt.Errorf("failed to init repo at %s: %w", dir, err)
 		}
 
 		if _, err := git.Run(ctx, "remote", "add", "origin", remote); err != nil {
-			return "", nil, errors.Wrapf(err, "failed add origin repo at %s", dir)
+			return "", nil, fmt.Errorf("failed add origin repo at %s: %w", dir, err)
 		}
 
 		// save new remote metadata
@@ -283,10 +283,10 @@ func verifyGitSignature(md *Metadata, opts *GitSignatureVerifyOptions) error {
 		if len(md.TagObject) > 0 {
 			tagObj, err := gitobject.Parse(md.TagObject)
 			if err != nil {
-				return errors.Wrap(err, "failed to parse git tag object")
+				return fmt.Errorf("failed to parse git tag object"+": %w", err)
 			}
 			if err := tagObj.VerifyChecksum(md.Checksum); err != nil {
-				return errors.Wrap(err, "tag object checksum verification failed")
+				return fmt.Errorf("tag object checksum verification failed"+": %w", err)
 			}
 			tagVerifyError = gitsign.VerifySignature(tagObj, opts.PubKey, &gitsign.VerifyPolicy{
 				RejectExpiredKeys: opts.RejectExpiredKeys,
@@ -304,14 +304,14 @@ func verifyGitSignature(md *Metadata, opts *GitSignatureVerifyOptions) error {
 	}
 	commitObj, err := gitobject.Parse(md.CommitObject)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse git commit object")
+		return fmt.Errorf("failed to parse git commit object"+": %w", err)
 	}
 	expected := md.Checksum
 	if md.CommitChecksum != "" {
 		expected = md.CommitChecksum
 	}
 	if err := commitObj.VerifyChecksum(expected); err != nil {
-		return errors.Wrap(err, "commit object checksum verification failed")
+		return fmt.Errorf("commit object checksum verification failed"+": %w", err)
 	}
 	return gitsign.VerifySignature(commitObj, opts.PubKey, &gitsign.VerifyPolicy{
 		RejectExpiredKeys: opts.RejectExpiredKeys,
@@ -321,7 +321,7 @@ func verifyGitSignature(md *Metadata, opts *GitSignatureVerifyOptions) error {
 func (gs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	gitIdentifier, ok := id.(*GitIdentifier)
 	if !ok {
-		return nil, errors.Errorf("invalid git identifier %v", id)
+		return nil, fmt.Errorf("invalid git identifier %v", id)
 	}
 
 	return &gitSourceHandler{
@@ -394,7 +394,7 @@ func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, sshID string, 
 	err := gs.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
 		if err := sshforward.CheckSSHID(ctx, c, sshID); err != nil {
 			if st, ok := status.FromError(err); ok && st.Code() == codes.Unimplemented {
-				return errors.Errorf("no SSH key %q forwarded from the client", sshID)
+				return fmt.Errorf("no SSH key %q forwarded from the client", sshID)
 			}
 
 			return err
@@ -430,7 +430,7 @@ func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, sshID string, 
 
 func (gs *gitSourceHandler) mountKnownHosts() (string, func() error, error) {
 	if gs.src.KnownSSHHosts == "" {
-		return "", nil, errors.Errorf("no configured known hosts forwarded from the client")
+		return "", nil, errors.New("no configured known hosts forwarded from the client")
 	}
 	knownHosts, err := os.CreateTemp("", "")
 	if err != nil {
@@ -464,13 +464,13 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 	if gs.src.Checksum != "" {
 		matched, err := regexp.MatchString("^[a-fA-F0-9]+$", gs.src.Checksum)
 		if err != nil || !matched {
-			return nil, errors.Errorf("invalid checksum %s for Git URL, expected hex commit hash", gs.src.Checksum)
+			return nil, fmt.Errorf("invalid checksum %s for Git URL, expected hex commit hash", gs.src.Checksum)
 		}
 	}
 
 	if gitutil.IsCommitSHA(gs.src.Ref) {
 		if gs.src.Checksum != "" && !strings.HasPrefix(gs.src.Ref, gs.src.Checksum) {
-			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, gs.src.Ref)
+			return nil, fmt.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, gs.src.Ref)
 		}
 		return &Metadata{
 			Ref:      gs.src.Ref,
@@ -500,7 +500,7 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 			for _, v := range values {
 				v2, ok := v.(*Metadata)
 				if !ok {
-					return nil, errors.Errorf("invalid resolver cache value for %s: %T", gs.remoteKey(), v)
+					return nil, fmt.Errorf("invalid resolver cache value for %s: %T", gs.remoteKey(), v)
 				}
 				if gs.src.Checksum != "" && !strings.HasPrefix(v2.Checksum, gs.src.Checksum) {
 					continue
@@ -532,7 +532,7 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 
 	buf, err := tmpGit.Run(ctx, "ls-remote", gs.src.Remote, ref, ref+"^{}")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
+		return nil, fmt.Errorf("failed to fetch remote %s: %w", urlutil.RedactCredentials(remote), err)
 	}
 	lines := strings.Split(string(buf), "\n")
 
@@ -573,10 +573,10 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 		usedRef = tagRef
 	}
 	if sha == "" {
-		return nil, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(buf))
+		return nil, fmt.Errorf("repository does not contain ref %s, output: %q", ref, string(buf))
 	}
 	if !gitutil.IsCommitSHA(sha) {
-		return nil, errors.Errorf("invalid commit sha %q", sha)
+		return nil, fmt.Errorf("invalid commit sha %q", sha)
 	}
 	if gs.src.Checksum != "" {
 		if !strings.HasPrefix(sha, gs.src.Checksum) && !strings.HasPrefix(annotatedTagSha, gs.src.Checksum) {
@@ -584,7 +584,7 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 			if annotatedTagSha != "" {
 				exp = " or " + annotatedTagSha
 			}
-			return nil, errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
+			return nil, fmt.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, exp)
 		}
 	}
 	md = &Metadata{
@@ -613,7 +613,7 @@ func (gs *gitSourceHandler) addGitObjectsToMetadata(ctx context.Context, jobCtx 
 	objType := strings.TrimSpace(string(buf))
 
 	if objType != "commit" && objType != "tag" {
-		return errors.Errorf("expected commit or tag object, got %s", objType)
+		return fmt.Errorf("expected commit or tag object, got %s", objType)
 	}
 
 	if objType == "tag" && md.CommitChecksum == "" {
@@ -723,11 +723,11 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	if gs.src.Checksum != "" {
 		actualHashBuf, err := repo.Run(ctx, "rev-parse", ref)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to rev-parse %s for %s", ref, urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to rev-parse %s for %s: %w", ref, urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 		actualHash := strings.TrimSpace(string(actualHashBuf))
 		if !strings.HasPrefix(actualHash, gs.src.Checksum) {
-			retErr := errors.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
+			retErr := fmt.Errorf("expected checksum to match %s, got %s", gs.src.Checksum, actualHash)
 			actualHashBuf2, err := git.Run(ctx, "rev-parse", ref+"^{}")
 			if err != nil {
 				return nil, retErr
@@ -737,7 +737,7 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 				return nil, retErr
 			}
 			if !strings.HasPrefix(actualHash2, gs.src.Checksum) {
-				return nil, errors.Errorf("expected checksum to match %s, got %s or %s", gs.src.Checksum, actualHash, actualHash2)
+				return nil, fmt.Errorf("expected checksum to match %s, got %s or %s", gs.src.Checksum, actualHash, actualHash2)
 			}
 		}
 	}
@@ -767,7 +767,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 
 	sis, err := searchGitSnapshot(ctx, gs.cache, snapshotKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to search metadata for %s", snapshotKey)
+		return nil, fmt.Errorf("failed to search metadata for %s: %w", snapshotKey, err)
 	}
 	if len(sis) > 0 {
 		return gs.cache.Get(ctx, sis[0].ID(), nil)
@@ -878,7 +878,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 			args = append(args, "--force", ref+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
-			err := errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			err := fmt.Errorf("failed to fetch remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 			if strings.Contains(err.Error(), "rejected") && strings.Contains(err.Error(), "(would clobber existing tag)") {
 				// this can happen if a tag was mutated to another commit in remote.
 				// only hope is to abandon the existing shared repo and start a fresh one
@@ -919,12 +919,12 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 				}
 				args = append(args, "origin", gs.cacheCommit)
 				if _, err := git.Run(ctx, args...); err != nil {
-					return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
+					return nil, fmt.Errorf("failed to fetch remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 				}
 
 				_, err = git.Run(ctx, "reflog", "expire", "--all", "--expire=now")
 				if err != nil {
-					return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+					return nil, fmt.Errorf("failed to expire reflog for remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 				}
 				if _, err := git.Run(ctx, "cat-file", "-e", gs.cacheCommit); err == nil {
 					// force the ref to point to the commit that the cache key points to
@@ -932,7 +932,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 						return nil, err
 					}
 				} else {
-					return nil, errors.Errorf("fetched ref %s does not match expected commit %s and commit can not be found in the repository", ref, gs.cacheCommit)
+					return nil, fmt.Errorf("fetched ref %s does not match expected commit %s and commit can not be found in the repository", ref, gs.cacheCommit)
 				}
 			}
 		}
@@ -945,7 +945,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	ref := gs.src.Ref
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", urlutil.RedactCredentials(gs.src.Remote), ref)))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(gs.src.Remote))
+		return nil, fmt.Errorf("failed to create new mutable for %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 	}
 
 	defer func() {
@@ -1028,31 +1028,31 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		}
 		_, err = checkoutGit.Run(ctx, "checkout", "FETCH_HEAD")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to checkout remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 		_, err = checkoutGit.Run(ctx, "remote", "set-url", "origin", urlutil.RedactCredentials(gs.src.Remote))
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to set remote origin to %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to set remote origin to %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 		_, err = checkoutGit.Run(ctx, "reflog", "expire", "--all", "--expire=now")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to expire reflog for remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 		if err := os.Remove(filepath.Join(checkoutDirGit, "FETCH_HEAD")); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, errors.Wrapf(err, "failed to remove FETCH_HEAD for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to remove FETCH_HEAD for remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 		gitDir = checkoutDirGit
 	} else {
 		if subdir != "." {
 			cd, err = os.MkdirTemp(cd, "checkout")
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to create temporary checkout dir")
+				return nil, fmt.Errorf("failed to create temporary checkout dir: %w", err)
 			}
 		}
 		checkoutGit := git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
 		_, err = checkoutGit.Run(ctx, "checkout", ref, "--", ".")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to checkout remote %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 	}
 
@@ -1060,14 +1060,14 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	if !gs.src.SkipSubmodules {
 		_, err = git.Run(ctx, "submodule", "update", "--init", "--recursive", "--depth=1")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
+			return nil, fmt.Errorf("failed to update submodules for %s: %w", urlutil.RedactCredentials(gs.src.Remote), err)
 		}
 	}
 
 	if subdir != "." {
 		d, err := os.Open(filepath.Join(cd, subdir))
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
+			return nil, fmt.Errorf("failed to open subdir %v: %w", subdir, err)
 		}
 		defer func() {
 			if d != nil {
@@ -1098,7 +1098,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 			return os.Lchown(p, uid, gid)
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to remap git checkout")
+			return nil, fmt.Errorf("failed to remap git checkout"+": %w", err)
 		}
 	}
 
@@ -1195,12 +1195,12 @@ func tokenScope(remote string) string {
 func getDefaultBranch(ctx context.Context, git *gitutil.GitCLI, remoteURL string) (string, error) {
 	buf, err := git.Run(ctx, "ls-remote", "--symref", remoteURL, "HEAD")
 	if err != nil {
-		return "", errors.Wrapf(err, "error fetching default branch for repository %s", urlutil.RedactCredentials(remoteURL))
+		return "", fmt.Errorf("error fetching default branch for repository %s: %w", urlutil.RedactCredentials(remoteURL), err)
 	}
 
 	ss := defaultBranch.FindAllStringSubmatch(string(buf), -1)
 	if len(ss) == 0 || len(ss[0]) != 2 {
-		return "", errors.Errorf("could not find default branch for repository: %s", urlutil.RedactCredentials(remoteURL))
+		return "", fmt.Errorf("could not find default branch for repository: %s", urlutil.RedactCredentials(remoteURL))
 	}
 	return ss[0][1], nil
 }

@@ -2,6 +2,8 @@ package file
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,7 +15,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
@@ -35,7 +37,7 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 
 	p, err := fs.RootPath(d, action.Path)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	ch, err := mapUserToChowner(user, idmap)
@@ -52,13 +54,13 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 			if errors.Is(err, os.ErrExist) {
 				return nil
 			}
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if err := copy.Chown(p, nil, ch); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if err := copy.Utimes(p, timestampToTime(action.Timestamp)); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	}
 
@@ -76,7 +78,7 @@ func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *use
 
 	newpath, err := fs.RootPath(d, filepath.Join("/", action.Newpath))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	ch, err := mapUserToChowner(user, idmap)
@@ -85,15 +87,15 @@ func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *use
 	}
 
 	if err := os.Symlink(action.Oldpath, newpath); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	if err := copy.Chown(newpath, nil, ch); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	if err := copy.Utimes(newpath, timestampToTime(action.Timestamp)); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	return nil
@@ -110,7 +112,7 @@ func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *user.
 
 	p, err := fs.RootPath(d, filepath.Join("/", action.Path))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	ch, err := mapUserToChowner(user, idmap)
@@ -119,15 +121,15 @@ func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *user.
 	}
 
 	if err := os.WriteFile(p, action.Data, os.FileMode(action.Mode)&0777); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	if err := copy.Chown(p, nil, ch); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	if err := copy.Utimes(p, timestampToTime(action.Timestamp)); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	return nil
@@ -146,7 +148,7 @@ func rm(d string, action *pb.FileActionRm) (err error) {
 		src := cleanPath(action.Path)
 		m, err := copy.ResolveWildcards(d, src, false)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 
 		for _, s := range m {
@@ -169,7 +171,7 @@ func rmPath(root, src string, allowNotFound bool) error {
 	}
 	dir, err := fs.RootPath(root, filepath.Join("/", dir))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	p := filepath.Join(dir, base)
 
@@ -177,11 +179,11 @@ func rmPath(root, src string, allowNotFound bool) error {
 		_, err := os.Stat(p)
 
 		if errors.Is(err, os.ErrNotExist) {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	}
 
-	return errors.WithStack(os.RemoveAll(p))
+	return pkgerrors.WithStack(os.RemoveAll(p))
 }
 
 func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u *copy.User, idmap *user.IdentityMapping) (err error) {
@@ -191,10 +193,10 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 	if !action.CreateDestPath {
 		p, err := fs.RootPath(dest, filepath.Join("/", action.Dest))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if _, err := os.Lstat(filepath.Dir(p)); err != nil {
-			return errors.Wrapf(err, "failed to stat %s", action.Dest)
+			return fmt.Errorf("failed to stat %s: %w", action.Dest, err)
 		}
 	}
 
@@ -242,27 +244,27 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 		var err error
 		m, err = copy.ResolveWildcards(src, srcPath, action.FollowSymlink)
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 
 		if len(m) == 0 {
 			if action.AllowEmptyWildcard {
 				return nil
 			}
-			return errors.Errorf("%s not found", srcPath)
+			return fmt.Errorf("%s not found", srcPath)
 		}
 	}
 
 	for _, s := range m {
 		if action.AttemptUnpackDockerCompatibility {
 			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), idmap); err != nil {
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			} else if ok {
 				continue
 			}
 		}
 		if err := copy.Copy(ctx, src, s, dest, destPath, opt...); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	}
 
@@ -289,7 +291,7 @@ type Backend struct {
 func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m)
+		return fmt.Errorf("invalid mount type %T", m)
 	}
 
 	lm := snapshot.LocalMounter(mnt.m)
@@ -310,7 +312,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m)
+		return fmt.Errorf("invalid mount type %T", m)
 	}
 
 	lm := snapshot.LocalMounter(mnt.m)
@@ -331,7 +333,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 func (fb *Backend) Symlink(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionSymlink) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m)
+		return fmt.Errorf("invalid mount type %T", m)
 	}
 
 	lm := snapshot.LocalMounter(mnt.m)
@@ -352,7 +354,7 @@ func (fb *Backend) Symlink(ctx context.Context, m, user, group fileoptypes.Mount
 func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action *pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m)
+		return fmt.Errorf("invalid mount type %T", m)
 	}
 
 	lm := snapshot.LocalMounter(mnt.m)
@@ -368,11 +370,11 @@ func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action *pb.FileA
 func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action *pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m1)
+		return fmt.Errorf("invalid mount type %T", m1)
 	}
 	mnt2, ok := m2.(*Mount)
 	if !ok {
-		return errors.Errorf("invalid mount type %T", m2)
+		return fmt.Errorf("invalid mount type %T", m2)
 	}
 
 	lm := snapshot.LocalMounter(mnt1.m)
@@ -402,7 +404,7 @@ func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.M
 	if user != nil {
 		usr, ok := user.(*Mount)
 		if !ok {
-			return nil, errors.Errorf("invalid mount type %T", user)
+			return nil, fmt.Errorf("invalid mount type %T", user)
 		}
 		userMountable = usr.Mountable()
 	}
@@ -410,7 +412,7 @@ func (fb *Backend) readUserWrapper(owner *pb.ChownOpt, user, group fileoptypes.M
 	if group != nil {
 		grp, ok := group.(*Mount)
 		if !ok {
-			return nil, errors.Errorf("invalid mount type %T", group)
+			return nil, fmt.Errorf("invalid mount type %T", group)
 		}
 		groupMountable = grp.Mountable()
 	}

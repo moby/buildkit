@@ -3,10 +3,10 @@
 package filesync
 
 import (
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 )
 
 func sendDiffCopy(stream Stream, fs fsutil.FS, progress progressCb) error {
-	return errors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress))
+	return pkgerrors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress))
 }

@@ -1,13 +1,13 @@
 package debug
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/moby/buildkit/util/appdefaults"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	bolt "go.etcd.io/bbolt"
 )

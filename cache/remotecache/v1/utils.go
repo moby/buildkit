@@ -3,6 +3,7 @@ package cacheimport
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -11,7 +12,6 @@ import (
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 // sortConfig sorts the config structure to make sure it is deterministic
@@ -194,7 +194,7 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 			}
 			idx, ok := state.recordsByItem[l.src]
 			if !ok {
-				return errors.Errorf("invalid source record: %v", l.src)
+				return fmt.Errorf("invalid source record: %v", l.src)
 			}
 			if idx == -1 {
 				continue
@@ -211,7 +211,7 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 		if id != "" {
 			idx, ok := state.chainsByID[id]
 			if !ok {
-				return errors.Errorf("parent chainid not found")
+				return errors.New("parent chainid not found")
 			}
 			rec.Results = append(rec.Results, cacheimporttypes.CacheResult{LayerIndex: idx, CreatedAt: res.CreatedAt})
 		}

@@ -3,6 +3,7 @@ package llbsolver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -45,7 +46,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -114,7 +115,7 @@ func New(opt Opt) (*Solver, error) {
 	}
 	for k := range opt.ProvenanceEnv {
 		if _, ok := forbiddenKeys[k]; ok {
-			return nil, errors.Errorf("key %q is builtin and not allowed to be modified in provenance config", k)
+			return nil, fmt.Errorf("key %q is builtin and not allowed to be modified in provenance config", k)
 		}
 	}
 
@@ -224,8 +225,8 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		}
 
 		ctx, cancel := context.WithCancelCause(ctx)
-		ctx, _ = context.WithTimeoutCause(ctx, 300*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		ctx, _ = context.WithTimeoutCause(ctx, 300*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 		var mu sync.Mutex
 		ch := make(chan *client.SolveStatus)
@@ -636,7 +637,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	inp, err := result.ConvertResult(cached, func(res solver.CachedResult) (cache.ImmutableRef, error) {
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid reference: %T", res.Sys())
+			return nil, fmt.Errorf("invalid reference: %T", res.Sys())
 		}
 		return workerRef.ImmutableRef, nil
 	})
@@ -703,8 +704,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	caller, err := s.sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {
@@ -1005,12 +1006,12 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 
 	pr, ok := p.(*provenance.Capture)
 	if !ok {
-		return nil, errors.Errorf("invalid provenance type %T", p)
+		return nil, fmt.Errorf("invalid provenance type %T", p)
 	}
 
 	if br.req != nil {
 		if pr == nil {
-			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+			return nil, fmt.Errorf("missing provenance for %s", ref.ID())
 		}
 
 		pr.Frontend = br.req.Frontend
@@ -1076,7 +1077,7 @@ func asInlineCache(e remotecache.Exporter) (inlineCacheExporter, bool) {
 func inlineCache(ctx context.Context, ie inlineCacheExporter, res solver.CachedResult, compressionopt compression.Config, g session.Group) ([]byte, error) {
 	workerRef, ok := res.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid reference: %T", res.Sys())
+		return nil, fmt.Errorf("invalid reference: %T", res.Sys())
 	}
 
 	remotes, err := workerRef.GetRemotes(ctx, true, cacheconfig.RefConfig{Compression: compressionopt}, false, g)
@@ -1214,7 +1215,7 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 	err := b.EachValue(context.TODO(), keyEntitlements, func(v any) error {
 		set, ok := v.(entitlements.Set)
 		if !ok {
-			return errors.Errorf("invalid entitlements %T", v)
+			return fmt.Errorf("invalid entitlements %T", v)
 		}
 		for k, v := range set {
 			if prev, ok := ent[k]; ok && prev != nil {
@@ -1236,11 +1237,11 @@ func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
 	err := b.EachValue(context.TODO(), keySourcePolicy, func(v any) error {
 		x, ok := v.(*spb.Policy)
 		if !ok {
-			return errors.Errorf("invalid source policy %T", v)
+			return fmt.Errorf("invalid source policy %T", v)
 		}
 		for _, f := range x.Rules {
 			if f == nil {
-				return errors.Errorf("invalid nil policy rule")
+				return errors.New("invalid nil policy rule")
 			}
 			srcPol.Rules = append(srcPol.Rules, f.CloneVT())
 		}
@@ -1258,7 +1259,7 @@ func loadSourcePolicySession(b solver.Builder) (string, error) {
 	err := b.EachValue(context.TODO(), keySourcePolicySession, func(v any) error {
 		x, ok := v.(string)
 		if !ok {
-			return errors.Errorf("invalid source policy session %T", v)
+			return fmt.Errorf("invalid source policy session %T", v)
 		}
 		if x != "" {
 			session = x

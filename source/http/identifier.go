@@ -1,12 +1,13 @@
 package http
 
 import (
+	"fmt"
+
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 func NewHTTPIdentifier(str string, tls bool) (*HTTPIdentifier, error) {
@@ -46,7 +47,7 @@ func (id *HTTPIdentifier) Scheme() string {
 func (id *HTTPIdentifier) Capture(c *provenance.Capture, pin string) error {
 	dgst, err := digest.Parse(pin)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse HTTP digest %s", pin)
+		return fmt.Errorf("failed to parse HTTP digest %s: %w", pin, err)
 	}
 	c.AddHTTP(provenancetypes.HTTPSource{
 		URL:    id.URL,

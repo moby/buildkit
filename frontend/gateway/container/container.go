@@ -3,6 +3,7 @@ package container
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -11,20 +12,19 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/moby/buildkit/session/secrets"
-	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/system"
-
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -148,13 +148,13 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		)
 
 		if m.Dest == opspb.RootMount && m.MountType != opspb.MountType_BIND {
-			return p, errors.Errorf("invalid mount type %s for %s", m.MountType.String(), m.Dest)
+			return p, fmt.Errorf("invalid mount type %s for %s", m.MountType.String(), m.Dest)
 		}
 
 		// if mount is based on input validate and load it
 		if m.Input != int64(opspb.Empty) {
 			if int(m.Input) >= len(refs) {
-				return p, errors.Errorf("missing input %d", m.Input)
+				return p, fmt.Errorf("missing input %d", m.Input)
 			}
 			ref = refs[int(m.Input)].ImmutableRef
 			mountable = ref
@@ -235,12 +235,12 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 			}
 
 		default:
-			return p, errors.Errorf("mount type %s not implemented", m.MountType)
+			return p, fmt.Errorf("mount type %s not implemented", m.MountType)
 		}
 
 		// validate that there is a mount
 		if mountable == nil {
-			return p, errors.Errorf("mount %s has no input", m.Dest)
+			return p, fmt.Errorf("mount %s has no input", m.Dest)
 		}
 
 		// if dest is root we need mutable ref even if there is no output
@@ -379,7 +379,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*o
 	for _, sopt := range secretEnv {
 		id := sopt.ID
 		if id == "" {
-			return nil, errors.Errorf("secret ID missing for %q environment variable", sopt.Name)
+			return nil, fmt.Errorf("secret ID missing for %q environment variable", sopt.Name)
 		}
 		var dt []byte
 		var err error
@@ -401,7 +401,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*o
 func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
 	gwCtr.mu.Lock()
 	defer gwCtr.mu.Unlock()
-	gwCtr.cancel(errors.WithStack(context.Canceled))
+	gwCtr.cancel(pkgerrors.WithStack(context.Canceled))
 	err1 := gwCtr.errGroup.Wait()
 
 	var err2 error

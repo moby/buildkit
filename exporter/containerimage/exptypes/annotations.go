@@ -6,7 +6,6 @@ import (
 
 	"github.com/containerd/platforms"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -94,7 +93,7 @@ func ParseAnnotationKey(result string) (AnnotationKey, bool, error) {
 	case "":
 		tp = AnnotationManifest
 	default:
-		return AnnotationKey{}, true, errors.Errorf("unrecognized annotation type %s", tp)
+		return AnnotationKey{}, true, fmt.Errorf("unrecognized annotation type %s", tp)
 	}
 
 	var ociPlatform *ocispecs.Platform

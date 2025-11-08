@@ -3,10 +3,10 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver"
@@ -71,7 +71,7 @@ func (m *mergeOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []s
 		}
 		wref, ok := inp.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid reference for merge %T", inp.Sys())
+			return nil, fmt.Errorf("invalid reference for merge %T", inp.Sys())
 		}
 		if wref.ImmutableRef == nil {
 			continue

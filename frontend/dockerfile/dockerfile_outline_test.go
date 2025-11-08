@@ -3,6 +3,7 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
@@ -412,7 +412,7 @@ COPY Dockerfile Dockerfile
 func unmarshalOutline(res *gateway.Result) (*outline.Outline, error) {
 	dt, ok := res.Metadata["result.json"]
 	if !ok {
-		return nil, errors.Errorf("missing frontend.outline")
+		return nil, errors.New("missing frontend.outline")
 	}
 	var o outline.Outline
 	if err := json.Unmarshal(dt, &o); err != nil {

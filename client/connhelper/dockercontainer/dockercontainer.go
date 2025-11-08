@@ -3,12 +3,12 @@ package dockercontainer
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/url"
 
 	"github.com/docker/cli/cli/connhelper/commandconn"
 	"github.com/moby/buildkit/client/connhelper"
-	"github.com/pkg/errors"
 )
 
 func init() {

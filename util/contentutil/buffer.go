@@ -3,6 +3,8 @@ package contentutil
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -12,7 +14,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // Buffer is a content provider and ingester that keeps data in memory
@@ -96,7 +97,7 @@ func (b *buffer) Writer(ctx context.Context, opts ...content.WriterOpt) (content
 	}
 	b.mu.Lock()
 	if _, ok := b.refs[wOpts.Ref]; ok {
-		return nil, errors.Wrapf(cerrdefs.ErrUnavailable, "ref %s locked", wOpts.Ref)
+		return nil, fmt.Errorf("ref %s locked: %w", wOpts.Ref, cerrdefs.ErrUnavailable)
 	}
 	b.mu.Unlock()
 	return &bufferedWriter{
@@ -128,7 +129,7 @@ func (b *buffer) getBytesReader(dgst digest.Digest) (*bytes.Reader, error) {
 		return bytes.NewReader(dt), nil
 	}
 
-	return nil, errors.Wrapf(cerrdefs.ErrNotFound, "content %v", dgst)
+	return nil, fmt.Errorf("content %v: %w", dgst, cerrdefs.ErrNotFound)
 }
 
 func (b *buffer) addValue(k digest.Digest, dt []byte) {
@@ -183,17 +184,17 @@ func (w *bufferedWriter) Digest() digest.Digest {
 
 func (w *bufferedWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opt ...content.Opt) error {
 	if w.buffer == nil {
-		return errors.Errorf("can't commit already committed or closed")
+		return errors.New("can't commit already committed or closed")
 	}
 	if s := int64(w.buffer.Len()); size > 0 && size != s {
-		return errors.Errorf("unexpected commit size %d, expected %d", s, size)
+		return fmt.Errorf("unexpected commit size %d, expected %d", s, size)
 	}
 	dgst := w.digester.Digest()
 	if expected != "" && expected != dgst {
-		return errors.Errorf("unexpected digest: %v != %v", dgst, expected)
+		return fmt.Errorf("unexpected digest: %v != %v", dgst, expected)
 	}
 	if w.expected != "" && w.expected != dgst {
-		return errors.Errorf("unexpected digest: %v != %v", dgst, w.expected)
+		return fmt.Errorf("unexpected digest: %v != %v", dgst, w.expected)
 	}
 	w.main.addValue(dgst, w.buffer.Bytes())
 	return w.Close()

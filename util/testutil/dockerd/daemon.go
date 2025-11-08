@@ -2,6 +2,7 @@ package dockerd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/identity"
-	"github.com/pkg/errors"
 )
 
 type LogT interface {
@@ -50,7 +50,7 @@ var sockRoot = filepath.Join(os.TempDir(), "docker-integration")
 
 func NewDaemon(workingDir string, ops ...Option) (*Daemon, error) {
 	if err := os.MkdirAll(sockRoot, 0700); err != nil {
-		return nil, errors.Wrapf(err, "failed to create daemon socket root %q", sockRoot)
+		return nil, fmt.Errorf("failed to create daemon socket root %q: %w", sockRoot, err)
 	}
 
 	id := "d" + identity.NewID()[:shortLen]
@@ -60,7 +60,7 @@ func NewDaemon(workingDir string, ops ...Option) (*Daemon, error) {
 	}
 	daemonRoot := filepath.Join(daemonFolder, "root")
 	if err := os.MkdirAll(daemonRoot, 0755); err != nil {
-		return nil, errors.Wrapf(err, "failed to create daemon root %q", daemonRoot)
+		return nil, fmt.Errorf("failed to create daemon root %q: %w", daemonRoot, err)
 	}
 
 	d := &Daemon{
@@ -102,7 +102,7 @@ func (d *Daemon) Sock() string {
 func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArgs ...string) error {
 	dockerdBinary, err := exec.LookPath(d.dockerdBinary)
 	if err != nil {
-		return errors.Wrapf(err, "[%s] could not find dockerd binary %q in $PATH", d.id, d.dockerdBinary)
+		return fmt.Errorf("[%s] could not find dockerd binary %q in $PATH: %w", d.id, d.dockerdBinary, err)
 	}
 
 	if d.pidFile == "" {
@@ -154,7 +154,7 @@ func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArg
 
 	fmt.Fprintf(d.cmd.Stderr, "> startCmd %v %+v\n", time.Now(), d.cmd.String())
 	if err := d.cmd.Start(); err != nil {
-		return errors.Wrapf(err, "[%s] could not start daemon container", d.id)
+		return fmt.Errorf("[%s] could not start daemon container: %w", d.id, err)
 	}
 
 	wait := make(chan error, 1)
@@ -203,7 +203,7 @@ func (d *Daemon) StopWithError() (err error) {
 		if strings.Contains(err.Error(), "os: process already finished") {
 			return errDaemonNotStarted
 		}
-		return errors.Wrapf(err, "[%s] could not send signal", d.id)
+		return fmt.Errorf("[%s] could not send signal: %w", d.id, err)
 	}
 
 out1:
@@ -231,7 +231,7 @@ out2:
 			}
 			d.Log.Logf("[%d] attempt #%d/5: daemon is still running with pid %d", i, d.cmd.Process.Pid)
 			if err := d.cmd.Process.Signal(os.Interrupt); err != nil {
-				return errors.Wrapf(err, "[%s] attempt #%d/5 could not send signal", d.id, i)
+				return fmt.Errorf("[%s] attempt #%d/5 could not send signal: %w", d.id, i, err)
 			}
 		}
 	}

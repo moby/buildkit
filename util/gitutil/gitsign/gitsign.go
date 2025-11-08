@@ -5,6 +5,8 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -14,7 +16,6 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/hiddeco/sshsig"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -59,7 +60,7 @@ func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyD
 
 	ents, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(pubKeyData))
 	if err != nil {
-		return errors.Wrap(err, "failed to read armored public key")
+		return fmt.Errorf("failed to read armored public key"+": %w", err)
 	}
 
 	// add addition algorithm constraints
@@ -75,7 +76,7 @@ func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyD
 	)
 	if err != nil {
 		if sig.IssuerKeyId != nil {
-			return errors.Wrapf(err, "signature by %X", *sig.IssuerKeyId)
+			return fmt.Errorf("signature by %X: %w", *sig.IssuerKeyId, err)
 		}
 		return err
 	}
@@ -94,26 +95,26 @@ func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyD
 func verifySSHSignature(obj *gitobject.GitObject, sig *sshsig.Signature, pubKeyData []byte) error {
 	// future proofing
 	if sig.Version != 1 {
-		return errors.Errorf("unsupported SSH signature version: %d", sig.Version)
+		return fmt.Errorf("unsupported SSH signature version: %d", sig.Version)
 	}
 
 	switch sig.HashAlgorithm {
 	case sshsig.HashSHA256, sshsig.HashSHA512:
 		// OK
 	default:
-		return errors.Errorf("unsupported SSH signature hash algorithm: %s", sig.HashAlgorithm)
+		return fmt.Errorf("unsupported SSH signature hash algorithm: %s", sig.HashAlgorithm)
 	}
 	if sig.Namespace != "git" {
-		return errors.Errorf("unexpected SSH signature namespace: %q", sig.Namespace)
+		return fmt.Errorf("unexpected SSH signature namespace: %q", sig.Namespace)
 	}
 
 	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(pubKeyData)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse ssh public key")
+		return fmt.Errorf("failed to parse ssh public key"+": %w", err)
 	}
 
 	if err := sshsig.Verify(strings.NewReader(obj.SignedData), sig, pubKey, sig.HashAlgorithm, sig.Namespace); err != nil {
-		return errors.Wrap(err, "failed to verify ssh signature")
+		return fmt.Errorf("failed to verify ssh signature"+": %w", err)
 	}
 	return nil
 }
@@ -129,7 +130,7 @@ func checkEntityUsableForSigning(e *openpgp.Entity, now time.Time, policy *Verif
 			if exp := id.SelfSignature.KeyLifetimeSecs; exp != nil && *exp > 0 {
 				expiry := e.PrimaryKey.CreationTime.Add(time.Duration(*exp) * time.Second)
 				if now.After(expiry) {
-					return errors.Errorf("key expired at %v", expiry)
+					return fmt.Errorf("key expired at %v", expiry)
 				}
 			}
 		}
@@ -143,7 +144,7 @@ func checkEntityUsableForSigning(e *openpgp.Entity, now time.Time, policy *Verif
 	// RSA bit length (optional)
 	if rsaPub, ok := e.PrimaryKey.PublicKey.(*rsa.PublicKey); ok {
 		if rsaPub.N.BitLen() < 2048 {
-			return errors.Errorf("RSA key too short: %d bits", rsaPub.N.BitLen())
+			return fmt.Errorf("RSA key too short: %d bits", rsaPub.N.BitLen())
 		}
 	}
 
@@ -162,7 +163,7 @@ func checkEntityRevocation(e *openpgp.Entity) error {
 			continue // ignore malformed or unverified revocations
 		}
 		if r.RevocationReasonText != "" {
-			return errors.Errorf("key revoked: %s", r.RevocationReasonText)
+			return fmt.Errorf("key revoked: %s", r.RevocationReasonText)
 		}
 		return errors.New("key revoked")
 	}
@@ -179,15 +180,15 @@ func parseSignatureBlock(data []byte) ([]byte, sigType, error) {
 	} else if strings.HasPrefix(string(data), "-----BEGIN PGP SIGNATURE-----") {
 		block, err := armor.Decode(bytes.NewReader(data))
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "failed to decode armored signature")
+			return nil, 0, fmt.Errorf("failed to decode armored signature"+": %w", err)
 		}
 		dt, err := io.ReadAll(block.Body)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "failed to read armored signature body")
+			return nil, 0, fmt.Errorf("failed to read armored signature body"+": %w", err)
 		}
 		return dt, sigTypePGP, nil
 	}
-	return nil, 0, errors.Errorf("invalid signature format")
+	return nil, 0, errors.New("invalid signature format")
 }
 
 func ParseSignature(data []byte) (*Signature, error) {
@@ -204,7 +205,7 @@ func ParseSignature(data []byte) (*Signature, error) {
 				break
 			}
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to read next packet")
+				return nil, fmt.Errorf("failed to read next packet"+": %w", err)
 			}
 			sig, ok := p.(*packet.Signature)
 			if !ok {
@@ -215,12 +216,12 @@ func ParseSignature(data []byte) (*Signature, error) {
 	case sigTypeSSH:
 		sig, err := sshsig.ParseSignature(sigBlock)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to parse ssh signature")
+			return nil, fmt.Errorf("failed to parse ssh signature"+": %w", err)
 		}
 		return &Signature{SSHSignature: sig}, nil
 	}
 
-	return nil, errors.Errorf("no signature packet found")
+	return nil, errors.New("no signature packet found")
 }
 
 func checkAlgoPolicy(sig *packet.Signature) error {
@@ -228,20 +229,20 @@ func checkAlgoPolicy(sig *packet.Signature) error {
 	case crypto.SHA256, crypto.SHA384, crypto.SHA512:
 		// ok
 	default:
-		return errors.Errorf("rejecting weak/unknown hash: %v", sig.Hash)
+		return fmt.Errorf("rejecting weak/unknown hash: %v", sig.Hash)
 	}
 	// Pubkey policy
 	switch sig.PubKeyAlgo {
 	case packet.PubKeyAlgoEdDSA, packet.PubKeyAlgoECDSA, packet.PubKeyAlgoRSA, packet.PubKeyAlgoRSASignOnly:
 	default:
-		return errors.Errorf("rejecting unsupported pubkey algorithm: %v", sig.PubKeyAlgo)
+		return fmt.Errorf("rejecting unsupported pubkey algorithm: %v", sig.PubKeyAlgo)
 	}
 	return nil
 }
 
 func checkCreationTime(sigTime, now time.Time) error {
 	if sigTime.After(now.Add(5 * time.Minute)) {
-		return errors.Errorf("signature creation time is in the future: %v", sigTime)
+		return fmt.Errorf("signature creation time is in the future: %v", sigTime)
 	}
 	return nil
 }

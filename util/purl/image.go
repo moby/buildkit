@@ -1,6 +1,7 @@
 package purl
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/containerd/platforms"
@@ -8,7 +9,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	packageurl "github.com/package-url/packageurl-go"
-	"github.com/pkg/errors"
 )
 
 // RefToPURL converts an image reference with optional platform constraint to a package URL.
@@ -17,7 +17,7 @@ import (
 func RefToPURL(purlType string, ref string, platform *ocispecs.Platform) (string, error) {
 	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse ref %q", ref)
+		return "", fmt.Errorf("failed to parse ref %q: %w", ref, err)
 	}
 	var qualifiers []packageurl.Qualifier
 
@@ -63,7 +63,7 @@ func PURLToRef(purl string) (string, *ocispecs.Platform, error) {
 		return "", nil, err
 	}
 	if p.Type != "docker" {
-		return "", nil, errors.Errorf("invalid package type %q, expecting docker", p.Type)
+		return "", nil, fmt.Errorf("invalid package type %q, expecting docker", p.Type)
 	}
 	ref := p.Name
 	if p.Namespace != "" {
@@ -106,7 +106,7 @@ func PURLToRef(purl string) (string, *ocispecs.Platform, error) {
 		if q.Key == "digest" {
 			if dgstVersion != "" {
 				if dgstVersion != q.Value {
-					return "", nil, errors.Errorf("digest %q does not match version %q", q.Value, dgstVersion)
+					return "", nil, fmt.Errorf("digest %q does not match version %q", q.Value, dgstVersion)
 				}
 				continue
 			}
@@ -125,7 +125,7 @@ func PURLToRef(purl string) (string, *ocispecs.Platform, error) {
 
 	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "invalid image url %q", purl)
+		return "", nil, fmt.Errorf("invalid image url %q: %w", purl, err)
 	}
 
 	return named.String(), platform, nil

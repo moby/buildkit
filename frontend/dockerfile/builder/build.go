@@ -2,6 +2,8 @@ package builder
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -25,7 +27,6 @@ import (
 	"github.com/moby/buildkit/solver/result"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -56,7 +57,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 			p := strings.SplitN(strings.TrimSpace(cmdline), " ", 2)
 			res, err := forwardGateway(ctx, c, p[0], cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
-				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
+				return nil, fmt.Errorf("failed with %s = %s: %w", keySyntaxArg, cmdline, err)
 			}
 			return res, err
 		} else if ref, cmdline, loc, ok := parser.DetectSyntax(src.Data); ok {
@@ -144,7 +145,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, nil, nil, errors.Wrapf(err, "failed to marshal LLB definition")
+			return nil, nil, nil, fmt.Errorf("failed to marshal LLB definition: %w", err)
 		}
 
 		r, err := c.Solve(ctx, client.SolveRequest{
@@ -178,11 +179,11 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		if err := rb.EachPlatform(ctx, func(ctx context.Context, id string, p ocispecs.Platform) error {
 			v, ok := scanTargets.Load(id)
 			if !ok {
-				return errors.Errorf("no scan targets for %s", id)
+				return fmt.Errorf("no scan targets for %s", id)
 			}
 			target, ok := v.(*dockerfile2llb.SBOMTargets)
 			if !ok {
-				return errors.Errorf("invalid scan targets for %T", v)
+				return fmt.Errorf("invalid scan targets for %T", v)
 			}
 
 			var opts []llb.ConstraintsOpt
@@ -233,7 +234,7 @@ func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline st
 	if (&gwcaps).Supports(gwpb.CapFrontendInputs) == nil {
 		inputs, err := c.Inputs(ctx)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get frontend inputs")
+			return nil, fmt.Errorf("failed to get frontend inputs: %w", err)
 		}
 
 		frontendInputs = make(map[string]*pb.Definition)

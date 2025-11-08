@@ -2,6 +2,8 @@ package sshprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -11,7 +13,7 @@ import (
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/sshforward"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -35,14 +37,14 @@ func (conf AgentConfig) toDialer() (dialerFn, error) {
 	if conf.Paths[0] == "" {
 		p, err := getFallbackAgentPath()
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid empty ssh agent socket")
+			return nil, fmt.Errorf("invalid empty ssh agent socket"+": %w", err)
 		}
 		conf.Paths[0] = p
 	}
 
 	dialer, err := toDialer(conf.Paths, conf.Raw)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to convert agent config for ID: %q", conf.ID)
+		return nil, fmt.Errorf("failed to convert agent config for ID: %q: %w", conf.ID, err)
 	}
 
 	return dialer, nil
@@ -56,12 +58,12 @@ func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
 			conf.ID = sshforward.DefaultID
 		}
 		if _, ok := m[conf.ID]; ok {
-			return nil, errors.Errorf("duplicate agent ID %q", conf.ID)
+			return nil, fmt.Errorf("duplicate agent ID %q", conf.ID)
 		}
 
 		dialer, err := conf.toDialer()
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to convert agent config %v", conf)
+			return nil, fmt.Errorf("failed to convert agent config %v: %w", conf, err)
 		}
 		m[conf.ID] = dialer
 	}
@@ -87,7 +89,7 @@ func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
 	if s.socket != nil {
 		conn, err := s.socket.Dial(ctx)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to connect to %s", s.socket)
+			return nil, fmt.Errorf("failed to connect to %s: %w", s.socket, err)
 		}
 
 		agentConn = conn
@@ -132,24 +134,24 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 
 		fi, err := os.Stat(p)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 		if fi.Mode()&os.ModeSocket > 0 {
 			socket = &socketDialer{path: p, dialer: unixSocketDialer}
 			continue
 		}
 		if raw {
-			return nil, errors.Errorf("raw mode only supported with socket paths")
+			return nil, errors.New("raw mode only supported with socket paths")
 		}
 
 		f, err := os.Open(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to open %s", p)
+			return nil, fmt.Errorf("failed to open %s: %w", p, err)
 		}
 		dt, err := io.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
 		_ = f.Close()
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read %s", p)
+			return nil, fmt.Errorf("failed to read %s: %w", p, err)
 		}
 
 		k, err := ssh.ParseRawPrivateKey(dt)
@@ -159,16 +161,16 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 			// If parsing the file fails, check to see if it kind of looks like socket-shaped.
 			if runtime.GOOS == "windows" && strings.Contains(string(dt), "socket") {
 				if keys {
-					return nil, errors.Errorf("invalid combination of keys and sockets")
+					return nil, errors.New("invalid combination of keys and sockets")
 				}
 				socket = &socketDialer{path: p, dialer: unixSocketDialer}
 				continue
 			}
 
-			return nil, errors.Wrapf(err, "failed to parse %s", p) // TODO: prompt passphrase?
+			return nil, fmt.Errorf("failed to parse %s: %w", p, err) // TODO: prompt passphrase?
 		}
 		if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
-			return nil, errors.Wrapf(err, "failed to add %s to agent", p)
+			return nil, fmt.Errorf("failed to add %s to agent: %w", p, err)
 		}
 
 		keys = true
@@ -176,7 +178,7 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 
 	if socket != nil {
 		if keys {
-			return nil, errors.Errorf("invalid combination of keys and sockets")
+			return nil, errors.New("invalid combination of keys and sockets")
 		}
 		if raw {
 			return func(ctx context.Context) (net.Conn, error) {
@@ -202,21 +204,21 @@ type readOnlyAgent struct {
 }
 
 func (a *readOnlyAgent) Add(_ agent.AddedKey) error {
-	return errors.Errorf("adding new keys not allowed by buildkit")
+	return errors.New("adding new keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Remove(_ ssh.PublicKey) error {
-	return errors.Errorf("removing keys not allowed by buildkit")
+	return errors.New("removing keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) RemoveAll() error {
-	return errors.Errorf("removing keys not allowed by buildkit")
+	return errors.New("removing keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Lock(_ []byte) error {
-	return errors.Errorf("locking agent not allowed by buildkit")
+	return errors.New("locking agent not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Extension(_ string, _ []byte) ([]byte, error) {
-	return nil, errors.Errorf("extensions not allowed by buildkit")
+	return nil, errors.New("extensions not allowed by buildkit")
 }

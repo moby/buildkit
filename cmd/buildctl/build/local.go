@@ -1,7 +1,7 @@
 package build
 
 import (
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 )
 
@@ -9,7 +9,7 @@ import (
 func ParseLocal(locals []string) (map[string]fsutil.FS, error) {
 	localDirs, err := attrMap(locals)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	mounts := make(map[string]fsutil.FS, len(localDirs))
@@ -17,7 +17,7 @@ func ParseLocal(locals []string) (map[string]fsutil.FS, error) {
 	for k, v := range localDirs {
 		mounts[k], err = fsutil.NewFS(v)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 	}
 

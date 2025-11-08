@@ -3,15 +3,14 @@
 package disk
 
 import (
+	"fmt"
 	"syscall"
-
-	"github.com/pkg/errors"
 )
 
 func GetDiskStat(root string) (DiskStat, error) {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(root, &st); err != nil {
-		return DiskStat{}, errors.Wrapf(err, "could not stat fs at %s", root)
+		return DiskStat{}, fmt.Errorf("could not stat fs at %s: %w", root, err)
 	}
 
 	return DiskStat{

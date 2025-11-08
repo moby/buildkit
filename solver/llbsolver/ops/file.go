@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"runtime"
@@ -23,7 +24,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -178,14 +179,14 @@ func (f *fileOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 	for _, inp := range inputs {
 		workerRef, ok := inp.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
+			return nil, fmt.Errorf("invalid reference for exec %T", inp.Sys())
 		}
 		inpRefs = append(inpRefs, workerRef.ImmutableRef)
 	}
 
 	backend, err := file.NewFileOpBackend(getReadUserFn(f.w))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	fs := NewFileOpSolver(f.w, backend, f.refManager)
@@ -283,7 +284,7 @@ func processOwner(chopt *pb.ChownOpt, selectors map[int][]opsutils.Selector) err
 	if chopt.User != nil {
 		if u, ok := chopt.User.User.(*pb.UserOpt_ByName); ok {
 			if u.ByName.Input < 0 {
-				return errors.Errorf("invalid user index %d", u.ByName.Input)
+				return fmt.Errorf("invalid user index %d", u.ByName.Input)
 			}
 			addSelector(selectors, int(u.ByName.Input), "/etc/passwd", false, true, nil, nil, nil)
 		}
@@ -291,7 +292,7 @@ func processOwner(chopt *pb.ChownOpt, selectors map[int][]opsutils.Selector) err
 	if chopt.Group != nil {
 		if u, ok := chopt.Group.User.(*pb.UserOpt_ByName); ok {
 			if u.ByName.Input < 0 {
-				return errors.Errorf("invalid user index %d", u.ByName.Input)
+				return fmt.Errorf("invalid user index %d", u.ByName.Input)
 			}
 			addSelector(selectors, int(u.ByName.Input), "/etc/group", false, true, nil, nil, nil)
 		}
@@ -329,10 +330,10 @@ type input struct {
 func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, actions []*pb.FileAction, g session.Group) ([]fileoptypes.Ref, error) {
 	for i, a := range actions {
 		if int(a.Input) < -1 || int(a.Input) >= len(inputs)+len(actions) {
-			return nil, errors.Errorf("invalid input index %d, %d provided", a.Input, len(inputs)+len(actions))
+			return nil, fmt.Errorf("invalid input index %d, %d provided", a.Input, len(inputs)+len(actions))
 		}
 		if int(a.SecondaryInput) < -1 || int(a.SecondaryInput) >= len(inputs)+len(actions) {
-			return nil, errors.Errorf("invalid secondary input index %d, %d provided", a.Input, len(inputs))
+			return nil, fmt.Errorf("invalid secondary input index %d, %d provided", a.Input, len(inputs))
 		}
 
 		inp, ok := s.ins[int(a.Input)]
@@ -349,7 +350,7 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 
 		if a.Output != -1 {
 			if _, ok := s.outs[int(a.Output)]; ok {
-				return nil, errors.Errorf("duplicate output %d", a.Output)
+				return nil, fmt.Errorf("duplicate output %d", a.Output)
 			}
 			idx := len(inputs) + i
 			s.outs[int(a.Output)] = idx
@@ -358,12 +359,12 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 	}
 
 	if len(s.outs) == 0 {
-		return nil, errors.Errorf("no outputs specified")
+		return nil, errors.New("no outputs specified")
 	}
 
 	for i := range len(s.outs) {
 		if _, ok := s.outs[i]; !ok {
-			return nil, errors.Errorf("missing output index %d", i)
+			return nil, fmt.Errorf("missing output index %d", i)
 		}
 	}
 
@@ -408,7 +409,7 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 
 func (s *FileOpSolver) validate(idx int, inputs []fileoptypes.Ref, actions []*pb.FileAction, loaded []int) error {
 	if slices.Contains(loaded, idx) {
-		return errors.Errorf("loop from index %d", idx)
+		return fmt.Errorf("loop from index %d", idx)
 	}
 	if idx < len(inputs) {
 		return nil
@@ -488,7 +489,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				if inp.ref != nil {
 					m, err := s.r.Prepare(ctx, inp.ref, false, g)
 					if err != nil {
-						return errors.WithStack(err)
+						return pkgerrors.WithStack(err)
 					}
 					inpMount = m
 					return nil
@@ -507,7 +508,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				if inp.ref != nil {
 					m, err := s.r.Prepare(ctx, inp.ref, true, g)
 					if err != nil {
-						return errors.WithStack(err)
+						return pkgerrors.WithStack(err)
 					}
 					inpMountSecondary = m
 					toRelease = append(toRelease, m)
@@ -526,7 +527,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			case *pb.UserOpt_ByName:
 				var m fileoptypes.Mount
 				if u.ByName.Input < 0 {
-					return nil, errors.Errorf("invalid user index: %d", u.ByName.Input)
+					return nil, fmt.Errorf("invalid user index: %d", u.ByName.Input)
 				}
 				inp, err := s.getInput(ctx, int(u.ByName.Input), inputs, actions, g)
 				if err != nil {
@@ -535,7 +536,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				if inp.ref != nil {
 					mm, err := s.r.Prepare(ctx, inp.ref, true, g)
 					if err != nil {
-						return nil, errors.WithStack(err)
+						return nil, pkgerrors.WithStack(err)
 					}
 					toRelease = append(toRelease, mm)
 					m = mm
@@ -586,7 +587,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 		if inpMount == nil {
 			m, err := s.r.Prepare(ctx, nil, false, g)
 			if err != nil {
-				return input{}, errors.WithStack(err)
+				return input{}, pkgerrors.WithStack(err)
 			}
 			inpMount = m
 		}
@@ -636,7 +637,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				return input{}, err
 			}
 		default:
-			return input{}, errors.Errorf("invalid action type %T", action.Action)
+			return input{}, fmt.Errorf("invalid action type %T", action.Action)
 		}
 
 		if inp.requiresCommit {
@@ -694,7 +695,7 @@ func isDefaultIndexes(idxs [][]int) bool {
 func unlazyResultFunc(ctx context.Context, res solver.Result, g session.Group) error {
 	ref, ok := res.Sys().(*worker.WorkerRef)
 	if !ok {
-		return errors.Errorf("invalid reference: %T", res)
+		return fmt.Errorf("invalid reference: %T", res)
 	}
 	if ref.ImmutableRef == nil {
 		return nil

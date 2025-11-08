@@ -1,10 +1,10 @@
 package attestations
 
 import (
+	"fmt"
 	"strings"
 
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -36,7 +36,7 @@ func Filter(v map[string]string) map[string]string {
 func Validate(values map[string]map[string]string) (map[string]map[string]string, error) {
 	for k := range values {
 		if k != KeyTypeSbom && k != KeyTypeProvenance {
-			return nil, errors.Errorf("unknown attestation type %q", k)
+			return nil, fmt.Errorf("unknown attestation type %q", k)
 		}
 	}
 	return values, nil
@@ -70,7 +70,7 @@ func Parse(values map[string]string) (map[string]map[string]string, error) {
 		}
 		fields, err := csvvalue.Fields(v, nil)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse %s", k)
+			return nil, fmt.Errorf("failed to parse %s: %w", k, err)
 		}
 		for _, field := range fields {
 			parts := strings.SplitN(field, "=", 2)

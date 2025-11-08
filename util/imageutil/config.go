@@ -3,6 +3,7 @@ package imageutil
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ import (
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type ContentCache interface {
@@ -69,13 +70,13 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	}
 	ref, err := reference.Parse(str)
 	if err != nil {
-		return "", nil, errors.WithStack(err)
+		return "", nil, pkgerrors.WithStack(err)
 	}
 
 	if leaseManager != nil {
 		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 		if err != nil {
-			return "", nil, errors.WithStack(err)
+			return "", nil, pkgerrors.WithStack(err)
 		}
 		ctx = ctx2
 		defer func() {
@@ -118,7 +119,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	if desc.MediaType == images.MediaTypeDockerSchema1Manifest {
 		errMsg := "support Docker Image manifest version 2, schema 1 has been removed. " +
 			"More information at https://docs.docker.com/go/deprecated-image-specs/"
-		return "", nil, errors.WithStack(cerrdefs.ErrConflict.WithMessage(errMsg))
+		return "", nil, pkgerrors.WithStack(cerrdefs.ErrConflict.WithMessage(errMsg))
 	}
 
 	children := childrenConfigHandler(cache, platform)
@@ -193,7 +194,7 @@ func childrenConfigHandler(provider content.Provider, platform platforms.MatchCo
 			// childless data types.
 			return nil, nil
 		default:
-			return nil, errors.Errorf("encountered unknown type %v; children may not be fetched", desc.MediaType)
+			return nil, fmt.Errorf("encountered unknown type %v; children may not be fetched", desc.MediaType)
 		}
 
 		return descs, nil
@@ -227,7 +228,7 @@ func DetectManifestBlobMediaType(dt []byte) (string, error) {
 		mt = images.MediaTypeDockerSchema2Manifest
 
 		if mfst.Manifests != nil {
-			return "", errors.Errorf("invalid ambiguous manifest and manifest list")
+			return "", errors.New("invalid ambiguous manifest and manifest list")
 		}
 	}
 
@@ -235,12 +236,12 @@ func DetectManifestBlobMediaType(dt []byte) (string, error) {
 		switch *mfst.MediaType {
 		case images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 			if mt != images.MediaTypeDockerSchema2ManifestList {
-				return "", errors.Errorf("mediaType in manifest does not match manifest contents")
+				return "", errors.New("mediaType in manifest does not match manifest contents")
 			}
 			mt = *mfst.MediaType
 		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest:
 			if mt != images.MediaTypeDockerSchema2Manifest {
-				return "", errors.Errorf("mediaType in manifest does not match manifest contents")
+				return "", errors.New("mediaType in manifest does not match manifest contents")
 			}
 			mt = *mfst.MediaType
 		}

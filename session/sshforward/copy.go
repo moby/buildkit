@@ -2,9 +2,10 @@ package sshforward
 
 import (
 	"context"
+	"errors"
 	"io"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,7 +35,7 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 					return nil
 				}
 				conn.Close()
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 			select {
 			case <-ctx.Done():
@@ -44,7 +45,7 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 			}
 			if _, err := conn.Write(p.Data); err != nil {
 				conn.Close()
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 			p.Data = p.Data[:0]
 		}
@@ -61,7 +62,7 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 				}
 				return nil
 			case err != nil:
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 			select {
 			case <-ctx.Done():
@@ -70,7 +71,7 @@ func Copy(ctx context.Context, conn io.ReadWriteCloser, stream Stream, closeStre
 			}
 			p := &BytesMessage{Data: buf[:n]}
 			if err := stream.SendMsg(p); err != nil {
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 		}
 	})

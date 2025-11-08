@@ -36,7 +36,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/winlayers"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -2116,7 +2116,7 @@ type gitRepoFixture struct {
 func checkSignFixtures() error {
 	fixturesPath, ok := os.LookupEnv(signFixturesPathEnv)
 	if !ok {
-		return errors.Errorf("environment variable %s must be set to run signing tests", signFixturesPathEnv)
+		return fmt.Errorf("environment variable %s must be set to run signing tests", signFixturesPathEnv)
 	}
 
 	for _, method := range []string{"gpg", "ssh"} {
@@ -2124,7 +2124,7 @@ func checkSignFixtures() error {
 			path := filepath.Join(fixturesPath, user+"."+method+".gitconfig")
 			_, err := os.Stat(path)
 			if err != nil {
-				return errors.Errorf("missing signing fixture at %s", path)
+				return fmt.Errorf("missing signing fixture at %s", path)
 			}
 		}
 	}
@@ -2322,7 +2322,7 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 	pr, ctx, cancel := progress.NewContext(ctx)
 	done := make(chan struct{})
 	t.Cleanup(func() {
-		cancel(errors.WithStack(context.Canceled))
+		cancel(pkgerrors.WithStack(context.Canceled))
 		<-done
 	})
 	go func() {

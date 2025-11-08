@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"strconv"
@@ -28,7 +29,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 )
@@ -88,7 +89,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.tar = b
 		default:
@@ -133,7 +134,7 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
-		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
+		return nil, nil, errors.New("docker exporter does not currently support exporting manifest lists")
 	}
 
 	src = src.Clone()
@@ -213,12 +214,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
 	case VariantDocker:
 	default:
-		return nil, nil, errors.Errorf("invalid variant %q", e.opt.Variant)
+		return nil, nil, fmt.Errorf("invalid variant %q", e.opt.Variant)
 	}
 
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
@@ -304,7 +305,7 @@ func normalizedNames(name string) ([]string, error) {
 	for i, name := range names {
 		parsed, err := reference.ParseNormalizedNamed(name)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse %s", name)
+			return nil, fmt.Errorf("failed to parse %s: %w", name, err)
 		}
 		tagNames[i] = reference.TagNameOnly(parsed).String()
 	}

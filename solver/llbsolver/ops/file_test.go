@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -568,7 +568,7 @@ type testFileRef struct {
 
 func (r *testFileRef) Release(context.Context) error {
 	if r.refcount == 0 {
-		return errors.Errorf("ref already released")
+		return errors.New("ref already released")
 	}
 	r.refcount--
 	return nil
@@ -611,7 +611,7 @@ func (tm *testMount) Release(ctx context.Context) error {
 		return tm.b.mounts[tm.initID].Release(ctx)
 	}
 	if tm.unmounted {
-		return errors.Errorf("already unmounted")
+		return errors.New("already unmounted")
 	}
 	tm.unmounted = true
 	if tm.active != nil {

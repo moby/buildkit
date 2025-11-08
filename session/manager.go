@@ -2,12 +2,14 @@ package session
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -55,7 +57,7 @@ func (sm *Manager) HandleHTTPRequest(ctx context.Context, w http.ResponseWriter,
 	sm.mu.Lock()
 	if _, ok := sm.sessions[id]; ok {
 		sm.mu.Unlock()
-		return errors.Errorf("session %s already exists", id)
+		return fmt.Errorf("session %s already exists", id)
 	}
 
 	if proto == "" {
@@ -65,13 +67,13 @@ func (sm *Manager) HandleHTTPRequest(ctx context.Context, w http.ResponseWriter,
 
 	if proto != "h2c" {
 		sm.mu.Unlock()
-		return errors.Errorf("protocol %s not supported", proto)
+		return fmt.Errorf("protocol %s not supported", proto)
 	}
 
 	conn, _, err := hijacker.Hijack()
 	if err != nil {
 		sm.mu.Unlock()
-		return errors.Wrap(err, "failed to hijack connection")
+		return fmt.Errorf("failed to hijack connection"+": %w", err)
 	}
 
 	resp := &http.Response{
@@ -99,7 +101,7 @@ func (sm *Manager) HandleConn(ctx context.Context, conn net.Conn, opts map[strin
 // caller needs to take lock, this function will release it
 func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[string][]string) error {
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	opts = canonicalHeaders(opts)
 
@@ -154,7 +156,7 @@ func (sm *Manager) Get(ctx context.Context, id string, noWait bool) (Caller, err
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	go func() {
 		<-ctx.Done()
@@ -170,7 +172,7 @@ func (sm *Manager) Get(ctx context.Context, id string, noWait bool) (Caller, err
 		select {
 		case <-ctx.Done():
 			sm.mu.Unlock()
-			return nil, errors.Wrapf(context.Cause(ctx), "no active session for %s", id)
+			return nil, fmt.Errorf("no active session for %s: %w", id, context.Cause(ctx))
 		default:
 		}
 		var ok bool

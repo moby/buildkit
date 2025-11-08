@@ -15,7 +15,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/units"
 )
 
@@ -149,7 +148,7 @@ func (sw *streamWriter) write(dt []byte) (int, error) {
 		case 2:
 			return os.Stderr.Write(dt)
 		default:
-			return 0, errors.Errorf("invalid stream %d", sw.stream)
+			return 0, fmt.Errorf("invalid stream %d", sw.stream)
 		}
 	}
 	return len(dt), nil

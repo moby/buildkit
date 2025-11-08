@@ -12,7 +12,6 @@ import (
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/solver/pb"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type contextKeyT string
@@ -82,7 +81,7 @@ func dirf(value string, replace bool, v ...any) StateOption {
 			if !path.IsAbs(value) {
 				prev, err := getDir(s)(ctx, c)
 				if err != nil {
-					return nil, errors.Wrap(err, "getting dir from state")
+					return nil, fmt.Errorf("getting dir from state"+": %w", err)
 				}
 				if prev == "" {
 					prev = "/"

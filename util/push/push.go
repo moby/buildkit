@@ -3,6 +3,7 @@ package push
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -27,7 +28,6 @@ import (
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type pusher struct {
@@ -55,7 +55,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		return err
 	}
 	if byDigest && !reference.IsNameOnly(parsed) {
-		return errors.Errorf("can't push tagged ref %s by digest", parsed.String())
+		return fmt.Errorf("can't push tagged ref %s by digest", parsed.String())
 	}
 
 	if byDigest {
@@ -64,7 +64,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		// add digest to ref, this is what containderd uses to choose root manifest from all manifests
 		r, err := reference.WithDigest(reference.TagNameOnly(parsed), dgst)
 		if err != nil {
-			return errors.Wrapf(err, "failed to combine ref %s with digest %s", ref, dgst)
+			return fmt.Errorf("failed to combine ref %s with digest %s: %w", ref, dgst, err)
 		}
 		ref = r.String()
 	}

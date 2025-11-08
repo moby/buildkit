@@ -17,7 +17,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 const buildkitdConfigFile = "buildkitd.toml"
@@ -117,7 +117,7 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 
 	cdiSpecDir, err := os.MkdirTemp("", "buildkit-integration-cdi")
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "cannot create cdi spec dir")
+		return nil, nil, fmt.Errorf("cannot create cdi spec dir"+": %w", err)
 	}
 	deferF.Append(func() error {
 		return os.RemoveAll(cdiSpecDir)
@@ -126,7 +126,7 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 
 	b, closer, err := w.New(ctx, cfg)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "creating worker")
+		return nil, nil, fmt.Errorf("creating worker"+": %w", err)
 	}
 	deferF.Append(closer)
 
@@ -137,7 +137,7 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 		if strings.Contains(t.Name(), "ExtraTimeout") {
 			timeout *= 3
 		}
-		timeoutContext, cancelTimeout := context.WithTimeoutCause(ctx, timeout, errors.WithStack(context.DeadlineExceeded))
+		timeoutContext, cancelTimeout := context.WithTimeoutCause(ctx, timeout, pkgerrors.WithStack(context.DeadlineExceeded))
 		defer cancelTimeout()
 		<-timeoutContext.Done()
 		select {
@@ -148,7 +148,7 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 			if addr := b.DebugAddress(); addr != "" {
 				printBuildkitdDebugLogs(t, addr)
 			}
-			cancel(errors.WithStack(context.Canceled))
+			cancel(pkgerrors.WithStack(context.Canceled))
 		}
 	}()
 
@@ -241,7 +241,7 @@ func HasFeatureCompat(t *testing.T, sb Sandbox, features map[string]struct{}, re
 		}
 	}
 	if len(ereasons) > 0 {
-		return errors.Errorf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
+		return fmt.Errorf("%s worker can not currently run this test due to missing features (%s)", sb.Name(), strings.Join(ereasons, ", "))
 	}
 	return nil
 }

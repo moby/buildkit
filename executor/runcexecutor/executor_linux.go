@@ -3,6 +3,8 @@ package runcexecutor
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,7 +19,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/sys/signal"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -46,7 +47,7 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 func (w *runcExecutor) exec(ctx context.Context, id string, specsProcess *specs.Process, process executor.ProcessInfo, started func()) error {
 	killer, err := newExecProcKiller(w.runc, id)
 	if err != nil {
-		return errors.Wrap(err, "failed to initialize process killer")
+		return fmt.Errorf("failed to initialize process killer"+": %w", err)
 	}
 	defer killer.Cleanup()
 

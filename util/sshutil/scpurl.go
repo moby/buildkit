@@ -1,11 +1,10 @@
 package sshutil
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
-
-	"github.com/pkg/errors"
 )
 
 var gitSSHRegex = regexp.MustCompile(`^([a-zA-Z0-9-_]+)@([a-zA-Z0-9-.]+):(.*?)(?:\?(.*?))?(?:#(.*))?$`)
@@ -35,7 +34,7 @@ func ParseSCPStyleURL(raw string) (*SCPStyleURL, error) {
 		var err error
 		vals, err = url.ParseQuery(rawQuery)
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid query in scp-style url")
+			return nil, fmt.Errorf("invalid query in scp-style url"+": %w", err)
 		}
 	}
 

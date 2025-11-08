@@ -5,6 +5,7 @@ package parser
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
-	"github.com/pkg/errors"
 )
 
 // Node is a structure used to represent a parse tree.
@@ -148,7 +148,7 @@ type directives struct {
 // allowed as token.
 func (d *directives) setEscapeToken(s string) error {
 	if s != "`" && s != `\` {
-		return errors.Errorf("invalid escape token '%s' does not match ` or \\", s)
+		return fmt.Errorf("invalid escape token '%s' does not match ` or \\", s)
 	}
 	d.escapeToken = rune(s[0])
 	// The escape token is used both to escape characters in a line and as line
@@ -440,7 +440,7 @@ func heredocFromMatch(match []string) (*Heredoc, error) {
 		return nil, err
 	}
 	if len(wordsRaw) != len(words) {
-		return nil, errors.Errorf("internal lexing of heredoc produced inconsistent results: %s", rest)
+		return nil, fmt.Errorf("internal lexing of heredoc produced inconsistent results: %s", rest)
 	}
 
 	word := words[0]
@@ -558,7 +558,7 @@ func scanLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 func handleScannerError(err error) error {
 	switch {
 	case errors.Is(err, bufio.ErrTooLong):
-		return errors.Errorf("dockerfile line greater than max allowed size of %d", bufio.MaxScanTokenSize-1)
+		return fmt.Errorf("dockerfile line greater than max allowed size of %d", bufio.MaxScanTokenSize-1)
 	default:
 		return err
 	}

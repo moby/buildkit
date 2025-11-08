@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,13 +15,12 @@ import (
 	"time"
 
 	"github.com/containerd/continuity/fs/fstest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 )
 
-var ErrRequirements = errors.Errorf("missing requirements")
+var ErrRequirements = errors.New("missing requirements")
 
 type TmpDirWithName struct {
 	fsutil.FS
@@ -126,7 +126,7 @@ func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 	i := 0
 	for {
 		if cmd != nil && cmd.ProcessState != nil {
-			return errors.Errorf("process exited: %s", cmd.String())
+			return fmt.Errorf("process exited: %s", cmd.String())
 		}
 
 		if conn, err := dialPipe(address); err == nil {
@@ -135,7 +135,7 @@ func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 		}
 		i++
 		if time.Duration(i)*step > d {
-			return errors.Errorf("failed dialing: %s", address)
+			return fmt.Errorf("failed dialing: %s", address)
 		}
 		time.Sleep(step)
 	}
@@ -145,7 +145,7 @@ func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 func LookupBinary(name string) error {
 	_, err := exec.LookPath(name)
 	if err != nil {
-		return errors.Wrapf(ErrRequirements, "failed to lookup %s binary", name)
+		return fmt.Errorf("failed to lookup %s binary: %w", name, ErrRequirements)
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -30,7 +32,6 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 	bolt "go.etcd.io/bbolt"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -111,7 +112,7 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 	// double check invalid configuration
 	ns2 := h.opt.LeaseManager.Namespace()
 	if ns != ns2 {
-		return nil, errors.Errorf("invalid configuration: content store namespace %q does not match lease manager namespace %q", ns, ns2)
+		return nil, fmt.Errorf("invalid configuration: content store namespace %q does not match lease manager namespace %q", ns, ns2)
 	}
 	h.hContentStore = h.opt.ContentStore.WithNamespace(ns + "_history")
 	h.hLeaseManager = h.opt.LeaseManager.WithNamespace(ns + "_history")
@@ -191,7 +192,7 @@ func (h *HistoryQueue) migrateV2() error {
 						recs2 = append(recs2, r)
 					}
 				} else {
-					return errors.Errorf("unknown resource type %q", r.Type)
+					return fmt.Errorf("unknown resource type %q", r.Type)
 				}
 			}
 
@@ -317,7 +318,7 @@ func (h *HistoryQueue) gc() error {
 		return b.ForEach(func(key, dt []byte) error {
 			var br controlapi.BuildHistoryRecord
 			if err := br.UnmarshalVT(dt); err != nil {
-				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
+				return fmt.Errorf("failed to unmarshal build record %s: %w", key, err)
 			}
 			if br.Pinned {
 				return nil
@@ -366,7 +367,7 @@ func (h *HistoryQueue) clearOrphans() error {
 		return b.ForEach(func(key, dt []byte) error {
 			var br controlapi.BuildHistoryRecord
 			if err := proto.Unmarshal(dt, &br); err != nil {
-				return errors.Wrapf(err, "failed to unmarshal build record %s", key)
+				return fmt.Errorf("failed to unmarshal build record %s: %w", key, err)
 			}
 			recs, err := h.hLeaseManager.ListResources(ctx, leases.Lease{ID: h.leaseID(string(key))})
 			if (err != nil && cerrdefs.IsNotFound(err)) || len(recs) == 0 {
@@ -408,7 +409,7 @@ func (h *HistoryQueue) delete(ref string) (bool, error) {
 	if err := h.opt.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
-			return errors.Wrapf(os.ErrNotExist, "failed to retrieve bucket %s", recordsBucket)
+			return fmt.Errorf("failed to retrieve bucket %s: %w", recordsBucket, os.ErrNotExist)
 		}
 		err1 := b.Delete([]byte(ref))
 		err2 := h.hLeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)})
@@ -453,7 +454,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 				return err
 			}
 			if !ok {
-				return errors.Errorf("unknown blob %s in history", desc.Digest)
+				return fmt.Errorf("unknown blob %s in history", desc.Digest)
 			}
 		}
 	}
@@ -471,15 +472,15 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
-			return errors.Wrapf(os.ErrNotExist, "failed to retrieve bucket %s", recordsBucket)
+			return fmt.Errorf("failed to retrieve bucket %s: %w", recordsBucket, os.ErrNotExist)
 		}
 		dt := b.Get([]byte(ref))
 		if dt == nil {
-			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
+			return fmt.Errorf("failed to retrieve ref %s: %w", ref, os.ErrNotExist)
 		}
 
 		if err := br.UnmarshalVT(dt); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
+			return fmt.Errorf("failed to unmarshal build record %s: %w", ref, err)
 		}
 		return nil
 	}); err != nil {
@@ -492,7 +493,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 	br.Generation++
 
 	if br.Ref != ref {
-		return errors.Errorf("invalid ref change")
+		return errors.New("invalid ref change")
 	}
 
 	if err := h.update(ctx, &br); err != nil {
@@ -511,15 +512,15 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
-			return errors.Wrapf(os.ErrNotExist, "failed to retrieve bucket %s", recordsBucket)
+			return fmt.Errorf("failed to retrieve bucket %s: %w", recordsBucket, os.ErrNotExist)
 		}
 		dt := b.Get([]byte(ref))
 		if dt == nil {
-			return errors.Wrapf(os.ErrNotExist, "failed to retrieve ref %s", ref)
+			return fmt.Errorf("failed to retrieve ref %s: %w", ref, os.ErrNotExist)
 		}
 
 		if err := br.UnmarshalVT(dt); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal build record %s", ref)
+			return fmt.Errorf("failed to unmarshal build record %s: %w", ref, err)
 		}
 		return nil
 	}); err != nil {
@@ -934,7 +935,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 	if req.Ref != "" {
 		if _, ok := h.deleted[req.Ref]; ok {
 			h.mu.Unlock()
-			return errors.Wrapf(os.ErrNotExist, "ref %s is deleted", req.Ref)
+			return fmt.Errorf("ref %s is deleted: %w", req.Ref, os.ErrNotExist)
 		}
 
 		h.refs[req.Ref]++
@@ -988,7 +989,7 @@ func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryR
 				}
 				var br controlapi.BuildHistoryRecord
 				if err := br.UnmarshalVT(dt); err != nil {
-					return errors.Wrapf(err, "failed to unmarshal build record %s", key)
+					return fmt.Errorf("failed to unmarshal build record %s: %w", key, err)
 				}
 				events = append(events, &controlapi.BuildHistoryEvent{
 					Record: &br,
@@ -1068,7 +1069,7 @@ func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, l
 
 	if limit != 0 {
 		if limit < 0 {
-			return nil, errors.Errorf("invalid limit %d", limit)
+			return nil, fmt.Errorf("invalid limit %d", limit)
 		}
 		slices.SortFunc(out, func(a, b *controlapi.BuildHistoryEvent) int {
 			if a.Record == nil || b.Record == nil {
@@ -1121,14 +1122,14 @@ func timeBasedFilter(f string) (func(*controlapi.BuildHistoryEvent) bool, error)
 		} else {
 			tm, err := time.Parse(time.RFC3339, value)
 			if err != nil {
-				return nil, errors.Errorf("invalid time %s", value)
+				return nil, fmt.Errorf("invalid time %s", value)
 			}
 			cmp = tm.Unix()
 		}
 	case "duration":
 		v, err := time.ParseDuration(value)
 		if err != nil {
-			return nil, errors.Errorf("invalid duration %s", value)
+			return nil, fmt.Errorf("invalid duration %s", value)
 		}
 		cmp = int64(v)
 	default:
@@ -1188,7 +1189,7 @@ func parseFilter(in string) ([]func(*controlapi.BuildHistoryEvent) bool, error) 
 
 	filter, err := filters.ParseAll(strings.Join(staticFilters, ","))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse history filters %v", in)
+		return nil, fmt.Errorf("failed to parse history filters %v: %w", in, err)
 	}
 
 	out = append(out, func(ev *controlapi.BuildHistoryEvent) bool {

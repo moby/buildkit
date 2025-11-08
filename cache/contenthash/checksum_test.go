@@ -2,6 +2,7 @@ package contenthash
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,7 +26,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -1688,7 +1689,7 @@ func emit(fn fsutil.HandleChangeFn, inp []*change) error {
 	for _, c := range inp {
 		stat, ok := c.fi.Sys().(*fstypes.Stat)
 		if !ok {
-			return errors.Errorf("invalid non-stat change %s", c.fi.Name())
+			return fmt.Errorf("invalid non-stat change %s", c.fi.Name())
 		}
 		fi := c.fi
 		if c.kind != fsutil.ChangeKindDelete {
@@ -1723,17 +1724,17 @@ func writeChanges(root string, inp []*change) error {
 			p := filepath.Join(root, c.path)
 			stat, ok := c.fi.Sys().(*fstypes.Stat)
 			if !ok {
-				return errors.Errorf("invalid non-stat change %s", p)
+				return fmt.Errorf("invalid non-stat change %s", p)
 			}
 			if c.fi.IsDir() {
 				// The snapshot root ('/') is always created with 0755.
 				// We use the same permission mode here.
 				if err := os.Mkdir(p, 0755); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 			} else if c.fi.Mode()&os.ModeSymlink != 0 {
 				if err := os.Symlink(stat.Linkname, p); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 			} else if len(stat.Linkname) > 0 {
 				link := filepath.Join(root, stat.Linkname)
@@ -1741,16 +1742,16 @@ func writeChanges(root string, inp []*change) error {
 					link = filepath.Join(filepath.Dir(p), stat.Linkname)
 				}
 				if err := os.Link(link, p); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 			} else {
 				f, err := os.Create(p)
 				if err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 				if len(c.data) > 0 {
 					if _, err := f.Write([]byte(c.data)); err != nil {
-						return errors.WithStack(err)
+						return pkgerrors.WithStack(err)
 					}
 				}
 				f.Close()

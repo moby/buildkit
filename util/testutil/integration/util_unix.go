@@ -3,9 +3,8 @@
 package integration
 
 import (
+	"fmt"
 	"net"
-
-	"github.com/pkg/errors"
 )
 
 var socketScheme = "unix://"
@@ -16,7 +15,7 @@ var socketScheme = "unix://"
 func dialPipe(address string) (net.Conn, error) {
 	addr, err := net.ResolveUnixAddr("unix", address)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed resolving unix addr: %s", address)
+		return nil, fmt.Errorf("failed resolving unix addr: %s: %w", address, err)
 	}
 	return net.DialUnix("unix", nil, addr)
 }

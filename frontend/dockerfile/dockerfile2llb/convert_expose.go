@@ -1,6 +1,7 @@
 package dockerfile2llb
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
-	"github.com/pkg/errors"
 )
 
 func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, opt *dispatchOpt) error {
@@ -89,7 +89,7 @@ func (ps *portSpecs) parsePort(rawPort string) (portProto []string, _ error) {
 	ip, hostPort, containerPort := ps.splitParts(rawPort)
 	proto, containerPort, err := ps.splitProtoPort(containerPort)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid port: %q", rawPort)
+		return nil, fmt.Errorf("invalid port: %q: %w", rawPort, err)
 	}
 	if ps.lint != nil {
 		if proto != strings.ToLower(proto) {
@@ -107,7 +107,7 @@ func (ps *portSpecs) parsePort(rawPort string) (portProto []string, _ error) {
 		// Strip [] from IPV6 addresses
 		rawIP, _, err := net.SplitHostPort(ip + ":")
 		if err != nil {
-			return nil, errors.Wrapf(err, "invalid IP address %v", ip)
+			return nil, fmt.Errorf("invalid IP address %v: %w", ip, err)
 		}
 		ip = rawIP
 	}
@@ -131,7 +131,7 @@ func (ps *portSpecs) parsePort(rawPort string) (portProto []string, _ error) {
 			// In this case, use the host port range as the dynamic
 			// host port range to allocate into.
 			if endPort != startPort {
-				return nil, errors.Errorf("invalid ranges specified for container and host Ports: %s and %s", containerPort, hostPort)
+				return nil, fmt.Errorf("invalid ranges specified for container and host Ports: %s and %s", containerPort, hostPort)
 			}
 		}
 	}
@@ -154,7 +154,7 @@ func (ps *portSpecs) parsePortRange(ports string) (startPort, endPort int, _ err
 
 	startPort, err := ps.parsePortNumber(start)
 	if err != nil {
-		return 0, 0, errors.Wrapf(err, "invalid start port '%s'", start)
+		return 0, 0, fmt.Errorf("invalid start port '%s': %w", start, err)
 	}
 	if !ok || start == end {
 		return startPort, startPort, nil
@@ -162,7 +162,7 @@ func (ps *portSpecs) parsePortRange(ports string) (startPort, endPort int, _ err
 
 	endPort, err = ps.parsePortNumber(end)
 	if err != nil {
-		return 0, 0, errors.Wrapf(err, "invalid end port '%s'", end)
+		return 0, 0, fmt.Errorf("invalid end port '%s': %w", end, err)
 	}
 	if endPort < startPort {
 		return 0, 0, errors.New("invalid port range: " + ports)

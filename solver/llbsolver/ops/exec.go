@@ -296,7 +296,7 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 			continue
 		}
 		if int(m.Input) >= len(deps) {
-			return nil, errors.Errorf("invalid mountinput %v", m)
+			return nil, fmt.Errorf("invalid mountinput %v", m)
 		}
 
 		sel := path.Join("/", m.Selector)
@@ -338,7 +338,7 @@ func (e *ExecOp) getMountDeps() ([]dep, error) {
 		case pb.MountContentCache_ON:
 			if !contentBasedCache {
 				// If we can't enable cache for safety, then force-enabling it is invalid
-				return nil, errors.Errorf("invalid mount cache content %v", m)
+				return nil, fmt.Errorf("invalid mount cache content %v", m)
 			}
 		case pb.MountContentCache_DEFAULT:
 			if m.Dest == pb.RootMount {
@@ -370,7 +370,7 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		var ok bool
 		refs[i], ok = inp.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
+			return nil, fmt.Errorf("invalid reference for exec %T", inp.Sys())
 		}
 	}
 
@@ -561,7 +561,7 @@ func (e *ExecOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 	for _, sopt := range secretenv {
 		id := sopt.ID
 		if id == "" {
-			return nil, errors.Errorf("secret ID missing for %q environment variable", sopt.Name)
+			return nil, fmt.Errorf("secret ID missing for %q environment variable", sopt.Name)
 		}
 		var dt []byte
 		var err error

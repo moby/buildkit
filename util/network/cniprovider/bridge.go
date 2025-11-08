@@ -12,7 +12,6 @@ import (
 	cni "github.com/containerd/go-cni"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
-	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
 
@@ -73,7 +72,7 @@ func NewBridge(opt Opt) (network.Provider, error) {
 	if !setup {
 		fn := filepath.Join(opt.BinaryDir, "bridge")
 		if _, err := os.Stat(fn); err != nil {
-			return nil, errors.Wrapf(err, "failed to find CNI bridge %q or buildkit-cni-bridge", fn)
+			return nil, fmt.Errorf("failed to find CNI bridge %q or buildkit-cni-bridge: %w", fn, err)
 		}
 
 		cniOptions = append(cniOptions, cni.WithPluginDir([]string{opt.BinaryDir}))
@@ -163,11 +162,11 @@ func NewBridge(opt Opt) (network.Provider, error) {
 func bridgeByName(name string) (*netlink.Bridge, error) {
 	l, err := netlink.LinkByName(name)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not lookup %q", name)
+		return nil, fmt.Errorf("could not lookup %q: %w", name, err)
 	}
 	br, ok := l.(*netlink.Bridge)
 	if !ok {
-		return nil, errors.Errorf("%q already exists but is not a bridge", name)
+		return nil, fmt.Errorf("%q already exists but is not a bridge", name)
 	}
 	return br, nil
 }

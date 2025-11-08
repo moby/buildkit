@@ -197,7 +197,7 @@ func newRuleLinter(dt []byte, opt *ConvertOpt) (*linter.Linter, error) {
 		lintOptionStr, _, _, _ := parser.ParseDirective("check", dt)
 		lintConfig, err = linter.ParseLintOptions(lintOptionStr)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse check options")
+			return nil, fmt.Errorf("failed to parse check options: %w", err)
 		}
 	}
 	lintConfig.Warn = opt.Warn
@@ -206,11 +206,11 @@ func newRuleLinter(dt []byte, opt *ConvertOpt) (*linter.Linter, error) {
 
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
 	if len(dt) == 0 {
-		return nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, errors.New("the Dockerfile cannot be empty")
 	}
 
 	if opt.Client != nil && opt.MainContext != nil {
-		return nil, errors.Errorf("Client and MainContext cannot both be provided")
+		return nil, errors.New("Client and MainContext cannot both be provided")
 	}
 
 	namedContext := func(name string, copt dockerui.ContextOpt) (*dockerui.NamedContext, error) {
@@ -308,7 +308,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			return nil, parser.WithLocation(err, st.Location)
 		}
 		if nameMatch.Result == "" {
-			return nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return nil, parser.WithLocation(fmt.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = nameMatch.Result
 
@@ -331,11 +331,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			reportConstPlatformDisallowed(st.Name, platMatch, st.Location, lint)
 
 			if err != nil {
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
+				return nil, parser.WithLocation(fmt.Errorf("failed to process arguments for platform %s: %w", platMatch.Result, err), st.Location)
 			}
 
 			if platMatch.Result == "" {
-				err := errors.Errorf("empty platform value from expression %s", v)
+				err := fmt.Errorf("empty platform value from expression %s", v)
 				err = parser.WithLocation(err, st.Location)
 				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
 				return nil, err
@@ -345,7 +345,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			if err != nil {
 				err = parser.WithLocation(err, st.Location)
 				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				return nil, parser.WithLocation(fmt.Errorf("failed to parse platform %s: %w", v, err), st.Location)
 			}
 
 			for k := range platMatch.Matched {
@@ -407,7 +407,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		var ok bool
 		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
-			return nil, suggest.WrapError(errors.Errorf("target stage %q could not be found", opt.Target), opt.Target, allDispatchStates.names(), true)
+			return nil, suggest.WrapError(fmt.Errorf("target stage %q could not be found", opt.Target), opt.Target, allDispatchStates.names(), true)
 		}
 	}
 
@@ -473,7 +473,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 						origName := d.stage.BaseName
 						ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 						if err != nil {
-							return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
+							return fmt.Errorf("failed to parse stage name %q: %w", d.stage.BaseName, err)
 						}
 						platform := d.platform
 						if platform == nil {
@@ -554,12 +554,12 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 							if ref.String() != mutRef {
 								ref, err = reference.ParseNormalizedNamed(mutRef)
 								if err != nil {
-									return errors.Wrapf(err, "failed to parse ref %q", mutRef)
+									return fmt.Errorf("failed to parse ref %q: %w", mutRef, err)
 								}
 							}
 							var img dockerspec.DockerOCIImage
 							if err := json.Unmarshal(dt, &img); err != nil {
-								return errors.Wrap(err, "failed to parse image config")
+								return fmt.Errorf("failed to parse image config"+": %w", err)
 							}
 							d.baseImg = cloneX(&img) // immutable
 							img.Created = nil
@@ -833,7 +833,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates, shlex
 				return command{}, err
 			}
 			if res.Result != c.From {
-				return command{}, errors.Errorf("variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
+				return command{}, errors.New("variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
 			}
 			var stn *dispatchState
 			index, err := strconv.Atoi(c.From)
@@ -1004,7 +1004,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		if len(cmd.sources) != 0 {
 			src := cmd.sources[0]
 			if !src.dispatched {
-				return errors.Errorf("cannot copy from stage %q, it needs to be defined before current stage %q", c.From, d.stageName)
+				return fmt.Errorf("cannot copy from stage %q, it needs to be defined before current stage %q", c.From, d.stageName)
 			}
 			l = src.state
 		} else {
@@ -1146,7 +1146,7 @@ func (dss *dispatchStates) findStateByName(name string) (*dispatchState, bool) {
 
 func (dss *dispatchStates) findStateByIndex(index int) (*dispatchState, error) {
 	if index < 0 || index >= len(dss.states) {
-		return nil, errors.Errorf("invalid stage index %d", index)
+		return nil, fmt.Errorf("invalid stage index %d", index)
 	}
 
 	return dss.states[index], nil
@@ -1235,7 +1235,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	args := c.CmdLine
 	if len(c.Files) > 0 {
 		if len(args) != 1 || !c.PrependShell {
-			return errors.Errorf("parsing produced an invalid run command: %v", args)
+			return fmt.Errorf("parsing produced an invalid run command: %v", args)
 		}
 
 		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
@@ -1394,7 +1394,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 
 	wd, err := system.NormalizeWorkdir(d.image.Config.WorkingDir, c.Path, d.platform.OS)
 	if err != nil {
-		return errors.Wrap(err, "normalizing workdir")
+		return fmt.Errorf("normalizing workdir"+": %w", err)
 	}
 
 	// NormalizeWorkdir returns paths with platform specific separators. For Windows
@@ -1456,7 +1456,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	if cfg.chmod != "" {
 		chopt = &llb.ChmodOpt{}
 		p, err := strconv.ParseUint(cfg.chmod, 8, 32)
-		nonOctalErr := errors.Errorf("invalid chmod parameter: '%v'. it should be octal string and between 0 and 07777", cfg.chmod)
+		nonOctalErr := fmt.Errorf("invalid chmod parameter: '%v'. it should be octal string and between 0 and 07777", cfg.chmod)
 		if err == nil {
 			if p > 0o7777 {
 				return nonOctalErr
@@ -1542,7 +1542,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			}
 			if cfg.checksum != "" && gitRef.Checksum != "" {
 				if cfg.checksum != gitRef.Checksum {
-					return errors.Errorf("checksum mismatch %q != %q", cfg.checksum, gitRef.Checksum)
+					return fmt.Errorf("checksum mismatch %q != %q", cfg.checksum, gitRef.Checksum)
 				}
 			}
 			if gitRef.Checksum != "" {
@@ -1628,7 +1628,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 				pattern, err = system.NormalizePath("/", pattern, d.platform.OS, false)
 				if err != nil {
-					return errors.Wrap(err, "removing drive letter")
+					return fmt.Errorf("removing drive letter"+": %w", err)
 				}
 
 				patterns = []string{strings.TrimPrefix(pattern, "/")}
@@ -1642,13 +1642,13 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 			src, err = system.NormalizePath("/", src, d.platform.OS, false)
 			if err != nil {
-				return errors.Wrap(err, "removing drive letter")
+				return fmt.Errorf("removing drive letter"+": %w", err)
 			}
 
 			for i, requiredPath := range requiredPaths {
 				p, err := system.NormalizePath("/", requiredPath, d.platform.OS, false)
 				if err != nil {
-					return errors.Wrap(err, "removing drive letter")
+					return fmt.Errorf("removing drive letter"+": %w", err)
 				}
 				requiredPaths[i] = p
 			}
@@ -1684,7 +1684,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		data := src.Data
 		f, err := system.CheckSystemDriveAndRemoveDriveLetter(src.Path, d.platform.OS, false)
 		if err != nil {
-			return errors.Wrap(err, "removing drive letter")
+			return fmt.Errorf("removing drive letter"+": %w", err)
 		}
 		st := llb.Scratch().File(
 			llb.Mkfile(f, 0644, []byte(data)),
@@ -1926,7 +1926,7 @@ func pathRelativeToWorkingDir(s llb.State, p string, platform ocispecs.Platform)
 
 	p, err = system.CheckSystemDriveAndRemoveDriveLetter(p, platform.OS, true)
 	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
+		return "", fmt.Errorf("removing drive letter"+": %w", err)
 	}
 
 	if system.IsAbs(p, platform.OS) {
@@ -2086,7 +2086,7 @@ func validateCircularDependency(states []*dispatchState) error {
 	}
 	for _, state := range states {
 		if cmds := visit(state, nil); cmds != nil {
-			err := errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+			err := fmt.Errorf("circular dependency detected on stage: %s", state.stageName)
 			for _, c := range cmds {
 				err = parser.WithLocation(err, c.Location())
 			}

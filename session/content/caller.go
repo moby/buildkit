@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -33,52 +33,52 @@ func (cs *callerContentStore) choose(ctx context.Context) context.Context {
 func (cs *callerContentStore) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
 	ctx = cs.choose(ctx)
 	info, err := cs.store.Info(ctx, dgst)
-	return info, errors.WithStack(err)
+	return info, pkgerrors.WithStack(err)
 }
 
 func (cs *callerContentStore) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
 	ctx = cs.choose(ctx)
 	info, err := cs.store.Update(ctx, info, fieldpaths...)
-	return info, errors.WithStack(err)
+	return info, pkgerrors.WithStack(err)
 }
 
 func (cs *callerContentStore) Walk(ctx context.Context, fn content.WalkFunc, fs ...string) error {
 	ctx = cs.choose(ctx)
-	return errors.WithStack(cs.store.Walk(ctx, fn, fs...))
+	return pkgerrors.WithStack(cs.store.Walk(ctx, fn, fs...))
 }
 
 func (cs *callerContentStore) Delete(ctx context.Context, dgst digest.Digest) error {
 	ctx = cs.choose(ctx)
-	return errors.WithStack(cs.store.Delete(ctx, dgst))
+	return pkgerrors.WithStack(cs.store.Delete(ctx, dgst))
 }
 
 func (cs *callerContentStore) ListStatuses(ctx context.Context, fs ...string) ([]content.Status, error) {
 	ctx = cs.choose(ctx)
 	resp, err := cs.store.ListStatuses(ctx, fs...)
-	return resp, errors.WithStack(err)
+	return resp, pkgerrors.WithStack(err)
 }
 
 func (cs *callerContentStore) Status(ctx context.Context, ref string) (content.Status, error) {
 	ctx = cs.choose(ctx)
 	st, err := cs.store.Status(ctx, ref)
-	return st, errors.WithStack(err)
+	return st, pkgerrors.WithStack(err)
 }
 
 func (cs *callerContentStore) Abort(ctx context.Context, ref string) error {
 	ctx = cs.choose(ctx)
-	return errors.WithStack(cs.store.Abort(ctx, ref))
+	return pkgerrors.WithStack(cs.store.Abort(ctx, ref))
 }
 
 func (cs *callerContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
 	ctx = cs.choose(ctx)
 	w, err := cs.store.Writer(ctx, opts...)
-	return w, errors.WithStack(err)
+	return w, pkgerrors.WithStack(err)
 }
 
 func (cs *callerContentStore) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	ctx = cs.choose(ctx)
 	ra, err := cs.store.ReaderAt(ctx, desc)
-	return ra, errors.WithStack(err)
+	return ra, pkgerrors.WithStack(err)
 }
 
 // NewCallerStore creates content.Store from session.Caller with specified storeID

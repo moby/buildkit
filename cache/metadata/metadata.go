@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/db/boltutil"
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -20,7 +22,7 @@ const (
 	externalBucket = "_external"
 )
 
-var errNotFound = errors.Errorf("not found")
+var errNotFound = errors.New("not found")
 
 type Store struct {
 	db db.DB
@@ -29,7 +31,7 @@ type Store struct {
 func NewStore(dbPath string) (*Store, error) {
 	db, err := boltutil.Open(dbPath, 0600, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open database file %s", dbPath)
+		return nil, fmt.Errorf("failed to open database file %s: %w", dbPath, err)
 	}
 	return &Store{db: db}, nil
 }
@@ -58,7 +60,7 @@ func (s *Store) All() ([]*StorageItem, error) {
 			return nil
 		})
 	})
-	return out, errors.WithStack(err)
+	return out, pkgerrors.WithStack(err)
 }
 
 func (s *Store) Probe(index string) (bool, error) {
@@ -80,7 +82,7 @@ func (s *Store) Probe(index string) (bool, error) {
 		}
 		return nil
 	})
-	return exists, errors.WithStack(err)
+	return exists, pkgerrors.WithStack(err)
 }
 
 func (s *Store) Search(ctx context.Context, index string, prefix bool) ([]*StorageItem, error) {
@@ -123,25 +125,25 @@ func (s *Store) Search(ctx context.Context, index string, prefix bool) ([]*Stora
 		}
 		return nil
 	})
-	return out, errors.WithStack(err)
+	return out, pkgerrors.WithStack(err)
 }
 
 func (s *Store) View(id string, fn func(b *bolt.Bucket) error) error {
 	return s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(mainBucket))
 		if b == nil {
-			return errors.WithStack(errNotFound)
+			return pkgerrors.WithStack(errNotFound)
 		}
 		b = b.Bucket([]byte(id))
 		if b == nil {
-			return errors.WithStack(errNotFound)
+			return pkgerrors.WithStack(errNotFound)
 		}
 		return fn(b)
 	})
 }
 
 func (s *Store) Clear(id string) error {
-	return errors.WithStack(s.db.Update(func(tx *bolt.Tx) error {
+	return pkgerrors.WithStack(s.db.Update(func(tx *bolt.Tx) error {
 		external := tx.Bucket([]byte(externalBucket))
 		if external != nil {
 			external.DeleteBucket([]byte(id))
@@ -173,14 +175,14 @@ func (s *Store) Clear(id string) error {
 }
 
 func (s *Store) Update(id string, fn func(b *bolt.Bucket) error) error {
-	return errors.WithStack(s.db.Update(func(tx *bolt.Tx) error {
+	return pkgerrors.WithStack(s.db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(mainBucket))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		b, err = b.CreateBucketIfNotExists([]byte(id))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return fn(b)
 	}))
@@ -216,7 +218,7 @@ func (s *Store) Get(id string) (*StorageItem, bool) {
 }
 
 func (s *Store) Close() error {
-	return errors.WithStack(s.db.Close())
+	return pkgerrors.WithStack(s.db.Close())
 }
 
 type StorageItem struct {
@@ -239,13 +241,13 @@ func newStorageItem(id string, b *bolt.Bucket, s *Store) (*StorageItem, error) {
 			var sv Value
 			if len(v) > 0 {
 				if err := json.Unmarshal(v, &sv); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 				si.values[string(k)] = &sv
 			}
 			return nil
 		}); err != nil {
-			return si, errors.WithStack(err)
+			return si, pkgerrors.WithStack(err)
 		}
 	}
 	return si, nil
@@ -289,15 +291,15 @@ func (s *StorageItem) GetExternal(k string) ([]byte, error) {
 	err := s.storage.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(externalBucket))
 		if b == nil {
-			return errors.WithStack(errNotFound)
+			return pkgerrors.WithStack(errNotFound)
 		}
 		b = b.Bucket([]byte(s.id))
 		if b == nil {
-			return errors.WithStack(errNotFound)
+			return pkgerrors.WithStack(errNotFound)
 		}
 		dt2 := b.Get([]byte(k))
 		if dt2 == nil {
-			return errors.WithStack(errNotFound)
+			return pkgerrors.WithStack(errNotFound)
 		}
 		// data needs to be copied as boltdb can reuse the buffer after View returns
 		dt = make([]byte, len(dt2))
@@ -305,20 +307,20 @@ func (s *StorageItem) GetExternal(k string) ([]byte, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	return dt, nil
 }
 
 func (s *StorageItem) SetExternal(k string, dt []byte) error {
-	return errors.WithStack(s.storage.db.Update(func(tx *bolt.Tx) error {
+	return pkgerrors.WithStack(s.storage.db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(externalBucket))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		b, err = b.CreateBucketIfNotExists([]byte(s.id))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return b.Put([]byte(k), dt)
 	}))
@@ -336,10 +338,10 @@ func (s *StorageItem) Commit() error {
 	if len(s.queue) == 0 {
 		return nil
 	}
-	return errors.WithStack(s.Update(func(b *bolt.Bucket) error {
+	return pkgerrors.WithStack(s.Update(func(b *bolt.Bucket) error {
 		for _, fn := range s.queue {
 			if err := fn(b); err != nil {
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 		}
 		s.queue = s.queue[:0]
@@ -373,7 +375,7 @@ func (s *StorageItem) ClearIndex(tx *bolt.Tx, index string) error {
 func (s *StorageItem) clearIndex(tx *bolt.Tx, index string) error {
 	b, err := tx.CreateBucketIfNotExists([]byte(indexBucket))
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	return b.Delete([]byte(indexKey(index, s.ID())))
 }
@@ -393,18 +395,18 @@ func (s *StorageItem) setValue(b *bolt.Bucket, key string, v *Value) error {
 	}
 	dt, err := json.Marshal(v)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	if err := b.Put([]byte(key), dt); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	if v.Index != "" {
 		b, err := b.Tx().CreateBucketIfNotExists([]byte(indexBucket))
 		if err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if err := b.Put([]byte(indexKey(v.Index, s.ID())), []byte{}); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	}
 	s.values[key] = v
@@ -435,13 +437,13 @@ type Value struct {
 func NewValue(v any) (*Value, error) {
 	dt, err := json.Marshal(v)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 	return &Value{Value: json.RawMessage(dt)}, nil
 }
 
 func (v *Value) Unmarshal(target any) error {
-	return errors.WithStack(json.Unmarshal(v.Value, target))
+	return pkgerrors.WithStack(json.Unmarshal(v.Value, target))
 }
 
 func indexKey(index, target string) string {

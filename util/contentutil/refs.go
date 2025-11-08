@@ -2,6 +2,7 @@ package contentutil
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type ResolveOpt struct {
@@ -99,7 +99,7 @@ func (w *ingester) Writer(ctx context.Context, opts ...content.WriterOpt) (conte
 		}
 	}
 	if wo.Ref == "" {
-		return nil, errors.Wrap(cerrdefs.ErrInvalidArgument, "ref must not be empty")
+		return nil, fmt.Errorf("ref must not be empty"+": %w", cerrdefs.ErrInvalidArgument)
 	}
 	w.locker.Lock(wo.Ref)
 	var once sync.Once

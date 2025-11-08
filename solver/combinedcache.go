@@ -2,12 +2,12 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
 
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -101,7 +101,7 @@ func (cm *combinedCacheManager) Load(ctx context.Context, rec *CacheRecord) (res
 		}
 	}
 	if len(results) == 0 { // TODO: handle gracefully
-		return nil, errors.Errorf("failed to load deleted cache")
+		return nil, errors.New("failed to load deleted cache")
 	}
 	return results[0].Result, nil
 }
@@ -117,7 +117,7 @@ func (cm *combinedCacheManager) Records(ctx context.Context, ck *CacheKey) ([]*C
 	ck.mu.RLock()
 	if len(ck.ids) == 0 {
 		ck.mu.RUnlock()
-		return nil, errors.Errorf("no results")
+		return nil, errors.New("no results")
 	}
 
 	cms := make([]*cacheManager, 0, len(ck.ids))

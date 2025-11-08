@@ -3,13 +3,14 @@ package filesync
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	io "io"
 	"os"
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
-
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"google.golang.org/grpc"
@@ -33,7 +34,7 @@ type bufferedWriteCloser struct {
 
 func (bwc *bufferedWriteCloser) Close() error {
 	if err := bwc.Flush(); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	return bwc.Closer.Close()
 }
@@ -62,23 +63,23 @@ func (wc *streamWriterCloser) Write(dt []byte) (int, error) {
 	if err := wc.SendMsg(&BytesMessage{Data: dt}); err != nil {
 		// SendMsg return EOF on remote errors
 		if errors.Is(err, io.EOF) {
-			if err := errors.WithStack(wc.RecvMsg(struct{}{})); err != nil {
+			if err := pkgerrors.WithStack(wc.RecvMsg(struct{}{})); err != nil {
 				return 0, err
 			}
 		}
-		return 0, errors.WithStack(err)
+		return 0, pkgerrors.WithStack(err)
 	}
 	return len(dt), nil
 }
 
 func (wc *streamWriterCloser) Close() error {
 	if err := wc.CloseSend(); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	// block until receiver is done
 	var bm BytesMessage
 	if err := wc.RecvMsg(&bm); !errors.Is(err, io.EOF) {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	return nil
 }
@@ -101,7 +102,7 @@ func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress p
 			ds.CloseSend()
 		}
 	}()
-	return errors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
+	return pkgerrors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
 		NotifyHashed:  cf,
 		ContentHasher: ch,
 		ProgressCb:    progress,
@@ -113,9 +114,9 @@ func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress p
 
 func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
 	if err := os.MkdirAll(dest, 0700); err != nil {
-		return errors.Wrapf(err, "failed to create synctarget dest dir %s", dest)
+		return fmt.Errorf("failed to create synctarget dest dir %s: %w", dest, err)
 	}
-	return errors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
+	return pkgerrors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
 		Merge: true,
 		Filter: func() func(string, *fstypes.Stat) bool {
 			uid := os.Getuid()
@@ -137,10 +138,10 @@ func writeTargetFile(ds grpc.ServerStream, wc io.WriteCloser) error {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if _, err := wc.Write(bm.Data); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	}
 }

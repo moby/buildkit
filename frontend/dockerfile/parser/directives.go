@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -66,7 +64,7 @@ func (d *DirectiveParser) ParseLine(line []byte) (*Directive, error) {
 		d.seen = map[string]struct{}{}
 	}
 	if _, ok := d.seen[k]; ok {
-		return nil, errors.Errorf("only one %s parser directive can be used", k)
+		return nil, fmt.Errorf("only one %s parser directive can be used", k)
 	}
 	d.seen[k] = struct{}{}
 

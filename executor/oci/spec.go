@@ -2,6 +2,8 @@ package oci
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,7 +27,7 @@ import (
 	"github.com/moby/sys/userns"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 // ProcessMode configures PID namespaces
@@ -141,7 +143,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
-		return nil, nil, errors.WithStack(err)
+		return nil, nil, pkgerrors.WithStack(err)
 	}
 
 	if cgroupV2NamespaceSupported() {
@@ -157,7 +159,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	// set the networking information on the spec
 	if err := namespace.Set(s); err != nil {
-		return nil, nil, errors.WithStack(err)
+		return nil, nil, pkgerrors.WithStack(err)
 	}
 
 	sm := &submounts{}
@@ -175,17 +177,17 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	for _, m := range mounts {
 		if m.Src == nil {
-			return nil, nil, errors.Errorf("mount %s has no source", m.Dest)
+			return nil, nil, fmt.Errorf("mount %s has no source", m.Dest)
 		}
 		mountable, err := m.Src.Mount(ctx, m.Readonly)
 		if err != nil {
 			releaseAll()
-			return nil, nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
+			return nil, nil, fmt.Errorf("failed to mount %s: %w", m.Dest, err)
 		}
 		mounts, release, err := mountable.Mount()
 		if err != nil {
 			releaseAll()
-			return nil, nil, errors.WithStack(err)
+			return nil, nil, pkgerrors.WithStack(err)
 		}
 		releasers = append(releasers, release)
 		for _, mount := range mounts {
@@ -261,7 +263,7 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 	}
 	h, err := hashstructure.Hash(m, hashstructure.FormatV2, nil)
 	if err != nil {
-		return mount.Mount{}, errors.WithStack(err)
+		return mount.Mount{}, pkgerrors.WithStack(err)
 	}
 	if mr, ok := s.m[h]; ok {
 		if sm, ok := mr.subRefs[subPath]; ok {

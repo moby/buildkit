@@ -2,13 +2,12 @@ package grpcerrors_test
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
@@ -103,8 +102,8 @@ func TestFromGRPCPreserveTypes(t *testing.T) {
 	decodedErr := grpcerrors.FromGRPC(status.FromProto(pb).Err())
 	// Create a typed error (errdefs.Solve) and wrap a base error with it
 	typed := &errdefs.Solve{InputIDs: []string{"typed-input"}}
-	typedErr := typed.WrapError(stderrors.New("typed-base"))
-	joined := stderrors.Join(decodedErr, typedErr)
+	typedErr := typed.WrapError(errors.New("typed-base"))
+	joined := errors.Join(decodedErr, typedErr)
 
 	// Re-encode and decode the joined error and ensure the unknown detail is preserved
 	reEncoded := grpcerrors.ToGRPC(context.TODO(), joined)
@@ -138,13 +137,13 @@ func TestCode(t *testing.T) {
 
 	t.Run("unwraps single wrapped error", func(t *testing.T) {
 		inner := testCodeError{c: codes.FailedPrecondition}
-		outer := errors.Wrap(inner, "wrap")
+		outer := fmt.Errorf("wrap"+": %w", inner)
 		c := grpcerrors.Code(outer)
 		assert.Equal(t, codes.FailedPrecondition, c)
 	})
 
 	t.Run("chooses first non-OK from joined errors", func(t *testing.T) {
-		j := stderrors.Join(testCodeError{c: codes.OK}, testCodeError{c: codes.InvalidArgument}, testCodeError{c: codes.FailedPrecondition})
+		j := errors.Join(testCodeError{c: codes.OK}, testCodeError{c: codes.InvalidArgument}, testCodeError{c: codes.FailedPrecondition})
 		c := grpcerrors.Code(j)
 		assert.Equal(t, codes.InvalidArgument, c)
 	})
@@ -175,7 +174,7 @@ func TestAsGRPCStatus(t *testing.T) {
 
 	t.Run("finds status through a wrapped error", func(t *testing.T) {
 		in := status.New(codes.Unavailable, "down")
-		outer := errors.Wrap(testGRPCStatusError{st: in}, "wrap")
+		outer := fmt.Errorf("wrap"+": %w", testGRPCStatusError{st: in})
 		st, ok := grpcerrors.AsGRPCStatus(outer)
 		require.True(t, ok)
 		assert.Equal(t, in.Code(), st.Code())
@@ -183,7 +182,7 @@ func TestAsGRPCStatus(t *testing.T) {
 
 	t.Run("finds status in joined errors", func(t *testing.T) {
 		in := status.New(codes.ResourceExhausted, "res")
-		j := stderrors.Join(testCodeError{c: codes.InvalidArgument}, testGRPCStatusError{st: in})
+		j := errors.Join(testCodeError{c: codes.InvalidArgument}, testGRPCStatusError{st: in})
 		st, ok := grpcerrors.AsGRPCStatus(j)
 		require.True(t, ok)
 		assert.Equal(t, in.Code(), st.Code())
@@ -207,10 +206,10 @@ func TestToGRPCMessage(t *testing.T) {
 	t.Run("keep extra context", func(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
-		wrapped := errors.Wrap(grpcerrors.ToGRPC(context.TODO(), err), "extra context")
+		wrapped := fmt.Errorf("extra context: %w", grpcerrors.ToGRPC(context.TODO(), err))
 
 		anotherErr := errors.New("another error")
-		joined := stderrors.Join(wrapped, anotherErr)
+		joined := errors.Join(wrapped, anotherErr)
 
 		// Check that wrapped.Error() starts with "extra context"
 		encoded := grpcerrors.ToGRPC(context.TODO(), joined)

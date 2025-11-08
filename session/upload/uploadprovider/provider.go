@@ -1,13 +1,13 @@
 package uploadprovider
 
 import (
+	"fmt"
 	"io"
 	"path"
 	"sync"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session/upload"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -45,7 +45,7 @@ func (hp *Uploader) Pull(stream upload.Upload_PullServer) error {
 	r, ok := hp.m[p]
 	if !ok {
 		hp.mu.Unlock()
-		return errors.Errorf("no http response from session for %s", p)
+		return fmt.Errorf("no http response from session for %s", p)
 	}
 	delete(hp.m, p)
 	hp.mu.Unlock()

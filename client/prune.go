@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/pkg/errors"
 )
 
 func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOption) error {
@@ -27,7 +28,7 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 	}
 	cl, err := c.ControlClient().Prune(ctx, req)
 	if err != nil {
-		return errors.Wrap(err, "failed to call prune")
+		return fmt.Errorf("failed to call prune"+": %w", err)
 	}
 
 	for {

@@ -2,10 +2,10 @@ package sshprovider
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/moby/buildkit/session/sshforward"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -24,7 +24,7 @@ func (p *socketProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAg
 
 	_, ok := p.m[id]
 	if !ok {
-		return nil, errors.Errorf("unset ssh forward key %s", id)
+		return nil, fmt.Errorf("unset ssh forward key %s", id)
 	}
 	return &sshforward.CheckAgentResponse{}, nil
 }
@@ -41,12 +41,12 @@ func (p *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer) 
 
 	dialer, ok := p.m[id]
 	if !ok {
-		return errors.Errorf("unset ssh forward key %s", id)
+		return fmt.Errorf("unset ssh forward key %s", id)
 	}
 
 	conn, err := dialer(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "failed to dial agent %s", id)
+		return fmt.Errorf("failed to dial agent %s: %w", id, err)
 	}
 	defer conn.Close()
 

@@ -1,9 +1,8 @@
 package compression
 
 import (
+	"fmt"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -31,7 +30,7 @@ func ParseAttributes(attrs map[string]string) (Config, error) {
 		} else {
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return Config{}, errors.Wrapf(err, "non-bool value %s specified for %s", v, attrForceCompression)
+				return Config{}, fmt.Errorf("non-bool value %s specified for %s: %w", v, attrForceCompression, err)
 			}
 			force = b
 		}
@@ -40,7 +39,7 @@ func ParseAttributes(attrs map[string]string) (Config, error) {
 	if v, ok := attrs[attrCompressionLevel]; ok {
 		ii, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			return Config{}, errors.Wrapf(err, "non-integer value %s specified for %s", v, attrCompressionLevel)
+			return Config{}, fmt.Errorf("non-integer value %s specified for %s: %w", v, attrCompressionLevel, err)
 		}
 		compressionConfig = compressionConfig.SetLevel(int(ii))
 	}

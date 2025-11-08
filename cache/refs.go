@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -39,7 +39,6 @@ import (
 	"github.com/moby/sys/userns"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -189,7 +188,7 @@ func (p parentRefs) release(ctx context.Context) error {
 		}
 	}
 
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (p parentRefs) cloneParentRefs() parentRefs {
@@ -359,7 +358,7 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 					return 0, nil
 				}
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
-					return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
+					return s, fmt.Errorf("failed to get usage for %s: %w", cr.ID(), err)
 				}
 			}
 		}
@@ -469,19 +468,19 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) (rerr er
 		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
 			ID: cr.ID(),
 		}); err != nil && !cerrdefs.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to delete lease for %s", cr.ID())
+			return fmt.Errorf("failed to delete lease for %s: %w", cr.ID(), err)
 		}
 		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
 			ID: cr.compressionVariantsLeaseID(),
 		}); err != nil && !cerrdefs.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to delete compression variant lease for %s", cr.ID())
+			return fmt.Errorf("failed to delete compression variant lease for %s: %w", cr.ID(), err)
 		}
 	}
 	if err := cr.cm.MetadataStore.Clear(cr.ID()); err != nil {
-		return errors.Wrapf(err, "failed to delete metadata of %s", cr.ID())
+		return fmt.Errorf("failed to delete metadata of %s: %w", cr.ID(), err)
 	}
 	if err := cr.release(ctx); err != nil {
-		return errors.Wrapf(err, "failed to release parents of %s", cr.ID())
+		return fmt.Errorf("failed to release parents of %s: %w", cr.ID(), err)
 	}
 	return nil
 }
@@ -613,7 +612,7 @@ func (l RefList) Release(ctx context.Context) error {
 			l[i] = nil
 		}
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (sr *immutableRef) LayerChain() RefList {
@@ -712,7 +711,7 @@ func layerToNonDistributable(mt string) string {
 func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNonDist bool) (ocispecs.Descriptor, error) {
 	dgst := sr.getBlob()
 	if dgst == "" {
-		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
+		return ocispecs.Descriptor{}, fmt.Errorf("no blob set for cache record %s", sr.ID())
 	}
 
 	desc := ocispecs.Descriptor{
@@ -899,11 +898,11 @@ func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (oci
 		return ocispecs.Descriptor{}, err
 	}
 	if info.Labels == nil {
-		return ocispecs.Descriptor{}, errors.Errorf("no blob metadata is stored for %q", info.Digest)
+		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
 	}
 	mt, ok := info.Labels[blobMediaTypeLabel]
 	if !ok {
-		return ocispecs.Descriptor{}, errors.Errorf("no media type is stored for %q", info.Digest)
+		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
 	}
 	desc := ocispecs.Descriptor{
 		Digest:    info.Digest,
@@ -1057,7 +1056,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 		flds, labels := makeTmpLabelsStargzMode(snapshots.FilterInheritedLabels(dh.SnapshotLabels), s)
 		info.Labels = labels
 		if _, err := r.cm.Snapshotter.Update(ctx, info, flds...); err != nil {
-			return errors.Wrapf(err, "failed to add tmp remote labels for remote snapshot")
+			return fmt.Errorf("failed to add tmp remote labels for remote snapshot: %w", err)
 		}
 		defer func() {
 			ctx := context.WithoutCancel(ctx)
@@ -1065,7 +1064,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 				info.Labels[k] = "" // Remove labels appended in this call
 			}
 			if _, err := r.cm.Snapshotter.Update(ctx, info, flds...); err != nil {
-				bklog.G(ctx).Warn(errors.Wrapf(err, "failed to remove tmp remote labels"))
+				bklog.G(ctx).Warn(fmt.Errorf("failed to remove tmp remote labels: %w", err))
 			}
 		}()
 
@@ -1136,8 +1135,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 									Debug("snapshots exist but labels are nil")
 							}
 							if _, err := r.cm.Snapshotter.Update(ctx, info, tmpFields...); err != nil {
-								bklog.G(ctx).Warn(errors.Wrapf(err,
-									"failed to remove tmp remote labels after prepare"))
+								bklog.G(ctx).Warn(fmt.Errorf("failed to remove tmp remote labels after prepare: %w", err))
 							}
 						}()
 
@@ -1497,7 +1495,7 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	})
 	if err != nil {
 		if !errors.Is(err, cerrdefs.ErrAlreadyExists) { // migrator adds leases for everything
-			return errors.Wrap(err, "failed to create lease")
+			return fmt.Errorf("failed to create lease: %w", err)
 		}
 	}
 
@@ -1506,12 +1504,12 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 		Type: "snapshots/" + cr.cm.Snapshotter.Name(),
 	}); err != nil {
 		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.getSnapshotID())
+		return fmt.Errorf("failed to add snapshot %s to lease: %w", cr.getSnapshotID(), err)
 	}
 
 	if err := cr.cm.Snapshotter.Commit(ctx, cr.getSnapshotID(), mutable.getSnapshotID()); err != nil {
 		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to commit %s to %s during finalize", mutable.getSnapshotID(), cr.getSnapshotID())
+		return fmt.Errorf("failed to commit %s to %s during finalize: %w", mutable.getSnapshotID(), cr.getSnapshotID(), err)
 	}
 	cr.mountCache = nil
 
@@ -1535,7 +1533,7 @@ func (sr *mutableRef) shouldUpdateLastUsed() bool {
 
 func (sr *mutableRef) commit() (_ *immutableRef, rerr error) {
 	if !sr.mutable || len(sr.refs) == 0 {
-		return nil, errors.Wrapf(errInvalid, "invalid mutable ref %p", sr)
+		return nil, fmt.Errorf("invalid mutable ref %p: %w", sr, errInvalid)
 	}
 
 	id := identity.NewID()
@@ -1718,12 +1716,12 @@ func readonlyOverlay(opt []string) []string {
 func newSharableMountPool(tmpdirRoot string) (sharableMountPool, error) {
 	if tmpdirRoot != "" {
 		if err := os.MkdirAll(tmpdirRoot, 0700); err != nil {
-			return sharableMountPool{}, errors.Wrap(err, "failed to prepare mount pool")
+			return sharableMountPool{}, fmt.Errorf("failed to prepare mount pool: %w", err)
 		}
 		// If tmpdirRoot is specified, remove existing mounts to avoid conflict.
 		files, err := os.ReadDir(tmpdirRoot)
 		if err != nil {
-			return sharableMountPool{}, errors.Wrap(err, "failed to read mount pool")
+			return sharableMountPool{}, fmt.Errorf("failed to read mount pool: %w", err)
 		}
 		for _, file := range files {
 			if file.IsDir() {

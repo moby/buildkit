@@ -3,6 +3,7 @@ package compression
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -13,7 +14,6 @@ import (
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type Compressor func(dest io.Writer, mediaType string) (io.WriteCloser, error)
@@ -92,7 +92,7 @@ func parse(t string) (Type, error) {
 	case Zstd.String():
 		return Zstd, nil
 	default:
-		return nil, errors.Errorf("unsupported compression type %s", t)
+		return nil, fmt.Errorf("unsupported compression type %s", t)
 	}
 }
 
@@ -105,7 +105,7 @@ func fromMediaType(mediaType string) (Type, error) {
 	case ocispecs.MediaTypeImageLayerZstd, ocispecs.MediaTypeImageLayerNonDistributableZstd: //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 		return Zstd, nil
 	default:
-		return nil, errors.Errorf("unsupported media type %s", mediaType)
+		return nil, fmt.Errorf("unsupported media type %s", mediaType)
 	}
 }
 
@@ -143,7 +143,7 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 		return images.MediaTypeDockerSchema2LayerGzip, nil
 
 	default:
-		return "", errors.Errorf("failed to detect layer %v compression type", id)
+		return "", fmt.Errorf("failed to detect layer %v compression type", id)
 	}
 }
 

@@ -3,7 +3,7 @@ package cachedigest
 import (
 	"encoding/binary"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type FrameID uint32
@@ -53,7 +53,7 @@ func decodeFrames(data []byte) ([]Frame, error) {
 		frameID := binary.BigEndian.Uint32(data[i : i+4])
 		length := binary.BigEndian.Uint32(data[i+4 : i+8])
 		if i+8+int(length) > len(data) {
-			return nil, errors.WithStack(ErrInvalidEncoding)
+			return nil, pkgerrors.WithStack(ErrInvalidEncoding)
 		}
 		frames = append(frames, Frame{
 			ID:   FrameID(frameID),
@@ -62,7 +62,7 @@ func decodeFrames(data []byte) ([]Frame, error) {
 		i += 8 + int(length)
 	}
 	if i != len(data) {
-		return nil, errors.WithStack(ErrInvalidEncoding)
+		return nil, pkgerrors.WithStack(ErrInvalidEncoding)
 	}
 	return frames, nil
 }

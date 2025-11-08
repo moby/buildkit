@@ -2,10 +2,12 @@ package secretsprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -37,7 +39,7 @@ func (sp *secretProvider) GetSecret(ctx context.Context, req *secrets.GetSecretR
 		return nil, err
 	}
 	if l := len(dt); l > MaxSecretSize {
-		return nil, errors.Errorf("invalid secret size %d", l)
+		return nil, fmt.Errorf("invalid secret size %d", l)
 	}
 
 	return &secrets.GetSecretResponse{
@@ -54,7 +56,7 @@ type mapStore map[string][]byte
 func (m mapStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
 	v, ok := m[id]
 	if !ok {
-		return nil, errors.WithStack(secrets.ErrNotFound)
+		return nil, pkgerrors.WithStack(secrets.ErrNotFound)
 	}
 	return v, nil
 }

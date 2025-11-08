@@ -3,13 +3,13 @@ package authprovider
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
 
 	"github.com/gofrs/flock"
-	"github.com/pkg/errors"
 )
 
 type tokenSeeds struct {

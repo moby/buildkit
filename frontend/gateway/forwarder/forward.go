@@ -2,6 +2,8 @@ package forwarder
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -23,7 +25,6 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
 )
@@ -66,7 +67,7 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	for _, atts := range res.Attestations {
 		for _, att := range atts {
 			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
+				return nil, errors.New("attestation callback cannot be sent through gateway")
 			}
 		}
 	}
@@ -175,7 +176,7 @@ func (c *BridgeClient) registerResultIDs(results ...solver.Result) (ids []string
 		}
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
-			return ids, errors.Errorf("unexpected type for result, got %T", res.Sys())
+			return ids, fmt.Errorf("unexpected type for result, got %T", res.Sys())
 		}
 		ids[i] = workerRef.ID()
 		c.workerRefByID[workerRef.ID()] = workerRef
@@ -190,7 +191,7 @@ func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 	for _, atts := range r.Attestations {
 		for _, att := range atts {
 			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
+				return nil, errors.New("attestation callback cannot be sent through gateway")
 			}
 		}
 	}
@@ -198,7 +199,7 @@ func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 	res, err := result.ConvertResult(r, func(r client.Reference) (solver.ResultProxy, error) {
 		rr, ok := r.(*ref)
 		if !ok {
-			return nil, errors.Errorf("invalid reference type for forward %T", r)
+			return nil, fmt.Errorf("invalid reference type for forward %T", r)
 		}
 		return rr.acquireResultProxy(), nil
 	})
@@ -250,7 +251,7 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 			if m.Ref != nil {
 				refProxy, ok := m.Ref.(*ref)
 				if !ok {
-					return errors.Errorf("unexpected Ref type: %T", m.Ref)
+					return fmt.Errorf("unexpected Ref type: %T", m.Ref)
 				}
 
 				res, err := refProxy.resultProxy.Result(ctx)
@@ -260,13 +261,13 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 
 				workerRef, ok = res.Sys().(*worker.WorkerRef)
 				if !ok {
-					return errors.Errorf("invalid ref: %T", res.Sys())
+					return fmt.Errorf("invalid ref: %T", res.Sys())
 				}
 			} else if m.ResultID != "" {
 				var ok bool
 				workerRef, ok = c.workerRefByID[m.ResultID]
 				if !ok {
-					return errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
+					return fmt.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
 				}
 			}
 			ctrReq.Mounts[i] = container.Mount{
@@ -388,7 +389,7 @@ func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
 	}
 	ref, ok := rr.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
+		return nil, fmt.Errorf("invalid ref: %T", rr.Sys())
 	}
 	return ref.ImmutableRef.Mount(ctx, true, r.session)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/progress/progressui"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	"github.com/urfave/cli"
@@ -165,7 +165,7 @@ func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, e
 	for _, buildArg := range clicontext.StringSlice("build-arg") {
 		kv := strings.SplitN(buildArg, "=", 2)
 		if len(kv) != 2 {
-			return nil, errors.Errorf("invalid build-arg value %s", buildArg)
+			return nil, fmt.Errorf("invalid build-arg value %s", buildArg)
 		}
 		frontendAttrs["build-arg:"+kv[0]] = kv[1]
 	}

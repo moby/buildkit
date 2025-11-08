@@ -2,10 +2,11 @@ package pipe
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type channel[V any] struct {
@@ -70,7 +71,7 @@ func NewWithFunction[Payload, Value any](f func(context.Context) (Value, error))
 
 	p.OnReceiveCompletion = func() {
 		if req := p.Sender.Request(); req.Canceled {
-			cancel(errors.WithStack(context.Canceled))
+			cancel(pkgerrors.WithStack(context.Canceled))
 		}
 	}
 

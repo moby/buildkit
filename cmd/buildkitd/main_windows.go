@@ -4,6 +4,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/Microsoft/go-winio"
 	_ "github.com/moby/buildkit/solver/llbsolver/ops"
 	_ "github.com/moby/buildkit/util/system/getuserinfo"
-	"github.com/pkg/errors"
 )
 
 const socketScheme = "npipe://"
@@ -36,7 +36,7 @@ func getLocalListener(listenerPath, secDescriptor string) (net.Listener, error) 
 
 	listener, err := winio.ListenPipe(listenerPath, pc)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating listener")
+		return nil, fmt.Errorf("creating listener"+": %w", err)
 	}
 	return listener, nil
 }
@@ -47,7 +47,7 @@ func groupToSecurityDescriptor(group string) (string, error) {
 		for g := range strings.SplitSeq(group, ",") {
 			sid, err := winio.LookupSidByName(g)
 			if err != nil {
-				return "", errors.Wrapf(err, "failed to lookup sid for group %s", g)
+				return "", fmt.Errorf("failed to lookup sid for group %s: %w", g, err)
 			}
 			sddl += fmt.Sprintf("(A;;GRGW;;;%s)", sid)
 		}

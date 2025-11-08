@@ -1,7 +1,7 @@
 package dockerfile2llb
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
@@ -17,6 +17,6 @@ func dispatchRunSecurity(c *instructions.RunCommand) (llb.RunOption, error) {
 	case instructions.SecuritySandbox:
 		return llb.Security(pb.SecurityMode_SANDBOX), nil
 	default:
-		return nil, errors.Errorf("unsupported security mode %q", security)
+		return nil, fmt.Errorf("unsupported security mode %q", security)
 	}
 }

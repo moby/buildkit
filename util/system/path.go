@@ -1,10 +1,10 @@
 package system
 
 import (
+	"errors"
+	"fmt"
 	"path"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // DefaultPathEnvUnix is unix style list of directories to search for
@@ -47,7 +47,7 @@ func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, err
 	var err error
 	parent, err = CheckSystemDriveAndRemoveDriveLetter(parent, inputOS, keepSlash)
 	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
+		return "", fmt.Errorf("removing drive letter"+": %w", err)
 	}
 
 	if !IsAbs(parent, inputOS) {
@@ -62,7 +62,7 @@ func NormalizePath(parent, newPath, inputOS string, keepSlash bool) (string, err
 
 	newPath, err = CheckSystemDriveAndRemoveDriveLetter(newPath, inputOS, keepSlash)
 	if err != nil {
-		return "", errors.Wrap(err, "removing drive letter")
+		return "", fmt.Errorf("removing drive letter"+": %w", err)
 	}
 
 	if !IsAbs(newPath, inputOS) {
@@ -112,7 +112,7 @@ func NormalizeWorkdir(current, wd string, inputOS string) (string, error) {
 
 	wd, err := NormalizePath(current, wd, inputOS, false)
 	if err != nil {
-		return "", errors.Wrap(err, "normalizing working directory")
+		return "", fmt.Errorf("normalizing working directory"+": %w", err)
 	}
 
 	// Make sure we use the platform specific path separator. HCS does not like forward
@@ -183,12 +183,12 @@ func CheckSystemDriveAndRemoveDriveLetter(path string, inputOS string, keepSlash
 	}
 
 	if len(path) == 2 && string(path[1]) == ":" {
-		return "", errors.Errorf("No relative path specified in %q", path)
+		return "", fmt.Errorf("No relative path specified in %q", path)
 	}
 
 	// UNC paths should error out
 	if len(path) >= 2 && ToSlash(path[:2], inputOS) == "//" {
-		return "", errors.Errorf("UNC paths are not supported")
+		return "", errors.New("UNC paths are not supported")
 	}
 
 	parts := strings.SplitN(path, ":", 2)

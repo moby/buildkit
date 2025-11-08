@@ -2,12 +2,14 @@ package solver
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/moby/buildkit/errdefs"
 	"github.com/moby/buildkit/solver/internal/pipe"
 	"github.com/moby/buildkit/util/cond"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func newScheduler(ef edgeFactory) *scheduler {
@@ -212,7 +214,7 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 	e := s.ef.getEdge(edge)
 	if e == nil {
 		s.mu.Unlock()
-		return nil, errors.Errorf("invalid request %v for build", edge)
+		return nil, fmt.Errorf("invalid request %v for build", edge)
 	}
 
 	wait := make(chan struct{})
@@ -227,7 +229,7 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 	s.mu.Unlock()
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	go func() {
 		<-ctx.Done()
@@ -345,7 +347,7 @@ func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipeReceiver {
 	if target == nil {
 		debugSchedulerInconsistentGraphState(ee)
 		return pf.NewFuncRequest(func(_ context.Context) (any, error) {
-			return nil, errdefs.Internal(errors.Errorf("failed to get edge: inconsistent graph state in edge %s %s %d", ee.Vertex.Name(), ee.Vertex.Digest(), ee.Index))
+			return nil, errdefs.Internal(fmt.Errorf("failed to get edge: inconsistent graph state in edge %s %s %d", ee.Vertex.Name(), ee.Vertex.Digest(), ee.Index))
 		})
 	}
 	p := pf.s.newPipe(target, pf.e, pipeRequest{Payload: req})

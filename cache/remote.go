@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"github.com/moby/buildkit/util/pull/pullprogress"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -224,7 +224,7 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refC
 				// compressed blob must be created and stored in the content store.
 				blobDesc, err := getBlobWithCompressionWithRetry(ctx, ref, refCfg.Compression, s)
 				if err != nil {
-					return nil, errors.Wrapf(err, "failed to get compression blob %q", refCfg.Compression.Type)
+					return nil, fmt.Errorf("failed to get compression blob %q: %w", refCfg.Compression.Type, err)
 				}
 				newDesc := desc
 				newDesc.MediaType = blobDesc.MediaType
@@ -259,7 +259,7 @@ func getBlobWithCompressionWithRetry(ctx context.Context, ref *immutableRef, com
 		return blobDesc, nil
 	}
 	if err := ensureCompression(ctx, ref, comp, s); err != nil {
-		return ocispecs.Descriptor{}, errors.Wrapf(err, "failed to get and ensure compression type of %q", comp.Type)
+		return ocispecs.Descriptor{}, fmt.Errorf("failed to get and ensure compression type of %q: %w", comp.Type, err)
 	}
 	return ref.getBlobWithCompression(ctx, comp.Type)
 }

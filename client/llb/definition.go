@@ -2,12 +2,13 @@ package llb
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -41,7 +42,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := proto.Unmarshal(dt, &op); err != nil {
-			return nil, errors.Wrap(err, "failed to parse llb proto op")
+			return nil, fmt.Errorf("failed to parse llb proto op"+": %w", err)
 		}
 		dgst = digest.FromBytes(dt)
 		ops[dgst] = &op
@@ -76,7 +77,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		for dgst, locs := range def.Source.Locations {
 			for _, loc := range locs.Locations {
 				if loc.SourceIndex < 0 || int(loc.SourceIndex) >= len(sourceMaps) {
-					return nil, errors.Errorf("failed to find source map with index %d", loc.SourceIndex)
+					return nil, fmt.Errorf("failed to find source map with index %d", loc.SourceIndex)
 				}
 
 				srcs[digest.Digest(dgst)] = append(srcs[digest.Digest(dgst)], &SourceLocation{
@@ -128,28 +129,28 @@ func (d *DefinitionOp) Validate(context.Context, *Constraints) error {
 	defer d.mu.Unlock()
 
 	if len(d.ops) == 0 || len(d.defs) == 0 || len(d.metas) == 0 {
-		return errors.Errorf("invalid definition op with no ops %d %d", len(d.ops), len(d.metas))
+		return fmt.Errorf("invalid definition op with no ops %d %d", len(d.ops), len(d.metas))
 	}
 
 	_, ok := d.ops[d.dgst]
 	if !ok {
-		return errors.Errorf("invalid definition op with unknown op %q", d.dgst)
+		return fmt.Errorf("invalid definition op with unknown op %q", d.dgst)
 	}
 
 	_, ok = d.defs[d.dgst]
 	if !ok {
-		return errors.Errorf("invalid definition op with unknown def %q", d.dgst)
+		return fmt.Errorf("invalid definition op with unknown def %q", d.dgst)
 	}
 
 	_, ok = d.metas[d.dgst]
 	if !ok {
-		return errors.Errorf("invalid definition op with unknown metas %q", d.dgst)
+		return fmt.Errorf("invalid definition op with unknown metas %q", d.dgst)
 	}
 
 	// It is possible for d.index >= len(d.ops[d.dgst]) when depending on scratch
 	// images.
 	if d.index < 0 {
-		return errors.Errorf("invalid definition op with invalid index")
+		return errors.New("invalid definition op with invalid index")
 	}
 
 	return nil
@@ -157,7 +158,7 @@ func (d *DefinitionOp) Validate(context.Context, *Constraints) error {
 
 func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	if d.dgst == "" {
-		return "", nil, nil, nil, errors.Errorf("cannot marshal empty definition op")
+		return "", nil, nil, nil, errors.New("cannot marshal empty definition op")
 	}
 
 	if err := d.Validate(ctx, c); err != nil {

@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -52,7 +53,6 @@ import (
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/errgroup"
@@ -73,7 +73,7 @@ type cmOut struct {
 func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, cleanup func(), err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {
-		return nil, nil, errors.Errorf("namespace required for test")
+		return nil, nil, errors.New("namespace required for test")
 	}
 
 	if opt.snapshotterName == "" {
@@ -1460,7 +1460,7 @@ func ensurePrune(ctx context.Context, t *testing.T, cm Manager, pruneNum, maxRet
 func getCompressor(w io.Writer, compressionType compression.Type, customized bool) (io.WriteCloser, error) {
 	switch compressionType {
 	case compression.Uncompressed:
-		return nil, errors.Errorf("compression is not requested: %v", compressionType)
+		return nil, fmt.Errorf("compression is not requested: %v", compressionType)
 	case compression.Gzip:
 		if customized {
 			gz, _ := gzip.NewWriterLevel(w, gzip.NoCompression)
@@ -1501,7 +1501,7 @@ func getCompressor(w io.Writer, compressionType compression.Type, customized boo
 		}
 		return zstd.NewWriter(w)
 	default:
-		return nil, errors.Errorf("unknown compression type: %q", compressionType)
+		return nil, fmt.Errorf("unknown compression type: %q", compressionType)
 	}
 }
 
@@ -2804,7 +2804,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		}
 		v, ok := expected[k]
 		if !ok {
-			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected file %s", h.Name)
+			return nil, ocispecs.Descriptor{}, fmt.Errorf("unexpected file %s", h.Name)
 		}
 		delete(expected, k)
 		gotV, err := io.ReadAll(tr)
@@ -2812,11 +2812,11 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 			return nil, ocispecs.Descriptor{}, err
 		}
 		if string(gotV) != v {
-			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected contents of %s", h.Name)
+			return nil, ocispecs.Descriptor{}, fmt.Errorf("unexpected contents of %s", h.Name)
 		}
 	}
 	if len(expected) > 0 {
-		return nil, ocispecs.Descriptor{}, errors.Errorf("expected file doesn't archived: %+v", expected)
+		return nil, ocispecs.Descriptor{}, fmt.Errorf("expected file doesn't archived: %+v", expected)
 	}
 
 	return tarout, ocispecs.Descriptor{

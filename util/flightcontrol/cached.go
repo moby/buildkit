@@ -2,9 +2,8 @@ package flightcontrol
 
 import (
 	"context"
+	"errors"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 // Group is a flightcontrol synchronization group that memoizes the results of a function

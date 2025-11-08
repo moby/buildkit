@@ -4,6 +4,7 @@ package compression
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -11,7 +12,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/labels"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 
 	nydusify "github.com/containerd/nydus-snapshotter/pkg/converter"
 )
@@ -51,14 +51,14 @@ func (c nydusType) Compress(ctx context.Context, comp Config) (compressorFunc Co
 			uncompressedDgst := digester.Digest().String()
 			info, err := cs.Info(ctx, digester.Digest())
 			if err != nil {
-				return nil, errors.Wrap(err, "get info from content store")
+				return nil, fmt.Errorf("get info from content store"+": %w", err)
 			}
 			if info.Labels == nil {
 				info.Labels = make(map[string]string)
 			}
 			info.Labels[labels.LabelUncompressed] = uncompressedDgst
 			if _, err := cs.Update(ctx, info, "labels."+labels.LabelUncompressed); err != nil {
-				return nil, errors.Wrap(err, "update info to content store")
+				return nil, fmt.Errorf("update info to content store"+": %w", err)
 			}
 
 			// Fill annotations
@@ -82,7 +82,7 @@ func (c nydusType) Decompress(ctx context.Context, cs content.Store, desc ocispe
 	go func() {
 		defer pw.Close()
 		if err := nydusify.Unpack(ctx, ra, pw, nydusify.UnpackOption{}); err != nil {
-			pw.CloseWithError(errors.Wrap(err, "unpack nydus blob"))
+			pw.CloseWithError(fmt.Errorf("unpack nydus blob"+": %w", err))
 		}
 	}()
 

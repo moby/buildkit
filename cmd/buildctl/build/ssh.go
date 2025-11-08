@@ -1,11 +1,11 @@
 package build
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
-	"github.com/pkg/errors"
 )
 
 // ParseSSH parses --ssh
@@ -25,7 +25,7 @@ func ParseSSH(inp []string) ([]sshprovider.AgentConfig, error) {
 				if ok && key == "raw" {
 					b, err := strconv.ParseBool(val)
 					if err != nil {
-						return nil, errors.Wrapf(err, "invalid value for 'raw': %s", val)
+						return nil, fmt.Errorf("invalid value for 'raw': %s: %w", val, err)
 					}
 					cfg.Raw = b
 				} else {
@@ -34,7 +34,7 @@ func ParseSSH(inp []string) ([]sshprovider.AgentConfig, error) {
 			}
 		}
 		if cfg.Raw && len(cfg.Paths) != 1 {
-			return nil, errors.Errorf("raw mode must supply exactly one socket path for %q", cfg.ID)
+			return nil, fmt.Errorf("raw mode must supply exactly one socket path for %q", cfg.ID)
 		}
 		configs = append(configs, cfg)
 	}

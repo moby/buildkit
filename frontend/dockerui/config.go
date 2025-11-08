@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -113,7 +114,7 @@ func validateMinCaps(c client.Client) error {
 	caps := c.BuildOpts().LLBCaps
 
 	if err := caps.Supports(pb.CapFileBase); err != nil {
-		return errors.Wrap(err, "needs BuildKit 0.5 or later")
+		return fmt.Errorf("needs BuildKit 0.5 or later"+": %w", err)
 	}
 	if opts["override-copy-image"] != "" {
 		return errors.New("support for \"override-copy-image\" was removed in BuildKit 0.11")
@@ -176,19 +177,19 @@ func (bc *Client) init() error {
 
 	extraHosts, err := parseExtraHosts(opts[keyGlobalAddHosts])
 	if err != nil {
-		return errors.Wrap(err, "failed to parse additional hosts")
+		return fmt.Errorf("failed to parse additional hosts"+": %w", err)
 	}
 	bc.ExtraHosts = extraHosts
 
 	shmSize, err := parseShmSize(opts[keyShmSize])
 	if err != nil {
-		return errors.Wrap(err, "failed to parse shm size")
+		return fmt.Errorf("failed to parse shm size"+": %w", err)
 	}
 	bc.ShmSize = shmSize
 
 	ulimits, err := parseUlimits(opts[keyUlimit])
 	if err != nil {
-		return errors.Wrap(err, "failed to parse ulimit")
+		return fmt.Errorf("failed to parse ulimit"+": %w", err)
 	}
 	bc.Ulimits = ulimits
 
@@ -215,10 +216,10 @@ func (bc *Client) init() error {
 	if v := opts[keyMultiPlatform]; v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return errors.Errorf("invalid boolean value for multi-platform: %s", v)
+			return fmt.Errorf("invalid boolean value for multi-platform: %s", v)
 		}
 		if !b && multiPlatform {
-			return errors.Errorf("conflicting config: returning multiple target platforms is not allowed")
+			return errors.New("conflicting config: returning multiple target platforms is not allowed")
 		}
 		multiPlatform = b
 	}
@@ -268,7 +269,7 @@ func (bc *Client) init() error {
 			if k == "generator" {
 				ref, err = reference.ParseNormalizedNamed(v)
 				if err != nil {
-					return errors.Wrapf(err, "failed to parse sbom scanner %s", v)
+					return fmt.Errorf("failed to parse sbom scanner %s: %w", v, err)
 				}
 				ref = reference.TagNameOnly(ref)
 			} else {
@@ -276,7 +277,7 @@ func (bc *Client) init() error {
 			}
 		}
 		if ref == nil {
-			return errors.Errorf("sbom scanner cannot be empty")
+			return errors.New("sbom scanner cannot be empty")
 		}
 
 		bc.SBOM = &SBOM{
@@ -299,7 +300,7 @@ func (bc *Client) init() error {
 	if v, ok := opts[keyDockerfileLintArg]; ok {
 		bc.LinterConfig, err = linter.ParseLintOptions(v)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse %s", keyDockerfileLintArg)
+			return fmt.Errorf("failed to parse %s: %w", keyDockerfileLintArg, err)
 		}
 	}
 
@@ -357,7 +358,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 
 	def, err := src.Marshal(ctx, bc.marshalOpts()...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to marshal local source")
+		return nil, fmt.Errorf("failed to marshal local source: %w", err)
 	}
 
 	defVtx, err := def.Head()
@@ -369,7 +370,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 		Definition: def.ToPB(),
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to resolve dockerfile")
+		return nil, fmt.Errorf("failed to resolve dockerfile: %w", err)
 	}
 
 	ref, err := res.SingleRef()
@@ -391,7 +392,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 			}
 		}
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read dockerfile")
+			return nil, fmt.Errorf("failed to read dockerfile: %w", err)
 		}
 	}
 	smap := llb.NewSourceMap(src, bctx.filename, lang, dt)
@@ -436,7 +437,7 @@ func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*ll
 
 	excludes, err := bc.dockerIgnorePatterns(ctx, bctx)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read dockerignore patterns")
+		return nil, fmt.Errorf("failed to read dockerignore patterns: %w", err)
 	}
 
 	sessionID := bc.bopts.SessionID
@@ -459,7 +460,7 @@ func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*ll
 func (bc *Client) NamedContext(name string, opt ContextOpt) (*NamedContext, error) {
 	named, err := reference.ParseNormalizedNamed(name)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid context name %s", name)
+		return nil, fmt.Errorf("invalid context name %s: %w", name, err)
 	}
 	name = strings.TrimSuffix(reference.FamiliarString(named), ":latest")
 
@@ -560,7 +561,7 @@ func (bc *Client) dockerIgnorePatterns(ctx context.Context, bctx *buildContext) 
 	if len(bc.dockerignore) != 0 {
 		excludes, err = ignorefile.ReadAll(bytes.NewBuffer(bc.dockerignore))
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed parsing %s", bc.dockerignoreName)
+			return nil, fmt.Errorf("failed parsing %s: %w", bc.dockerignoreName, err)
 		}
 	}
 	return excludes, nil

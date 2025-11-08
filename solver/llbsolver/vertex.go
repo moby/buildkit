@@ -128,7 +128,7 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 				if ent, ok := ent[entitlements.EntitlementDevice]; ok {
 					cfg, ok = ent.(*entitlements.DevicesConfig)
 					if !ok {
-						return errors.Errorf("invalid device entitlement config %T", ent)
+						return fmt.Errorf("invalid device entitlement config %T", ent)
 					}
 				}
 				if cfg != nil && cfg.All {
@@ -190,9 +190,9 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 
 				if len(forbidden) > 0 {
 					if len(forbidden) == 1 {
-						return errors.Errorf("device %s is requested by the build but not allowed", forbidden[0])
+						return fmt.Errorf("device %s is requested by the build but not allowed", forbidden[0])
 					}
-					return errors.Errorf("devices %s are requested by the build but not allowed", strings.Join(forbidden, ", "))
+					return fmt.Errorf("devices %s are requested by the build but not allowed", strings.Join(forbidden, ", "))
 				}
 
 				op.Exec.CdiDevices = allowedDevices
@@ -280,7 +280,7 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 	}
 	op, ok := all[dgst]
 	if !ok {
-		return "", errors.Errorf("invalid missing input digest %s", dgst)
+		return "", fmt.Errorf("invalid missing input digest %s", dgst)
 	}
 
 	for _, input := range op.Inputs {
@@ -332,7 +332,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	for _, dt := range def.Def {
 		var pbop pb.Op
 		if err := pbop.Unmarshal(dt); err != nil {
-			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
+			return solver.Edge{}, fmt.Errorf("failed to parse llb proto op"+": %w", err)
 		}
 		dgst := digest.FromBytes(dt)
 		if pbop.GetSource() != nil {
@@ -351,7 +351,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			eg.Go(func() error {
 				op := allOps[dgst]
 				if _, err := polEngine.Evaluate(ctx, op.Op); err != nil {
-					return errors.Wrap(err, "error evaluating the source policy")
+					return fmt.Errorf("error evaluating the source policy"+": %w", err)
 				}
 				return nil
 			})
@@ -369,7 +369,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	}
 
 	if len(allOps) < 2 {
-		return solver.Edge{}, errors.Errorf("invalid LLB with %d vertexes", len(allOps))
+		return solver.Edge{}, fmt.Errorf("invalid LLB with %d vertexes", len(allOps))
 	}
 
 	for {
@@ -383,7 +383,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	lastOp := allOps[lastDgst]
 	delete(allOps, lastDgst)
 	if len(lastOp.Inputs) == 0 {
-		return solver.Edge{}, errors.Errorf("invalid LLB with no inputs on last vertex")
+		return solver.Edge{}, errors.New("invalid LLB with no inputs on last vertex")
 	}
 	dgst := lastOp.Inputs[0].Digest
 
@@ -396,7 +396,7 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		}
 		op, ok := allOps[dgst]
 		if !ok {
-			return nil, errors.Errorf("invalid missing input digest %s", dgst)
+			return nil, fmt.Errorf("invalid missing input digest %s", dgst)
 		}
 
 		if err := opsutils.Validate(op.Op); err != nil {

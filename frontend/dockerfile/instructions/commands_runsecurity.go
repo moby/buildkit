@@ -1,7 +1,8 @@
 package instructions
 
 import (
-	"github.com/pkg/errors"
+	"errors"
+	"fmt"
 )
 
 const (
@@ -36,12 +37,12 @@ func runSecurityPreHook(cmd *RunCommand, req parseRequest) error {
 func runSecurityPostHook(cmd *RunCommand, req parseRequest) error {
 	st := cmd.getExternalValue(securityKey).(*securityState)
 	if st == nil {
-		return errors.Errorf("no security state")
+		return errors.New("no security state")
 	}
 
 	value := st.flag.Value
 	if !isValidSecurity(value) {
-		return errors.Errorf("security %q is not valid", value)
+		return fmt.Errorf("security %q is not valid", value)
 	}
 
 	st.security = value

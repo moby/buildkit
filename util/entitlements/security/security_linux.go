@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/sys/userns"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -125,7 +124,7 @@ func getFreeLoopID() (int, error) {
 	if uerr == 0 {
 		return int(r1), nil
 	}
-	return 0, errors.Errorf("error getting free loop device: %v", uerr)
+	return 0, fmt.Errorf("error getting free loop device: %v", uerr)
 }
 
 var (
@@ -145,7 +144,7 @@ func getCurrentCaps() ([]string, error) {
 func getAllCaps(ctx context.Context) ([]string, error) {
 	availableCaps, err := getCurrentCaps()
 	if err != nil {
-		return nil, errors.Errorf("error getting current capabilities: %s", err)
+		return nil, fmt.Errorf("error getting current capabilities: %s", err)
 	}
 
 	// see if any of the base linux35Caps are not available to be granted

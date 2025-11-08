@@ -4,6 +4,7 @@ package containerdexecutor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"runtime"
 
@@ -20,7 +21,7 @@ import (
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func getUserSpec(user, rootfsPath string) (specs.User, error) {
@@ -33,7 +34,7 @@ func getUserSpec(user, rootfsPath string) (specs.User, error) {
 		uid, gid, err = oci.ParseUIDGID(user)
 	}
 	if err != nil {
-		return specs.User{}, errors.WithStack(err)
+		return specs.User{}, pkgerrors.WithStack(err)
 	}
 	return specs.User{
 		UID:            uid,
@@ -104,7 +105,7 @@ func (w *containerdExecutor) prepareExecutionEnv(ctx context.Context, rootMount 
 func (w *containerdExecutor) ensureCWD(details *containerState, meta executor.Meta) error {
 	newp, err := fs.RootPath(details.rootfsPath, meta.Cwd)
 	if err != nil {
-		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+		return fmt.Errorf("working dir %s points to invalid target: %w", newp, err)
 	}
 
 	uid, gid, _, err := oci.GetUser(details.rootfsPath, meta.User)
@@ -114,7 +115,7 @@ func (w *containerdExecutor) ensureCWD(details *containerState, meta executor.Me
 
 	if _, err := os.Stat(newp); err != nil {
 		if err := user.MkdirAllAndChown(newp, 0755, int(uid), int(gid)); err != nil {
-			return errors.Wrapf(err, "failed to create working directory %s", newp)
+			return fmt.Errorf("failed to create working directory %s: %w", newp, err)
 		}
 	}
 	return nil

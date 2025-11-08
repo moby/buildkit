@@ -1,9 +1,8 @@
 package client
 
 import (
+	"fmt"
 	"net/http"
-
-	"github.com/pkg/errors"
 )
 
 // Opt is a configuration option to initialize a [Client].
@@ -23,6 +22,6 @@ func WithHost(host string) Opt {
 		if transport, ok := c.client.Transport.(*http.Transport); ok {
 			return configureTransport(transport, c.proto, c.addr)
 		}
-		return errors.Errorf("cannot apply host to transport: %T", c.client.Transport)
+		return fmt.Errorf("cannot apply host to transport: %T", c.client.Transport)
 	}
 }

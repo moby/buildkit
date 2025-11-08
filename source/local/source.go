@@ -24,6 +24,7 @@ import (
 	"github.com/moby/patternmatcher"
 	"github.com/moby/sys/user"
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/time/rate"
@@ -92,7 +93,7 @@ func (ls *localSource) Identifier(scheme, ref string, attrs map[string]string, p
 		case pb.AttrMetadataTransfer:
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid value for local.metadatatransfer %q", v)
+				return nil, fmt.Errorf("invalid value for local.metadatatransfer %q: %w", v, err)
 			}
 			id.MetadataOnly = b
 		case pb.AttrMetadataTransferExclude:
@@ -110,7 +111,7 @@ func (ls *localSource) Identifier(scheme, ref string, attrs map[string]string, p
 func (ls *localSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	localIdentifier, ok := id.(*LocalIdentifier)
 	if !ok {
-		return nil, errors.Errorf("invalid local identifier %v", id)
+		return nil, fmt.Errorf("invalid local identifier %v", id)
 	}
 
 	return &localSourceHandler{
@@ -169,8 +170,8 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCon
 	}
 
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	caller, err := ls.sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {
@@ -281,7 +282,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 	if opt.MetadataOnly && len(ls.src.MetadataExceptions) > 0 {
 		matcher, err := patternmatcher.New(ls.src.MetadataExceptions)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 		opt.MetadataOnlyFilter = func(p string, _ *fstypes.Stat) bool {
 			v, err := matcher.MatchesOrParentMatches(p)

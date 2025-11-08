@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"runtime"
@@ -21,7 +23,6 @@ import (
 	"github.com/moby/buildkit/worker/containerd"
 	"github.com/moby/sys/userns"
 	"github.com/pelletier/go-toml"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/semaphore"
 )
@@ -323,11 +324,11 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 		t, err := toml.TreeFromMap(cfg.Runtime.Options)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse runtime options config")
+			return nil, fmt.Errorf("failed to parse runtime options config: %w", err)
 		}
 		err = t.Unmarshal(opts)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse runtime options config")
+			return nil, fmt.Errorf("failed to parse runtime options config: %w", err)
 		}
 
 		runtime = &containerd.RuntimeInfo{
@@ -366,7 +367,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid platforms")
+			return nil, fmt.Errorf("invalid platforms"+": %w", err)
 		}
 		opt.Platforms = platforms
 	}

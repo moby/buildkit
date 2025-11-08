@@ -2,6 +2,7 @@ package dockerfile2llb
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/system"
-	"github.com/pkg/errors"
 )
 
 func detectRunMount(cmd *command, allDispatchStates *dispatchStates) bool {
@@ -74,7 +74,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			src := sources[i]
 			st = src.state
 			if !src.dispatched {
-				return nil, errors.Errorf("cannot mount from stage %q to %q, stage needs to be defined before current command", mount.From, mount.Target)
+				return nil, fmt.Errorf("cannot mount from stage %q to %q, stage needs to be defined before current command", mount.From, mount.Target)
 			}
 		}
 		var mountOpts []llb.MountOption
@@ -127,7 +127,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			target = filepath.Join("/", dir, mount.Target)
 		}
 		if target == "/" {
-			return nil, errors.Errorf("invalid mount target %q", target)
+			return nil, fmt.Errorf("invalid mount target %q", target)
 		}
 		if src := path.Join("/", mount.Source); src != "/" {
 			mountOpts = append(mountOpts, llb.SourcePath(src))

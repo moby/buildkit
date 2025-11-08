@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math"
 	"net"
 	"sync/atomic"
@@ -11,7 +13,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/trace"
@@ -34,7 +36,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	var dialCount int64
 	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 		if c := atomic.AddInt64(&dialCount, 1); c > 1 {
-			return nil, errors.Errorf("only one connection allowed")
+			return nil, errors.New("only one connection allowed")
 		}
 		return conn, nil
 	})
@@ -59,7 +61,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	//nolint:staticcheck // ignore SA1019 NewClient is preferred but has different behavior
 	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
 	if err != nil {
-		return ctx, nil, errors.Wrap(err, "failed to create grpc client")
+		return ctx, nil, fmt.Errorf("failed to create grpc client"+": %w", err)
 	}
 
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -69,7 +71,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 }
 
 func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(error)) {
-	defer cancelConn(errors.WithStack(context.Canceled))
+	defer cancelConn(pkgerrors.WithStack(context.Canceled))
 	defer cc.Close()
 
 	ticker := time.NewTicker(5 * time.Second)
@@ -94,9 +96,9 @@ func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func(err
 			timeout := time.Duration(math.Max(float64(defaultHealthcheckDuration), float64(lastHealthcheckDuration)*1.5))
 
 			ctx, cancel := context.WithCancelCause(ctx)
-			ctx, _ = context.WithTimeoutCause(ctx, timeout, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+			ctx, _ = context.WithTimeoutCause(ctx, timeout, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
 			_, err := healthClient.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-			cancel(errors.WithStack(context.Canceled))
+			cancel(pkgerrors.WithStack(context.Canceled))
 
 			lastHealthcheckDuration = time.Since(healthcheckStart)
 			logFields := logrus.Fields{

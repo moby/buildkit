@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -12,7 +13,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/dfgitutil"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -82,13 +82,13 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	} else if st, filename, ok := DetectHTTPContext(opts[localNameContext]); ok {
 		def, err := st.Marshal(ctx, bc.marshalOpts()...)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
+			return nil, fmt.Errorf("failed to marshal httpcontext: %w", err)
 		}
 		res, err := bc.client.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to resolve httpcontext")
+			return nil, fmt.Errorf("failed to resolve httpcontext: %w", err)
 		}
 
 		ref, err := res.SingleRef()
@@ -103,7 +103,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 			},
 		})
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read downloaded context")
+			return nil, fmt.Errorf("failed to read downloaded context: %w", err)
 		}
 		if isArchive(dt) {
 			bc := llb.Scratch().File(llb.Copy(*st, filepath.Join("/", filename), "/", &llb.CopyInfo{
@@ -118,7 +118,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	} else if (&gwcaps).Supports(gwpb.CapFrontendInputs) == nil {
 		inputs, err := bc.client.Inputs(ctx)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get frontend inputs")
+			return nil, fmt.Errorf("failed to get frontend inputs: %w", err)
 		}
 
 		if !bctx.forceLocalDockerfile {

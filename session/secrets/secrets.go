@@ -2,10 +2,11 @@ package secrets
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 )
 
@@ -13,7 +14,7 @@ type SecretStore interface {
 	GetSecret(context.Context, string) ([]byte, error)
 }
 
-var ErrNotFound = errors.Errorf("not found")
+var ErrNotFound = errors.New("not found")
 
 func GetSecret(ctx context.Context, c session.Caller, id string) ([]byte, error) {
 	client := NewSecretsClient(c.Conn())
@@ -22,7 +23,7 @@ func GetSecret(ctx context.Context, c session.Caller, id string) ([]byte, error)
 	})
 	if err != nil {
 		if code := grpcerrors.Code(err); code == codes.Unimplemented || code == codes.NotFound {
-			return nil, errors.Wrapf(ErrNotFound, "secret %s", id)
+			return nil, fmt.Errorf("secret %s: %w", id, ErrNotFound)
 		}
 		return nil, err
 	}

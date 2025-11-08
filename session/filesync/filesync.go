@@ -2,6 +2,7 @@ package filesync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"google.golang.org/grpc"
@@ -208,7 +209,7 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	opts[keyDirName] = []string{opt.Name}
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	client := NewFileSyncClient(c.Conn())
 
@@ -330,7 +331,7 @@ func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	}
 	f, ok := sp.fs[id]
 	if !ok {
-		return errors.Errorf("exporter %d not found", id)
+		return fmt.Errorf("exporter %d not found", id)
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
@@ -359,7 +360,7 @@ func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
-		return errors.Errorf("method %s not supported by the client", method)
+		return fmt.Errorf("method %s not supported by the client", method)
 	}
 
 	client := NewFileSendClient(c.Conn())
@@ -376,7 +377,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 
 	cc, err := client.DiffCopy(ctx)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	return sendDiffCopy(cc, fs, progress)
@@ -385,7 +386,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session.Caller) (io.WriteCloser, error) {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
-		return nil, errors.Errorf("method %s not supported by the client", method)
+		return nil, fmt.Errorf("method %s not supported by the client", method)
 	}
 
 	client := NewFileSendClient(c.Conn())
@@ -409,7 +410,7 @@ func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session
 
 	cc, err := client.DiffCopy(ctx)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	return newStreamWriter(cc), nil

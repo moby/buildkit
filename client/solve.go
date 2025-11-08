@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -26,7 +28,7 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
@@ -81,7 +83,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		return nil, errors.New("invalid empty definition")
 	}
 	if opt.Frontend != "" && def != nil {
-		return nil, errors.Errorf("invalid definition for frontend %s", opt.Frontend)
+		return nil, fmt.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
 
 	return c.solve(ctx, def, nil, opt, statusChan)
@@ -110,7 +112,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	eg, ctx := errgroup.WithContext(ctx)
 
 	statusContext, cancelStatus := context.WithCancelCause(context.Background())
-	defer cancelStatus(errors.WithStack(context.Canceled))
+	defer cancelStatus(pkgerrors.WithStack(context.Canceled))
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		statusContext = trace.ContextWithSpan(statusContext, span)
@@ -120,11 +122,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if s == nil {
 		if opt.SessionPreInitialized {
-			return nil, errors.Errorf("no session provided for preinitialized option")
+			return nil, errors.New("no session provided for preinitialized option")
 		}
 		s, err = session.NewSession(statusContext, opt.SharedKey)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create session")
+			return nil, fmt.Errorf("failed to create session"+": %w", err)
 		}
 	}
 
@@ -149,7 +151,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		for key, store := range opt.OCIStores {
 			key2 := "oci:" + key
 			if _, ok := contentStores[key2]; ok {
-				return nil, errors.Errorf("oci store key %q already exists", key)
+				return nil, fmt.Errorf("oci store key %q already exists", key)
 			}
 			contentStores[key2] = store
 		}
@@ -166,27 +168,27 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				supportFile = ex.Output != nil
 				supportStore = ex.OutputStore != nil || ex.OutputDir != ""
 				if supportFile && supportStore {
-					return nil, errors.Errorf("both file and store output is not supported by %s exporter", ex.Type)
+					return nil, fmt.Errorf("both file and store output is not supported by %s exporter", ex.Type)
 				}
 			}
 			if !supportFile && ex.Output != nil {
-				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
+				return nil, fmt.Errorf("output file writer is not supported by %s exporter", ex.Type)
 			}
 			if !supportDir && !supportStore && ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory is not supported by %s exporter", ex.Type)
+				return nil, fmt.Errorf("output directory is not supported by %s exporter", ex.Type)
 			}
 			if !supportStore && ex.OutputStore != nil {
-				return nil, errors.Errorf("output store is not supported by %s exporter", ex.Type)
+				return nil, fmt.Errorf("output store is not supported by %s exporter", ex.Type)
 			}
 			if supportFile {
 				if ex.Output == nil {
-					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+					return nil, fmt.Errorf("output file writer is required for %s exporter", ex.Type)
 				}
 				syncTargets = append(syncTargets, filesync.WithFSSync(exID, ex.Output))
 			}
 			if supportDir {
 				if ex.OutputDir == "" {
-					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
+					return nil, fmt.Errorf("output directory is required for %s exporter", ex.Type)
 				}
 				syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
 			}
@@ -206,7 +208,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				// TODO: this should be dependent on the exporter id (to allow multiple oci exporters)
 				storeName := "export"
 				if _, ok := contentStores[storeName]; ok {
-					return nil, errors.Errorf("oci store key %q already exists", storeName)
+					return nil, fmt.Errorf("oci store key %q already exists", storeName)
 				}
 				contentStores[storeName] = store
 			}
@@ -240,12 +242,12 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	var res *SolveResponse
 	eg.Go(func() error {
 		ctx := solveCtx
-		defer cancelSolve(errors.WithStack(context.Canceled))
+		defer cancelSolve(pkgerrors.WithStack(context.Canceled))
 
 		defer func() { // make sure the Status ends cleanly on build errors
 			go func() {
 				<-time.After(3 * time.Second)
-				cancelStatus(errors.WithStack(context.Canceled))
+				cancelStatus(pkgerrors.WithStack(context.Canceled))
 			}()
 			if !opt.SessionPreInitialized {
 				bklog.G(ctx).Debugf("stopping session")
@@ -302,7 +304,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 		resp, err := c.ControlClient().Solve(ctx, sopt)
 		if err != nil {
-			return errors.Wrap(err, "failed to solve")
+			return fmt.Errorf("failed to solve"+": %w", err)
 		}
 		res = &SolveResponse{
 			ExporterResponse: resp.ExporterResponse,
@@ -325,7 +327,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			select {
 			case <-solveCtx.Done():
 			case <-time.After(5 * time.Second):
-				cancelSolve(errors.WithStack(context.Canceled))
+				cancelSolve(pkgerrors.WithStack(context.Canceled))
 			}
 
 			return err
@@ -337,7 +339,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Ref: ref,
 		})
 		if err != nil {
-			return errors.Wrap(err, "failed to get status")
+			return fmt.Errorf("failed to get status"+": %w", err)
 		}
 		for {
 			resp, err := stream.Recv()
@@ -345,7 +347,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if errors.Is(err, io.EOF) {
 					return nil
 				}
-				return errors.Wrap(err, "failed to receive status")
+				return fmt.Errorf("failed to receive status"+": %w", err)
 			}
 			if statusChan != nil {
 				statusChan <- NewSolveStatus(resp)
@@ -419,13 +421,13 @@ func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (
 		for _, dt := range def.Def {
 			var op pb.Op
 			if err := op.UnmarshalVT(dt); err != nil {
-				return nil, errors.Wrap(err, "failed to parse llb proto op")
+				return nil, fmt.Errorf("failed to parse llb proto op"+": %w", err)
 			}
 			if src := op.GetSource(); src != nil {
 				if name, ok := strings.CutPrefix(src.Identifier, "local://"); ok {
 					mount, ok := localMounts[name]
 					if !ok {
-						return nil, errors.Errorf("local directory %s not enabled", name)
+						return nil, fmt.Errorf("local directory %s not enabled", name)
 					}
 					mount, err := fsutil.NewFilterFS(mount, &fsutil.FilterOpt{
 						Map: resetUIDAndGID,
@@ -564,7 +566,7 @@ func prepareMounts(opt *SolveOpt) (map[string]fsutil.FS, error) {
 			return nil, err
 		}
 		if _, ok := mounts[k]; ok {
-			return nil, errors.Errorf("local mount %s already exists", k)
+			return nil, fmt.Errorf("local mount %s already exists", k)
 		}
 		mounts[k] = mount
 	}

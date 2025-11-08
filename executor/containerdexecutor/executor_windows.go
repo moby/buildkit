@@ -2,6 +2,7 @@ package containerdexecutor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 func getUserSpec(user, _ string) (specs.User, error) {
@@ -57,13 +57,13 @@ func (w *containerdExecutor) ensureCWD(details *containerState, meta executor.Me
 
 	newp, err := fs.RootPath(rootfsPath, meta.Cwd)
 	if err != nil {
-		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+		return fmt.Errorf("working dir %s points to invalid target: %w", newp, err)
 	}
 
 	if _, err := os.Stat(newp); err != nil {
 		// uid and gid are not used on windows.
 		if err := user.MkdirAllAndChown(newp, 0755, 0, 0); err != nil {
-			return errors.Wrapf(err, "failed to create working directory %s", newp)
+			return fmt.Errorf("failed to create working directory %s: %w", newp, err)
 		}
 	}
 	return nil

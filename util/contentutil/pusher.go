@@ -2,6 +2,7 @@ package contentutil
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/containerd/containerd/v2/core/remotes"
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 func FromPusher(p remotes.Pusher) content.Ingester {
@@ -41,7 +41,7 @@ func (i *pushingIngester) Writer(ctx context.Context, opts ...content.WriterOpt)
 		}
 	}
 	if wOpts.Ref == "" {
-		return nil, errors.Wrap(cerrdefs.ErrInvalidArgument, "ref must not be empty")
+		return nil, fmt.Errorf("ref must not be empty"+": %w", cerrdefs.ErrInvalidArgument)
 	}
 
 	st := time.Now()
@@ -50,7 +50,7 @@ func (i *pushingIngester) Writer(ctx context.Context, opts ...content.WriterOpt)
 	for {
 		if time.Since(st) > time.Hour {
 			i.mu.Unlock()
-			return nil, errors.Wrapf(cerrdefs.ErrUnavailable, "ref %v locked", wOpts.Desc.Digest)
+			return nil, fmt.Errorf("ref %v locked: %w", wOpts.Desc.Digest, cerrdefs.ErrUnavailable)
 		}
 		if _, ok := i.active[wOpts.Desc.Digest]; ok {
 			i.c.Wait()

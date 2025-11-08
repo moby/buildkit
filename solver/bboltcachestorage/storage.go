@@ -12,7 +12,7 @@ import (
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/db/boltutil"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -124,16 +124,16 @@ func (s *Store) Load(id string, resultID string) (solver.CacheResult, error) {
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(resultBucket))
 		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
+			return pkgerrors.WithStack(solver.ErrNotFound)
 		}
 		b = b.Bucket([]byte(id))
 		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
+			return pkgerrors.WithStack(solver.ErrNotFound)
 		}
 
 		v := b.Get([]byte(resultID))
 		if v == nil {
-			return errors.WithStack(solver.ErrNotFound)
+			return pkgerrors.WithStack(solver.ErrNotFound)
 		}
 
 		return json.Unmarshal(v, &res)
@@ -203,11 +203,11 @@ func (s *Store) Release(resultID string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(byResultBucket))
 		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
+			return pkgerrors.WithStack(solver.ErrNotFound)
 		}
 		b = b.Bucket([]byte(resultID))
 		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
+			return pkgerrors.WithStack(solver.ErrNotFound)
 		}
 		if err := b.ForEach(func(k, v []byte) error {
 			return s.releaseHelper(tx, string(k), resultID)
@@ -273,7 +273,7 @@ func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 				if err := subLinks.ForEach(func(k, v []byte) error {
 					parts := bytes.Split(k, []byte("@"))
 					if len(parts) != 2 {
-						return errors.Errorf("invalid key %s", k)
+						return fmt.Errorf("invalid key %s", k)
 					}
 					if bytes.Equal(id, parts[1]) {
 						toDelete = append(toDelete, string(k))
@@ -360,7 +360,7 @@ func (s *Store) WalkLinksAll(id string, fn func(id string, link solver.CacheInfo
 		return b.ForEach(func(k, v []byte) error {
 			parts := bytes.Split(k, []byte("@"))
 			if len(parts) != 2 {
-				return errors.Errorf("invalid key %s", k)
+				return fmt.Errorf("invalid key %s", k)
 			}
 			var link solver.CacheInfoLink
 			if err := json.Unmarshal(parts[0], &link); err != nil {
@@ -523,7 +523,7 @@ func isEmptyBucket(b *bolt.Bucket) bool {
 func safeOpenDB(dbPath string, opts *bolt.Options) (db db.DB, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = errors.Errorf("%v", r)
+			err = fmt.Errorf("%v", r)
 		}
 
 		// If we get an error when opening the database, but we have
@@ -546,7 +546,7 @@ func fallbackOpenDB(dbPath string, opts *bolt.Options, openErr error) (db.DB, er
 		"This error signifies that buildkitd likely crashed or was sigkilled abrubtly, leaving the database corrupted. "+
 		"If you see logs from a previous panic then please report in the issue tracker at https://github.com/moby/buildkit . %+v", dbPath, backupPath, openErr)
 	if err := os.Rename(dbPath, backupPath); err != nil {
-		return nil, errors.Wrapf(err, "failed to rename database file %s to %s", dbPath, backupPath)
+		return nil, fmt.Errorf("failed to rename database file %s to %s: %w", dbPath, backupPath, err)
 	}
 
 	// Attempt to open the database again. This should be a new database.

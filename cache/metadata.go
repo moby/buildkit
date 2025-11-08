@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
+	"fmt"
+
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -420,11 +421,11 @@ func (md *cacheMetadata) updateLastUsed() error {
 
 	v, err := metadata.NewValue(count)
 	if err != nil {
-		return errors.Wrap(err, "failed to create usageCount value")
+		return fmt.Errorf("failed to create usageCount value: %w", err)
 	}
 	v2, err := metadata.NewValue(time.Now().UnixNano())
 	if err != nil {
-		return errors.Wrap(err, "failed to create lastUsedAt value")
+		return fmt.Errorf("failed to create lastUsedAt value: %w", err)
 	}
 	return md.si.Update(func(b *bolt.Bucket) error {
 		if err := md.si.SetValue(b, keyUsageCount, v); err != nil {
@@ -437,7 +438,7 @@ func (md *cacheMetadata) updateLastUsed() error {
 func (md *cacheMetadata) queueValue(key string, value any, index string) error {
 	v, err := metadata.NewValue(value)
 	if err != nil {
-		return errors.Wrap(err, "failed to create value")
+		return fmt.Errorf("failed to create value: %w", err)
 	}
 	v.Index = index
 	md.si.Queue(func(b *bolt.Bucket) error {
@@ -453,7 +454,7 @@ func (md *cacheMetadata) SetString(key, value string, index string) error {
 func (md *cacheMetadata) setValue(key string, value any, index string) error {
 	v, err := metadata.NewValue(value)
 	if err != nil {
-		return errors.Wrap(err, "failed to create value")
+		return fmt.Errorf("failed to create value: %w", err)
 	}
 	v.Index = index
 	return md.si.Update(func(b *bolt.Bucket) error {

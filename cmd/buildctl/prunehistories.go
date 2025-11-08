@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"io"
 	"text/tabwriter"
@@ -11,7 +11,6 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 )
 
@@ -72,7 +71,7 @@ func pruneHistories(clicontext *cli.Context) error {
 				return err
 			}
 		}
-		return stderrors.Join(errs...)
+		return errors.Join(errs...)
 	}
 	return pruneHistoriesWithTableOutput(ctx, clicontext.App.Writer, controlClient, resp)
 }
@@ -115,5 +114,5 @@ func pruneHistoriesWithTableOutput(ctx context.Context, w io.Writer, controlClie
 		tw.Flush()
 	}
 	tw.Flush()
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }

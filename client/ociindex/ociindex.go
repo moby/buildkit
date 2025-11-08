@@ -2,6 +2,7 @@ package ociindex
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -55,11 +56,11 @@ func (s StoreIndex) Read() (*ocispecs.Index, error) {
 	locked, err := lock.TryRLock()
 	if err != nil {
 		if !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EROFS) {
-			return nil, errors.Wrapf(err, "could not lock %s", s.lockPath)
+			return nil, fmt.Errorf("could not lock %s: %w", s.lockPath, err)
 		}
 	} else {
 		if !locked {
-			return nil, errors.Errorf("could not lock %s", s.lockPath)
+			return nil, fmt.Errorf("could not lock %s", s.lockPath)
 		}
 		defer func() {
 			lock.Unlock()
@@ -69,7 +70,7 @@ func (s StoreIndex) Read() (*ocispecs.Index, error) {
 
 	b, err := os.ReadFile(s.indexPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not read %s", s.indexPath)
+		return nil, fmt.Errorf("could not read %s: %w", s.indexPath, err)
 	}
 	var idx ocispecs.Index
 	if err := json.Unmarshal(b, &idx); err != nil {
@@ -83,10 +84,10 @@ func (s StoreIndex) Put(desc ocispecs.Descriptor, names ...NameOrTag) error {
 	lock := flock.New(s.lockPath)
 	locked, err := lock.TryLock()
 	if err != nil {
-		return errors.Wrapf(err, "could not lock %s", s.lockPath)
+		return fmt.Errorf("could not lock %s: %w", s.lockPath, err)
 	}
 	if !locked {
-		return errors.Errorf("could not lock %s", s.lockPath)
+		return fmt.Errorf("could not lock %s", s.lockPath)
 	}
 	defer func() {
 		lock.Unlock()
@@ -108,14 +109,14 @@ func (s StoreIndex) Put(desc ocispecs.Descriptor, names ...NameOrTag) error {
 	// modify the index file
 	idxFile, err := os.OpenFile(s.indexPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return errors.Wrapf(err, "could not open %s", s.indexPath)
+		return fmt.Errorf("could not open %s: %w", s.indexPath, err)
 	}
 	defer idxFile.Close()
 
 	var idx ocispecs.Index
 	idxData, err := io.ReadAll(idxFile)
 	if err != nil {
-		return errors.Wrapf(err, "could not read %s", s.indexPath)
+		return fmt.Errorf("could not read %s: %w", s.indexPath, err)
 	}
 	if len(idxData) > 0 {
 		if err := json.Unmarshal(idxData, &idx); err != nil {
@@ -144,10 +145,10 @@ func (s StoreIndex) Put(desc ocispecs.Descriptor, names ...NameOrTag) error {
 		return err
 	}
 	if _, err = idxFile.WriteAt(idxData, 0); err != nil {
-		return errors.Wrapf(err, "could not write %s", s.indexPath)
+		return fmt.Errorf("could not write %s: %w", s.indexPath, err)
 	}
 	if err = idxFile.Truncate(int64(len(idxData))); err != nil {
-		return errors.Wrapf(err, "could not truncate %s", s.indexPath)
+		return fmt.Errorf("could not truncate %s: %w", s.indexPath, err)
 	}
 	return nil
 }

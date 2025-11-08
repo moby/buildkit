@@ -2,12 +2,13 @@ package progress
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -33,7 +34,7 @@ func TestProgress(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 15, s)
 
-	cancelProgress(errors.WithStack(context.Canceled))
+	cancelProgress(pkgerrors.WithStack(context.Canceled))
 	err = eg.Wait()
 	require.NoError(t, err)
 
@@ -58,7 +59,7 @@ func TestProgressNested(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 6, s)
 
-	cancelProgress(errors.WithStack(context.Canceled))
+	cancelProgress(pkgerrors.WithStack(context.Canceled))
 
 	err = eg.Wait()
 	require.NoError(t, err)

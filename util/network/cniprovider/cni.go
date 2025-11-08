@@ -2,6 +2,8 @@ package cniprovider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -15,7 +17,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -32,10 +33,10 @@ type Opt struct {
 
 func New(opt Opt) (network.Provider, error) {
 	if _, err := os.Stat(opt.ConfigPath); err != nil {
-		return nil, errors.Wrapf(err, "failed to read cni config %q", opt.ConfigPath)
+		return nil, fmt.Errorf("failed to read cni config %q: %w", opt.ConfigPath, err)
 	}
 	if _, err := os.Stat(opt.BinaryDir); err != nil {
-		return nil, errors.Wrapf(err, "failed to read cni binary dir %q", opt.BinaryDir)
+		return nil, fmt.Errorf("failed to read cni binary dir %q: %w", opt.BinaryDir, err)
 	}
 
 	cniOptions := []cni.Opt{cni.WithPluginDir([]string{opt.BinaryDir}), cni.WithInterfacePrefix("eth")}
@@ -289,7 +290,7 @@ func (c *cniProvider) newNS(ctx context.Context, hostname string) (*cniNS, error
 	}
 	if err != nil {
 		deleteNetNS(nativeID)
-		return nil, errors.Wrap(err, "CNI setup error")
+		return nil, fmt.Errorf("CNI setup error"+": %w", err)
 	}
 	trace.SpanFromContext(ctx).AddEvent("finished setting up network namespace")
 	bklog.G(ctx).Debugf("finished setting up network namespace %s", id)

@@ -22,7 +22,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -211,7 +211,7 @@ func (c *Connection) ContextWithStop(ctx context.Context) (context.Context, cont
 			// Nothing to do, either cancelled or deadline
 			// happened.
 		case <-c.stopCh:
-			cancel(errors.WithStack(context.Canceled))
+			cancel(pkgerrors.WithStack(context.Canceled))
 		}
 	}(ctx, cancel)
 	return ctx, cancel

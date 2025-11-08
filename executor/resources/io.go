@@ -1,13 +1,14 @@
 package resources
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -31,7 +32,7 @@ func getCgroupIOStat(cgroupPath string) (*resourcestypes.IOStat, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, errors.Wrapf(err, "failed to read %s", ioStatPath)
+		return nil, fmt.Errorf("failed to read %s: %w", ioStatPath, err)
 	}
 
 	ioStat := &resourcestypes.IOStat{}

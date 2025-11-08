@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"fmt"
 	"sync"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
 	"google.golang.org/grpc/codes"
 )
@@ -115,7 +115,7 @@ func GetTokenAuthority(ctx context.Context, host string, sm *session.Manager, g 
 			return err
 		}
 		if len(resp.PublicKey) != 32 {
-			return errors.Errorf("invalid pubkey length %d", len(pubKey))
+			return fmt.Errorf("invalid pubkey length %d", len(pubKey))
 		}
 
 		sessionID = id

@@ -338,7 +338,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)
 		if err != nil {
-			return nil, errors.Wrap(err, "invalid platforms")
+			return nil, fmt.Errorf("invalid platforms"+": %w", err)
 		}
 		opt.Platforms = platforms
 	}
@@ -378,7 +378,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 			//nolint:staticcheck
 			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to dial %q", address)
+				return nil, fmt.Errorf("failed to dial %q: %w", address, err)
 			}
 			return snproxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(conn), name), nil
 		}
@@ -424,11 +424,11 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 			// tree, and unmarshal it to the actual type.
 			t, err := toml.TreeFromMap(cfg.StargzSnapshotterConfig)
 			if err != nil {
-				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
+				return snFactory, fmt.Errorf("failed to parse stargz config: %w", err)
 			}
 			err = t.Unmarshal(&sgzCfg)
 			if err != nil {
-				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
+				return snFactory, fmt.Errorf("failed to parse stargz config: %w", err)
 			}
 		}
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
@@ -455,7 +455,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				fs, remotesn.AsynchronousRemove, remotesn.NoRestore)
 		}
 	default:
-		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
+		return snFactory, fmt.Errorf("unknown snapshotter name: %q", name)
 	}
 	return snFactory, nil
 }

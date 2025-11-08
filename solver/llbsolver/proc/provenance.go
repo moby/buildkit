@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"github.com/moby/buildkit/executor/resources"
@@ -13,7 +14,6 @@ import (
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/pkg/errors"
 )
 
 func ProvenanceProcessor(slsaVersion provenancetypes.ProvenanceSLSA, attrs map[string]string, customEnv map[string]any) llbsolver.Processor {
@@ -34,7 +34,7 @@ func ProvenanceProcessor(slsaVersion provenancetypes.ProvenanceSLSA, attrs map[s
 		for _, p := range ps.Platforms {
 			cp, ok := res.Provenance.FindRef(p.ID)
 			if !ok {
-				return nil, errors.Errorf("no build info found for provenance %s", p.ID)
+				return nil, fmt.Errorf("no build info found for provenance %s", p.ID)
 			}
 
 			if cp == nil {
@@ -43,7 +43,7 @@ func ProvenanceProcessor(slsaVersion provenancetypes.ProvenanceSLSA, attrs map[s
 
 			ref, ok := res.FindRef(p.ID)
 			if !ok {
-				return nil, errors.Errorf("could not find ref %s", p.ID)
+				return nil, fmt.Errorf("could not find ref %s", p.ID)
 			}
 
 			pc, err := llbsolver.NewProvenanceCreator(ctx, slsaVersion, cp, ref, attrs, j, usage, customEnv)

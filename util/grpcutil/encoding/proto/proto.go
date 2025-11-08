@@ -11,7 +11,8 @@
 package proto
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/mem"
 	"google.golang.org/protobuf/proto"
@@ -38,7 +39,7 @@ func (codec) Marshal(m any) (data mem.BufferSlice, err error) {
 		m2 := protoadapt.MessageV2Of(m)
 		return marshal(data, m2)
 	default:
-		return nil, errors.Errorf("failed to marshal, message is %T, want proto.Message", m)
+		return nil, fmt.Errorf("failed to marshal, message is %T, want proto.Message", m)
 	}
 }
 
@@ -52,7 +53,7 @@ func (codec) Unmarshal(data mem.BufferSlice, m any) error {
 		m2 := protoadapt.MessageV2Of(m)
 		return unmarshal(data, m2)
 	default:
-		return errors.Errorf("failed to unmarshal, message is %T, want proto.Message", m)
+		return fmt.Errorf("failed to unmarshal, message is %T, want proto.Message", m)
 	}
 }
 

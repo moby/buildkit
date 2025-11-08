@@ -2,13 +2,13 @@ package sourceresolver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 type ImageMetaResolver interface {
@@ -30,7 +30,7 @@ func NewImageMetaResolver(mr MetaResolver) ImageMetaResolver {
 func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string, opt Opt) (string, digest.Digest, []byte, error) {
 	parsed, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
-		return "", "", nil, errors.Wrapf(err, "could not parse reference %q", ref)
+		return "", "", nil, fmt.Errorf("could not parse reference %q: %w", ref, err)
 	}
 	ref = parsed.String()
 	op := &pb.SourceOp{
@@ -48,7 +48,7 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 	}
 	res, err := imr.mr.ResolveSourceMetadata(ctx, op, opt)
 	if err != nil {
-		return "", "", nil, errors.Wrapf(err, "failed to resolve source metadata for %s", ref)
+		return "", "", nil, fmt.Errorf("failed to resolve source metadata for %s: %w", ref, err)
 	}
 	if res.Image == nil {
 		return "", "", nil, &imageutil.ResolveToNonImageError{Ref: ref, Updated: res.Op.Identifier}

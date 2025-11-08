@@ -3,8 +3,9 @@
 package cniprovider
 
 import (
+	"errors"
+
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 )
 
 func createNetNS(_ *cniProvider, _ string) (string, error) {

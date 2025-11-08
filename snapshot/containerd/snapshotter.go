@@ -2,13 +2,13 @@ package containerd
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
 )
 
 func NewSnapshotter(name string, snapshotter snapshots.Snapshotter, ns string, idmap *user.IdentityMapping) snapshot.Snapshotter {
@@ -60,7 +60,7 @@ func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...sn
 }
 
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
-	return errors.Errorf("calling snapshotter.Remove is forbidden")
+	return errors.New("calling snapshotter.Remove is forbidden")
 }
 
 func (s *nsSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error {

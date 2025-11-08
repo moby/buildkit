@@ -7,7 +7,6 @@ import (
 	"runtime"
 
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 )
 
 // InitOCIWorker registers an integration test worker, which enables the --oci-worker
@@ -61,7 +60,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 
 	if s.UID != 0 {
 		if s.GID == 0 {
-			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
+			return nil, nil, fmt.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
 		}
 		var rootlessKitArgs []string
 		switch s.RootlessKitNet {

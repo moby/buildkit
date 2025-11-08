@@ -2,18 +2,19 @@ package sourcepolicy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 )
 
 // mutate is a MutateFn which converts the source operation to the identifier and attributes provided by the policy.
 // If there is no change, then the return value should be false and is not considered an error.
 func mutate(ctx context.Context, op *pb.SourceOp, rule *spb.Rule, selector *selectorCache, ref string) (bool, error) {
 	if rule.Updates == nil {
-		return false, errors.Errorf("missing destination for convert rule")
+		return false, errors.New("missing destination for convert rule")
 	}
 
 	dest := rule.Updates.Identifier
@@ -22,7 +23,7 @@ func mutate(ctx context.Context, op *pb.SourceOp, rule *spb.Rule, selector *sele
 	}
 	dest, err := selector.Format(ref, dest)
 	if err != nil {
-		return false, errors.Wrap(err, "error formatting destination")
+		return false, fmt.Errorf("error formatting destination"+": %w", err)
 	}
 
 	bklog.G(ctx).Debugf("sourcepolicy: converting %s to %s, pattern: %s", ref, dest, rule.Updates.Identifier)

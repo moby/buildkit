@@ -33,9 +33,8 @@ package proto
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
-
-	"github.com/pkg/errors"
 )
 
 func MarshalJSONEnum(m map[int32]string, value int32) ([]byte, error) {
@@ -61,14 +60,14 @@ func UnmarshalJSONEnum(m map[string]int32, data []byte, enumName string) (int32,
 		}
 		val, ok := m[repr]
 		if !ok {
-			return 0, errors.Errorf("unrecognized enum %s value %q", enumName, repr)
+			return 0, fmt.Errorf("unrecognized enum %s value %q", enumName, repr)
 		}
 		return val, nil
 	}
 	// Old style: enums are ints.
 	var val int32
 	if err := json.Unmarshal(data, &val); err != nil {
-		return 0, errors.Errorf("cannot unmarshal %#q into enum %s", data, enumName)
+		return 0, fmt.Errorf("cannot unmarshal %#q into enum %s", data, enumName)
 	}
 	return val, nil
 }

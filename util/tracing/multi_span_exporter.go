@@ -2,7 +2,7 @@ package tracing
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -16,7 +16,7 @@ func (m MultiSpanExporter) ExportSpans(ctx context.Context, spans []sdktrace.Rea
 			errs = append(errs, e)
 		}
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }
 
 func (m MultiSpanExporter) Shutdown(ctx context.Context) error {
@@ -26,5 +26,5 @@ func (m MultiSpanExporter) Shutdown(ctx context.Context) error {
 			errs = append(errs, e)
 		}
 	}
-	return stderrors.Join(errs...)
+	return errors.Join(errs...)
 }

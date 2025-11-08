@@ -3,6 +3,8 @@ package contenthash
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -22,12 +24,11 @@ import (
 	"github.com/moby/locker"
 	"github.com/moby/patternmatcher"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-var errNotFound = errors.Errorf("not found")
+var errNotFound = errors.New("not found")
 
 var (
 	defaultManager     *cacheManager
@@ -108,7 +109,7 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 		if p == "/" {
 			return digest.FromBytes(nil), nil
 		}
-		return "", errors.Errorf("%s: no such file or directory", p)
+		return "", fmt.Errorf("%s: no such file or directory", p)
 	}
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref))
 	if err != nil {
@@ -147,7 +148,7 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadat
 func (cm *cacheManager) SetCacheContext(ctx context.Context, md cache.RefMetadata, cci CacheContext) error {
 	cc, ok := cci.(*cacheContext)
 	if !ok {
-		return errors.Errorf("invalid cachecontext: %T", cc)
+		return fmt.Errorf("invalid cachecontext: %T", cc)
 	}
 	if md.ID() != cc.md.ID() {
 		cc = &cacheContext{
@@ -351,12 +352,12 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 
 	stat, ok := fi.Sys().(*fstypes.Stat)
 	if !ok {
-		return errors.Errorf("%s invalid change without stat information", p)
+		return fmt.Errorf("%s invalid change without stat information", p)
 	}
 
 	h, ok := fi.(Hashed)
 	if !ok {
-		return errors.Errorf("invalid fileinfo: %s", p)
+		return fmt.Errorf("invalid fileinfo: %s", p)
 	}
 
 	// if we are replacing a directory with a non-directory, rm -rf the tree under the existing dir
@@ -498,7 +499,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if len(opts.IncludePatterns) != 0 {
 		includePatternMatcher, err = patternmatcher.New(opts.IncludePatterns)
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
+			return "", nil, fmt.Errorf("invalid includepatterns: %s: %w", opts.IncludePatterns, err)
 		}
 	}
 
@@ -506,7 +507,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if len(opts.ExcludePatterns) != 0 {
 		excludePatternMatcher, err = patternmatcher.New(opts.ExcludePatterns)
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
+			return "", nil, fmt.Errorf("invalid excludepatterns: %s: %w", opts.ExcludePatterns, err)
 		}
 	}
 
@@ -699,7 +700,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		})
 
 		if !found {
-			return "", nil, errors.Wrapf(cerrdefs.ErrNotFound, "%q", requiredPath)
+			return "", nil, fmt.Errorf("%q: %w", requiredPath, cerrdefs.ErrNotFound)
 		}
 	}
 
@@ -725,7 +726,7 @@ func shouldIncludePath(
 			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
 		}
 		if err != nil {
-			return false, errors.Wrap(err, "failed to match includepatterns")
+			return false, fmt.Errorf("failed to match includepatterns"+": %w", err)
 		}
 		maybeIncludedPath.includeMatchInfo = matchInfo
 		if !m {
@@ -740,7 +741,7 @@ func shouldIncludePath(
 			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, patternmatcher.MatchInfo{})
 		}
 		if err != nil {
-			return false, errors.Wrap(err, "failed to match excludepatterns")
+			return false, fmt.Errorf("failed to match excludepatterns"+": %w", err)
 		}
 		maybeIncludedPath.excludeMatchInfo = matchInfo
 		if m {
@@ -891,7 +892,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node[*CacheRe
 		return nil, false, err
 	}
 	if cr == nil {
-		return nil, false, errors.Wrapf(errNotFound, "%q", convertKeyToPath(origk))
+		return nil, false, fmt.Errorf("%q: %w", convertKeyToPath(origk), errNotFound)
 	}
 	if cr.Digest != "" {
 		return cr, false, nil
@@ -1074,7 +1075,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string, follow
 			if itemPath == scanPath && errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
-			return errors.Wrapf(err, "failed to walk %s", itemPath)
+			return fmt.Errorf("failed to walk %s: %w", itemPath, err)
 		}
 		rel, err := filepath.Rel(mp, itemPath)
 		if err != nil {
@@ -1224,18 +1225,18 @@ func getFollowLinksCallback(root *iradix.Node[*CacheRecord], k []byte, followTra
 func prepareDigest(fp, p string, fi os.FileInfo) (digest.Digest, error) {
 	h, err := NewFileHash(fp, fi)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to create hash for %s", p)
+		return "", fmt.Errorf("failed to create hash for %s: %w", p, err)
 	}
 	if fi.Mode().IsRegular() && fi.Size() > 0 {
 		// TODO: would be nice to put the contents to separate hash first
 		// so it can be cached for hardlinks
 		f, err := os.Open(fp)
 		if err != nil {
-			return "", errors.Wrapf(err, "failed to open %s", p)
+			return "", fmt.Errorf("failed to open %s: %w", p, err)
 		}
 		defer f.Close()
 		if _, err := poolsCopy(h, f); err != nil {
-			return "", errors.Wrapf(err, "failed to copy file data for %s", p)
+			return "", fmt.Errorf("failed to copy file data for %s: %w", p, err)
 		}
 	}
 	return digest.NewDigest(digest.SHA256, h), nil

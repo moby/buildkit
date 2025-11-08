@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/pkg/errors"
 )
 
 type ImageCommitOpts struct {
@@ -106,7 +106,7 @@ func (c *ImageCommitOpts) EnableForceCompression(ctx context.Context, reason str
 func parseBool(dest *bool, key string, value string) error {
 	b, err := strconv.ParseBool(value)
 	if err != nil {
-		return errors.Wrapf(err, "non-bool value specified for %s", key)
+		return fmt.Errorf("non-bool value specified for %s: %w", key, err)
 	}
 	*dest = b
 	return nil

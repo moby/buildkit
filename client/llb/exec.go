@@ -3,6 +3,7 @@ package llb
 import (
 	"context"
 	_ "crypto/sha256" // for opencontainers/go-digest
+	"errors"
 	"fmt"
 	"net"
 	"slices"
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
@@ -78,9 +78,9 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 	if m.readonly {
 		m.output = source
 	} else if m.tmpfs {
-		m.output = &output{vertex: e, err: errors.Errorf("tmpfs mount for %s can't be used as a parent", target)}
+		m.output = &output{vertex: e, err: fmt.Errorf("tmpfs mount for %s can't be used as a parent", target)}
 	} else if m.noOutput {
-		m.output = &output{vertex: e, err: errors.Errorf("mount marked no-output and %s can't be used as a parent", target)}
+		m.output = &output{vertex: e, err: fmt.Errorf("mount marked no-output and %s can't be used as a parent", target)}
 	} else {
 		o := &output{vertex: e, getIndex: e.getMountIndexFn(m)}
 		if p := e.constraints.Platform; p != nil {
@@ -111,14 +111,14 @@ func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 		return err
 	}
 	if len(args) == 0 {
-		return errors.Errorf("arguments are required")
+		return errors.New("arguments are required")
 	}
 	cwd, err := getDir(e.base)(ctx, c)
 	if err != nil {
 		return err
 	}
 	if cwd == "" {
-		return errors.Errorf("working directory is required")
+		return errors.New("working directory is required")
 	}
 	for _, m := range e.mounts {
 		if m.source != nil {
@@ -356,7 +356,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		inputIndex := pb.InputIndex(len(pop.Inputs))
 		if m.source != nil {
 			if m.tmpfs {
-				return "", nil, nil, nil, errors.Errorf("tmpfs mounts must use scratch")
+				return "", nil, nil, nil, errors.New("tmpfs mounts must use scratch")
 			}
 			inp, err := m.source.ToInput(ctx, c)
 			if err != nil {
@@ -513,7 +513,7 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 			}
 			i++
 		}
-		return pb.OutputIndex(0), errors.Errorf("invalid mount: %s", m.target)
+		return pb.OutputIndex(0), fmt.Errorf("invalid mount: %s", m.target)
 	}
 }
 

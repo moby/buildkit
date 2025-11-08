@@ -2,13 +2,14 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -96,7 +97,7 @@ func (s *Session) Run(ctx context.Context, dialer Dialer) error {
 	s.cancelCtx = cancel
 	s.done = make(chan struct{})
 
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 	defer close(s.done)
 
 	meta := make(map[string][]string)
@@ -111,7 +112,7 @@ func (s *Session) Run(ctx context.Context, dialer Dialer) error {
 	conn, err := dialer(ctx, "h2c", meta)
 	if err != nil {
 		s.mu.Unlock()
-		return errors.Wrap(err, "failed to dial gRPC")
+		return fmt.Errorf("failed to dial gRPC"+": %w", err)
 	}
 	s.conn = conn
 	s.mu.Unlock()

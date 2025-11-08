@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/pkg/errors"
 )
 
 func NewCacheResultStorage(wc *Controller) solver.CacheResultStorage {
@@ -25,7 +25,7 @@ type cacheResultStorage struct {
 func (s *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solver.CacheResult, error) {
 	ref, ok := res.Sys().(*WorkerRef)
 	if !ok {
-		return solver.CacheResult{}, errors.Errorf("invalid result: %T", res.Sys())
+		return solver.CacheResult{}, fmt.Errorf("invalid result: %T", res.Sys())
 	}
 	if ref.ImmutableRef != nil {
 		if !ref.ImmutableRef.HasCachePolicyRetain() {
@@ -107,7 +107,7 @@ func (s *cacheResultStorage) Exists(ctx context.Context, id string) bool {
 func parseWorkerRef(id string) (string, string, error) {
 	parts := strings.Split(id, "::")
 	if len(parts) != 2 {
-		return "", "", errors.Errorf("invalid workerref id: %s", id)
+		return "", "", fmt.Errorf("invalid workerref id: %s", id)
 	}
 	return parts[0], parts[1], nil
 }

@@ -4,7 +4,7 @@ package file
 
 import (
 	"github.com/moby/sys/user"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
@@ -20,7 +20,7 @@ func mapUserToChowner(user *copy.User, idmap *user.IdentityMapping) (copy.Chowne
 				if idmap != nil {
 					uid, gid, err := idmap.ToHost(old.UID, old.GID)
 					if err != nil {
-						return nil, errors.WithStack(err)
+						return nil, pkgerrors.WithStack(err)
 					}
 					return &copy.User{UID: uid, GID: gid}, nil
 				}
@@ -32,7 +32,7 @@ func mapUserToChowner(user *copy.User, idmap *user.IdentityMapping) (copy.Chowne
 	if idmap != nil {
 		uid, gid, err := idmap.ToHost(user.UID, user.GID)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return nil, pkgerrors.WithStack(err)
 		}
 		u.UID = uid
 		u.GID = gid

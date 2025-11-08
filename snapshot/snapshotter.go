@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/sys/user"
 	"github.com/moby/sys/userns"
-	"github.com/pkg/errors"
 )
 
 type Mountable = executor.MountableRef
@@ -75,7 +75,7 @@ func (s *fromContainerd) IdentityMapping() *user.IdentityMapping {
 func (s *fromContainerd) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
 	info, err := s.Stat(ctx, key)
 	if err != nil {
-		return errors.Wrap(err, "failed to stat active key during commit")
+		return fmt.Errorf("failed to stat active key during commit"+": %w", err)
 	}
 	opts = append(opts, snapshots.WithLabels(snapshots.FilterInheritedLabels(info.Labels)))
 	return s.Snapshotter.Commit(ctx, name, key, opts...)

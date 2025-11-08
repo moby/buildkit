@@ -1,12 +1,12 @@
 package epoch
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/moby/buildkit/exporter"
 	commonexptypes "github.com/moby/buildkit/exporter/exptypes"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -43,7 +43,7 @@ func ParseSource(inp *exporter.Source) (*time.Time, bool, error) {
 	if v, ok := inp.Metadata[commonexptypes.ExporterEpochKey]; ok {
 		epoch, err := parseTime("", string(v))
 		if err != nil {
-			return nil, false, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH from frontend: %q", v)
+			return nil, false, fmt.Errorf("invalid SOURCE_DATE_EPOCH from frontend: %q: %w", v, err)
 		}
 		return epoch, true, nil
 	}
@@ -56,7 +56,7 @@ func parseTime(key, value string) (*time.Time, error) {
 	}
 	sde, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid %s: %s", key, err)
+		return nil, fmt.Errorf("invalid %s: %s: %w", key, err, err)
 	}
 	tm := time.Unix(sde, 0).UTC()
 	return &tm, nil

@@ -2,6 +2,7 @@ package contentutil
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -12,7 +13,7 @@ import (
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type CopyInfo struct {
@@ -112,13 +113,13 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 
 	for i := len(manifestStack) - 1; i >= 0; i-- {
 		desc := manifestStack[i]
 		if err := Copy(ctx, ingester, provider, desc, "", nil); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if ci.Referrers != nil {
 			referrers, err := ci.Referrers.Referrers(ctx, desc)
@@ -126,11 +127,11 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 				if errors.Is(err, cerrdefs.ErrNotFound) {
 					continue
 				}
-				return errors.WithStack(err)
+				return pkgerrors.WithStack(err)
 			}
 			for _, r := range referrers {
 				if err := copyChain(ctx, ingester, provider, r, visited, opts...); err != nil {
-					return errors.WithStack(err)
+					return pkgerrors.WithStack(err)
 				}
 			}
 		}

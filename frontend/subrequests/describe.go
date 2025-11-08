@@ -3,6 +3,7 @@ package subrequests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/errdefs"
-	"github.com/pkg/errors"
 )
 
 const RequestSubrequestsDescribe = "frontend.subrequests.describe"
@@ -55,12 +55,12 @@ func Describe(ctx context.Context, c client.Client) ([]Request, error) {
 
 	dt, ok := res.Metadata["result.json"]
 	if !ok {
-		return nil, errors.Errorf("no result.json metadata in response")
+		return nil, errors.New("no result.json metadata in response")
 	}
 
 	var reqs []Request
 	if err := json.Unmarshal(dt, &reqs); err != nil {
-		return nil, errors.Wrap(err, "failed to parse describe result")
+		return nil, fmt.Errorf("failed to parse describe result"+": %w", err)
 	}
 	return reqs, nil
 }

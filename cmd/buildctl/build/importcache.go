@@ -1,11 +1,12 @@
 package build
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/go-csvvalue"
 )
 
@@ -21,7 +22,7 @@ func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
 		if !ok {
-			return im, errors.Errorf("invalid value %s", field)
+			return im, fmt.Errorf("invalid value %s", field)
 		}
 		key = strings.ToLower(key)
 		switch key {

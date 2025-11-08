@@ -8,11 +8,10 @@
 package contenthash
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 var errTooManyLinks = errors.New("too many links")

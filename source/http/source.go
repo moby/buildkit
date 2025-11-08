@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -32,7 +33,6 @@ import (
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -160,7 +160,7 @@ func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *s
 func (hs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	httpIdentifier, ok := id.(*HTTPIdentifier)
 	if !ok {
-		return nil, errors.Errorf("invalid http identifier %v", id)
+		return nil, fmt.Errorf("invalid http identifier %v", id)
 	}
 
 	return &httpSourceHandler{
@@ -270,7 +270,7 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 			for _, v := range vals {
 				v2, ok := v.(*metadataWithRef)
 				if !ok {
-					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", v)
+					return nil, fmt.Errorf("invalid HTTP resolver cache value: %T", v)
 				}
 				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
 					continue
@@ -280,7 +280,7 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 				return &hs.resolved.Metadata, nil
 			}
 			if hs.src.Checksum != "" && len(vals) > 0 {
-				return nil, errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
+				return nil, fmt.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
 			}
 		}
 	}
@@ -288,7 +288,7 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	// look up metadata(previously stored headers) for that URL
 	mds, err := searchHTTPURLDigest(ctx, hs.cache, uh)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to search metadata for %s", uh)
+		return nil, fmt.Errorf("failed to search metadata for %s: %w", uh, err)
 	}
 
 	req, err := hs.newHTTPRequest(ctx, g)
@@ -389,7 +389,7 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return nil, errors.Errorf("invalid response status %d", resp.StatusCode)
+		return nil, fmt.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
 		respETag := etagValue(resp.Header.Get("ETag"))
@@ -402,11 +402,11 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 		}
 		md, ok := m[respETag]
 		if !ok {
-			return nil, errors.Errorf("invalid not-modified ETag: %v", respETag)
+			return nil, fmt.Errorf("invalid not-modified ETag: %v", respETag)
 		}
 		dgst := md.getHTTPChecksum()
 		if dgst == "" {
-			return nil, errors.Errorf("invalid metadata change")
+			return nil, errors.New("invalid metadata change")
 		}
 
 		var modTime *time.Time
@@ -613,7 +613,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 			for _, v := range vals {
 				v2, ok := v.(*metadataWithRef)
 				if !ok {
-					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", vals[0])
+					return nil, fmt.Errorf("invalid HTTP resolver cache value: %T", vals[0])
 				}
 				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
 					continue
@@ -625,7 +625,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 			}
 			release(nil)
 			if hs.src.Checksum != "" && len(vals) > 0 && refID == "" {
-				return nil, errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
+				return nil, fmt.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
 			}
 		}
 	}
@@ -665,7 +665,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 	}
 	if hs.resolved != nil && dgst != hs.resolved.Digest {
 		ref.Release(context.TODO())
-		return nil, errors.Errorf("digest mismatch %s: %s", dgst, hs.resolved.Digest)
+		return nil, fmt.Errorf("digest mismatch %s: %s", dgst, hs.resolved.Digest)
 	}
 
 	return ref, nil
@@ -712,7 +712,7 @@ func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group
 			return nil
 		})
 		if err != nil && hs.src.AuthHeaderSecret != "" {
-			return nil, errors.Wrapf(err, "failed to retrieve HTTP auth secret %s", hs.src.AuthHeaderSecret)
+			return nil, fmt.Errorf("failed to retrieve HTTP auth secret %s: %w", hs.src.AuthHeaderSecret, err)
 		}
 	}
 

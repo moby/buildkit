@@ -3,15 +3,17 @@ package cachedigest
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"sync"
 
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"go.etcd.io/bbolt"
 )
 
-var ErrInvalidEncoding = errors.Errorf("invalid encoding")
-var ErrNotFound = errors.Errorf("not found")
+var ErrInvalidEncoding = errors.New("invalid encoding")
+var ErrNotFound = errors.New("not found")
 
 const bucketName = "byhash"
 
@@ -87,22 +89,22 @@ func (d *DB) saveFrames(key string, frames []Frame) {
 
 func (d *DB) Get(ctx context.Context, dgst string) (Type, []Frame, error) {
 	if d.db == nil {
-		return "", nil, errors.WithStack(ErrNotFound)
+		return "", nil, pkgerrors.WithStack(ErrNotFound)
 	}
 	parsed, err := digest.Parse(dgst)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "invalid digest key")
+		return "", nil, fmt.Errorf("invalid digest key"+": %w", err)
 	}
 	var typ Type
 	var resultFrames []Frame
 	err = d.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(bucketName))
 		if b == nil {
-			return errors.WithStack(ErrNotFound)
+			return pkgerrors.WithStack(ErrNotFound)
 		}
 		val := b.Get([]byte(parsed.String()))
 		if val == nil {
-			return errors.WithStack(ErrNotFound)
+			return pkgerrors.WithStack(ErrNotFound)
 		}
 		frames, err := decodeFrames(val)
 		if err != nil {
@@ -142,7 +144,7 @@ func (d *DB) All(ctx context.Context, cb func(key string, typ Type, frames []Fra
 			keyStr := string(k)
 			_, err := digest.Parse(keyStr)
 			if err != nil {
-				return errors.Wrapf(err, "invalid digest key: %s", keyStr)
+				return fmt.Errorf("invalid digest key: %s: %w", keyStr, err)
 			}
 			frames, err := decodeFrames(v)
 			if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -36,7 +37,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -96,7 +96,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.push = b
 		case exptypes.OptKeyPushByDigest:
@@ -106,7 +106,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.pushByDigest = b
 		case exptypes.OptKeyInsecure:
@@ -116,7 +116,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.insecure = b
 		case exptypes.OptKeyUnpack:
@@ -126,7 +126,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.unpack = b
 		case exptypes.OptKeyStore:
@@ -136,7 +136,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.store = b
 		case keyUnsafeInternalStoreAllowIncomplete:
@@ -146,7 +146,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.storeAllowIncomplete = b
 		case exptypes.OptKeyDanglingPrefix:
@@ -158,7 +158,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.danglingEmptyOnly = b
 		case exptypes.OptKeyNameCanonical:
@@ -168,7 +168,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, fmt.Errorf("non-bool value specified for %s: %w", k, err)
 			}
 			i.nameCanonical = b
 		default:
@@ -361,7 +361,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					if errors.As(err, &statusErr) {
 						err = errutil.WithDetails(err)
 					}
-					return nil, nil, errors.Wrapf(err, "failed to push %v", targetName)
+					return nil, nil, fmt.Errorf("failed to push %v: %w", targetName, err)
 				}
 			}
 		}
@@ -500,7 +500,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 
 func getLayers(descs []ocispecs.Descriptor, manifest ocispecs.Manifest) ([]rootfs.Layer, error) {
 	if len(descs) != len(manifest.Layers) {
-		return nil, errors.Errorf("mismatched image rootfs and manifest layers")
+		return nil, errors.New("mismatched image rootfs and manifest layers")
 	}
 
 	layers := make([]rootfs.Layer, len(descs))

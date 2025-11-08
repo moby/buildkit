@@ -1,7 +1,7 @@
 package dockerfile2llb
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
@@ -19,6 +19,6 @@ func dispatchRunNetwork(c *instructions.RunCommand) (llb.RunOption, error) {
 	case instructions.NetworkHost:
 		return llb.Network(pb.NetMode_HOST), nil
 	default:
-		return nil, errors.Errorf("unsupported network mode %q", network)
+		return nil, fmt.Errorf("unsupported network mode %q", network)
 	}
 }

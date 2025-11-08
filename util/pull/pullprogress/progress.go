@@ -2,6 +2,7 @@ package pullprogress
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -45,7 +46,7 @@ type readerAtWithCancel struct {
 }
 
 func (ra readerAtWithCancel) Close() error {
-	ra.cancel(errors.WithStack(context.Canceled))
+	ra.cancel(pkgerrors.WithStack(context.Canceled))
 	select {
 	case <-ra.doneCh:
 	case <-time.After(time.Second):
@@ -79,7 +80,7 @@ type readerWithCancel struct {
 }
 
 func (r readerWithCancel) Close() error {
-	r.cancel(errors.WithStack(context.Canceled))
+	r.cancel(pkgerrors.WithStack(context.Canceled))
 	select {
 	case <-r.doneCh:
 	case <-time.After(time.Second):

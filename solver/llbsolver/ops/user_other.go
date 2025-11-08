@@ -3,10 +3,11 @@
 package ops
 
 import (
+	"errors"
+
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 

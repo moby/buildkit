@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -63,10 +64,10 @@ func dialStdioAction(clicontext *cli.Context) error {
 func dialer(address string, timeout time.Duration) (net.Conn, error) {
 	addrParts := strings.SplitN(address, "://", 2)
 	if len(addrParts) != 2 {
-		return nil, errors.Errorf("invalid address %s", address)
+		return nil, fmt.Errorf("invalid address %s", address)
 	}
 	if addrParts[0] != "unix" {
-		return nil, errors.Errorf("invalid address %s (expected unix://, got %s://)", address, addrParts[0])
+		return nil, fmt.Errorf("invalid address %s (expected unix://, got %s://)", address, addrParts[0])
 	}
 	return net.DialTimeout(addrParts[0], addrParts[1], timeout)
 }

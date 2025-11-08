@@ -2,6 +2,7 @@ package resources
 
 import (
 	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 	"syscall"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
-	"github.com/pkg/errors"
 )
 
 const (

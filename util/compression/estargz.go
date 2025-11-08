@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -17,7 +18,6 @@ import (
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation}
@@ -34,7 +34,7 @@ func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc 
 				return nil, err
 			}
 			if ct != Gzip {
-				return nil, errors.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
+				return nil, fmt.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
 			}
 			done := make(chan struct{})
 			pr, pw := io.Pipe()
@@ -92,15 +92,15 @@ func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc 
 			mu.Unlock()
 			if cInfo == nil {
 				if writeErr != nil {
-					return nil, errors.Wrapf(writeErr, "cannot finalize due to write error")
+					return nil, fmt.Errorf("cannot finalize due to write error: %w", writeErr)
 				}
-				return nil, errors.Errorf("cannot finalize (reason unknown)")
+				return nil, fmt.Errorf("cannot finalize (reason unknown)")
 			}
 
 			// Fill necessary labels
 			info, err := cs.Info(ctx, cInfo.compressedDigest)
 			if err != nil {
-				return nil, errors.Wrap(err, "failed to get info from content store")
+				return nil, fmt.Errorf("failed to get info from content store"+": %w", err)
 			}
 			if info.Labels == nil {
 				info.Labels = make(map[string]string)

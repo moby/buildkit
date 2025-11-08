@@ -2,11 +2,11 @@ package detect
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
 
-	"github.com/pkg/errors"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -51,7 +51,7 @@ func detectExporter[T any](envVar string, fn func(d ExporterDetector) (T, bool, 
 		d, ok := detectors[n]
 		if !ok {
 			if !ignoreErrors {
-				err = errors.Errorf("unsupported opentelemetry exporter %v", n)
+				err = fmt.Errorf("unsupported opentelemetry exporter %v", n)
 			}
 			return exp, err
 		}

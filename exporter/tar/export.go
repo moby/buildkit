@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -15,7 +17,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
@@ -121,14 +123,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
-		return nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, nil, errors.New("unable to export multiple refs, missing platforms mapping")
 	}
 	p, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
 		return nil, nil, err
 	}
 	if !isMap && len(p.Platforms) > 1 {
-		return nil, nil, errors.Errorf("unable to export multiple platforms without map")
+		return nil, nil, errors.New("unable to export multiple platforms without map")
 	}
 
 	var fs fsutil.FS
@@ -138,7 +140,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		for _, p := range p.Platforms {
 			r, ok := inp.FindRef(p.ID)
 			if !ok {
-				return nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+				return nil, nil, fmt.Errorf("failed to find ref for ID %s", p.ID)
 			}
 			d, err := getDir(ctx, p.ID, r, inp.Attestations[p.ID])
 			if err != nil {
@@ -164,8 +166,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
-	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {

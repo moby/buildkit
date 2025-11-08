@@ -4,6 +4,7 @@ package snapshot
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/leaseutil"
 	overlayutil "github.com/moby/buildkit/util/overlay"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 	libcap "kernel.org/pub/linux/libs/security/libcap/cap"
@@ -53,7 +53,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 			return nil, nil, err
 		}
 	default:
-		return nil, nil, errors.Errorf("unhandled snapshotter: %s", snapshotterName)
+		return nil, nil, fmt.Errorf("unhandled snapshotter: %s", snapshotterName)
 	}
 	t.Cleanup(func() {
 		require.NoError(t, ctdSnapshotter.Close())

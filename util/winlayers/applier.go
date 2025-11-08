@@ -3,6 +3,7 @@ package winlayers
 import (
 	"archive/tar"
 	"context"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func NewFileSystemApplierWithWindows(cs content.Provider, a diff.Applier) diff.Applier {
@@ -49,14 +49,14 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispecs.Descriptor, mounts
 
 	compressed, err := images.DiffCompression(ctx, desc.MediaType)
 	if err != nil {
-		return ocispecs.Descriptor{}, errors.Wrapf(cerrdefs.ErrNotImplemented, "unsupported diff media type: %v", desc.MediaType)
+		return ocispecs.Descriptor{}, fmt.Errorf("unsupported diff media type: %v: %w", desc.MediaType, cerrdefs.ErrNotImplemented)
 	}
 
 	var ocidesc ocispecs.Descriptor
 	if err := mount.WithTempMount(ctx, mounts, func(root string) error {
 		ra, err := s.cs.ReaderAt(ctx, desc)
 		if err != nil {
-			return errors.Wrap(err, "failed to get reader from content store")
+			return fmt.Errorf("failed to get reader from content store"+": %w", err)
 		}
 		defer ra.Close()
 

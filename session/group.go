@@ -2,9 +2,10 @@ package session
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type Group interface {
@@ -69,12 +70,12 @@ func (sm *Manager) Any(ctx context.Context, g Group, f func(context.Context, str
 			if lastErr != nil {
 				return lastErr
 			}
-			return errors.Errorf("no active sessions")
+			return errors.New("no active sessions")
 		}
 
 		timeoutCtx, cancel := context.WithCancelCause(ctx)
-		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-		defer func() { cancel(errors.WithStack(context.Canceled)) }()
+		timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, pkgerrors.WithStack(context.DeadlineExceeded)) //nolint:govet
+		defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 		c, err := sm.Get(timeoutCtx, id, false)
 		if err != nil {
 			lastErr = err

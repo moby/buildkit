@@ -1,16 +1,16 @@
 package sourcepolicy
 
 import (
+	"fmt"
 	"regexp"
 
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
-	"github.com/pkg/errors"
 )
 
 func match(src *selectorCache, ref string, attrs map[string]string) (bool, error) {
 	for _, c := range src.Constraints {
 		if c == nil {
-			return false, errors.Errorf("invalid nil constraint for %v", src)
+			return false, fmt.Errorf("invalid nil constraint for %v", src)
 		}
 		switch c.Condition {
 		case spb.AttrMatch_EQUAL:
@@ -25,13 +25,13 @@ func match(src *selectorCache, ref string, attrs map[string]string) (bool, error
 			// TODO: Cache the compiled regex
 			matches, err := regexp.MatchString(c.Value, attrs[c.Key])
 			if err != nil {
-				return false, errors.Errorf("invalid regex %q: %v", c.Value, err)
+				return false, fmt.Errorf("invalid regex %q: %v", c.Value, err)
 			}
 			if !matches {
 				return false, nil
 			}
 		default:
-			return false, errors.Errorf("unknown attr condition: %s", c.Condition)
+			return false, fmt.Errorf("unknown attr condition: %s", c.Condition)
 		}
 	}
 
@@ -55,6 +55,6 @@ func match(src *selectorCache, ref string, attrs map[string]string) (bool, error
 		}
 		return w.Match(ref) != nil, nil
 	default:
-		return false, errors.Errorf("unknown match type: %s", src.MatchType)
+		return false, fmt.Errorf("unknown match type: %s", src.MatchType)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	"github.com/moby/buildkit/util/tracing"
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -137,7 +137,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 			return err
 		}
 		defer func() {
-			err = errors.Wrap(errutil.WithDetails(err), "failed to fetch oauth token")
+			err = fmt.Errorf("failed to fetch oauth token"+": %w", errutil.WithDetails(err))
 		}()
 		ap.mu.Lock()
 		name := fmt.Sprintf("[auth] %v token for %s", strings.Join(trimScopePrefix(req.Scopes), " "), req.Host)
@@ -168,7 +168,7 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 	// do request anonymously
 	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch anonymous token")
+		return nil, fmt.Errorf("failed to fetch anonymous token"+": %w", err)
 	}
 	return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresInSeconds), nil
 }
@@ -188,7 +188,7 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 			if runtime.GOOS == "windows" {
 				systemPool = x509.NewCertPool()
 			} else {
-				return nil, errors.Wrapf(err, "unable to get system cert pool")
+				return nil, fmt.Errorf("unable to get system cert pool: %w", err)
 			}
 		}
 		tc.RootCAs = systemPool
@@ -197,7 +197,7 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 	for _, p := range c.RootCAs {
 		dt, err := os.ReadFile(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to read %s", p)
+			return nil, fmt.Errorf("failed to read %s: %w", p, err)
 		}
 		tc.RootCAs.AppendCertsFromPEM(dt)
 	}
@@ -205,7 +205,7 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 	for _, kp := range c.KeyPairs {
 		cert, err := tls.LoadX509KeyPair(kp.Certificate, kp.Key)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to load keypair for %s", kp.Certificate)
+			return nil, fmt.Errorf("failed to load keypair for %s: %w", kp.Certificate, err)
 		}
 		tc.Certificates = append(tc.Certificates, cert)
 	}

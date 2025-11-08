@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -24,7 +25,7 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	selinux "github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -163,7 +164,7 @@ func generateCDIOpts(manager *cdidevices.Manager, devs []*pb.CDIDevice) ([]oci.S
 				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
 			}
 			if err := manager.InjectDevices(s, devs...); err != nil {
-				return errors.Wrapf(err, "CDI device injection failed")
+				return fmt.Errorf("CDI device injection failed: %w", err)
 			}
 			// One crucial thing to keep in mind is that CDI device injection
 			// might add OCI Spec environment variables, hooks, and mounts as
@@ -296,18 +297,18 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 		// similar to runc.WithProcfd
 		fh, err := os.OpenFile(src, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {
-			return mount.Mount{}, nil, errors.WithStack(err)
+			return mount.Mount{}, nil, pkgerrors.WithStack(err)
 		}
 
 		fdPath := "/proc/self/fd/" + strconv.Itoa(int(fh.Fd()))
 		if resolved, err := os.Readlink(fdPath); err != nil {
 			fh.Close()
-			return mount.Mount{}, nil, errors.WithStack(err)
+			return mount.Mount{}, nil, pkgerrors.WithStack(err)
 		} else if resolved != src {
 			retries--
 			if retries <= 0 {
 				fh.Close()
-				return mount.Mount{}, nil, errors.Errorf("unable to safely resolve subpath %s", subPath)
+				return mount.Mount{}, nil, fmt.Errorf("unable to safely resolve subpath %s", subPath)
 			}
 			fh.Close()
 			continue

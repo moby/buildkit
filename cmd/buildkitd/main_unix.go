@@ -4,13 +4,13 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"os"
 	"syscall"
 
 	"github.com/containerd/containerd/v2/pkg/sys"
 	"github.com/coreos/go-systemd/v22/activation"
-	"github.com/pkg/errors"
 )
 
 const socketScheme = "unix://"

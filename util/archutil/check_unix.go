@@ -5,13 +5,12 @@ package archutil
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
-
-	"github.com/pkg/errors"
 )
 
 func withChroot(cmd *exec.Cmd, dir string) {
@@ -55,7 +54,7 @@ func check(arch, bin string) (string, error) {
 
 	// special handling for amd64. Exit code is 64 + amd64 variant
 	if err == nil {
-		return "", errors.Errorf("invalid zero exit code")
+		return "", errors.New("invalid zero exit code")
 	}
 	exitError := &exec.ExitError{}
 	if errors.As(err, &exitError) {

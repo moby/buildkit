@@ -26,7 +26,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
 )
@@ -232,7 +232,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						defer sandboxLimiter.Release(1)
 
 						ctx, cancel := context.WithCancelCause(ctx)
-						defer func() { cancel(errors.WithStack(context.Canceled)) }()
+						defer func() { cancel(pkgerrors.WithStack(context.Canceled)) }()
 
 						sb, closer, err := newSandbox(ctx, t, br, getMirror(), mv)
 						require.NoError(t, err)

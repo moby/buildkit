@@ -5,11 +5,12 @@ package venus
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -29,23 +30,23 @@ var _ cdidevices.Setup = &setup{}
 func (s *setup) Validate() error {
 	kVersion, err := getKernelVersion()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kernel version")
+		return fmt.Errorf("failed to get kernel version"+": %w", err)
 	}
 	if !strings.Contains(kVersion, "linuxkit") {
-		return errors.Errorf("%s currently requires a linuxkit kernel", cdiKind)
+		return fmt.Errorf("%s currently requires a linuxkit kernel", cdiKind)
 	}
 
 	_, err = os.Stat("/dev/dri")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errors.Errorf("no DRI device found, make you use Docker VMM Hypervisor")
+			return errors.New("no DRI device found, make you use Docker VMM Hypervisor")
 		}
-		return errors.Wrap(err, "failed to check DRI device")
+		return fmt.Errorf("failed to check DRI device"+": %w", err)
 	}
 
 	for _, dev := range []string{"renderD128", "card0"} {
 		if _, err := os.Stat("/dev/dri/" + dev); err != nil {
-			return errors.Wrapf(err, "failed to check DRI device %s", dev)
+			return fmt.Errorf("failed to check DRI device %s: %w", dev, err)
 		}
 	}
 	return nil
@@ -69,11 +70,11 @@ devices:
 `
 
 	if err := os.MkdirAll("/etc/cdi", 0700); err != nil {
-		return errors.Wrap(err, "failed to create /etc/cdi")
+		return fmt.Errorf("failed to create /etc/cdi"+": %w", err)
 	}
 
 	if err := os.WriteFile("/etc/cdi/venus.yaml", []byte(dt), 0600); err != nil {
-		return errors.Wrap(err, "failed to write /etc/cdi/venus.yaml")
+		return fmt.Errorf("failed to write /etc/cdi/venus.yaml"+": %w", err)
 	}
 
 	return nil

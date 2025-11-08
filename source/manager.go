@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/pkg/errors"
 )
 
 // Source implementations provide "root" vertices in the graph that can be
@@ -58,7 +58,7 @@ func (sm *Manager) Register(src Source) {
 func (sm *Manager) Identifier(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 	scheme, ref, ok := strings.Cut(op.Source.Identifier, "://")
 	if !ok {
-		return nil, errors.Wrapf(errInvalid, "failed to parse %s", op.Source.Identifier)
+		return nil, fmt.Errorf("failed to parse %s: %w", op.Source.Identifier, errInvalid)
 	}
 
 	sm.mu.Lock()
@@ -66,7 +66,7 @@ func (sm *Manager) Identifier(op *pb.Op_Source, platform *pb.Platform) (Identifi
 	sm.mu.Unlock()
 
 	if !found {
-		return nil, errors.Wrapf(errNotFound, "unknown scheme %s", scheme)
+		return nil, fmt.Errorf("unknown scheme %s: %w", scheme, errNotFound)
 	}
 
 	return source.Identifier(scheme, ref, op.Source.Attrs, platform)
@@ -78,7 +78,7 @@ func (sm *Manager) Resolve(ctx context.Context, id Identifier, sessM *session.Ma
 	sm.mu.Unlock()
 
 	if !ok {
-		return nil, errors.Errorf("no handler for %s", id.Scheme())
+		return nil, fmt.Errorf("no handler for %s", id.Scheme())
 	}
 
 	return src.Resolve(ctx, id, sessM, vtx)

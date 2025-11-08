@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -21,7 +22,6 @@ import (
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/version"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -217,7 +217,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 			}
 		}
 	}
-	return errors.Wrap(cerrdefs.ErrNotImplemented, "failed to find supported auth scheme")
+	return fmt.Errorf("failed to find supported auth scheme"+": %w", cerrdefs.ErrNotImplemented)
 }
 
 // authResult is used to control limit rate.
@@ -269,7 +269,7 @@ func (ah *authHandler) authorize(ctx context.Context, sm *session.Manager, g ses
 	case auth.BearerAuth:
 		return ah.doBearerAuth(ctx, sm, g)
 	default:
-		return "", errors.Wrapf(cerrdefs.ErrNotImplemented, "failed to find supported auth scheme: %s", string(ah.scheme))
+		return "", fmt.Errorf("failed to find supported auth scheme: %s: %w", string(ah.scheme), cerrdefs.ErrNotImplemented)
 	}
 }
 
@@ -368,7 +368,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 	// fetch token for the resource scope
 	if to.Secret != "" {
 		defer func() {
-			err = errors.Wrap(errutil.WithDetails(err), "failed to fetch oauth token")
+			err = fmt.Errorf("failed to fetch oauth token"+": %w", errutil.WithDetails(err))
 		}()
 		// try GET first because Docker Hub does not support POST
 		// switch once support has landed
@@ -408,7 +408,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 	// do request anonymously
 	resp, err := auth.FetchToken(ctx, ah.client, hdr, to)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch anonymous token")
+		return nil, fmt.Errorf("failed to fetch anonymous token"+": %w", err)
 	}
 	if resp.ExpiresInSeconds == 0 {
 		resp.ExpiresInSeconds = defaultExpiration
@@ -430,7 +430,7 @@ func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
 		return nil
 	}
 
-	return errors.Wrapf(docker.ErrInvalidAuthorization, "server message: %s", errStr)
+	return fmt.Errorf("server message: %s: %w", errStr, docker.ErrInvalidAuthorization)
 }
 
 func sameRequest(r1, r2 *http.Request) bool {

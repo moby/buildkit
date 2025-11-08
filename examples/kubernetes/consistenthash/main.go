@@ -15,12 +15,12 @@ Modify /tmp/nodes and confirm that the result rarely changes.
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/serialx/hashring"
 	"github.com/sirupsen/logrus"
 )
@@ -61,7 +61,7 @@ func doConsistentHash(nodes []string, key string) (string, error) {
 	ring := hashring.New(nodes)
 	x, ok := ring.GetNode(key)
 	if !ok {
-		return "", errors.Errorf("no node found for key %q", key)
+		return "", fmt.Errorf("no node found for key %q", key)
 	}
 	return x, nil
 }

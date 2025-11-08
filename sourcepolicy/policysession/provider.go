@@ -2,9 +2,9 @@ package policysession
 
 import (
 	context "context"
+	"errors"
 
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
-	"github.com/pkg/errors"
 	grpc "google.golang.org/grpc"
 )
 
@@ -26,7 +26,7 @@ func (p *PolicyProvider) CheckPolicy(ctx context.Context, req *CheckPolicyReques
 		return nil, err
 	}
 	if metareq != nil && decision != nil {
-		return nil, errors.Errorf("cannot return both decision and meta request")
+		return nil, errors.New("cannot return both decision and meta request")
 	}
 	resp := &CheckPolicyResponse{}
 	if decision != nil {

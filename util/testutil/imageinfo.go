@@ -3,12 +3,12 @@ package testutil
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/platforms"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 type ImageInfo struct {
@@ -99,7 +99,7 @@ func ReadImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor
 		return nil, err
 	}
 	if !images.IsManifestType(ii.Manifest.MediaType) {
-		return nil, errors.Errorf("invalid manifest type %s", ii.Manifest.MediaType)
+		return nil, fmt.Errorf("invalid manifest type %s", ii.Manifest.MediaType)
 	}
 
 	dt, err = content.ReadBlob(ctx, p, ii.Manifest.Config)

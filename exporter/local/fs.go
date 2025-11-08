@@ -23,7 +23,6 @@ import (
 	"github.com/moby/buildkit/util/staticfs"
 	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
@@ -64,7 +63,7 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 		case keyPlatformSplit:
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value for %s: %s", keyPlatformSplit, v)
+				return nil, fmt.Errorf("non-bool value for %s: %s: %w", keyPlatformSplit, v, err)
 			}
 			c.PlatformSplit = &b
 		default:
@@ -186,7 +185,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		for i, stmt := range stmts {
 			dt, err := json.MarshalIndent(stmt, "", "  ")
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "failed to marshal attestation")
+				return nil, nil, fmt.Errorf("failed to marshal attestation"+": %w", err)
 			}
 
 			name := opt.AttestationPrefix + path.Base(attestations[i].Path)
@@ -196,7 +195,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 				name = fmt.Sprintf("%s.%s%s", namBase, strings.ReplaceAll(k, "/", "_"), nameExt)
 			}
 			if _, ok := names[name]; ok {
-				return nil, nil, errors.Errorf("duplicate attestation path name %s", name)
+				return nil, nil, fmt.Errorf("duplicate attestation path name %s", name)
 			}
 			names[name] = struct{}{}
 

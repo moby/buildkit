@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -21,7 +22,6 @@ import (
 
 	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
@@ -1728,7 +1728,7 @@ func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintW
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
 	dt, ok := res.Metadata["result.json"]
 	if !ok {
-		return nil, errors.Errorf("missing frontend.outline")
+		return nil, errors.New("missing frontend.outline")
 	}
 	var l lint.LintResults
 	if err := json.Unmarshal(dt, &l); err != nil {

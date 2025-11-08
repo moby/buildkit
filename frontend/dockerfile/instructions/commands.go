@@ -1,11 +1,11 @@
 package instructions
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 // KeyValuePair represents an arbitrary named value.

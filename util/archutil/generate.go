@@ -5,13 +5,12 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"flag"
 	"html/template"
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/pkg/errors"
 )
 
 // saves baseimage binaries statically into go code

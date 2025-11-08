@@ -3,6 +3,7 @@ package cacheimport
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 )
 
 func NewCacheChains() *CacheChains {
@@ -73,7 +73,7 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 	matchDeps := make([]func() map[*item]struct{}, len(deps))
 	for i, dd := range deps {
 		if len(dd) == 0 {
-			return nil, false, errors.Errorf("empty dependency for %s", dgst)
+			return nil, false, fmt.Errorf("empty dependency for %s", dgst)
 		}
 		type itemWithSelector struct {
 			Src      *item
@@ -83,10 +83,10 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 		for ii, d := range dd {
 			it, ok := d.Src.(*item)
 			if !ok {
-				return nil, false, errors.Errorf("invalid dependency type %T for %s", d.Src, dgst)
+				return nil, false, fmt.Errorf("invalid dependency type %T for %s", d.Src, dgst)
 			}
 			if it.cc != c {
-				return nil, false, errors.Errorf("dependency %s is not part of the same cache chain", it.dgst)
+				return nil, false, fmt.Errorf("dependency %s is not part of the same cache chain", it.dgst)
 			}
 			items[ii] = itemWithSelector{
 				Src:      it,
@@ -157,7 +157,7 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 			allChildren[i] = struct{}{}
 			return nil
 		}, map[*item]struct{}{}); err != nil {
-			return nil, false, errors.Wrapf(err, "failed to walk children of %s", dgst)
+			return nil, false, fmt.Errorf("failed to walk children of %s: %w", dgst, err)
 		}
 		for i, dd := range deps {
 			for j, d := range dd {
@@ -248,7 +248,7 @@ func (p DescriptorProviderPair) Info(ctx context.Context, dgst digest.Digest) (c
 		return p.InfoProvider.Info(ctx, dgst)
 	}
 	if dgst != p.Descriptor.Digest {
-		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
+		return content.Info{}, fmt.Errorf("blob %s: %w", dgst, cerrdefs.ErrNotFound)
 	}
 	return content.Info{
 		Digest: p.Descriptor.Digest,

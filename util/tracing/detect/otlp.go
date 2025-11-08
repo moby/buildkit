@@ -2,9 +2,9 @@ package detect
 
 import (
 	"context"
+	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -46,7 +46,7 @@ func (otlpExporterDetector) DetectTraceExporter() (sdktrace.SpanExporter, error)
 		c = otlptracehttp.NewClient()
 	// case "http/json": // unsupported by library
 	default:
-		return nil, errors.Errorf("unsupported otlp protocol %v", proto)
+		return nil, fmt.Errorf("unsupported otlp protocol %v", proto)
 	}
 
 	return otlptrace.New(context.Background(), c)
@@ -77,7 +77,7 @@ func (otlpExporterDetector) DetectMetricExporter() (sdkmetric.Exporter, error) {
 		)
 	// case "http/json": // unsupported by library
 	default:
-		return nil, errors.Errorf("unsupported otlp protocol %v", proto)
+		return nil, fmt.Errorf("unsupported otlp protocol %v", proto)
 	}
 }
 

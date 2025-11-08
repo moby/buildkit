@@ -2,13 +2,14 @@ package solver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/moby/buildkit/solver/internal/pipe"
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type edgeStatusType int
@@ -202,7 +203,7 @@ func (e *edge) probeCache(d *dep, depKeys []CacheKeyWithSelector) bool {
 	}
 	keys, err := e.op.Cache().Query(depKeys, d.index, e.cacheMap.Digest, e.edge.Index)
 	if err != nil {
-		e.err = errors.Wrap(err, "error on cache query")
+		e.err = fmt.Errorf("error on cache query"+": %w", err)
 	}
 	found := false
 	for _, k := range keys {
@@ -342,7 +343,7 @@ func (e *edge) unpark(incoming []pipeSender, updates, allPipes []pipeReceiver, f
 		index := e.cacheMapIndex
 		e.cacheMapReq = f.NewFuncRequest(func(ctx context.Context) (any, error) {
 			cm, err := e.op.CacheMap(ctx, index)
-			return cm, errors.Wrap(err, "failed to load cache key")
+			return cm, fmt.Errorf("failed to load cache key"+": %w", err)
 		})
 		cacheMapReq = true
 	}
@@ -584,7 +585,7 @@ func (e *edge) processCacheMapReq() {
 		if !e.op.IgnoreCache() {
 			keys, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
 			if err != nil {
-				bklog.G(context.TODO()).Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
+				bklog.G(context.TODO()).Error(fmt.Errorf("invalid query response"+": %w", err)) // make the build fail for this error
 			} else {
 				for _, k := range keys {
 					k.vtx = e.edge.Vertex.Digest()
@@ -897,7 +898,7 @@ func (e *edge) computeCacheKeyFromDep(dep *dep, f *pipeFactory) (addedNew bool) 
 	index := dep.index
 	dep.slowCacheReq = f.NewFuncRequest(func(ctx context.Context) (any, error) {
 		v, err := e.op.CalcSlowCache(ctx, index, pfn, fn, res)
-		return v, errors.Wrap(err, "failed to compute cache key")
+		return v, fmt.Errorf("failed to compute cache key"+": %w", err)
 	})
 	return true
 }
@@ -949,7 +950,7 @@ func (e *edge) loadCache(ctx context.Context) (any, error) {
 	res, ctxOpts, err := e.op.LoadCache(ctx, rec)
 	if err != nil {
 		bklog.G(ctx).Debugf("load cache for %s err: %v", e.edge.Vertex.Name(), err)
-		return nil, errors.Wrap(err, "failed to load cache")
+		return nil, fmt.Errorf("failed to load cache"+": %w", err)
 	}
 
 	return NewCachedResult(res, []ExportableCacheKey{{CacheKey: rec.key, Exporter: &exporter{k: rec.key, record: rec, edge: e, recordCtxOpts: ctxOpts}}}), nil
@@ -960,12 +961,12 @@ func (e *edge) execOp(ctx context.Context) (any, error) {
 	cacheKeys, inputs := e.commitOptions()
 	results, subExporters, ctxOpts, err := e.op.Exec(ctx, toResultSlice(inputs))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, pkgerrors.WithStack(err)
 	}
 
 	index := e.edge.Index
 	if len(results) <= int(index) {
-		return nil, errors.Errorf("invalid response from exec need %d index but %d results received", index, len(results))
+		return nil, fmt.Errorf("invalid response from exec need %d index but %d results received", index, len(results))
 	}
 
 	res := results[int(index)]

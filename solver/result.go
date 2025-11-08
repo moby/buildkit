@@ -2,12 +2,12 @@ package solver
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/moby/buildkit/util/bklog"
-
-	"github.com/pkg/errors"
 )
 
 // SharedResult is a result that can be cloned
@@ -48,7 +48,7 @@ type splitResult struct {
 
 func (r *splitResult) Release(ctx context.Context) error {
 	if atomic.AddInt64(&r.released, 1) > 1 {
-		err := errors.Errorf("releasing already released reference %+v", r.ID())
+		err := fmt.Errorf("releasing already released reference %+v", r.ID())
 		bklog.G(ctx).Error(err)
 		return err
 	}

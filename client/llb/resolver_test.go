@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,7 +93,7 @@ func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt s
 
 	dt, err := json.Marshal(img)
 	if err != nil {
-		return "", "", nil, errors.WithStack(err)
+		return "", "", nil, pkgerrors.WithStack(err)
 	}
 	return ref, r.digest, dt, nil
 }

@@ -2,11 +2,12 @@ package sourcepolicy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -71,7 +72,7 @@ func (e *Engine) Evaluate(ctx context.Context, op *pb.SourceOp) (bool, error) {
 
 	for i := 0; ; i++ {
 		if i > maxIterr {
-			return mutated, errors.Wrapf(ErrTooManyOps, "too many mutations on a single source")
+			return mutated, fmt.Errorf("too many mutations on a single source: %w", ErrTooManyOps)
 		}
 
 		ctx := ctx
@@ -132,7 +133,7 @@ func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.
 		selector := e.selectorCache(rule.Selector)
 		matched, err := match(selector, ident, srcOp.Attrs)
 		if err != nil {
-			return false, errors.Wrap(err, "error matching source policy")
+			return false, fmt.Errorf("error matching source policy"+": %w", err)
 		}
 		if !matched {
 			continue
@@ -146,15 +147,15 @@ func (e *Engine) evaluatePolicy(ctx context.Context, pol *spb.Policy, srcOp *pb.
 		case spb.PolicyAction_CONVERT:
 			mut, err := mutate(ctx, srcOp, rule, selector, ident)
 			if err != nil || mut {
-				return mut, errors.Wrap(err, "error mutating source policy")
+				return mut, fmt.Errorf("error mutating source policy"+": %w", err)
 			}
 		default:
-			return false, errors.Errorf("source policy: rule %s %s: unknown type %q", rule.Action, rule.Selector.Identifier, ident)
+			return false, fmt.Errorf("source policy: rule %s %s: unknown type %q", rule.Action, rule.Selector.Identifier, ident)
 		}
 	}
 
 	if deny {
-		return false, errors.Wrapf(ErrSourceDenied, "source %q denied by policy", ident)
+		return false, fmt.Errorf("source %q denied by policy: %w", ident, ErrSourceDenied)
 	}
 	return false, nil
 }

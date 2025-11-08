@@ -2,6 +2,8 @@ package cache
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -15,7 +17,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func migrateChainID(si *metadata.StorageItem, all map[string]*metadata.StorageItem) (digest.Digest, digest.Digest, error) {
@@ -58,7 +60,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 	_, err := os.Stat(to)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 	} else {
 		return nil
@@ -67,24 +69,24 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 	_, err = os.Stat(from)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		return nil
 	}
 	tmpPath := to + ".tmp"
 	tmpFile, err := os.Create(tmpPath)
 	if err != nil {
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	src, err := os.Open(from)
 	if err != nil {
 		tmpFile.Close()
-		return errors.WithStack(err)
+		return pkgerrors.WithStack(err)
 	}
 	if _, err = io.Copy(tmpFile, src); err != nil {
 		tmpFile.Close()
 		src.Close()
-		return errors.Wrapf(err, "failed to copy db for migration")
+		return fmt.Errorf("failed to copy db for migration: %w", err)
 	}
 	src.Close()
 	tmpFile.Close()
@@ -150,7 +152,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 		}
 		var blob diffPair
 		if err := v.Unmarshal(&blob); err != nil {
-			return errors.WithStack(err)
+			return pkgerrors.WithStack(err)
 		}
 		if _, err := cs.Info(ctx, digest.Digest(blob.Blobsum)); err != nil {
 			continue
@@ -188,14 +190,14 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 			if errors.Is(err, cerrdefs.ErrAlreadyExists) {
 				continue
 			}
-			return errors.Wrap(err, "failed to create lease")
+			return fmt.Errorf("failed to create lease"+": %w", err)
 		}
 
 		if err := lm.AddResource(ctx, l, leases.Resource{
 			ID:   md.getSnapshotID(),
 			Type: "snapshots/" + s.Name(),
 		}); err != nil {
-			return errors.Wrapf(err, "failed to add snapshot %s to lease", item.ID())
+			return fmt.Errorf("failed to add snapshot %s to lease: %w", item.ID(), err)
 		}
 
 		if blobID := md.getBlob(); blobID != "" {
@@ -203,7 +205,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 				ID:   string(blobID),
 				Type: "content",
 			}); err != nil {
-				return errors.Wrapf(err, "failed to add blob %s to lease", item.ID())
+				return fmt.Errorf("failed to add blob %s to lease: %w", item.ID(), err)
 			}
 		}
 	}

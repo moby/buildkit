@@ -2,12 +2,12 @@ package ops
 
 import (
 	"context"
+	"errors"
 
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/windows"
 	"github.com/moby/buildkit/worker"
-	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
@@ -26,7 +26,7 @@ func readUser(chopt *pb.ChownOpt, mu, _ snapshot.Mountable, worker worker.Worker
 		switch u := chopt.User.User.(type) {
 		case *pb.UserOpt_ByName:
 			if mu == nil {
-				return nil, errors.Errorf("invalid missing user mount")
+				return nil, errors.New("invalid missing user mount")
 			}
 
 			rootMounts, release, err := mu.Mount()
