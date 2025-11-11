@@ -3,6 +3,10 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -11,10 +15,10 @@ import (
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
-	client "github.com/moby/buildkit/frontend/gateway/client"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
-	sourcepolicpb "github.com/moby/buildkit/sourcepolicy/pb"
+	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/testutil/integration"
 	digest "github.com/opencontainers/go-digest"
@@ -50,7 +54,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					return &policysession.DecisionResponse{
-						Action: sourcepolicpb.PolicyAction_ALLOW,
+						Action: sourcepolicypb.PolicyAction_ALLOW,
 					}, nil, nil
 				},
 			},
@@ -65,7 +69,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 						"image.layerlimit": "1",
 					}, req.Source.Source.Attrs)
 					return &policysession.DecisionResponse{
-						Action: sourcepolicpb.PolicyAction_ALLOW,
+						Action: sourcepolicypb.PolicyAction_ALLOW,
 					}, nil, nil
 				},
 			},
@@ -104,7 +108,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 					require.NoError(t, err)
 					require.NotEmpty(t, cfg.RootFS)
 					return &policysession.DecisionResponse{
-						Action: sourcepolicpb.PolicyAction_ALLOW,
+						Action: sourcepolicypb.PolicyAction_ALLOW,
 					}, nil, nil
 				},
 			},
@@ -178,7 +182,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					return &policysession.DecisionResponse{
-						Action: sourcepolicpb.PolicyAction_ALLOW,
+						Action: sourcepolicypb.PolicyAction_ALLOW,
 					}, nil, nil
 				},
 			},
@@ -214,7 +218,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 			})
 			_, err = c.Build(ctx, SolveOpt{
 				SourcePolicyProvider: p,
-			}, "test", func(ctx context.Context, c client.Client) (*client.Result, error) {
+			}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 				sop, opts := tc.source()
 				_, err = c.ResolveSourceMetadata(ctx, sop, opts)
 				return nil, err
@@ -267,7 +271,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 				countAlpine++
 				close(waitAlpineDone)
 				return &policysession.DecisionResponse{
-					Action: sourcepolicpb.PolicyAction_ALLOW,
+					Action: sourcepolicypb.PolicyAction_ALLOW,
 				}, nil, nil
 			default:
 				require.Fail(t, "too many calls for alpine")
@@ -278,7 +282,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 			countBusybox++
 			<-waitAlpineDone
 			return &policysession.DecisionResponse{
-				Action: sourcepolicpb.PolicyAction_ALLOW,
+				Action: sourcepolicypb.PolicyAction_ALLOW,
 			}, nil, nil
 		}
 		return nil, nil, errors.Errorf("unexpected source %q", req.Source.Source.Identifier)
@@ -291,4 +295,241 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, 2, countAlpine)
 	require.Equal(t, 1, countBusybox)
+}
+
+func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	signFixturesPath, ok := os.LookupEnv("BUILDKIT_TEST_SIGN_FIXTURES")
+	if !ok {
+		t.Skip("missing BUILDKIT_TEST_SIGN_FIXTURES")
+	}
+
+	withSign := func(user, method string) []string {
+		return []string{
+			"GIT_CONFIG_GLOBAL=" + filepath.Join(signFixturesPath, user+"."+method+".gitconfig"),
+		}
+	}
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo a > a",
+		"git add a",
+		"git commit -m a",
+		"git tag -a v0.1 -m v0.1",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+	gitCommands = []string{
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git checkout -B v2",
+	}
+	err = runInDirEnv(gitDir, withSign("user1", "gpg"), gitCommands...)
+	require.NoError(t, err)
+	gitCommands = []string{
+		"git tag -s -a v2.0 -m v2.0-tag",
+		"git update-server-info",
+	}
+	err = runInDirEnv(gitDir, withSign("user2", "ssh"), gitCommands...)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	pubKeyUser1gpg, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.gpg.pub"))
+	require.NoError(t, err)
+
+	pubKeyUser2ssh, err := os.ReadFile(filepath.Join(signFixturesPath, "user2.ssh.pub"))
+	require.NoError(t, err)
+
+	type testCase struct {
+		state       func() llb.State
+		name        string
+		srcPol      *sourcepolicypb.Policy
+		expectedErr string
+	}
+
+	gitURL := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git"
+
+	tests := []testCase{
+		{
+			name: "unsigned commit fails",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v0.1",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v0.1",
+							Attrs: map[string]string{
+								"git.sig.pubkey": string(pubKeyUser1gpg),
+							},
+						},
+					},
+				},
+			},
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v0.1"))
+			},
+			expectedErr: "git object is not signed",
+		},
+		{
+			name: "valid gpg signature for branch",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v2",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v2",
+							Attrs: map[string]string{
+								"git.sig.pubkey":          string(pubKeyUser1gpg),
+								"git.sig.rejectexpired":   "true",
+								"git.sig.ignoresignedtag": "false",
+							},
+						},
+					},
+				},
+			},
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2"))
+			},
+		},
+		{
+			name: "valid ssh signature for signed tag",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v2.0",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v2.0",
+							Attrs: map[string]string{
+								"git.sig.pubkey":           string(pubKeyUser2ssh),
+								"git.sig.requiresignedtag": "true",
+								"git.sig.rejectexpired":    "true",
+							},
+						},
+					},
+				},
+			},
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0"))
+			},
+		},
+		{
+			name: "invalid ssh signature for signed tag",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v2.0",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v2.0",
+							Attrs: map[string]string{
+								"git.sig.pubkey":           string(pubKeyUser1gpg),
+								"git.sig.requiresignedtag": "true",
+								"git.sig.rejectexpired":    "true",
+							},
+						},
+					},
+				},
+			},
+			expectedErr: "failed to parse ssh public key",
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0"))
+			},
+		},
+		{
+			name: "commit ssh signature for signed tag",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v2.0",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v2.0",
+							Attrs: map[string]string{
+								"git.sig.pubkey":           string(pubKeyUser1gpg),
+								"git.sig.requiresignedtag": "false",
+								"git.sig.rejectexpired":    "true",
+							},
+						},
+					},
+				},
+			},
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0"))
+			},
+		},
+		{
+			name: "invalid tag signature for commit",
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: gitURL + "#v2.0",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: gitURL + "#v2.0",
+							Attrs: map[string]string{
+								"git.sig.pubkey":          string(pubKeyUser2ssh),
+								"git.sig.rejectexpired":   "true",
+								"git.sig.ignoresignedtag": "true",
+							},
+						},
+					},
+				},
+			},
+			expectedErr: "failed to read armored public key: openpgp",
+			state: func() llb.State {
+				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				st := llb.Scratch().File(
+					llb.Copy(tt.state(), "a", "/a2"),
+				)
+				def, err := st.Marshal(sb.Context())
+				if err != nil {
+					return nil, err
+				}
+				return c.Solve(ctx, gateway.SolveRequest{
+					Definition: def.ToPB(),
+				})
+			}
+
+			_, err := c.Build(sb.Context(), SolveOpt{
+				SourcePolicy: tt.srcPol,
+			}, "", frontend, nil)
+			if tt.expectedErr == "" {
+				require.NoError(t, err, "test case %q failed", tt.name)
+				return
+			}
+			require.ErrorContains(t, err, tt.expectedErr, "test case %q failed", tt.name)
+		})
+	}
 }
