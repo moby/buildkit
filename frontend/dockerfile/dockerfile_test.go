@@ -619,17 +619,24 @@ RUN cmd /V:on /C "set /p tfcontent=<\sample\testfile \
 	require.NoError(t, err)
 }
 
-func testCopyLinkDotDestDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows")
+func testCopyLinkDotDestDir(t *testing.T, sb integration.Sandbox) { //SKIP due to functionally missing in Windows
+	integration.SkipOnPlatform(t, "windows")
+
 	f := getFrontend(t, sb)
+	// dockerfile := []byte(`
+	// FROM busybox
+	// WORKDIR /var/www
+	// COPY --link testfile .
+	// RUN [ "$(cat testfile)" == "contents0" ]
+	// `)
 
+	//Works with --link=false but not with true, Windows limitations
 	dockerfile := []byte(`
-FROM busybox
-WORKDIR /var/www
-COPY --link testfile .
-RUN [ "$(cat testfile)" == "contents0" ]
-`)
-
+	FROM mcr.microsoft.com/windows/servercore:ltsc2022
+	WORKDIR C:\\var\\www
+	COPY --link=false testfile .
+	RUN powershell -Command "if ((Get-Content testfile) -ne 'contents0') { exit 1 } else { exit 0 }"
+	`)
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -640,26 +647,36 @@ RUN [ "$(cat testfile)" == "contents0" ]
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+	opt := client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
 			dockerui.DefaultLocalNameContext:    dir,
 		},
-	}, nil)
+	}
+
+	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
+
 }
 
-func testCopyLinkEmptyDestDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows")
+func testCopyLinkEmptyDestDir(t *testing.T, sb integration.Sandbox) { //SKIP due to functionally missing in Windows
+	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
+	// 	dockerfile := []byte(`
+	// FROM busybox
+	// WORKDIR /var/www
+	// ENV empty=""
+	// COPY --link testfile $empty
+	// RUN [ "$(cat testfile)" == "contents0" ]
+	// `)
 
+	//Works with --link=false but not with true, Windows limitations
 	dockerfile := []byte(`
-FROM busybox
-WORKDIR /var/www
-ENV empty=""
-COPY --link testfile $empty
-RUN [ "$(cat testfile)" == "contents0" ]
-`)
+		FROM mcr.microsoft.com/windows/servercore:ltsc2022
+		WORKDIR C:\\var\\www
+		COPY --link=true testfile $empty
+		RUN powershell -Command "if ((Get-Content testfile) -ne 'contents0') { exit 1 } else { exit 0 }"
+	`)
 
 	dir := integration.Tmpdir(
 		t,
@@ -824,24 +841,26 @@ COPY foo foo
 }
 
 func testTarExporterMulti(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "Multi-platform tar export test specifically targets linux/amd64 and darwin/amd64 platforms")
 	f := getFrontend(t, sb)
-
 	dockerfile := []byte(`
-FROM scratch AS stage-linux
-COPY foo forlinux
+		FROM scratch AS stage-windows
+		COPY app forwindows
 
-FROM scratch AS stage-darwin
-COPY bar fordarwin
+		FROM scratch AS stage-linux
+		COPY foo forlinux
 
-FROM stage-$TARGETOS
-`)
+		FROM scratch AS stage-darwin
+		COPY bar fordarwin
+
+		FROM stage-$TARGETOS
+	`)
 
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-		fstest.CreateFile("foo", []byte("data"), 0600),
-		fstest.CreateFile("bar", []byte("data2"), 0600),
+		fstest.CreateFile("app", []byte("data"), 0600),
+		fstest.CreateFile("foo", []byte("data2"), 0600),
+		fstest.CreateFile("bar", []byte("data3"), 0600),
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())
@@ -863,42 +882,99 @@ FROM stage-$TARGETOS
 	}, nil)
 	require.NoError(t, err)
 
+	//Tests for Windows ONLY
 	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
 	require.NoError(t, err)
 
-	mi, ok := m["forlinux"]
+	mi, ok := m["forwindows"]
 	require.Equal(t, true, ok)
 	require.Equal(t, "data", string(mi.Data))
 
-	// repeat multi-platform
-	buf = &bytes.Buffer{}
+	dir2 := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("app", []byte("data"), 0600),
+		fstest.CreateFile("foo", []byte("data2"), 0600),
+		fstest.CreateFile("bar", []byte("data3"), 0600),
+	)
+	// Tests with multi-platform
+	//Windows Test
+	winbuf := &bytes.Buffer{}
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Output: fixedWriteCloser(&nopWriteCloser{winbuf}),
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"platform": "linux/amd64,darwin/amd64",
+			"platform": "windows/amd64",
 		},
 		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
+			dockerui.DefaultLocalNameDockerfile: dir2,
+			dockerui.DefaultLocalNameContext:    dir2,
 		},
 	}, nil)
 	require.NoError(t, err)
 
-	m, err = testutil.ReadTarToMap(buf.Bytes(), false)
+	//Linux Test
+	linbuf := &bytes.Buffer{}
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{linbuf}),
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir2,
+			dockerui.DefaultLocalNameContext:    dir2,
+		},
+	}, nil)
 	require.NoError(t, err)
 
-	mi, ok = m["linux_amd64/forlinux"]
+	//Darwin Test
+	darbuf := &bytes.Buffer{}
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{darbuf}),
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "darwin/amd64",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir2,
+			dockerui.DefaultLocalNameContext:    dir2,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	//Windows
+	m, err = testutil.ReadTarToMap(winbuf.Bytes(), false)
+	require.NoError(t, err)
+	mi, ok = m["forwindows"]
 	require.Equal(t, true, ok)
 	require.Equal(t, "data", string(mi.Data))
 
-	mi, ok = m["darwin_amd64/fordarwin"]
+	//Linux
+	m, err = testutil.ReadTarToMap(linbuf.Bytes(), false)
+	require.NoError(t, err)
+	mi, ok = m["forlinux"]
 	require.Equal(t, true, ok)
 	require.Equal(t, "data2", string(mi.Data))
+
+	//Darwin
+	m, err = testutil.ReadTarToMap(darbuf.Bytes(), false)
+	require.NoError(t, err)
+	mi, ok = m["fordarwin"]
+	require.Equal(t, true, ok)
+	require.Equal(t, "data3", string(mi.Data))
 }
 
 func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {

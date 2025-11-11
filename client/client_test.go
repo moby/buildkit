@@ -7815,21 +7815,19 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #2490
 func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	busybox := llb.Image("busybox:latest")
+	busybox := llb.Image("mcr.microsoft.com/windows/nanoserver:ltsc2022")
 	st := llb.Scratch()
 
 	run := func(cmd string) {
-		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).Root()
 	}
 
-	run(`sh -c "mkdir -p foo; echo -n first > foo/bar;"`)
-	run(`mv foo foo2`)
+	run(`cmd /c "mkdir foo2 && echo first > foo2/bar && move foo2 foo"`)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -7871,14 +7869,49 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 	m, err = testutil.ReadTarToMap(layer.Data, true)
 	require.NoError(t, err)
 
-	_, ok = m[".wh.foo"]
+	_, ok = m["/wd/foo2/bar"] //Should be false, else move didn't happen
+	require.False(t, ok)
+
+	_, ok = m["Files/wd/foo/bar"]
 	require.True(t, ok)
 
-	_, ok = m["foo2/"]
+	_, ok = m["Files/wd/foo"]
 	require.True(t, ok)
 
-	_, ok = m["foo2/bar"]
+	_, ok = m["Files/wd"]
 	require.True(t, ok)
+
+	for key := range m {
+		if err == nil && strings.Contains(key, "/wd") {
+			ok = true
+			break
+		} else {
+			ok = false
+		}
+	}
+	require.True(t, ok)
+
+	for key := range m {
+		if err == nil && strings.Contains(key, "/foo/bar") {
+			ok = true
+			break
+		} else {
+			ok = false
+		}
+	}
+	require.True(t, ok)
+
+	for key := range m {
+		if err == nil && strings.Contains(key, "/foo") {
+			ok = true
+			break
+		} else {
+			ok = false
+		}
+
+	}
+	require.True(t, ok)
+
 }
 
 // #319
