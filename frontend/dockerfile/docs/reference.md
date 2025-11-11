@@ -2845,7 +2845,8 @@ The health check will first run **interval** seconds after the container is
 started, and then again **interval** seconds after each previous check completes.
 
 If a single run of the check takes longer than **timeout** seconds then the check
-is considered to have failed.
+is considered to have failed. The process performing the check is abruptly stopped
+with a `SIGKILL`.
 
 It takes **retries** consecutive failures of the health check for the container
 to be considered `unhealthy`.
