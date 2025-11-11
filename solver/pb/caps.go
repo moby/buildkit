@@ -103,7 +103,8 @@ const (
 	CapMultipleExporters apicaps.CapID = "exporter.multiple"
 	CapSessionExporter   apicaps.CapID = "exporter.session"
 
-	CapSourcePolicy apicaps.CapID = "source.policy"
+	CapSourcePolicy        apicaps.CapID = "source.policy"
+	CapSourcePolicySession apicaps.CapID = "source.policy.session"
 
 	// GC/Prune controls allow MinFreeSpace and MaxUsedSpace to be set
 	CapGCFreeSpaceFilter apicaps.CapID = "gc.freespacefilter"
@@ -570,6 +571,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourcePolicy,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourcePolicySession,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
