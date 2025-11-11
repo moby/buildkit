@@ -4821,6 +4821,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows") // failure in dockerd needs investigation
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -12255,6 +12256,7 @@ func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 }
 
 func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform, workers.FeatureProvenance)
 	// this test temporarily requires direct registry access as the integration test
 	// mirroring system does not support mirroring attestation chains yet.
 	// Support is coming in future buildx release.
