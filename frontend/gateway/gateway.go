@@ -880,6 +880,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			for _, att := range atts {
 				pbAtt, err := gwclient.AttestationToPB(&att)
 				if err != nil {
+					lbf.mu.Unlock()
 					return nil, err
 				}
 
