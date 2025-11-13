@@ -2045,6 +2045,7 @@ func validateCopySourcePath(src string, cfg *copyConfig) error {
 		cmd = "Add"
 	}
 
+	src = filepath.ToSlash(filepath.Clean(src))
 	ok, err := cfg.ignoreMatcher.MatchesOrParentMatches(src)
 	if err != nil {
 		return err

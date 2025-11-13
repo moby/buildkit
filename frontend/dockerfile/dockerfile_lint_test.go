@@ -216,6 +216,19 @@ COPY --from=base /foobar /Dockerfile
 		Dockerfile:   dockerfile,
 		DockerIgnore: dockerignore,
 	})
+
+	dockerignore = []byte(`
+**
+!Dockerfile
+`)
+	dockerfile = []byte(`
+FROM scratch
+COPY ./Dockerfile .
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:   dockerfile,
+		DockerIgnore: dockerignore,
+	})
 }
 
 func testSecretsUsedInArgOrEnv(t *testing.T, sb integration.Sandbox) {
