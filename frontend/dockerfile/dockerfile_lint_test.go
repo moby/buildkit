@@ -242,6 +242,14 @@ ENV apikey=bar sunflower=foo
 ENV git_key=
 ENV PUBLIC_KEY=
 ARG public_token
+# check=skip=SecretsUsedInArgOrEnv // allow secret in environment
+ENV password=bar
+# check=skip=SecretsUsedInArgOrEnv // allow secret in arg
+ARG password
+# check=skip=all // is local to only this instruction
+ENV alternate_password=bar
+# check=skip=all // is local to only this instruction
+ARG alternate_password
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
@@ -845,6 +853,27 @@ FROM scratch
 LABEL org.opencontainers.image.authors="me@example.org"
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch
+# check=skip=JSONArgsRecommended
+CMD mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch
+# check=skip=JSONArgsRecommended
+ENTRYPOINT mycommand
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch
+# check=skip=MaintainerDeprecated
+MAINTAINER me@example.org
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func testWarningsBeforeError(t *testing.T, sb integration.Sandbox) {
@@ -1018,6 +1047,13 @@ WORKDIR /app
 
 FROM a AS b
 WORKDIR subdir/
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
+
+	dockerfile = []byte(`
+FROM scratch
+# check=skip=WorkdirRelativePath
+WORKDIR app/
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
@@ -1252,6 +1288,15 @@ FROM a AS c
 			},
 		},
 	})
+
+	dockerfile = []byte(`
+FROM scratch
+# check=skip=LegacyKeyValueFormat
+ENV testkey value
+# check=skip=LegacyKeyValueFormat
+LABEL key value
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func testRedundantTargetPlatform(t *testing.T, sb integration.Sandbox) {
@@ -1288,6 +1333,12 @@ FROM --platform=${TARGETPLATFORM} scratch
 			},
 		},
 	})
+
+	dockerfile = []byte(`
+# check=skip=RedundantTargetPlatform
+FROM --platform=$TARGETPLATFORM scratch
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{Dockerfile: dockerfile})
 }
 
 func testInvalidDefaultArgInFrom(t *testing.T, sb integration.Sandbox) {

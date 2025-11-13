@@ -177,7 +177,7 @@ func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
 	for i, s := range stages {
 		t := targets.Target{
 			Name:        s.Name,
-			Description: s.Comment,
+			Description: s.DocComment,
 			Default:     i == len(stages)-1,
 			Base:        s.BaseName,
 			Platform:    s.Platform,
@@ -296,6 +296,8 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	// set base state for every image
 	for i, st := range stages {
+		lint := lint.WithMergedConfigFromComments(st.Comments)
+
 		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, globalArgs)
 		argKeys := unusedFromArgsCheckKeys(globalArgs, outline.allArgs)
 		reportUnusedFromArgs(argKeys, nameMatch.Unmatched, st.Location, lint)
@@ -914,6 +916,8 @@ func (e *envsFromState) Keys() []string {
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
+	opt.lint = opt.lint.WithMergedConfigFromComments(cmd.Comments())
+
 	d.cmdIsOnBuild = cmd.isOnBuild
 	var err error
 	// ARG command value could be ignored, so defer handling the expansion error
