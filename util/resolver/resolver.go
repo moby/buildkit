@@ -25,6 +25,25 @@ const (
 	defaultPath = "/v2"
 )
 
+func fillConfigOpts(host string, c config.RegistryConfig, h docker.RegistryHost) (*docker.RegistryHost, error) {
+	if len(c.Capabilities) > 0 {
+		h.Capabilities = 0
+		for _, capability := range c.Capabilities {
+			switch strings.ToLower(capability) {
+			case "pull":
+				h.Capabilities |= docker.HostCapabilityPull
+			case "resolve":
+				h.Capabilities |= docker.HostCapabilityResolve
+			case "push":
+				h.Capabilities |= docker.HostCapabilityPush
+			default:
+				return nil, errors.Errorf("unknown capability %v", c)
+			}
+		}
+	}
+
+	return fillInsecureOpts(host, c, h)
+}
 func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHost) (*docker.RegistryHost, error) {
 	tc, err := loadTLSConfig(c)
 	if err != nil {
@@ -134,7 +153,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			for _, rawMirror := range c.Mirrors {
 				h := newMirrorRegistryHost(rawMirror)
 				mirrorHost := h.Host
-				host, err := fillInsecureOpts(mirrorHost, m[mirrorHost], h)
+				host, err := fillConfigOpts(mirrorHost, m[mirrorHost], h)
 				if err != nil {
 					return nil, err
 				}
@@ -154,7 +173,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 				Capabilities: docker.HostCapabilityPush | docker.HostCapabilityPull | docker.HostCapabilityResolve,
 			}
 
-			hosts, err := fillInsecureOpts(host, c, h)
+			hosts, err := fillConfigOpts(host, c, h)
 			if err != nil {
 				return nil, err
 			}
