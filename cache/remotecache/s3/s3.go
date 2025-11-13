@@ -398,7 +398,20 @@ func newMinioClient(config Config) (*minioClient, error) {
 	}
 
 	client, err := minio.New(parsedURL.Host, &minio.Options{
-		Creds:        credentials.NewStaticV4(config.AccessKeyID, config.SecretAccessKey, config.SessionToken),
+		Creds: credentials.NewChainCredentials([]credentials.Provider{
+			&credentials.Static{
+				Value: credentials.Value{
+					AccessKeyID:     config.AccessKeyID,
+					SecretAccessKey: config.SecretAccessKey,
+					SessionToken:    config.SessionToken,
+					SignerType:      credentials.SignatureV4,
+				},
+			},
+			&credentials.EnvAWS{},
+			&credentials.EnvMinio{},
+			&credentials.FileAWSCredentials{},
+			&credentials.IAM{},
+		}),
 		Secure:       parsedURL.Scheme == "https",
 		Region:       config.Region,
 		BucketLookup: bucketLookup,
