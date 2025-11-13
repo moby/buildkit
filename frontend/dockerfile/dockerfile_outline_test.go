@@ -54,6 +54,11 @@ RUN true
 
 FROM scratch AS third
 ARG ABC=a
+# check=skip=all
+ARG password
+# alternate_password will show up in the outline
+# check=skip=all
+ARG alternate_password
 
 # target defines build target
 FROM third AS target
@@ -81,6 +86,11 @@ RUN exit 0
 
 FROM nanoserver AS third
 ARG ABC=a
+# check=skip=all
+ARG password
+# alternate_password will show up in the outline
+# check=skip=all
+ARG alternate_password
 
 # target defines build target
 FROM third AS target
@@ -125,7 +135,7 @@ FROM second
 		require.Equal(t, 1, len(outline.Sources))
 		require.Equal(t, dockerfile, outline.Sources[0])
 
-		require.Equal(t, 5, len(outline.Args))
+		require.Equal(t, 7, len(outline.Args))
 
 		arg := outline.Args[0]
 		require.Equal(t, "inherited", arg.Name)
@@ -154,6 +164,18 @@ FROM second
 		arg = outline.Args[4]
 		require.Equal(t, "ABC", arg.Name)
 		require.Equal(t, "a", arg.Value)
+
+		arg = outline.Args[5]
+		require.Equal(t, "password", arg.Name)
+		require.Equal(t, "", arg.Value)
+		require.Equal(t, "", arg.Description)
+		require.Equal(t, int32(22), arg.Location.Ranges[0].Start.Line)
+
+		arg = outline.Args[6]
+		require.Equal(t, "alternate_password", arg.Name)
+		require.Equal(t, "", arg.Value)
+		require.Equal(t, "will show up in the outline", arg.Description)
+		require.Equal(t, int32(25), arg.Location.Ranges[0].Start.Line)
 
 		called = true
 		return nil, nil

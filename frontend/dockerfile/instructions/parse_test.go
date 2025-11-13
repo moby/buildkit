@@ -193,18 +193,18 @@ ARG bar baz=123
 	stages, meta, err := Parse(ast.AST, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, "defines first stage", stages[0].Comment)
+	require.Equal(t, "defines first stage", stages[0].DocComment)
 	require.Equal(t, "foo", meta[0].Args[0].Key)
-	require.Equal(t, "sets foo", meta[0].Args[0].Comment)
+	require.Equal(t, "sets foo", meta[0].Args[0].DocComment)
 
 	st := stages[0]
 
 	require.Equal(t, "foo", st.Commands[0].(*ArgCommand).Args[0].Key)
-	require.Equal(t, "", st.Commands[0].(*ArgCommand).Args[0].Comment)
+	require.Equal(t, "", st.Commands[0].(*ArgCommand).Args[0].DocComment)
 	require.Equal(t, "bar", st.Commands[1].(*ArgCommand).Args[0].Key)
-	require.Equal(t, "defines bar", st.Commands[1].(*ArgCommand).Args[0].Comment)
+	require.Equal(t, "defines bar", st.Commands[1].(*ArgCommand).Args[0].DocComment)
 	require.Equal(t, "baz", st.Commands[1].(*ArgCommand).Args[1].Key)
-	require.Equal(t, "is something else", st.Commands[1].(*ArgCommand).Args[1].Comment)
+	require.Equal(t, "is something else", st.Commands[1].(*ArgCommand).Args[1].DocComment)
 }
 
 func TestErrorCases(t *testing.T) {
