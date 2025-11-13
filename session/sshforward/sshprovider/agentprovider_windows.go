@@ -3,6 +3,7 @@
 package sshprovider
 
 import (
+	"context"
 	"net"
 	"regexp"
 	"strings"
@@ -55,6 +56,6 @@ func getWindowsPipeDialer(path string) *socketDialer {
 	return nil
 }
 
-func windowsPipeDialer(path string) (net.Conn, error) {
-	return winio.DialPipe(path, nil)
+func windowsPipeDialer(ctx context.Context, path string) (net.Conn, error) {
+	return winio.DialPipeContext(ctx, path)
 }

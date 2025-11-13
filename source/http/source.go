@@ -672,7 +672,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 }
 
 func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group) (*http.Request, error) {
-	req, err := http.NewRequest(http.MethodGet, hs.src.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, hs.src.URL, nil)
 	if err != nil {
 		return nil, err
 	}

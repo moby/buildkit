@@ -201,7 +201,7 @@ func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 
 	repo := setupGitRepo(t, format)
 
-	cmd := exec.Command("git", "rev-parse", "feature")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -316,14 +316,14 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
 
 	repo := setupGitRepo(t, format)
 
-	cmd := exec.Command("git", "rev-parse", ref)
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", ref)
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -512,7 +512,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -522,7 +522,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
 	if checksumMode != testChecksumModeNone {
-		cmd := exec.Command("git", "rev-parse", tag)
+		cmd := exec.CommandContext(ctx, "git", "rev-parse", tag)
 		cmd.Dir = repo.mainPath
 
 		out, err := cmd.Output()
@@ -2258,7 +2258,7 @@ func serveGitRepo(t *testing.T, root string) string {
 	t.Helper()
 	gitpath, err := exec.LookPath("git")
 	require.NoError(t, err)
-	gitversion, _ := exec.Command(gitpath, "version").CombinedOutput()
+	gitversion, _ := exec.CommandContext(t.Context(), gitpath, "version").CombinedOutput()
 	t.Logf("%s", gitversion) // E.g. "git version 2.30.2"
 
 	// Serve all repositories under root using the Smart HTTP protocol so
@@ -2306,9 +2306,9 @@ func runShellEnv(t *testing.T, dir string, env []string, cmds ...string) {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("powershell", "-command", args)
+			cmd = exec.CommandContext(t.Context(), "powershell", "-command", args)
 		} else {
-			cmd = exec.Command("sh", "-c", args)
+			cmd = exec.CommandContext(t.Context(), "sh", "-c", args)
 		}
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), env...)
