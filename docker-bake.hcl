@@ -166,7 +166,7 @@ target "image" {
 
 target "image-cross" {
   inherits = ["image"]
-  output = ["type=image"]
+  output = ["type=image,oci-artifact=true"]
   platforms = [
     "linux/amd64",
     "linux/arm/v7",
