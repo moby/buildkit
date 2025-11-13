@@ -360,10 +360,10 @@ version.
 
 ## Environment replacement
 
-Environment variables (declared with [the `ENV` statement](#env)) can also be
-used in certain instructions as variables to be interpreted by the
-Dockerfile. Escapes are also handled for including variable-like syntax
-into a statement literally.
+Environment variables (declared with [the `ENV` statement](#env) and [the `ARG`
+statement](#arg)) can also be used in certain instructions as variables to be
+interpreted by the Dockerfile. Escapes are also handled for including
+variable-like syntax into a statement literally.
 
 Environment variables are notated in the Dockerfile either with
 `$variable_name` or `${variable_name}`. They are treated equivalently and the
@@ -373,28 +373,51 @@ whitespace, like `${foo}_bar`.
 The `${variable_name}` syntax also supports a few of the standard `bash`
 modifiers as specified below:
 
-- `${variable:-word}` indicates that if `variable` is set then the result
-  will be that value. If `variable` is not set then `word` will be the result.
-- `${variable:+word}` indicates that if `variable` is set then `word` will be
+- `${variable:-word}` indicates that if `variable` is set and not an empty
+  string then the result will be that value, otherwise the result is `word`.
+
+- `${variable-word}` indicates that if `variable` is set then the result
+  will be that value, otherwise the result is `word`.
+
+  This syntax can be used with `docker/dockerfile:1.6.0` or later.
+
+- `${variable:+word}` indicates that if `variable` is set and not an empty
+  string then `word` will be the result, otherwise the result is the empty
+  string.
+
+- `${variable+word}` indicates that if `variable` is set then `word` will be
   the result, otherwise the result is the empty string.
 
-The following variable replacements are supported in a pre-release version of
-Dockerfile syntax, when using the `# syntax=docker/dockerfile-upstream:master` syntax
-directive in your Dockerfile:
+  This syntax can be used with `docker/dockerfile:1.6.0` or later.
+
+- `${variable:?word}` indicates that if `variable` is set and not an empty
+  string then the result will be that value, otherwise display `word` as an
+  error message.
+
+  This syntax can be used with `docker/dockerfile/1.1.6` or later.
+
+- `${variable?word}` indicates that if `variable is set then the result will be
+  that value, otherwise display `word` as an error message.
+
+  This syntax can be used with `docker/dockerfile:1.1.6` or later.
 
 - `${variable#pattern}` removes the shortest match of `pattern` from `variable`,
   seeking from the start of the string.
-  
+
   ```bash
   str=foobarbaz echo ${str#f*b}     # arbaz
   ```
-  
+
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
+
 - `${variable##pattern}` removes the longest match of `pattern` from `variable`,
   seeking from the start of the string.
 
   ```bash
   str=foobarbaz echo ${str##f*b}    # az
   ```
+
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
 
 - `${variable%pattern}` removes the shortest match of `pattern` from `variable`,
   seeking backwards from the end of the string.
@@ -403,6 +426,8 @@ directive in your Dockerfile:
   string=foobarbaz echo ${string%b*}    # foobar
   ```
 
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
+
 - `${variable%%pattern}` removes the longest match of `pattern` from `variable`,
   seeking backwards from the end of the string.
 
@@ -410,22 +435,28 @@ directive in your Dockerfile:
   string=foobarbaz echo ${string%%b*}   # foo
   ```
 
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
+
 - `${variable/pattern/replacement}` replace the first occurrence of `pattern`
-  in `variable` with `replacement`
+  in `variable` with `replacement`.
 
   ```bash
   string=foobarbaz echo ${string/ba/fo}  # fooforbaz
   ```
 
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
+
 - `${variable//pattern/replacement}` replaces all occurrences of `pattern`
-  in `variable` with `replacement`
+  in `variable` with `replacement`.
 
   ```bash
   string=foobarbaz echo ${string//ba/fo}  # fooforfoz
   ```
 
-In all cases, `word` can be any string, including additional environment
-variables.
+  This syntax can be used with `docker/dockerfile:1.7.0` or later.
+
+In all cases, `word`, `pattern` and `replacement` can be any string, including
+additional environment variables.
 
 `pattern` is a glob pattern where `?` matches any single character
 and `*` any number of characters (including zero). To match literal `?` and `*`,
@@ -448,6 +479,7 @@ Environment variables are supported by the following list of instructions in
 the Dockerfile:
 
 - `ADD`
+- `ARG`
 - `COPY`
 - `ENV`
 - `EXPOSE`
