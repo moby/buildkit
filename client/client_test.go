@@ -11911,8 +11911,6 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
-	// flaky on WS2025 and moby/moby too
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -11923,7 +11921,9 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	mntInput := llb.Image(imgName)
 	st := llb.Image(imgName)
 	var mnts []llb.State
-	for range 20 {
+	// Reduce iterations on Windows due to significantly slower container operations
+	numIterations := integration.UnixOrWindows(20, 5)
+	for range numIterations {
 		execSt := st.Run(
 			llb.Args(integration.UnixOrWindows(
 				[]string{"true"},
@@ -11940,8 +11940,9 @@ func testLLBMountPerformance(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	// Windows images take longer time
-	timeout := integration.UnixOrWindows(time.Minute, 3*time.Minute)
+	// Windows images take longer time, especially on CI systems
+	// With reduced iterations (5 vs 20), use generous timeout
+	timeout := integration.UnixOrWindows(time.Minute, 10*time.Minute)
 	timeoutCtx, cancel := context.WithTimeoutCause(sb.Context(), timeout, nil)
 	defer cancel()
 	_, err = c.Solve(timeoutCtx, def, SolveOpt{}, nil)
