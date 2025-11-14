@@ -1325,6 +1325,7 @@ The available `[OPTIONS]` are:
 | [`--chown`](#add---chown---chmod)       |                            |
 | [`--chmod`](#add---chown---chmod)       | 1.2                        |
 | [`--link`](#add---link)                 | 1.4                        |
+| [`--unpack`](#add---unpack)             | 1.17                       |
 | [`--exclude`](#add---exclude)           | 1.19                       |
 
 The `ADD` instruction copies new files or directories from `<src>` and adds
@@ -1590,10 +1591,6 @@ See [`COPY --chown --chmod`](#copy---chown---chmod).
 
 See [`COPY --link`](#copy---link).
 
-### ADD --exclude
-
-See [`COPY --exclude`](#copy---exclude).
-
 ### ADD --unpack
 
 ```dockerfile
@@ -1613,6 +1610,10 @@ ADD --unpack=true https://example.com/archive.tar.gz /download
 # Add local tar without unpacking:
 ADD --unpack=false my-archive.tar.gz .
 ```
+
+### ADD --exclude
+
+See [`COPY --exclude`](#copy---exclude).
 
 ## COPY
 
