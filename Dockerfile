@@ -205,7 +205,7 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
-RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables \
+RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables util-linux-misc \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
@@ -380,8 +380,37 @@ EOT
 
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
+COPY --link --chmod=755 <<EOF /usr/bin/buildkitd-entrypoint
+#!/bin/sh
+#
+# For cgroup v2, ensure buildkitd has a namespaced view of /sys/fs/cgroup by
+# running in a new cgroup and mount namespace and remounting /sys/fs/cgroup.
+# Assume we are already in our own cgroup ns if the current cgroup path is
+# "/".
+
+set -e
+
+if [ -e /sys/fs/cgroup/cgroup.controllers ]; then
+  if [ "\$(cut -d: -f3 /proc/self/cgroup)" != "/" ]; then
+    echo creating cgroup namespace
+    exec /usr/bin/unshare --cgroup --mount /usr/bin/with-cgroupfs-remount buildkitd "\$@"
+  fi
+fi
+
+exec /usr/bin/buildkitd "\$@"
+EOF
+COPY --link --chmod=755 <<EOF /usr/bin/with-cgroupfs-remount
+#!/bin/sh
+set -e
+
+options="\$(awk '\$2 == "/sys/fs/cgroup" { print \$4 }' /proc/self/mounts)"
+umount /sys/fs/cgroup
+mount -t cgroup2 -o "\$options" cgroup2 /sys/fs/cgroup
+
+exec "\$@"
+EOF
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
-ENTRYPOINT ["buildkitd"]
+ENTRYPOINT ["/usr/bin/buildkitd-entrypoint"]
 
 FROM buildkit-linux AS buildkit-linux-debug
 COPY --link --from=dlv /out/dlv /usr/bin/dlv
