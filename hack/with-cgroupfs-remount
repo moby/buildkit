@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+options="$(awk '$2 == "/sys/fs/cgroup" { print $4 }' /proc/self/mounts)"
+umount /sys/fs/cgroup
+mount -t cgroup2 -o "$options" cgroup2 /sys/fs/cgroup
+
+exec "$@"
