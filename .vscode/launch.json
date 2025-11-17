@@ -1,0 +1,151 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Debug TestMountStubsDirectory",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/client",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestMountStubsDirectory",
+                "-test.v",
+                "-test.timeout=10m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+        {
+            "name": "Debug TestDefaultEnvWithArgs with containerd worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/frontend/dockerfile",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestDefaultEnvWithArgs/worker=containerd",
+                "-test.v",
+                "-test.timeout=10m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+        {
+            "name": "Debug TestCopyLinkDotDestDir",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/frontend/dockerfile",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestCopyLinkDotDestDir",
+                "-test.v",
+                "-test.timeout=3m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+         {
+            "name": "Debug TestCopyLinkDotDestDir with containerd worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/frontend/dockerfile",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestCopyLinkDotDestDir/worker=containerd",
+                "-test.v",
+                "-test.timeout=10m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+
+            {
+            "name": "Debug TestTarExporterMulti with containerd worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/frontend/dockerfile",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestTarExporterMulti/worker=containerd",
+                "-test.v",
+                "-test.timeout=10m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+              {
+            "name": "Debug TestCopyLinkEmptyDestDir with containerd worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/frontend/dockerfile",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestCopyLinkEmptyDestDir/worker=containerd",
+                "-test.v",
+                "-test.timeout=3m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+         {
+            "name": "Debug TestMoveParentDir",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/client",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestMoveParentDir",
+                "-test.v",
+                "-test.timeout=20m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+        {
+            "name": "Debug TestMoveParentDir with containerd worker",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/client",
+            "args": [
+                "-test.run",
+                "TestIntegration/TestMoveParentDir/worker=containerd",
+                "-test.v",
+                "-test.timeout=20m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        },
+        {
+            "name": "Debug all client tests",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/client",
+            "args": [
+                "-test.run",
+                "TestIntegration",
+                "-test.v",
+                "-test.timeout=10m"
+            ],
+            "env": {},
+            "showLog": true,
+            "trace": "verbose"
+        }
+    ]
+}
