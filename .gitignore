@@ -4,3 +4,5 @@
 bin
 .certs
 .tmp
+client/__debug_bin.exe*
+.vscode/
