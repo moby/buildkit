@@ -811,7 +811,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		return nil, err
 	}
 
-	historyDB, err := boltutil.Open(filepath.Join(cfg.Root, "history.db"), 0600, nil)
+	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, nil)
 	if err != nil {
 		return nil, err
 	}
