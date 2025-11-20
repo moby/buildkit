@@ -2359,7 +2359,7 @@ USER <UID>[:<GID>]
 The `USER` instruction sets the user name (or UID) and optionally the user
 group (or GID) to use as the default user and group for the remainder of the
 current stage. The specified user is used for `RUN` instructions and at
-runtime, runs the relevant `ENTRYPOINT` and `CMD` commands.
+runtime runs the relevant `ENTRYPOINT` and `CMD` commands.
 
 > Note that when specifying a group for the user, the user will have _only_ the
 > specified group membership. Any other configured group memberships will be ignored.
