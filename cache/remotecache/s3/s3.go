@@ -404,7 +404,10 @@ type s3Client struct {
 }
 
 func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
-	cfg, err := aws_config.LoadDefaultConfig(ctx, aws_config.WithRegion(config.Region))
+	cfg, err := aws_config.LoadDefaultConfig(ctx,
+		aws_config.WithRegion(config.Region),
+		aws_config.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
+	)
 	if err != nil {
 		return nil, errors.Errorf("Unable to load AWS SDK config, %v", err)
 	}
