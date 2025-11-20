@@ -75,7 +75,7 @@ if [[ "$RELEASE" = "true" ]] && [[ "$GITHUB_ACTIONS" = "true" ]]; then
   nocacheFilterFlag="--no-cache-filter=base"
 fi
 
-outputFlag="type=image,$pushFlag"
+outputFlag="type=image,$pushFlag,oci-artifact=true"
 if [ "$GITHUB_ACTIONS" = "true" ]; then
   outputFlag="${outputFlag},\"annotation.org.opencontainers.image.title=Dockerfile Frontend\""
   if [ -n "$GITHUB_SHA" ]; then
