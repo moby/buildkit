@@ -565,7 +565,7 @@ S3 configuration:
 
 AWS Authentication:
 
-BuildKit relies on the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config#EnvConfig). This means that all standard authentication methods through environment variables or config files are supported. This is especially true for AWS EC2 IAM Profile and AWS Web Identity Token (IAM roles in Kubernetes).
+BuildKit relies on the [AWS Go SDK](https://docs.aws.amazon.com/sdk-for-go/v2/developer-guide/configure-gosdk.html). This means that all standard authentication methods through [environment variables](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config#EnvConfig) or config files are supported. This is especially true for AWS EC2 IAM Profile and AWS Web Identity Token (IAM roles in Kubernetes).
 
 Beware, these configurations must be available at buildkit daemon level, not at client level.
 
