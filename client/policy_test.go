@@ -299,7 +299,8 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 
 func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(sb.Context(), sb.Address())
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -530,6 +531,103 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 				return
 			}
 			require.ErrorContains(t, err, tt.expectedErr, "test case %q failed", tt.name)
+		})
+	}
+
+	// session policy based test cases
+
+	type tcase struct {
+		name          string
+		state         func() llb.State
+		callbacks     []policysession.PolicyCallback
+		expectedError string
+	}
+
+	tcases := []tcase{
+		{
+			name:  "gitchecksum",
+			state: func() llb.State { return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0")) },
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Git)
+					return nil, &pb.ResolveSourceMetaRequest{
+						Source:   req.Source.Source,
+						Platform: req.Platform,
+					}, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
+					require.NotNil(t, req.Source.Git)
+					require.Len(t, req.Source.Git.Checksum, 40)
+					require.Len(t, req.Source.Git.CommitChecksum, 40)
+					require.NotEqual(t, req.Source.Git.Checksum, req.Source.Git.CommitChecksum)
+					require.Nil(t, req.Source.Git.CommitObject)
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_ALLOW,
+					}, nil, nil
+				},
+			},
+		},
+		{
+			name:  "gitobjects",
+			state: func() llb.State { return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0")) },
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Git)
+					return nil, &pb.ResolveSourceMetaRequest{
+						Source:   req.Source.Source,
+						Platform: req.Platform,
+						Git: &pb.ResolveSourceGitRequest{
+							ReturnObject: true,
+						},
+					}, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
+					require.NotNil(t, req.Source.Git)
+					require.Len(t, req.Source.Git.Checksum, 40)
+					require.Len(t, req.Source.Git.CommitChecksum, 40)
+					require.NotEqual(t, req.Source.Git.Checksum, req.Source.Git.CommitChecksum)
+					require.NotNil(t, req.Source.Git.CommitObject)
+					require.Greater(t, len(req.Source.Git.CommitObject), 50)
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_ALLOW,
+					}, nil, nil
+				},
+			},
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := tc.state()
+			def, err := st.Marshal(ctx)
+			require.NoError(t, err)
+
+			callCounter := 0
+
+			p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				if callCounter >= len(tc.callbacks) {
+					return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+				}
+				cb := tc.callbacks[callCounter]
+				callCounter++
+				return cb(ctx, req)
+			})
+
+			_, err = c.Solve(ctx, def, SolveOpt{
+				SourcePolicyProvider: p,
+			}, nil)
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
 		})
 	}
 }
