@@ -50,60 +50,65 @@ jobs:
           fields: platforms
 
   binaries:
+    uses: docker/github-builder-experimental/.github/workflows/bake.yml@8fc70909404a502fd0eca6601b99b32fa7192b03
+    permissions:
+      contents: read # same as global permission
+      id-token: write # for signing attestation(s) with GitHub OIDC Token
+    with:
+      runner: amd64
+      target: release
+      output: local
+      push: ${{ github.event_name != 'pull_request' }}
+      artifact-name: buildkit
+      cache: true
+      cache-scope: binaries
+      setup-qemu: true
+      bake-sbom: true
+      bake-set: |
+        *.no-cache-filter=${{ startsWith(github.ref, 'refs/tags/v') && 'gobuild-base' || '' }}
+
+  binaries-finalize:
     runs-on: ubuntu-24.04
     needs:
-      - prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.prepare.outputs.binaries-platforms) }}
+      - binaries
     steps:
       -
-        name: Prepare
-        run: |
-          platform=${{ matrix.platforms }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        name: Download artifacts
+        uses: actions/download-artifact@v6
         with:
-          version: ${{ env.SETUP_BUILDX_VERSION }}
-          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
-          buildkitd-flags: --debug
-      -
-        name: Build
-        uses: docker/bake-action@v6
-        with:
-          # FIXME: remove context once git context with query string implemented in actions-toolkit
-          source: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.ref }}
-          targets: release
-          provenance: mode=max
-          sbom: true
-          set: |
-            *.platform=${{ matrix.platforms }}
-            *.cache-from=type=gha,scope=binaries
-            *.cache-to=type=gha,scope=binaries
-            *.no-cache-filter=${{ startsWith(github.ref, 'refs/tags/v') && 'gobuild-base' || '' }}
+          path: /tmp/buildx-output
+          pattern: ${{ needs.binaries.outputs.artifact-name }}*
+          merge-multiple: true
       -
         name: Rename provenance and sbom
+        run: |
+          for pdir in /tmp/buildx-output/*/; do
+            (
+              cd "$pdir"
+              binname=$(find . -name 'buildkit-*')
+              filename=$(basename "$binname" | sed -E 's/\.(tar\.gz|zip)$//')
+              mv "provenance.json" "${filename}.provenance.json"
+              mv "sbom-binaries.spdx.json" "${filename}.sbom.json"
+              find . -name 'sbom*.json' -exec rm {} \;
+              if [ -f "provenance.sigstore.json" ]; then
+                mv "provenance.sigstore.json" "${filename}.provenance.sigstore.json"
+              fi
+            )
+          done
+          mkdir -p "${{ env.DESTDIR }}"
+          mv /tmp/buildx-output/**/* "${{ env.DESTDIR }}/"
+      -
+        name: List artifacts
         working-directory: ${{ env.DESTDIR }}
         run: |
-          binname=$(find . -name 'buildkit-*')
-          filename=$(basename "$binname" | sed -E 's/\.(tar\.gz|zip)$//')
-          mv "provenance.json" "${filename}.provenance.json"
-          mv "sbom-binaries.spdx.json" "${filename}.sbom.json"
-          find . -name 'sbom*.json' -exec rm {} \;
+          tree -nh .
       -
-        name: Upload artifacts
+        name: Upload release binaries
         uses: actions/upload-artifact@v6
         with:
-          name: buildkit-${{ env.PLATFORM_PAIR }}
+          name: release
           path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
-          retention-days: 1
 
   test:
     uses: ./.github/workflows/.test.yml
@@ -338,20 +343,15 @@ jobs:
       contents: write
     needs:
       - test
-      - binaries
+      - binaries-finalize
       - image
     steps:
       -
-        name: Download artifacts
+        name: Download release binaries
         uses: actions/download-artifact@v7
         with:
           path: ${{ env.DESTDIR }}
-          pattern: buildkit-*
-          merge-multiple: true
-      -
-        name: List artifacts
-        run: |
-          tree -nh ${{ env.DESTDIR }}
+          name: release
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
