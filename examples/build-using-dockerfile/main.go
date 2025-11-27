@@ -93,6 +93,9 @@ func action(clicontext *cli.Context) error {
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
+		// once Solve/Build returns, close the writer side so loadDockerTar will see EOF
+		defer pipeW.Close()
+
 		var err error
 		if clicontext.Bool("clientside-frontend") {
 			_, err = c.Build(ctx, *solveOpt, "", dockerfile.Build, ch)
