@@ -76,10 +76,10 @@ COPY --parents foo1/foo2/ba* .
 }
 
 func testCopyRelativeParents(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM alpine AS base
 WORKDIR /test
 RUN <<eot
@@ -155,7 +155,61 @@ RUN <<eot
 	[ -f /out/d/e2/baz ]
 	[ -f /out/c/d/e/bar ] # via b2
 eot
-`)
+`,
+		`
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS base
+WORKDIR /test
+RUN mkdir a && mkdir a\b && mkdir a\b\c && mkdir a\b\c\d && mkdir a\b\c\d\e
+RUN mkdir a\b2 && mkdir a\b2\c && mkdir a\b2\c\d && mkdir a\b2\c\d\e
+RUN mkdir a\b\c2 && mkdir a\b\c2\d && mkdir a\b\c2\d\e
+RUN mkdir a\b\c2\d\e2
+RUN cmd /C "echo. > a\b\c\d\foo"
+RUN cmd /C "echo. > a\b\c\d\e\bay"
+RUN cmd /C "echo. > a\b2\c\d\e\bar"
+RUN cmd /C "echo. > a\b\c2\d\e\baz"
+RUN cmd /C "echo. > a\b\c2\d\e2\baz"
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS middle
+COPY --from=base --parents /test/a/b/./c/d /out/
+RUN if not exist \out\c\d\e exit /b 1
+RUN if not exist \out\c\d\foo exit /b 1
+RUN if exist \out\a exit /b 1
+RUN if exist \out\e exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS end
+COPY --from=base --parents /test/a/b/c/d/. /out/
+RUN if not exist \out\test\a\b\c\d\e exit /b 1
+RUN if not exist \out\test\a\b\c\d\foo exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS start
+COPY --from=base --parents ./test/a/b/c/d /out/
+RUN if not exist \out\test\a\b\c\d\e exit /b 1
+RUN if not exist \out\test\a\b\c\d\foo exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS double
+COPY --from=base --parents /test/a/./b/./c /out/
+RUN if not exist \out\b\c\d\e exit /b 1
+RUN if not exist \out\b\c\d\foo exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS wildcard
+COPY --from=base --parents /test/a/./*/c /out/
+RUN if not exist \out\b\c\d\e exit /b 1
+RUN if not exist \out\b2\c\d\e\bar exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS doublewildcard
+COPY --from=base --parents /test/a/b*/./c/**/e /out/
+RUN if not exist \out\c\d\e exit /b 1
+RUN if not exist \out\c\d\e\bay exit /b 1
+RUN if not exist \out\c\d\e\bar exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS doubleinputs
+COPY --from=base --parents /test/a/b/c*/./d/**/baz /test/a/b*/./c/**/bar /out/
+RUN if not exist \out\d\e\baz exit /b 1
+RUN if exist \out\d\e\bay exit /b 1
+RUN if not exist \out\d\e2\baz exit /b 1
+RUN if not exist \out\c\d\e\bar exit /b 1
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -182,10 +236,10 @@ eot
 }
 
 func testCopyParentsMissingDirectory(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM alpine AS base
 WORKDIR /test
 RUN <<eot
@@ -234,7 +288,43 @@ RUN <<eot
 	[ ! -d /out/a ]
 	[ ! -d /out/c* ]
 eot
-`)
+`,
+		`
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS base
+WORKDIR /test
+RUN mkdir a && mkdir a\b && mkdir a\b\c && mkdir a\b\c\d && mkdir a\b\c\d\e
+RUN cmd /C "echo. > a\b\c\d\foo"
+RUN cmd /C "echo. > a\b\c\d\e\bay"
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS normal
+COPY --from=base --parents /test/a/b/c/d /out/
+RUN if not exist \out\test\a\b\c\d\e exit /b 1
+RUN if not exist \out\test\a\b\c\d\e\bay exit /b 1
+RUN if exist \out\e exit /b 1
+RUN if exist \out\a exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS withpivot
+COPY --from=base --parents /test/a/b/./c/d /out/
+RUN if not exist \out\c\d\e exit /b 1
+RUN if not exist \out\c\d\foo exit /b 1
+RUN if exist \out\a exit /b 1
+RUN if exist \out\e exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS nonexistentfile
+COPY --from=base --parents /test/nonexistent-file /out/
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS wildcard-nonexistent
+COPY --from=base --parents /test/a/b2*/c /out/
+RUN if not exist \out exit /b 1
+RUN if exist \out\a exit /b 1
+
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS wildcard-afterpivot
+COPY --from=base --parents /test/a/b/./c2* /out/
+RUN if not exist \out exit /b 1
+RUN if exist \out\a exit /b 1
+RUN if exist \out\c exit /b 1
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
