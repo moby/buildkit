@@ -25,6 +25,12 @@ images:
 	$(BUILDX_CMD) bake image
 	IMAGE_TARGET=rootless $(BUILDX_CMD) bake image
 
+.PHONY: frontends
+frontends:
+# docker/dockerfile:local and docker/dockerfile:local-labs are created on Docker
+	$(BUILDX_CMD) bake frontend-image
+	FRONTEND_CHANNEL=labs $(BUILDX_CMD) bake frontend-image
+
 .PHONY: install
 install:
 	mkdir -p $(DESTDIR)$(bindir)
