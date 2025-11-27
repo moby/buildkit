@@ -45,8 +45,11 @@ type Opt struct {
 	CommandCandidates []string
 	// without root privileges (has nothing to do with Opt.Root directory)
 	Rootless bool
-	// DefaultCgroupParent is the cgroup-parent name for executor
+	// DefaultCgroupParent is the default cgroup-parent name for executor
 	DefaultCgroupParent string
+	// RootCgroup ensures all cgroups (including DefaultCgroupParent) are
+	// created beneath the given root cgroup.
+	RootCgroup string
 	// ProcessMode
 	ProcessMode     oci.ProcessMode
 	IdentityMapping *user.IdentityMapping
@@ -67,6 +70,7 @@ type runcExecutor struct {
 	runc             *runc.Runc
 	root             string
 	cgroupParent     string
+	rootCgroup       string
 	rootless         bool
 	networkProviders map[pb.NetMode]network.Provider
 	processMode      oci.ProcessMode
@@ -135,6 +139,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		runc:             runtime,
 		root:             root,
 		cgroupParent:     opt.DefaultCgroupParent,
+		rootCgroup:       opt.RootCgroup,
 		rootless:         opt.Rootless,
 		networkProviders: networkProviders,
 		processMode:      opt.ProcessMode,
@@ -268,7 +273,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, w.cdiManager, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, w.rootCgroup, w.processMode, w.idmap, w.apparmorProfile, w.selinux, w.tracingSocket, w.cdiManager, opts...)
 	if err != nil {
 		return nil, err
 	}
