@@ -358,7 +358,14 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 			Length: r.Length,
 		}
 	}
-	return cacheutil.ReadFile(ctx, m, newReq)
+
+	var dt []byte
+	err = withMount(m, func(root string) error {
+		var err error
+		dt, err = cacheutil.ReadFile(ctx, root, newReq)
+		return err
+	})
+	return dt, err
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
@@ -370,7 +377,14 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 		Path:           req.Path,
 		IncludePattern: req.IncludePattern,
 	}
-	return cacheutil.ReadDir(ctx, m, newReq)
+
+	var rd []*fstypes.Stat
+	err = withMount(m, func(root string) error {
+		var err error
+		rd, err = cacheutil.ReadDir(ctx, root, newReq)
+		return err
+	})
+	return rd, err
 }
 
 func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
@@ -378,7 +392,14 @@ func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.St
 	if err != nil {
 		return nil, err
 	}
-	return cacheutil.StatFile(ctx, m, req.Path)
+
+	var st *fstypes.Stat
+	err = withMount(m, func(root string) error {
+		var err error
+		st, err = cacheutil.StatFile(ctx, root, req.Path)
+		return err
+	})
+	return st, err
 }
 
 func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
@@ -391,4 +412,29 @@ func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
 		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
 	}
 	return ref.ImmutableRef.Mount(ctx, true, r.session)
+}
+
+func withMount(mount snapshot.Mountable, cb func(string) error) error {
+	lm := snapshot.LocalMounter(mount)
+
+	root, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if lm != nil {
+			lm.Unmount()
+		}
+	}()
+
+	if err := cb(root); err != nil {
+		return err
+	}
+
+	if err := lm.Unmount(); err != nil {
+		return err
+	}
+	lm = nil
+	return nil
 }
