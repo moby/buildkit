@@ -44,7 +44,7 @@ jobs:
   prepare:
     runs-on: ubuntu-24.04
     outputs:
-      channels: ${{ steps.set.outputs.matrix }}
+      includes: ${{ steps.set.outputs.includes }}
       tag: ${{ steps.set.outputs.tag }}
     steps:
       -
@@ -56,140 +56,142 @@ jobs:
           INPUT_CHANNELS: |
             mainline
             labs
+          INPUT_IMAGE-NAME: ${{ env.IMAGE_NAME }}
         with:
           script: |
             const ref = core.getInput('ref');
             const channels = core.getMultilineInput('channels');
+            const imageName = core.getInput('image-name');
+            
+            function getTags(channel) {
+              let tagSuffix = '';
+              if (channel !== 'mainline') {
+                tagSuffix = `-${channel}`;
+              }
+              let tagLatest = '';
+              let tagVersion = '';
+              if (ref.startsWith('refs/tags/dockerfile/')) {
+                const version = ref.replace('refs/tags/dockerfile/', '').replace(new RegExp(`-${channel}$`), '');
+                if (/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {
+                  tagLatest = channel === 'mainline' ? 'latest' : channel;
+                }
+                tagVersion = version;
+              }
+              return { tagSuffix, tagLatest, tagVersion };
+            }
+            
             const matrix = [];
             if (ref.startsWith('refs/tags/dockerfile/')) {
               const version = ref.replace('refs/tags/dockerfile/', '');
               for (const channel of channels) {
                 if (version.endsWith(`-${channel}`)) {
-                  matrix.push(channel);
+                  const { tagSuffix, tagLatest, tagVersion } = getTags(channel);
+                  matrix.push({
+                    channel: channel,
+                    imageName: imageName,
+                    tagSuffix: tagSuffix,
+                    tagLatest: tagLatest,
+                    tagVersion: tagVersion
+                  });
                   break;
                 }
               }
               if (matrix.length === 0) {
                 // default to mainline if no channel suffix
-                matrix.push('mainline');
+                const { tagSuffix, tagLatest, tagVersion } = getTags('mainline');
+                matrix.push({
+                  channel: 'mainline',
+                  imageName: imageName,
+                  tagSuffix: tagSuffix,
+                  tagLatest: tagLatest,
+                  tagVersion: tagVersion
+                });
               }
               core.setOutput('tag', ref.replace('refs/tags/', ''));
             } else {
-              matrix.push('mainline', 'labs');
+              for (const channel of channels) {
+                const { tagSuffix, tagLatest, tagVersion } = getTags(channel);
+                matrix.push({
+                  channel: channel,
+                  imageName: imageName,
+                  tagSuffix: tagSuffix,
+                  tagLatest: tagLatest,
+                  tagVersion: tagVersion
+                });
+              }
             }
+            
             core.info(JSON.stringify(matrix, null, 2));
-            core.setOutput('matrix', JSON.stringify(matrix));
+            core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    runs-on: ubuntu-24.04
+    uses: docker/github-builder-experimental/.github/workflows/bake.yml@8fc70909404a502fd0eca6601b99b32fa7192b03
     needs:
-      - test
       - prepare
+      - test
     strategy:
       fail-fast: false
       matrix:
-        channel: ${{ fromJson(needs.prepare.outputs.channels) }}
-    steps:
-      -
-        name: Prepare
-        uses: actions/github-script@v8
-        env:
-          INPUT_CHANNEL: ${{ matrix.channel }}
-          INPUT_REF: ${{ github.ref }}
-        with:
-          script: |
-            const channel = core.getInput('channel');
-            const ref = core.getInput('ref');
-            if (channel !== 'mainline') {
-              core.exportVariable('TAG_SUFFIX', `-${channel}`);
-            }
-            if (ref.startsWith('refs/tags/dockerfile/')) {
-              const version = ref.replace('refs/tags/dockerfile/', '').replace(new RegExp(`-${channel}$`), '');
-              if (/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {
-                // stable release
-                core.exportVariable('TAG_LATEST', channel === 'mainline' ? 'latest' : channel);
-              }
-              core.exportVariable('TAG_VERSION', version);
-            }
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          version: ${{ env.SETUP_BUILDX_VERSION }}
-          driver-opts: image=${{ env.SETUP_BUILDKIT_TAG }}
-          buildkitd-flags: --debug
-      -
-        name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.IMAGE_NAME }}
-          # versioning strategy
-          ## push tag dockerfile/1.17.0
-          ### docker/dockerfile-upstream:1.17.0
-          ### docker/dockerfile-upstream:1.17
-          ### docker/dockerfile-upstream:1
-          ### docker/dockerfile-upstream:latest
-          ## push tag dockerfile/1.17.0-labs
-          ### docker/dockerfile-upstream:1.17.0-labs
-          ### docker/dockerfile-upstream:1.17-labs
-          ### docker/dockerfile-upstream:1-labs
-          ### docker/dockerfile-upstream:labs
-          ## push prerelease tag dockerfile/1.17.0-rc1
-          ### docker/dockerfile-upstream:1.17.0-rc1
-          ## push prerelease tag dockerfile/1.17.0-rc1-labs
-          ### docker/dockerfile-upstream:1.17.0-rc1-labs
-          ## push on master
-          ### docker/dockerfile-upstream:master
-          ### docker/dockerfile-upstream:master-labs
-          tags: |
-            type=ref,event=branch,suffix=${{ env.TAG_SUFFIX }}
-            type=ref,event=pr,suffix=${{ env.TAG_SUFFIX }}
-            type=semver,pattern={{version}},value=${{ env.TAG_VERSION }},suffix=${{ env.TAG_SUFFIX }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG_VERSION }},suffix=${{ env.TAG_SUFFIX }}
-            type=semver,pattern={{major}},value=${{ env.TAG_VERSION }},suffix=${{ env.TAG_SUFFIX }}
-            type=raw,value=${{ env.TAG_LATEST }}
-          flavor: |
-            latest=false
-          annotations: |
-            org.opencontainers.image.title=Dockerfile Frontend
-            org.opencontainers.image.vendor=Moby
-          bake-target: frontend-meta-helper
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v3
-        if: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
-        with:
+        include: ${{ fromJson(needs.prepare.outputs.includes) }}
+    permissions:
+      contents: read # same as global permission
+      id-token: write # for signing attestation(s) with GitHub OIDC Token
+    with:
+      runner: amd64
+      target: frontend-image-cross
+      output: image
+      push: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
+      envs: |
+        FRONTEND_CHANNEL=${{ matrix.channel }}
+      cache: true
+      cache-scope: frontend-${{ matrix.channel }}
+      set-meta-annotations: true
+      meta-images: |
+        ${{ matrix.imageName }}
+      # versioning strategy
+      ## push tag dockerfile/1.17.0
+      ### docker/dockerfile-upstream:1.17.0
+      ### docker/dockerfile-upstream:1.17
+      ### docker/dockerfile-upstream:1
+      ### docker/dockerfile-upstream:latest
+      ## push tag dockerfile/1.17.0-labs
+      ### docker/dockerfile-upstream:1.17.0-labs
+      ### docker/dockerfile-upstream:1.17-labs
+      ### docker/dockerfile-upstream:1-labs
+      ### docker/dockerfile-upstream:labs
+      ## push prerelease tag dockerfile/1.17.0-rc1
+      ### docker/dockerfile-upstream:1.17.0-rc1
+      ## push prerelease tag dockerfile/1.17.0-rc1-labs
+      ### docker/dockerfile-upstream:1.17.0-rc1-labs
+      ## push on master
+      ### docker/dockerfile-upstream:master
+      ### docker/dockerfile-upstream:master-labs
+      meta-tags: |
+        type=ref,event=branch,suffix=${{ matrix.tagSuffix }}
+        type=ref,event=pr,suffix=${{ matrix.tagSuffix }}
+        type=semver,pattern={{version}},value=${{ matrix.tagVersion }},suffix=${{ matrix.tagSuffix }}
+        type=semver,pattern={{major}}.{{minor}},value=${{ matrix.tagVersion }},suffix=${{ matrix.tagSuffix }}
+        type=semver,pattern={{major}},value=${{ matrix.tagVersion }},suffix=${{ matrix.tagSuffix }}
+        type=raw,value=${{ matrix.tagLatest }}
+      meta-flavor: |
+        latest=false
+      meta-annotations: |
+        org.opencontainers.image.title=Dockerfile Frontend
+        org.opencontainers.image.vendor=Moby
+      meta-bake-target: frontend-meta-helper
+      setup-qemu: true
+      bake-sbom: true
+      bake-set: |
+        *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) && 'base' || '' }}
+    secrets:
+      registry-auths: |
+        - registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build
-        uses: docker/bake-action@v6
-        with:
-          # FIXME: remove context once git context with query string implemented in actions-toolkit
-          source: ${{ github.server_url }}/${{ github.repository }}.git#${{ github.ref }}
-          files: |
-            ./docker-bake.hcl
-            cwd://${{ steps.meta.outputs.bake-file-tags }}
-            cwd://${{ steps.meta.outputs.bake-file-annotations }}
-          targets: frontend-image-cross
-          push: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
-          provenance: mode=max,version=v1
-          sbom: true
-          set: |
-            *.cache-from=type=gha,scope=frontend-${{ matrix.channel }}
-            *.cache-to=type=gha,scope=frontend-${{ matrix.channel }}
-            *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) && 'base' || '' }}
-        env:
-          FRONTEND_CHANNEL: ${{ matrix.channel }}
 
   scout:
     runs-on: ubuntu-24.04
-    if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
+    if: ${{ github.repository == 'moby/buildkit' && github.ref == 'refs/heads/master' }}
     permissions:
       # same as global permission
       contents: read
