@@ -27,7 +27,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if err := grpcclient.RunFromEnvironment(appcontext.Context(), dockerfile.Build); err != nil {
+	if err := grpcclient.BuildFromEnvironment(appcontext.Context(), dockerfile.Build); err != nil {
 		bklog.L.Errorf("fatal error: %+v", err)
 		panic(err)
 	}

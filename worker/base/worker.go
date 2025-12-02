@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
+	gatewayexporter "github.com/moby/buildkit/exporter/gateway"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
 	tarexporter "github.com/moby/buildkit/exporter/tar"
@@ -265,6 +266,15 @@ func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
 }
 
+func (w *Worker) Info() client.WorkerInfo {
+	return client.WorkerInfo{
+		ID:              w.ID(),
+		Labels:          w.Labels(),
+		Platforms:       w.Platforms(false),
+		BuildkitVersion: w.BuildkitVersion(),
+	}
+}
+
 func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
 	if noCache {
 		matchers := make([]platforms.MatchComparer, len(w.WorkerOpt.Platforms))
@@ -352,6 +362,7 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
+
 		case *pb.Op_Merge:
 			return ops.NewMergeOp(v, op, w)
 		case *pb.Op_Diff:
@@ -509,6 +520,13 @@ func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...cli
 
 func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {
 	switch name {
+	case client.ExporterGateway:
+		return gatewayexporter.New(gatewayexporter.Opt{
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			LeaseManager:   w.LeaseManager(),
+			WorkerInfo:     w.Info(),
+		})
 	case client.ExporterImage:
 		return imageexporter.New(imageexporter.Opt{
 			Images:         w.ImageStore,

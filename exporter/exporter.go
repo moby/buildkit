@@ -4,18 +4,34 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/compression"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-type Source = result.Result[cache.ImmutableRef]
+type Source struct {
+	*result.Result[cache.ImmutableRef]
+	FrontendResult *frontend.Result
+}
+
+func (src *Source) Clone() *Source {
+	if src == nil {
+		return nil
+	}
+	return &Source{
+		Result:         src.Result.Clone(),
+		FrontendResult: src.FrontendResult.Clone(),
+	}
+}
 
 type Attestation = result.Attestation[cache.ImmutableRef]
 
 type Exporter interface {
-	Resolve(context.Context, int, map[string]string) (ExporterInstance, error)
+	// XXX: resolver is so much more complicated now
+	Resolve(ctx context.Context, id int, frontendAttrs map[string]string, exporterAttrs map[string]string, target exptypes.ExporterTarget) (ExporterInstance, error)
 }
 
 type ExporterInstance interface {
@@ -24,7 +40,9 @@ type ExporterInstance interface {
 	Config() *Config
 	Type() string
 	Attrs() map[string]string
-	Export(ctx context.Context, src *Source, inlineCache exptypes.InlineCache, sessionID string) (map[string]string, DescriptorReference, error)
+	Target() exptypes.ExporterTarget
+	// XXX: so is export
+	Export(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, src *Source, inlineCache exptypes.InlineCache, sessionID string) (map[string]string, DescriptorReference, error)
 }
 
 type DescriptorReference interface {

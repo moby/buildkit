@@ -16,9 +16,11 @@ import (
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
@@ -60,7 +62,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, id int, _ map[string]string, opt map[string]string, target exptypes.ExporterTarget) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
 		id:            id,
@@ -98,6 +100,16 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			i.meta[k] = []byte(v)
 		}
 	}
+
+	if target != exptypes.ExporterTargetUnknown {
+		if i.tar && target != exptypes.ExporterTargetFile {
+			return nil, errors.Errorf("tar=true exporter only supports file target")
+		}
+		if !i.tar && target != exptypes.ExporterTargetStore {
+			return nil, errors.Errorf("tar=false exporter only supports content store target")
+		}
+	}
+
 	return i, nil
 }
 
@@ -127,11 +139,18 @@ func (e *imageExporterInstance) Attrs() map[string]string {
 	return e.attrs
 }
 
+func (e *imageExporterInstance) Target() exptypes.ExporterTarget {
+	if e.tar {
+		return exptypes.ExporterTargetFile
+	}
+	return exptypes.ExporterTargetStore
+}
+
 func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+func (e *imageExporterInstance) Export(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}

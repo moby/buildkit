@@ -27,8 +27,12 @@ service LLBBridge {
 	rpc StatFile(StatFileRequest) returns (StatFileResponse);
 	// apicaps:CapGatewayEvaluate
 	rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+	// apicaps:CapGatewayGetRemote
+	rpc GetRemote(GetRemoteRequest) returns (GetRemoteResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 	rpc Return(ReturnRequest) returns (ReturnResponse);
+	// apicaps:CapGatewayGetReturn
+	rpc GetReturn(GetReturnRequest) returns (GetReturnResponse);
 	// apicaps:CapFrontendInputs
 	rpc Inputs(InputsRequest) returns (InputsResponse);
 
@@ -77,6 +81,8 @@ message Attestation {
 
 	Ref ref = 3;
 	string path = 4;
+	bytes content = 7;
+
 	string inTotoPredicateType = 5;
 	repeated InTotoSubject inTotoSubjects = 6;
 }
@@ -104,6 +110,13 @@ message ReturnRequest {
 }
 
 message ReturnResponse {
+}
+
+message GetReturnRequest {
+}
+
+message GetReturnResponse {
+	Result result = 1;
 }
 
 message InputsRequest {
@@ -265,6 +278,15 @@ message EvaluateRequest {
 message EvaluateResponse {
 }
 
+message GetRemoteRequest {
+	string Ref = 1;
+	Compression compression = 2;
+}
+
+message GetRemoteResponse {
+	repeated Descriptor descriptors = 1;
+}
+
 message PingRequest{
 }
 message PongResponse{
@@ -374,4 +396,19 @@ message Descriptor {
 	string digest = 2;
 	int64 size = 3;
 	map<string, string> annotations = 5;
+}
+
+message Compression {
+	enum Type {
+		UNKNOWN = 0;
+		UNCOMPRESSED = 1;
+		GZIP = 2;
+		ESTARGZ = 3;
+		ZSTD = 4;
+	}
+
+	Type type = 1;
+	bool force = 2;
+	bool hasLevel = 3;
+	int32 level = 4;
 }
