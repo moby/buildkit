@@ -1573,15 +1573,18 @@ ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
 ADD [--checksum=<hash>] <src> ... <dir>
 ```
 
-The `--checksum` flag lets you verify the checksum of a remote resource. The
-checksum is formatted as `sha256:<hash>`. SHA-256 is the only supported hash
-algorithm.
+The `--checksum` flag lets you verify the checksum of a remote Git or HTTP
+resource:
+
+- For Git sources, the checksum is the commit SHA. It can be the full commit
+  SHA or match on the prefix (1 or more characters).
+- For HTTP sources, the checksum is the SHA-256 content digest, formatted as
+  `sha256:<hash>`. SHA-256 is the only supported hash algorithm.
 
 ```dockerfile
+ADD --checksum=be1f38e https://github.com/moby/buildkit.git#v0.26.2 /
 ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
 ```
-
-The `--checksum` flag only supports HTTP(S) sources.
 
 ### ADD --chown --chmod
 
