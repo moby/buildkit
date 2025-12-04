@@ -38,6 +38,7 @@ func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 		workers:           w,
 		workerRefByID:     make(map[string]*worker.WorkerRef),
 		executor:          exec,
+		mounts:            make(map[string]snapshot.Mounter),
 	}
 	bc.buildOpts = bc.loadBuildOpts()
 	return bc, nil
@@ -56,6 +57,7 @@ type BridgeClient struct {
 	buildOpts     client.BuildOpts
 	ctrs          []client.Container
 	executor      executor.Executor
+	mounts        map[string]snapshot.Mounter
 }
 
 func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
@@ -213,6 +215,10 @@ func (c *BridgeClient) discard(err error) {
 		ctr.Release(context.TODO())
 	}
 
+	for _, mount := range c.mounts {
+		mount.Unmount()
+	}
+
 	for id, workerRef := range c.workerRefByID {
 		workerRef.ImmutableRef.Release(context.TODO())
 		delete(c.workerRefByID, id)
@@ -345,7 +351,7 @@ func (r *ref) Evaluate(ctx context.Context) error {
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
-	m, err := r.getMountable(ctx)
+	root, err := r.getMount(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -358,18 +364,11 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 			Length: r.Length,
 		}
 	}
-
-	var dt []byte
-	err = withMount(m, func(root string) error {
-		var err error
-		dt, err = cacheutil.ReadFile(ctx, root, newReq)
-		return err
-	})
-	return dt, err
+	return cacheutil.ReadFile(ctx, root, newReq)
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
-	m, err := r.getMountable(ctx)
+	root, err := r.getMount(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,32 +376,23 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 		Path:           req.Path,
 		IncludePattern: req.IncludePattern,
 	}
-
-	var rd []*fstypes.Stat
-	err = withMount(m, func(root string) error {
-		var err error
-		rd, err = cacheutil.ReadDir(ctx, root, newReq)
-		return err
-	})
-	return rd, err
+	return cacheutil.ReadDir(ctx, root, newReq)
 }
 
 func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
-	m, err := r.getMountable(ctx)
+	root, err := r.getMount(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	var st *fstypes.Stat
-	err = withMount(m, func(root string) error {
-		var err error
-		st, err = cacheutil.StatFile(ctx, root, req.Path)
-		return err
-	})
-	return st, err
+	return cacheutil.StatFile(ctx, root, req.Path)
 }
 
-func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
+func (r *ref) getMounter(ctx context.Context) (snapshot.Mounter, error) {
+	id := r.resultProxy.ID()
+	if mounter, ok := r.c.mounts[id]; ok {
+		return mounter, nil
+	}
+
 	rr, err := r.resultProxy.Result(ctx)
 	if err != nil {
 		return nil, r.c.wrapSolveError(err)
@@ -411,30 +401,22 @@ func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
 	}
-	return ref.ImmutableRef.Mount(ctx, true, r.session)
+
+	mountable, err := ref.ImmutableRef.Mount(ctx, true, r.session)
+	if err != nil {
+		return nil, err
+	}
+	mounter := snapshot.LocalMounter(mountable)
+
+	r.c.mounts[id] = mounter
+	return mounter, nil
 }
 
-func withMount(mount snapshot.Mountable, cb func(string) error) error {
-	lm := snapshot.LocalMounter(mount)
-
-	root, err := lm.Mount()
+func (r *ref) getMount(ctx context.Context) (string, error) {
+	mounter, err := r.getMounter(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	defer func() {
-		if lm != nil {
-			lm.Unmount()
-		}
-	}()
-
-	if err := cb(root); err != nil {
-		return err
-	}
-
-	if err := lm.Unmount(); err != nil {
-		return err
-	}
-	lm = nil
-	return nil
+	// corresponding Unmount call is made in discard()
+	return mounter.Mount()
 }
