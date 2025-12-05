@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net"
 	"os"
@@ -22,7 +23,7 @@ var dialStdioCommand = cli.Command{
 func dialStdioAction(clicontext *cli.Context) error {
 	addr := clicontext.GlobalString("addr")
 	timeout := time.Duration(clicontext.GlobalInt("timeout")) * time.Second
-	conn, err := dialer(addr, timeout)
+	conn, err := dialer(context.TODO(), addr, timeout) // use appcontext?
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func dialStdioAction(clicontext *cli.Context) error {
 	return err
 }
 
-func dialer(address string, timeout time.Duration) (net.Conn, error) {
+func dialer(ctx context.Context, address string, timeout time.Duration) (net.Conn, error) {
 	addrParts := strings.SplitN(address, "://", 2)
 	if len(addrParts) != 2 {
 		return nil, errors.Errorf("invalid address %s", address)
@@ -68,7 +69,7 @@ func dialer(address string, timeout time.Duration) (net.Conn, error) {
 	if addrParts[0] != "unix" {
 		return nil, errors.Errorf("invalid address %s (expected unix://, got %s://)", address, addrParts[0])
 	}
-	return net.DialTimeout(addrParts[0], addrParts[1], timeout)
+	return (&net.Dialer{Timeout: timeout}).DialContext(ctx, addrParts[0], addrParts[1])
 }
 
 func copier(to halfWriteCloser, from halfReadCloser, debugDescription string) error {
