@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.3.3
-ARG CONTAINERD_VERSION=v2.1.4
+ARG CONTAINERD_VERSION=v2.2.0
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
-ARG CONTAINERD_ALT_VERSION_20=v2.0.6
-ARG CONTAINERD_ALT_VERSION_17=v1.7.28
+ARG CONTAINERD_ALT_VERSION_21=v2.1.5
+ARG CONTAINERD_ALT_VERSION_20=v2.0.7
+ARG CONTAINERD_ALT_VERSION_17=v1.7.29
 ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v2.3.5
 ARG CNI_VERSION=v1.8.0
@@ -261,6 +262,13 @@ ARG CONTAINERD_VERSION
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_VERSION" .
 RUN /build.sh
 
+# containerd-alt-21 builds containerd v2.1 for integration tests
+FROM containerd-build AS containerd-alt-21
+WORKDIR /go/src/github.com/containerd/containerd
+ARG CONTAINERD_ALT_VERSION_21
+ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_21" .
+RUN /build.sh
+
 # containerd-alt-20 builds containerd v2.0 for integration tests
 FROM containerd-build AS containerd-alt-20
 WORKDIR /go/src/github.com/containerd/containerd
@@ -432,7 +440,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /
   && chmod 0755 /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.0=/opt/containerd-alt-20/bin,containerd-1.7=/opt/containerd-alt-17/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.1=opt/containerd-alt-21/bin,containerd-2.0=/opt/containerd-alt-20/bin,containerd-1.7=/opt/containerd-alt-17/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV BUILDKIT_TEST_SIGN_FIXTURES=/tmp/buildkit_test_sign_fixtures
@@ -446,6 +454,7 @@ COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=containerd-alt-21 /out/containerd* /opt/containerd-alt-21/bin/
 COPY --link --from=containerd-alt-20 /out/containerd* /opt/containerd-alt-20/bin/
 COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin/
 COPY --link --from=registry /out /usr/bin/
