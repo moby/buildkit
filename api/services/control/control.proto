@@ -244,10 +244,20 @@ message BuildResultInfo {
 	map<int64, Descriptor> Results = 3;
 }
 
+enum ExporterTarget {
+	UNKNOWN = 0;
+	NONE = 1;
+	FILE = 2;
+	DIRECTORY = 3;
+	STORE = 4;
+}
+
 // Exporter describes the output exporter
 message Exporter {
 	// Type identifies the exporter
 	string Type = 1;
 	// Attrs specifies exporter configuration
 	map<string, string> Attrs = 2;
+	// Target indicates the target type of the exporter
+	ExporterTarget Target = 3;
 }

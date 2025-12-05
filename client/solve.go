@@ -168,6 +168,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if supportFile && supportStore {
 					return nil, errors.Errorf("both file and store output is not supported by %s exporter", ex.Type)
 				}
+			case ExporterGateway:
+				supportFile = ex.Output != nil
+				supportDir = ex.OutputDir != ""
 			}
 			if !supportFile && ex.Output != nil {
 				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
@@ -290,9 +293,24 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				exportDeprecated = exp.Type
 				exportAttrDeprecated = exp.Attrs
 			}
+			target := controlapi.ExporterTarget_NONE
+			switch {
+			case exp.Output != nil:
+				target = controlapi.ExporterTarget_FILE
+			case exp.OutputDir != "":
+				switch exp.Type {
+				case ExporterOCI, ExporterDocker:
+					target = controlapi.ExporterTarget_STORE
+				default:
+					target = controlapi.ExporterTarget_DIRECTORY
+				}
+			case exp.OutputStore != nil:
+				target = controlapi.ExporterTarget_STORE
+			}
 			exports = append(exports, &controlapi.Exporter{
-				Type:  exp.Type,
-				Attrs: exp.Attrs,
+				Type:   exp.Type,
+				Attrs:  exp.Attrs,
+				Target: target,
 			})
 		}
 
