@@ -620,7 +620,7 @@ RUN cmd /V:on /C "set /p tfcontent=<\sample\testfile \
 }
 
 func testCopyLinkDotDestDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows")
+	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows. Set COPY --link=false for default COPY behavior")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -650,7 +650,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testCopyLinkEmptyDestDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows")
+	integration.SkipOnPlatform(t, "windows", "COPY --link requires diffApply which is not supported on Windows. Set COPY --link=false for default COPY behavior")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -824,7 +824,7 @@ COPY foo foo
 }
 
 func testTarExporterMulti(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "Multi-platform tar export test specifically targets linux/amd64 and darwin/amd64 platforms")
+	integration.SkipOnPlatform(t, "windows", "Multi-platform tar export test specifically targets linux/amd64 and darwin/amd64 platforms as feature it's supported on Windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
