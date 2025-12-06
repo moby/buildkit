@@ -50,13 +50,11 @@ func TestResolverCache_ConcurrentWaiters(t *testing.T) {
 
 	// Two goroutines that will wait
 	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			v, _, err := rc.Lock("shared")
 			results <- v
 			assert.NoError(t, err)
-		}()
+		})
 	}
 
 	select {
