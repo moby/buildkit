@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
@@ -60,6 +61,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
+	policy "github.com/moby/policy-helpers"
 	"github.com/moby/sys/userns"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -840,18 +842,23 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		return nil, err
 	}
 
+	var verifierProvider func() (*policy.Verifier, error)
+	if cfg.Cache.GHA != nil && cfg.Cache.GHA.Verify.Required {
+		verifierProvider = newVerifierProvider(cfg.Root)
+	}
+
 	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
 		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
 		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
 		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
-		"gha":      gha.ResolveCacheExporterFunc(),
+		"gha":      gha.ResolveCacheExporterFunc(cfg.Cache.GHA, verifierProvider),
 		"s3":       s3remotecache.ResolveCacheExporterFunc(),
 		"azblob":   azblob.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
-		"gha":      gha.ResolveCacheImporterFunc(),
+		"gha":      gha.ResolveCacheImporterFunc(cfg.Cache.GHA, verifierProvider),
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
 		"azblob":   azblob.ResolveCacheImporterFunc(),
 	}
@@ -1094,4 +1101,23 @@ func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
 		return nil, errors.Wrapf(err, "CDI registry initialization failure")
 	}
 	return cdidevices.NewManager(cdiCache, cfg.AutoAllowed), nil
+}
+
+func newVerifierProvider(root string) func() (*policy.Verifier, error) {
+	var mu sync.Mutex
+	var verifier *policy.Verifier
+	var initErr error
+	return func() (*policy.Verifier, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if verifier != nil || initErr != nil {
+			return verifier, initErr
+		}
+		statePath := filepath.Join(root, "policy")
+		verifier, initErr = policy.NewVerifier(policy.Config{
+			StateDir:      statePath,
+			RequireOnline: false,
+		})
+		return verifier, initErr
+	}
 }

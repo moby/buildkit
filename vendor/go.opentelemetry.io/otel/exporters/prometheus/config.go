@@ -1,43 +1,68 @@
 // Copyright The OpenTelemetry Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 package prometheus // import "go.opentelemetry.io/otel/exporters/prometheus"
 
 import (
-	"strings"
+	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/otlptranslator"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/internal/global"
 	"go.opentelemetry.io/otel/sdk/metric"
 )
 
 // config contains options for the exporter.
 type config struct {
-	registerer             prometheus.Registerer
-	disableTargetInfo      bool
-	withoutUnits           bool
-	withoutCounterSuffixes bool
-	readerOpts             []metric.ManualReaderOption
-	disableScopeInfo       bool
-	namespace              string
+	registerer               prometheus.Registerer
+	disableTargetInfo        bool
+	translationStrategy      otlptranslator.TranslationStrategyOption
+	withoutUnits             bool
+	withoutCounterSuffixes   bool
+	readerOpts               []metric.ManualReaderOption
+	disableScopeInfo         bool
+	namespace                string
+	resourceAttributesFilter attribute.Filter
 }
+
+var logTemporaryDefault = sync.OnceFunc(func() {
+	global.Warn(
+		"The default Prometheus naming translation strategy is planned to be changed from otlptranslator.NoUTF8EscapingWithSuffixes to otlptranslator.UnderscoreEscapingWithSuffixes in a future release. Add prometheus.WithTranslationStrategy(otlptranslator.NoUTF8EscapingWithSuffixes) to preserve the existing behavior, or prometheus.WithTranslationStrategy(otlptranslator.UnderscoreEscapingWithSuffixes) to opt into the future default behavior.",
+	)
+})
 
 // newConfig creates a validated config configured with options.
 func newConfig(opts ...Option) config {
 	cfg := config{}
 	for _, opt := range opts {
 		cfg = opt.apply(cfg)
+	}
+
+	if cfg.translationStrategy == "" {
+		// If no translation strategy was specified, deduce one based on the global
+		// NameValidationScheme. NOTE: this logic will change in the future, always
+		// defaulting to UnderscoreEscapingWithSuffixes
+
+		//nolint:staticcheck // NameValidationScheme is deprecated but we still need it for now.
+		if model.NameValidationScheme == model.UTF8Validation {
+			logTemporaryDefault()
+			cfg.translationStrategy = otlptranslator.NoUTF8EscapingWithSuffixes
+		} else {
+			cfg.translationStrategy = otlptranslator.UnderscoreEscapingWithSuffixes
+		}
+	} else {
+		// Note, if the translation strategy implies that suffixes should be added,
+		// the user can still use WithoutUnits and WithoutCounterSuffixes to
+		// explicitly disable specific suffixes. We do not override their preference
+		// in this case. However if the chosen strategy disables suffixes, we should
+		// forcibly disable all of them.
+		if !cfg.translationStrategy.ShouldAddSuffixes() {
+			cfg.withoutCounterSuffixes = true
+			cfg.withoutUnits = true
+		}
 	}
 
 	if cfg.registerer == nil {
@@ -97,6 +122,30 @@ func WithoutTargetInfo() Option {
 	})
 }
 
+// WithTranslationStrategy provides a standardized way to define how metric and
+// label names should be handled during translation to Prometheus format. See:
+// https://github.com/open-telemetry/opentelemetry-specification/blob/v1.48.0/specification/metrics/sdk_exporters/prometheus.md#configuration.
+// The recommended approach is to use either
+// [otlptranslator.UnderscoreEscapingWithSuffixes] for full Prometheus-style
+// compatibility or [otlptranslator.NoTranslation] for OpenTelemetry-style names.
+//
+// By default, if the NameValidationScheme variable in
+// [github.com/prometheus/common/model] is "legacy", the default strategy is
+// [otlptranslator.UnderscoreEscapingWithSuffixes]. If the validation scheme is
+// "utf8", then currently the default Strategy is
+// [otlptranslator.NoUTF8EscapingWithSuffixes].
+//
+// Notice: It is planned that a future release of this SDK will change the
+// default to always be [otlptranslator.UnderscoreEscapingWithSuffixes] in all
+// circumstances. Users wanting a different translation strategy should specify
+// it explicitly.
+func WithTranslationStrategy(strategy otlptranslator.TranslationStrategyOption) Option {
+	return optionFunc(func(cfg config) config {
+		cfg.translationStrategy = strategy
+		return cfg
+	})
+}
+
 // WithoutUnits disables exporter's addition of unit suffixes to metric names,
 // and will also prevent unit comments from being added in OpenMetrics once
 // unit comments are supported.
@@ -105,6 +154,12 @@ func WithoutTargetInfo() Option {
 // conventions. For example, the counter metric request.duration, with unit
 // milliseconds would become request_duration_milliseconds_total.
 // With this option set, the name would instead be request_duration_total.
+//
+// Can be used in conjunction with [WithTranslationStrategy] to disable unit
+// suffixes in strategies that would otherwise add suffixes, but this behavior
+// is not recommended and may be removed in a future release.
+//
+// Deprecated: Use [WithTranslationStrategy] instead.
 func WithoutUnits() Option {
 	return optionFunc(func(cfg config) config {
 		cfg.withoutUnits = true
@@ -112,12 +167,19 @@ func WithoutUnits() Option {
 	})
 }
 
-// WithoutUnits disables exporter's addition _total suffixes on counters.
+// WithoutCounterSuffixes disables exporter's addition _total suffixes on
+// counters.
 //
 // By default, metric names include a _total suffix to follow Prometheus naming
 // conventions. For example, the counter metric happy.people would become
 // happy_people_total. With this option set, the name would instead be
 // happy_people.
+//
+// Can be used in conjunction with [WithTranslationStrategy] to disable counter
+// suffixes in strategies that would otherwise add suffixes, but this behavior
+// is not recommended and may be removed in a future release.
+//
+// Deprecated: Use [WithTranslationStrategy] instead.
 func WithoutCounterSuffixes() Option {
 	return optionFunc(func(cfg config) config {
 		cfg.withoutCounterSuffixes = true
@@ -125,9 +187,8 @@ func WithoutCounterSuffixes() Option {
 	})
 }
 
-// WithoutScopeInfo configures the Exporter to not export the otel_scope_info metric.
-// If not specified, the Exporter will create a otel_scope_info metric containing
-// the metrics' Instrumentation Scope, and also add labels about Instrumentation Scope to all metric points.
+// WithoutScopeInfo configures the Exporter to not export
+// labels about Instrumentation Scope to all metric points.
 func WithoutScopeInfo() Option {
 	return optionFunc(func(cfg config) config {
 		cfg.disableScopeInfo = true
@@ -135,19 +196,25 @@ func WithoutScopeInfo() Option {
 	})
 }
 
-// WithNamespace configures the Exporter to prefix metric with the given namespace.
-// Metadata metrics such as target_info and otel_scope_info are not prefixed since these
-// have special behavior based on their name.
+// WithNamespace configures the Exporter to prefix metric with the given
+// namespace. Metadata metrics such as target_info are not prefixed since these
+// have special behavior based on their name. Namespaces will be prepended even
+// if [otlptranslator.NoTranslation] is set as a translation strategy. If the provided namespace
+// is empty, nothing will be prepended to metric names.
 func WithNamespace(ns string) Option {
 	return optionFunc(func(cfg config) config {
-		ns = sanitizeName(ns)
-		if !strings.HasSuffix(ns, "_") {
-			// namespace and metric names should be separated with an underscore,
-			// adds a trailing underscore if there is not one already.
-			ns = ns + "_"
-		}
-
 		cfg.namespace = ns
+		return cfg
+	})
+}
+
+// WithResourceAsConstantLabels configures the Exporter to add the resource attributes the
+// resourceFilter returns true for as attributes on all exported metrics.
+//
+// The does not affect the target info generated from resource attributes.
+func WithResourceAsConstantLabels(resourceFilter attribute.Filter) Option {
+	return optionFunc(func(cfg config) config {
+		cfg.resourceAttributesFilter = resourceFilter
 		return cfg
 	})
 }
