@@ -134,7 +134,11 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			for _, rawMirror := range c.Mirrors {
 				h := newMirrorRegistryHost(rawMirror)
 				mirrorHost := h.Host
-				host, err := fillInsecureOpts(mirrorHost, m[mirrorHost], h)
+				cfg := c
+				if mirrorCfg, ok := m[mirrorHost]; ok {
+					cfg = mirrorCfg
+				}
+				host, err := fillInsecureOpts(mirrorHost, cfg, h)
 				if err != nil {
 					return nil, err
 				}
