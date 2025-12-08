@@ -70,7 +70,7 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 
 			switch att.Kind {
 			case gatewaypb.AttestationKind_InToto:
-				stmt, err := makeInTotoStatement(content, att, defaultSubjects)
+				stmt, err := MakeInTotoStatement(content, att, defaultSubjects)
 				if err != nil {
 					return err
 				}
@@ -87,7 +87,7 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 	return statements, nil
 }
 
-func makeInTotoStatement(content []byte, attestation exporter.Attestation, defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
+func MakeInTotoStatement[T any](content []byte, attestation result.Attestation[T], defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
 	if len(attestation.InToto.Subjects) == 0 {
 		attestation.InToto.Subjects = []result.InTotoSubject{{
 			Kind: gatewaypb.InTotoSubjectKind_Self,

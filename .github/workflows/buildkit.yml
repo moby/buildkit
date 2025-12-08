@@ -112,7 +112,7 @@ jobs:
       - binaries
     with:
       cache_scope: build-integration-tests
-      pkgs: ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend
+      pkgs: ./client ./cmd/buildctl ./worker/containerd ./solver ./frontend ./exporter
       kinds: integration
       codecov_flags: core
       includes: |
