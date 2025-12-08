@@ -1078,7 +1078,7 @@ func (lbf *llbBridgeForwarder) stashResult(ctx context.Context, res *frontend.Re
 		pbRes.Attestations = map[string]*pb.Attestations{}
 		for k, atts := range res.Attestations {
 			for _, att := range atts {
-				pbAtt, err := gwclient.AttestationToPB(&att)
+				pbAtt, err := gwclient.AttestationToPB(ctx, &att)
 				if err != nil {
 					return nil, "", err
 				}

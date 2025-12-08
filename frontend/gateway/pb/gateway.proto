@@ -81,6 +81,8 @@ message Attestation {
 
 	Ref ref = 3;
 	string path = 4;
+	bytes content = 7;
+
 	string inTotoPredicateType = 5;
 	repeated InTotoSubject inTotoSubjects = 6;
 }

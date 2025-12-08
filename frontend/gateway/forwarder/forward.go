@@ -66,13 +66,6 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	if err != nil {
 		return nil, c.wrapSolveError(err)
 	}
-	for _, atts := range res.Attestations {
-		for _, att := range atts {
-			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
-			}
-		}
-	}
 
 	c.mu.Lock()
 	cRes, err := result.ConvertResult(res, func(r solver.ResultProxy) (client.Reference, error) {
@@ -189,13 +182,6 @@ func (c *BridgeClient) registerResultIDs(results ...solver.Result) (ids []string
 func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {
 	if r == nil {
 		return nil, nil
-	}
-	for _, atts := range r.Attestations {
-		for _, att := range atts {
-			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
-			}
-		}
 	}
 
 	res, err := result.ConvertResult(r, func(r client.Reference) (solver.ResultProxy, error) {

@@ -497,6 +497,7 @@ type Attestation struct {
 	Metadata            map[string][]byte      `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Ref                 *Ref                   `protobuf:"bytes,3,opt,name=ref,proto3" json:"ref,omitempty"`
 	Path                string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	Content             []byte                 `protobuf:"bytes,7,opt,name=content,proto3" json:"content,omitempty"`
 	InTotoPredicateType string                 `protobuf:"bytes,5,opt,name=inTotoPredicateType,proto3" json:"inTotoPredicateType,omitempty"`
 	InTotoSubjects      []*InTotoSubject       `protobuf:"bytes,6,rep,name=inTotoSubjects,proto3" json:"inTotoSubjects,omitempty"`
 	unknownFields       protoimpl.UnknownFields
@@ -559,6 +560,13 @@ func (x *Attestation) GetPath() string {
 		return x.Path
 	}
 	return ""
+}
+
+func (x *Attestation) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
 }
 
 func (x *Attestation) GetInTotoPredicateType() string {
@@ -3543,12 +3551,13 @@ const file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_rawDesc = 
 	"\x03key\x18\x01 \x01(\tR\x03key\x124\n" +
 	"\x05value\x18\x02 \x01(\v2\x1e.moby.buildkit.v1.frontend.RefR\x05value:\x028\x01\"X\n" +
 	"\fAttestations\x12H\n" +
-	"\vattestation\x18\x01 \x03(\v2&.moby.buildkit.v1.frontend.AttestationR\vattestation\"\xa6\x03\n" +
+	"\vattestation\x18\x01 \x03(\v2&.moby.buildkit.v1.frontend.AttestationR\vattestation\"\xc0\x03\n" +
 	"\vAttestation\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2*.moby.buildkit.v1.frontend.AttestationKindR\x04kind\x12P\n" +
 	"\bmetadata\x18\x02 \x03(\v24.moby.buildkit.v1.frontend.Attestation.MetadataEntryR\bmetadata\x120\n" +
 	"\x03ref\x18\x03 \x01(\v2\x1e.moby.buildkit.v1.frontend.RefR\x03ref\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04path\x120\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\a \x01(\fR\acontent\x120\n" +
 	"\x13inTotoPredicateType\x18\x05 \x01(\tR\x13inTotoPredicateType\x12P\n" +
 	"\x0einTotoSubjects\x18\x06 \x03(\v2(.moby.buildkit.v1.frontend.InTotoSubjectR\x0einTotoSubjects\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
