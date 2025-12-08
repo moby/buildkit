@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"os"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	distreference "github.com/distribution/reference"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -416,53 +416,63 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		return nil, err
 	}
 
-	res = client.NewResult()
 	if resp.Result == nil {
+		res = client.NewResult()
 		if id := resp.Ref; id != "" {
 			c.requests[id] = req
 		}
 		res.SetRef(&reference{id: resp.Ref, c: c})
 	} else {
-		res.Metadata = resp.Result.Metadata
-		switch pbRes := resp.Result.Result.(type) {
-		case *pb.Result_RefDeprecated:
-			if id := pbRes.RefDeprecated; id != "" {
-				res.SetRef(&reference{id: id, c: c})
-			}
-		case *pb.Result_RefsDeprecated:
-			for k, v := range pbRes.RefsDeprecated.Refs {
-				var ref client.Reference
-				if v != "" {
-					ref = &reference{id: v, c: c}
-				}
-				res.AddRef(k, ref)
-			}
-		case *pb.Result_Ref:
-			if pbRes.Ref.Id != "" {
-				res.SetRef(newReference(c, pbRes.Ref))
-			}
-		case *pb.Result_Refs:
-			for k, v := range pbRes.Refs.Refs {
-				var ref client.Reference
-				if v.Id != "" {
-					ref = newReference(c, v)
-				}
-				res.AddRef(k, ref)
-			}
+		res, err = c.loadResult(resp.Result)
+		if err != nil {
+			return nil, err
 		}
+	}
 
-		if resp.Result.Attestations != nil {
-			for p, as := range resp.Result.Attestations {
-				for _, a := range as.Attestation {
-					att, err := client.AttestationFromPB[client.Reference](a)
-					if err != nil {
-						return nil, err
-					}
-					if a.Ref.Id != "" {
-						att.Ref = newReference(c, a.Ref)
-					}
-					res.AddAttestation(p, *att)
+	return res, nil
+}
+
+func (c *grpcClient) loadResult(pbRes *pb.Result) (*client.Result, error) {
+	res := client.NewResult()
+	res.Metadata = pbRes.Metadata
+	switch pbRes := pbRes.Result.(type) {
+	case *pb.Result_RefDeprecated:
+		if id := pbRes.RefDeprecated; id != "" {
+			res.SetRef(&reference{id: id, c: c})
+		}
+	case *pb.Result_RefsDeprecated:
+		for k, v := range pbRes.RefsDeprecated.Refs {
+			var ref client.Reference
+			if v != "" {
+				ref = &reference{id: v, c: c}
+			}
+			res.AddRef(k, ref)
+		}
+	case *pb.Result_Ref:
+		if pbRes.Ref.Id != "" {
+			res.SetRef(newReference(c, pbRes.Ref))
+		}
+	case *pb.Result_Refs:
+		for k, v := range pbRes.Refs.Refs {
+			var ref client.Reference
+			if v.Id != "" {
+				ref = newReference(c, v)
+			}
+			res.AddRef(k, ref)
+		}
+	}
+
+	if pbRes.Attestations != nil {
+		for p, as := range pbRes.Attestations {
+			for _, a := range as.Attestation {
+				att, err := client.AttestationFromPB[client.Reference](a)
+				if err != nil {
+					return nil, err
 				}
+				if a.Ref != nil && a.Ref.Id != "" {
+					att.Ref = newReference(c, a.Ref)
+				}
+				res.AddAttestation(p, *att)
 			}
 		}
 	}
@@ -591,25 +601,13 @@ func imgResponseFromPB(resp *pb.ResolveSourceImageResponse) *sourceresolver.Reso
 		}
 		for k, v := range resp.AttestationChain.Blobs {
 			ac.Blobs[digest.Digest(k)] = sourceresolver.Blob{
-				Descriptor: descriptorFromPB(v.GetDescriptor_()),
+				Descriptor: pb.DescriptorFromPB(v.GetDescriptor_()),
 				Data:       v.Data,
 			}
 		}
 		r.AttestationChain = ac
 	}
 	return r
-}
-
-func descriptorFromPB(pbDesc *pb.Descriptor) ocispecs.Descriptor {
-	if pbDesc == nil {
-		return ocispecs.Descriptor{}
-	}
-	return ocispecs.Descriptor{
-		MediaType:   pbDesc.GetMediaType(),
-		Size:        pbDesc.GetSize(),
-		Digest:      digest.Digest(pbDesc.GetDigest()),
-		Annotations: maps.Clone(pbDesc.GetAnnotations()),
-	}
 }
 
 func (c *grpcClient) resolveImageConfigViaSourceMetadata(ctx context.Context, ref string, opt sourceresolver.Opt, p *opspb.Platform) (string, digest.Digest, []byte, error) {
@@ -751,6 +749,18 @@ func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 		inputs[key] = llb.NewState(op)
 	}
 	return inputs, nil
+}
+
+func (c *grpcClient) GetReturn(ctx context.Context) (*client.Result, error) {
+	result, err := c.client.GetReturn(ctx, &pb.GetReturnRequest{})
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.loadResult(result.Result)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // procMessageForwarder is created per container process to act as the
@@ -1320,6 +1330,24 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 		return nil, err
 	}
 	return resp.Stat, nil
+}
+
+func (r *reference) GetRemote(ctx context.Context, cfg config.RefConfig) ([]ocispecs.Descriptor, error) {
+	if cfg.PreferNonDistributable {
+		return nil, errors.New("prefer-nondistributable is not supported over gateway")
+	}
+	resp, err := r.c.client.GetRemote(ctx, &pb.GetRemoteRequest{
+		Ref:         r.id,
+		Compression: pb.CompressionToPB(cfg.Compression),
+	})
+	if err != nil {
+		return nil, err
+	}
+	descs := make([]ocispecs.Descriptor, len(resp.Descriptors))
+	for i, d := range resp.Descriptors {
+		descs[i] = pb.DescriptorFromPB(d)
+	}
+	return descs, nil
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {

@@ -138,6 +138,11 @@ func (g *gatewayClientForBuild) Evaluate(ctx context.Context, in *gatewayapi.Eva
 	return g.gateway.Evaluate(ctx, in, opts...)
 }
 
+func (g *gatewayClientForBuild) GetRemote(ctx context.Context, in *gatewayapi.GetRemoteRequest, opts ...grpc.CallOption) (*gatewayapi.GetRemoteResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.GetRemote(ctx, in, opts...)
+}
+
 func (g *gatewayClientForBuild) Ping(ctx context.Context, in *gatewayapi.PingRequest, opts ...grpc.CallOption) (*gatewayapi.PongResponse, error) {
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Ping(ctx, in, opts...)
@@ -146,6 +151,11 @@ func (g *gatewayClientForBuild) Ping(ctx context.Context, in *gatewayapi.PingReq
 func (g *gatewayClientForBuild) Return(ctx context.Context, in *gatewayapi.ReturnRequest, opts ...grpc.CallOption) (*gatewayapi.ReturnResponse, error) {
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Return(ctx, in, opts...)
+}
+
+func (g *gatewayClientForBuild) GetReturn(ctx context.Context, in *gatewayapi.GetReturnRequest, opts ...grpc.CallOption) (*gatewayapi.GetReturnResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.GetReturn(ctx, in, opts...)
 }
 
 func (g *gatewayClientForBuild) Inputs(ctx context.Context, in *gatewayapi.InputsRequest, opts ...grpc.CallOption) (*gatewayapi.InputsResponse, error) {

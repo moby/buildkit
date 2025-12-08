@@ -22,6 +22,7 @@ import (
 	"github.com/golang/protobuf/ptypes/timestamp"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/config"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -309,7 +310,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		lbf.mu.Unlock()
 	}
 
-	return lbf.Result()
+	return lbf.Result(ctx)
 }
 
 func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
@@ -398,17 +399,18 @@ func (lbf *llbBridgeForwarder) setResult(r *frontend.Result, err error) (*pb.Ret
 		return nil, errors.New("gateway return must be either result or err")
 	}
 
-	if lbf.result != nil || lbf.err != nil {
+	if lbf.done {
 		return nil, errors.New("gateway result is already set")
 	}
 
 	lbf.result = r
 	lbf.err = err
 	close(lbf.doneCh)
+	lbf.done = true
 	return &pb.ReturnResponse{}, nil
 }
 
-func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
+func (lbf *llbBridgeForwarder) Result(ctx context.Context) (*frontend.Result, error) {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
@@ -417,6 +419,9 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	}
 
 	if lbf.err != nil {
+		if errdefs.IsCanceled(ctx, lbf.err) && lbf.isErrServerClosed {
+			return nil, errors.Errorf("frontend grpc server closed unexpectedly")
+		}
 		return nil, lbf.err
 	}
 
@@ -530,8 +535,10 @@ func (d dummyAddr) String() string {
 type LLBBridgeForwarder interface {
 	pb.LLBBridgeServer
 	Done() <-chan struct{}
-	Result() (*frontend.Result, error)
 	Discard()
+
+	Result(ctx context.Context) (*frontend.Result, error)
+	SetResult(r *frontend.Result, err error)
 }
 
 type llbBridgeForwarder struct {
@@ -543,6 +550,7 @@ type llbBridgeForwarder struct {
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
+	done              bool
 	doneCh            chan struct{} // closed when result or err become valid through a call to a Return
 	result            *frontend.Result
 	err               error
@@ -734,81 +742,10 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		return nil, errors.Errorf("solve did not return default result")
 	}
 
-	pbRes := &pb.Result{
-		Metadata: res.Metadata,
+	pbRes, defaultID, err := lbf.stashResult(ctx, res, req)
+	if err != nil {
+		return nil, err
 	}
-	var defaultID string
-
-	lbf.mu.Lock()
-
-	if res.Refs != nil {
-		ids := make(map[string]string, len(res.Refs))
-		defs := make(map[string]*opspb.Definition, len(res.Refs))
-		for k, ref := range res.Refs {
-			var id string
-			var def *opspb.Definition
-			if ref != nil {
-				id = identity.NewID()
-				def = ref.Definition()
-				lbf.refs[id] = ref
-			}
-			ids[k] = id
-			defs[k] = def
-		}
-
-		if req.AllowResultArrayRef {
-			refMap := make(map[string]*pb.Ref, len(res.Refs))
-			for k, id := range ids {
-				refMap[k] = &pb.Ref{Id: id, Def: defs[k]}
-			}
-			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
-		} else {
-			pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: ids}}
-		}
-	} else {
-		ref := res.Ref
-		var id string
-		var def *opspb.Definition
-		if ref != nil {
-			id = identity.NewID()
-			def = ref.Definition()
-			lbf.refs[id] = ref
-		}
-		defaultID = id
-
-		if req.AllowResultArrayRef {
-			pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Id: id, Def: def}}
-		} else {
-			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
-		}
-	}
-
-	if res.Attestations != nil {
-		pbRes.Attestations = map[string]*pb.Attestations{}
-		for k, atts := range res.Attestations {
-			for _, att := range atts {
-				pbAtt, err := gwclient.AttestationToPB(&att)
-				if err != nil {
-					lbf.mu.Unlock()
-					return nil, err
-				}
-
-				if att.Ref != nil {
-					id := identity.NewID()
-					def := att.Ref.Definition()
-					lbf.refs[id] = att.Ref
-					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
-				}
-
-				if pbRes.Attestations[k] == nil {
-					pbRes.Attestations[k] = &pb.Attestations{}
-				}
-				pbRes.Attestations[k].Attestation = append(pbRes.Attestations[k].Attestation, pbAtt)
-			}
-		}
-	}
-
-	lbf.mu.Unlock()
 
 	// compatibility mode for older clients
 	if req.Final {
@@ -988,11 +925,19 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			Details: in.Error.Details,
 		})))
 	}
-	r := &frontend.Result{
-		Metadata: in.Result.Metadata,
-	}
 
-	switch res := in.Result.Result.(type) {
+	r, err := lbf.loadResult(in.Result)
+	if err != nil {
+		return nil, err
+	}
+	return lbf.setResult(r, nil)
+}
+
+func (lbf *llbBridgeForwarder) loadResult(pbRes *pb.Result) (*frontend.Result, error) {
+	r := &frontend.Result{
+		Metadata: pbRes.Metadata,
+	}
+	switch res := pbRes.Result.(type) {
 	case *pb.Result_RefDeprecated:
 		ref, err := lbf.cloneRef(res.RefDeprecated)
 		if err != nil {
@@ -1023,8 +968,8 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 	}
 
-	if in.Result.Attestations != nil {
-		for k, pbAtts := range in.Result.Attestations {
+	if pbRes.Attestations != nil {
+		for k, pbAtts := range pbRes.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
 				att, err := gwclient.AttestationFromPB[solver.ResultProxy](pbAtt)
 				if err != nil {
@@ -1042,7 +987,147 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 	}
 
-	return lbf.setResult(r, nil)
+	return r, nil
+}
+
+func (lbf *llbBridgeForwarder) stashResult(ctx context.Context, res *frontend.Result, req *pb.SolveRequest) (*pb.Result, string, error) {
+	var defaultID string
+	pbRes := &pb.Result{
+		Metadata: res.Metadata,
+	}
+
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	if res.Refs != nil {
+		ids := make(map[string]string, len(res.Refs))
+		defs := make(map[string]*opspb.Definition, len(res.Refs))
+		for k, ref := range res.Refs {
+			var id string
+			var def *opspb.Definition
+			if ref != nil {
+				id = identity.NewID()
+				def = ref.Definition()
+				lbf.refs[id] = ref
+			}
+			ids[k] = id
+			defs[k] = def
+		}
+
+		if req != nil && req.AllowResultArrayRef {
+			refMap := make(map[string]*pb.Ref, len(res.Refs))
+			for k, id := range ids {
+				refMap[k] = &pb.Ref{Id: id, Def: defs[k]}
+			}
+			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
+		} else {
+			pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: ids}}
+		}
+	} else {
+		ref := res.Ref
+		var id string
+		var def *opspb.Definition
+		if ref != nil {
+			id = identity.NewID()
+			def = ref.Definition()
+			lbf.refs[id] = ref
+		}
+		defaultID = id
+
+		if req != nil && req.AllowResultArrayRef {
+			pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Id: id, Def: def}}
+		} else {
+			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
+		}
+	}
+
+	if res.Attestations != nil {
+		pbRes.Attestations = map[string]*pb.Attestations{}
+		for k, atts := range res.Attestations {
+			for _, att := range atts {
+				pbAtt, err := gwclient.AttestationToPB(&att)
+				if err != nil {
+					return nil, "", err
+				}
+
+				if att.Ref != nil {
+					id := identity.NewID()
+					def := att.Ref.Definition()
+					lbf.refs[id] = att.Ref
+					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
+				}
+
+				if pbRes.Attestations[k] == nil {
+					pbRes.Attestations[k] = &pb.Attestations{}
+				}
+				pbRes.Attestations[k].Attestation = append(pbRes.Attestations[k].Attestation, pbAtt)
+			}
+		}
+	}
+
+	return pbRes, defaultID, nil
+}
+
+func (lbf *llbBridgeForwarder) SetResult(result *frontend.Result, err error) {
+	lbf.mu.Lock()
+	if result != nil {
+		lbf.result = result
+	}
+	if err != nil && lbf.err == nil {
+		// An existing error (set via Return rpc) takes
+		// precedence over this error
+		lbf.err = err
+		lbf.result = nil
+	}
+	lbf.mu.Unlock()
+}
+
+func (lbf *llbBridgeForwarder) GetReturn(ctx context.Context, in *pb.GetReturnRequest) (*pb.GetReturnResponse, error) {
+	res, err := lbf.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("no result to export")
+	}
+
+	pbRes, _, err := lbf.stashResult(ctx, res, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := &pb.GetReturnResponse{
+		Result: pbRes,
+	}
+	return resp, nil
+}
+
+func (lbf *llbBridgeForwarder) GetRemote(ctx context.Context, in *pb.GetRemoteRequest) (*pb.GetRemoteResponse, error) {
+	r, err := lbf.getImmutableRef(ctx, in.Ref)
+	if err != nil {
+		return nil, err
+	}
+
+	rc := config.RefConfig{
+		Compression: pb.CompressionFromPB(in.Compression),
+	}
+	remotes, err := r.GetRemotes(ctx, true, rc, false, session.NewGroup(lbf.sid))
+	if err != nil {
+		return nil, err
+	}
+	remote := remotes[0]
+	if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+		if err := unlazier.Unlazy(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	resp := &pb.GetRemoteResponse{
+		Descriptors: make([]*pb.Descriptor, 0, len(remote.Descriptors)),
+	}
+	for _, desc := range remote.Descriptors {
+		resp.Descriptors = append(resp.Descriptors, pb.DescriptorToPB(desc))
+	}
+	return resp, nil
 }
 
 func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {
@@ -1669,13 +1754,8 @@ func toPBAttestationChain(ac *sourceresolver.AttestationChain) *pb.AttestationCh
 	}
 	for k, v := range ac.Blobs {
 		out.Blobs[k.String()] = &pb.Blob{
-			Descriptor_: &pb.Descriptor{
-				MediaType:   v.Descriptor.MediaType,
-				Size:        v.Descriptor.Size,
-				Digest:      string(v.Descriptor.Digest),
-				Annotations: maps.Clone(v.Descriptor.Annotations),
-			},
-			Data: v.Data,
+			Descriptor_: pb.DescriptorToPB(v.Descriptor),
+			Data:        v.Data,
 		}
 	}
 	return out

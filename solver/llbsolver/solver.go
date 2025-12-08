@@ -573,7 +573,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		var err error
 		select {
 		case <-fwd.Done():
-			res, err = fwd.Result()
+			res, err = fwd.Result(ctx)
 		case <-ctx.Done():
 			err = context.Cause(ctx)
 		}

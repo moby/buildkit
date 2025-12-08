@@ -72,6 +72,12 @@ const (
 	// CapSourceMetaResolver is the capability to indicates support for ResolveSourceMetadata
 	// function in gateway API
 	CapSourceMetaResolver apicaps.CapID = "source.metaresolver"
+
+	// CapGatewayGetReturn is the capability allowing fetching a previously returned result.
+	CapGatewayGetReturn apicaps.CapID = "gateway.getreturn"
+
+	// CapGatewayGetRemote is the capability that allows fetching ref blobs from the content store.
+	CapGatewayGetRemote apicaps.CapID = "gateway.remote"
 )
 
 func init() {
@@ -239,6 +245,20 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceMetaResolver,
 		Name:    "source meta resolver",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayGetReturn,
+		Name:    "gateway get return",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayGetRemote,
+		Name:    "gateway get remote",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
