@@ -34,27 +34,31 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, id int, opts exporter.ResolveOpts) (exporter.ExporterInstance, error) {
+	if opts.Target != exptypes.ExporterTargetFile && opts.Target != exptypes.ExporterTargetUnknown {
+		return nil, errors.Errorf("local exporter only supports file target")
+	}
+	opts.Target = exptypes.ExporterTargetFile
+
 	li := &localExporterInstance{
 		localExporter: e,
 		id:            id,
-		attrs:         opt,
+		opts:          opts,
 	}
-	_, err := li.opts.Load(opt)
+	_, err := li.fsOpts.Load(opts.Attrs)
 	if err != nil {
 		return nil, err
 	}
-	_ = opt
 
 	return li, nil
 }
 
 type localExporterInstance struct {
 	*localExporter
-	id    int
-	attrs map[string]string
+	id   int
+	opts exporter.ResolveOpts
 
-	opts local.CreateFSOpts
+	fsOpts local.CreateFSOpts
 }
 
 func (e *localExporterInstance) ID() int {
@@ -69,8 +73,12 @@ func (e *localExporterInstance) Type() string {
 	return client.ExporterTar
 }
 
-func (e *localExporterInstance) Attrs() map[string]string {
-	return e.attrs
+func (e *localExporterInstance) Opts() exporter.ResolveOpts {
+	return e.opts
+}
+
+func (e *localExporterInstance) Target() exptypes.ExporterTarget {
+	return exptypes.ExporterTargetFile
 }
 
 func (e *localExporterInstance) Config() *exporter.Config {
@@ -86,11 +94,11 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		}
 	}()
 
-	if e.opts.Epoch == nil {
+	if e.fsOpts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, nil, err
 		} else if ok {
-			e.opts.Epoch = tm
+			e.fsOpts.Epoch = tm
 		}
 	}
 
@@ -98,7 +106,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	isMap := len(inp.Refs) > 0
 
 	getDir := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []exporter.Attestation) (*fsutil.Dir, error) {
-		outputFS, cleanup, err := local.CreateFS(ctx, sessionID, k, ref, attestations, now, isMap, e.opts)
+		outputFS, cleanup, err := local.CreateFS(ctx, sessionID, k, ref, attestations, now, isMap, e.fsOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -110,8 +118,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			Mode: uint32(os.ModeDir | 0755),
 			Path: strings.ReplaceAll(k, "/", "_"),
 		}
-		if e.opts.Epoch != nil {
-			st.ModTime = e.opts.Epoch.UnixNano()
+		if e.fsOpts.Epoch != nil {
+			st.ModTime = e.fsOpts.Epoch.UnixNano()
 		}
 
 		return &fsutil.Dir{

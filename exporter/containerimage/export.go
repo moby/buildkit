@@ -68,12 +68,17 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, id int, opts exporter.ResolveOpts) (exporter.ExporterInstance, error) {
+	if opts.Target != exptypes.ExporterTargetUnknown && opts.Target != exptypes.ExporterTargetNone {
+		return nil, errors.New("image exporter does not support client target")
+	}
+	opts.Target = exptypes.ExporterTargetNone
+
 	i := &imageExporterInstance{
 		imageExporter: e,
 		id:            id,
-		attrs:         opt,
-		opts: ImageCommitOpts{
+		opts:          opts,
+		commit: ImageCommitOpts{
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
@@ -82,7 +87,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 		store: true,
 	}
 
-	opt, err := i.opts.Load(ctx, opt)
+	opt, err := i.commit.Load(ctx, opts.Attrs)
 	if err != nil {
 		return nil, err
 	}
@@ -183,10 +188,10 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 
 type imageExporterInstance struct {
 	*imageExporter
-	id    int
-	attrs map[string]string
+	id   int
+	opts exporter.ResolveOpts
 
-	opts                 ImageCommitOpts
+	commit               ImageCommitOpts
 	push                 bool
 	pushByDigest         bool
 	unpack               bool
@@ -208,15 +213,15 @@ func (e *imageExporterInstance) Name() string {
 }
 
 func (e *imageExporterInstance) Config() *exporter.Config {
-	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
+	return exporter.NewConfigWithCompression(e.commit.RefCfg.Compression)
 }
 
 func (e *imageExporterInstance) Type() string {
 	return client.ExporterImage
 }
 
-func (e *imageExporterInstance) Attrs() map[string]string {
-	return e.attrs
+func (e *imageExporterInstance) Opts() exporter.ResolveOpts {
+	return e.opts
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
@@ -226,7 +231,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	maps.Copy(src.Metadata, e.meta)
 
-	opts := e.opts
+	opts := e.commit
 	as, _, err := ParseAnnotations(src.Metadata)
 	if err != nil {
 		return nil, nil, err
@@ -255,23 +260,23 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 	resp := make(map[string]string)
 
-	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
-		e.opts.ImageName = string(n)
+	if n, ok := src.Metadata["image.name"]; e.commit.ImageName == "*" && ok {
+		e.commit.ImageName = string(n)
 	}
 
 	nameCanonical := e.nameCanonical
-	if e.danglingPrefix != "" && (!e.danglingEmptyOnly || e.opts.ImageName == "") {
+	if e.danglingPrefix != "" && (!e.danglingEmptyOnly || e.commit.ImageName == "") {
 		danglingImageName := e.danglingPrefix + "@" + desc.Digest.String()
-		if e.opts.ImageName != "" {
-			e.opts.ImageName += "," + danglingImageName
+		if e.commit.ImageName != "" {
+			e.commit.ImageName += "," + danglingImageName
 		} else {
-			e.opts.ImageName = danglingImageName
+			e.commit.ImageName = danglingImageName
 			nameCanonical = false
 		}
 	}
 
-	if e.opts.ImageName != "" {
-		targetNames := strings.SplitSeq(e.opts.ImageName, ",")
+	if e.commit.ImageName != "" {
+		targetNames := strings.SplitSeq(e.commit.ImageName, ",")
 		for targetName := range targetNames {
 			if e.opt.Images != nil && e.store {
 				tagDone := progress.OneOff(ctx, "naming to "+targetName)
@@ -282,8 +287,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				// However, due to a bug of containerd, we are temporarily stuck with this workaround.
 				// https://github.com/containerd/containerd/issues/8322
 				imageClientCtx := ctx
-				if e.opts.Epoch != nil {
-					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.opts.Epoch)
+				if e.commit.Epoch != nil {
+					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.commit.Epoch)
 				}
 				img := images.Image{
 					Target: *desc,
@@ -336,7 +341,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 					eg, ctx := errgroup.WithContext(ctx)
 					for _, ref := range refs {
 						eg.Go(func() error {
-							remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+							remotes, err := ref.GetRemotes(ctx, false, e.commit.RefCfg, false, session.NewGroup(sessionID))
 							if err != nil {
 								return err
 							}
@@ -365,7 +370,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 			}
 		}
-		resp[exptypes.ExporterImageNameKey] = e.opts.ImageName
+		resp[exptypes.ExporterImageNameKey] = e.commit.ImageName
 	}
 
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
@@ -398,7 +403,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	annotations := map[digest.Digest]map[string]string{}
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	for _, ref := range refs {
-		remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
+		remotes, err := ref.GetRemotes(ctx, false, e.commit.RefCfg, false, session.NewGroup(sessionID))
 		if err != nil {
 			return err
 		}
@@ -455,7 +460,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		return err
 	}
 
-	remotes, err := ref.GetRemotes(ctx, true, e.opts.RefCfg, false, s)
+	remotes, err := ref.GetRemotes(ctx, true, e.commit.RefCfg, false, s)
 	if err != nil {
 		return err
 	}

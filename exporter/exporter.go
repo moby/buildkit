@@ -15,7 +15,13 @@ type Source = result.Result[cache.ImmutableRef]
 type Attestation = result.Attestation[cache.ImmutableRef]
 
 type Exporter interface {
-	Resolve(context.Context, int, map[string]string) (ExporterInstance, error)
+	Resolve(ctx context.Context, id int, opts ResolveOpts) (ExporterInstance, error)
+}
+
+type ResolveOpts struct {
+	Attrs         map[string]string
+	Target        exptypes.ExporterTarget
+	FrontendAttrs map[string]string
 }
 
 type ExporterInstance interface {
@@ -23,8 +29,8 @@ type ExporterInstance interface {
 	Name() string
 	Config() *Config
 	Type() string
-	Attrs() map[string]string
 	Export(ctx context.Context, src *Source, inlineCache exptypes.InlineCache, sessionID string) (map[string]string, DescriptorReference, error)
+	Opts() ResolveOpts
 }
 
 type DescriptorReference interface {

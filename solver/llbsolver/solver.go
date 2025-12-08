@@ -193,8 +193,9 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 	for _, e := range exp.Exporters {
 		rec.Exporters = append(rec.Exporters, &controlapi.Exporter{
-			Type:  e.Type(),
-			Attrs: e.Attrs(),
+			Type:   e.Type(),
+			Attrs:  e.Opts().Attrs,
+			Target: controlapi.ExporterTargetToPB(e.Opts().Target),
 		})
 	}
 
@@ -663,7 +664,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
 	if exp.EnableSessionExporter {
-		exporters, err := s.getSessionExporters(ctx, j.SessionID, len(exp.Exporters), inp)
+		exporters, err := s.getSessionExporters(ctx, j.SessionID, len(exp.Exporters), inp, req)
 		if err != nil {
 			return nil, err
 		}
@@ -701,7 +702,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
+func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source, req frontend.SolveRequest) ([]exporter.ExporterInstance, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
@@ -740,12 +741,16 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 	}
 
 	var out []exporter.ExporterInstance
-	for i, req := range res.Exporters {
-		exp, err := w.Exporter(req.Type, s.sm)
+	for i, expReq := range res.Exporters {
+		exp, err := w.Exporter(expReq.Type, s.sm)
 		if err != nil {
 			return nil, err
 		}
-		expi, err := exp.Resolve(ctx, id+i, req.Attrs)
+		expi, err := exp.Resolve(ctx, id+i, exporter.ResolveOpts{
+			Target:        controlapi.ExporterTargetFromPB(expReq.Target),
+			Attrs:         expReq.Attrs,
+			FrontendAttrs: req.FrontendOpt,
+		})
 		if err != nil {
 			return nil, err
 		}

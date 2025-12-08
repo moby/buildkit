@@ -418,7 +418,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 		bklog.G(ctx).Debugf("resolve exporter %s with %v", ex.Type, ex.Attrs)
-		expi, err := exp.Resolve(ctx, i, ex.Attrs)
+		expi, err := exp.Resolve(ctx, i, exporter.ResolveOpts{
+			Target:        controlapi.ExporterTargetFromPB(ex.Target),
+			Attrs:         ex.Attrs,
+			FrontendAttrs: req.FrontendAttrs,
+		})
 		if err != nil {
 			return nil, err
 		}
