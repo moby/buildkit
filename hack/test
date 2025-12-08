@@ -71,6 +71,7 @@ done
 testReportsDir="$(pwd)/bin/testreports"
 mkdir -p "$testReportsDir"
 testReportsVol="-v $testReportsDir:/testreports"
+sourceVol="-v $(pwd):/mnt/buildkit:ro"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
 gotestArgs="-mod=vendor"
 
@@ -120,7 +121,7 @@ if [ "$GITHUB_ACTIONS" = "true" ] || [ -n "$MOUNT_BUILDKIT_DOCKER_CONFIG_PATH" ]
 fi
 
 baseCreateFlags="--rm --privileged $dockerConfigMount \
--v /tmp $testReportsVol \
+-v /tmp $sourceVol $testReportsVol \
 --volumes-from=$cacheVolume \
 -e CGO_ENABLED \
 -e GITHUB_REF \
