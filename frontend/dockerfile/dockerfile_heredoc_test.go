@@ -295,16 +295,26 @@ func testRunShebangHeredoc(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM busybox AS build
 
+WORKDIR /dest
+
 RUN <<EOF
 #!/bin/awk -f
 BEGIN {
-	print "hello" >> "/dest"
-	print "world" >> "/dest"
+	print "hello" >> "./out1"
+	print "world" >> "./out1"
 }
 EOF
 
+RUN <<-EOF
+	#!/bin/awk -f
+	BEGIN {
+		print "hello" >> "./out2"
+		print "world" >> "./out2"
+	}
+EOF
+
 FROM scratch
-COPY --from=build /dest /dest
+COPY --from=build /dest /
 `)
 
 	dir := integration.Tmpdir(
@@ -332,9 +342,16 @@ COPY --from=build /dest /dest
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
-	require.NoError(t, err)
-	require.Equal(t, "hello\nworld\n", string(dt))
+	contents := map[string]string{
+		"out1": "hello\nworld\n",
+		"out2": "hello\nworld\n",
+	}
+
+	for name, content := range contents {
+		dt, err := os.ReadFile(filepath.Join(destDir, name))
+		require.NoError(t, err)
+		require.Equal(t, content, string(dt))
+	}
 }
 
 func testRunComplexHeredoc(t *testing.T, sb integration.Sandbox) {
