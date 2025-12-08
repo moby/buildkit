@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -41,7 +42,9 @@ const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
 type GrpcClient interface {
 	client.Client
-	Run(context.Context, client.BuildFunc) error
+
+	Build(context.Context, client.BuildFunc) error
+	Export(context.Context, *grpc.ClientConn, client.ExportFunc) error
 }
 
 func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
@@ -74,17 +77,22 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 	}, nil
 }
 
-func current() (GrpcClient, error) {
+func current() (GrpcClient, *grpc.ClientConn, error) {
 	if ep := product(); ep != "" {
 		apicaps.ExportedProduct = ep
 	}
 
 	ctx, conn, err := grpcClientConn(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	gc, err := New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return gc, conn, nil
 }
 
 func convertRef(ref client.Reference) (*pb.Ref, error) {
@@ -98,15 +106,20 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	return &pb.Ref{Id: r.id, Def: r.def}, nil
 }
 
+// Deprecated: use BuildFromEnvironment
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
-	client, err := current()
+	return BuildFromEnvironment(ctx, f)
+}
+
+func BuildFromEnvironment(ctx context.Context, f client.BuildFunc) error {
+	client, _, err := current()
 	if err != nil {
 		return errors.Wrapf(err, "failed to initialize client from environment")
 	}
-	return client.Run(ctx, f)
+	return client.Build(ctx, f)
 }
 
-func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError error) {
+func (c *grpcClient) Build(ctx context.Context, f client.BuildFunc) (retError error) {
 	export := c.caps.Supports(pb.CapReturnResult) == nil
 
 	var (
@@ -246,6 +259,60 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 	}
 
 	return nil
+}
+
+func ExportFromEnvironment(ctx context.Context, f client.ExportFunc) error {
+	client, conn, err := current()
+	if err != nil {
+		return errors.Wrapf(err, "failed to initialize client from environment")
+	}
+	return client.Export(ctx, conn, f)
+}
+
+func (c *grpcClient) Export(ctx context.Context, conn *grpc.ClientConn, f client.ExportFunc) (retError error) {
+	export := c.caps.Supports(pb.CapGatewayGetReturn) == nil
+	if !export {
+		return errors.New("gateway does not support export")
+	}
+
+	resp, err := c.client.GetReturn(ctx, &pb.GetReturnRequest{})
+	if err != nil {
+		return err
+	}
+	result, err := c.loadResult(resp.Result)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return errors.Errorf("no result returned from gateway")
+	}
+
+	defer func() {
+		if retError != nil {
+			st, _ := status.FromError(grpcerrors.ToGRPC(ctx, retError))
+			stp := st.Proto()
+			req := &pb.ReturnRequest{}
+			req.Error = &spb.Status{
+				Code:    stp.Code,
+				Message: stp.Message,
+				Details: stp.Details,
+			}
+			_, _ = c.client.Return(ctx, req)
+		}
+	}()
+
+	defer func() {
+		err = c.execMsgs.Release()
+		if err != nil && retError != nil {
+			retError = err
+		}
+	}()
+
+	handle := client.ExportHandle{
+		Conn:   conn,
+		Target: exportTarget(),
+	}
+	return f(ctx, c, handle, result)
 }
 
 // defaultCaps returns the capabilities that were implemented when capabilities
@@ -1451,4 +1518,9 @@ func workers() []client.WorkerInfo {
 
 func product() string {
 	return os.Getenv("BUILDKIT_EXPORTEDPRODUCT")
+}
+
+func exportTarget() exptypes.ExporterTarget {
+	v := os.Getenv("BUILDKIT_EXPORTER_TARGET")
+	return exptypes.ExporterTarget(v)
 }

@@ -131,3 +131,15 @@ func SplitResultProxy(res ResultProxy) (ResultProxy, ResultProxy) {
 	sem := int64(0)
 	return &splitResultProxy{ResultProxy: res, sem: &sem}, &splitResultProxy{ResultProxy: res, sem: &sem}
 }
+
+type nopReleaseResultProxy struct {
+	ResultProxy
+}
+
+func (r *nopReleaseResultProxy) Release(ctx context.Context) error {
+	return nil
+}
+
+func NopReleaseResultProxy(res ResultProxy) ResultProxy {
+	return &nopReleaseResultProxy{ResultProxy: res}
+}

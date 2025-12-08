@@ -22,6 +22,7 @@ type Result = result.Result[Reference]
 type Attestation = result.Attestation[Reference]
 
 type BuildFunc func(context.Context, Client) (*Result, error)
+type ExportFunc func(context.Context, Client, ExportHandle, *Result) error
 
 func NewResult() *Result {
 	return &Result{}

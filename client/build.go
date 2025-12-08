@@ -9,12 +9,14 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/grpcclient"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/exporter"
+	"github.com/moby/buildkit/session/exporter/exporterprovider"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
-func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, statusChan chan *SolveStatus) (*SolveResponse, error) {
+func (c *Client) BuildExport(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, exportFunc gateway.ExportFunc, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
@@ -42,13 +44,26 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		})
 	}
 
+	var g grpcclient.GrpcClient
+	if exportFunc != nil {
+		opt.EnableSessionExporter = true
+		exporter := exporterprovider.New(func(ctx context.Context, _ map[string][]byte, _ []string) ([]*exporter.ExporterRequest, error) {
+			if g == nil {
+				return nil, errors.New("no build session found for export")
+			}
+			return nil, g.Export(ctx, c.conn, exportFunc)
+		})
+		opt.Session = append(opt.Session, exporter)
+	}
+
 	cb := func(ref string, s *session.Session, opts map[string]string) error {
 		if feOpts == nil {
 			feOpts = map[string]string{}
 		}
 		maps.Copy(feOpts, opts)
 		gwClient := c.gatewayClientForBuild(ref)
-		g, err := grpcclient.New(ctx, feOpts, s.ID(), product, gwClient, gworkers)
+		var err error
+		g, err = grpcclient.New(ctx, feOpts, s.ID(), product, gwClient, gworkers)
 		if err != nil {
 			return err
 		}
@@ -56,13 +71,18 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		caps := g.BuildOpts().Caps
 		gwClient.caps = &caps
 
-		if err := g.Run(ctx, buildFunc); err != nil {
+		err = g.Build(ctx, buildFunc)
+		if err != nil {
 			return errors.Wrap(err, "failed to run Build function")
 		}
 		return nil
 	}
 
 	return c.solve(ctx, nil, cb, opt, statusChan)
+}
+
+func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildFunc gateway.BuildFunc, statusChan chan *SolveStatus) (*SolveResponse, error) {
+	return c.BuildExport(ctx, opt, product, buildFunc, nil, statusChan)
 }
 
 func (c *Client) gatewayClientForBuild(buildid string) *gatewayClientForBuild {

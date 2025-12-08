@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/distribution/reference"
@@ -462,6 +463,7 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		sm:            sm,
 		ctrs:          map[string]gwclient.Container{},
 		executor:      exec,
+		storeFilter:   &storeFilter{},
 	}
 	return lbf
 }
@@ -533,6 +535,8 @@ type LLBBridgeForwarder interface {
 	Result(ctx context.Context) (*frontend.Result, error)
 	SetResult(r *frontend.Result, err error)
 
+	Store(store content.Store) content.Store
+
 	// Conn returns the stdin and stdout pipes that can be used to communicate
 	// using the gateway API
 	Conn() (io.ReadCloser, io.WriteCloser)
@@ -558,8 +562,9 @@ type llbBridgeForwarder struct {
 	sm                *session.Manager
 	executor          executor.Executor
 	*pipe
-	ctrs   map[string]gwclient.Container
-	ctrsMu sync.Mutex
+	ctrs        map[string]gwclient.Container
+	ctrsMu      sync.Mutex
+	storeFilter *storeFilter
 }
 
 func (lbf *llbBridgeForwarder) Serve(ctx context.Context, attachables ...session.Attachable) context.Context {
@@ -1134,6 +1139,10 @@ func (lbf *llbBridgeForwarder) GetReturn(ctx context.Context, in *pb.GetReturnRe
 	return resp, nil
 }
 
+func (lbf *llbBridgeForwarder) Store(store content.Store) content.Store {
+	return newFilteredStore(store, lbf.storeFilter)
+}
+
 func (lbf *llbBridgeForwarder) GetRemote(ctx context.Context, in *pb.GetRemoteRequest) (*pb.GetRemoteResponse, error) {
 	r, err := lbf.getImmutableRef(ctx, in.Ref)
 	if err != nil {
@@ -1160,6 +1169,7 @@ func (lbf *llbBridgeForwarder) GetRemote(ctx context.Context, in *pb.GetRemoteRe
 	for _, desc := range remote.Descriptors {
 		resp.Descriptors = append(resp.Descriptors, pb.DescriptorToPB(desc))
 	}
+	lbf.storeFilter.allow(remote.Descriptors...)
 	return resp, nil
 }
 
