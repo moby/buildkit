@@ -32,7 +32,7 @@ require (
 	github.com/containerd/stargz-snapshotter v0.17.0
 	github.com/containerd/stargz-snapshotter/estargz v0.17.0
 	github.com/containerd/typeurl/v2 v2.2.3
-	github.com/containernetworking/plugins v1.8.0
+	github.com/containernetworking/plugins v1.9.0
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/cli v28.5.0+incompatible
