@@ -7882,10 +7882,10 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 
 	switch imgName {
 	case "nanoserver:latest":
-		_, ok = m["/wd/foo/bar"] //Should be false, else move didn't happen
+		_, ok = m["/wd/foo/bar"] // Should be false, else move didn't happen
 		require.False(t, ok)
 
-		_, ok = m["Files/wd/foo/bar"] //Should be false, else move didn't happen
+		_, ok = m["Files/wd/foo/bar"] // Should be false, else move didn't happen
 		require.False(t, ok)
 
 		_, ok = m["Files/wd/foo2/bar"]
@@ -7924,7 +7924,6 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 			} else {
 				ok = false
 			}
-
 		}
 		require.True(t, ok)
 	case "busybox:latest":
