@@ -20,12 +20,48 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 const defaultExpiration = 60
+
+// clientHasMTLS checks if the HTTP client has mTLS (client certificates) configured.
+// This is used to determine whether to use direct auth (which sends client certs)
+// or delegate to the session (which may not have access to the certs).
+func clientHasMTLS(client *http.Client) bool {
+	if client == nil || client.Transport == nil {
+		return false
+	}
+	return transportHasMTLS(client.Transport)
+}
+
+// transportHasMTLS recursively unwraps transport wrappers to find the base
+// http.Transport and check if it has TLS client certificates configured.
+func transportHasMTLS(rt http.RoundTripper) bool {
+	if rt == nil {
+		return false
+	}
+
+	// Handle tracing.TracingTransport wrapper
+	if tt, ok := rt.(*tracing.TracingTransport); ok {
+		return transportHasMTLS(tt.BaseTransport())
+	}
+
+	// Handle httpFallback wrapper (used for insecure registries)
+	if fb, ok := rt.(*httpFallback); ok {
+		return transportHasMTLS(fb.super)
+	}
+
+	// Check the base http.Transport for TLS client certificates
+	if t, ok := rt.(*http.Transport); ok {
+		return t.TLSClientConfig != nil && len(t.TLSClientConfig.Certificates) > 0
+	}
+
+	return false
+}
 
 type authHandlerNS struct {
 	counter int64 // needs to be 64bit aligned for 32bit systems
@@ -335,7 +371,15 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 		}
 	}()
 
-	if ah.authority != nil {
+	// Use session auth only if:
+	// 1. Authority is set (session supports token fetching), AND
+	// 2. Client does NOT have mTLS configured
+	//
+	// When mTLS is configured on the server (buildkitd), we must use direct auth
+	// because the session (client-side, e.g., docker buildx) doesn't have access
+	// to the server's mTLS certificates. Using session auth would fail with
+	// "tls: certificate required" errors on the token endpoint.
+	if ah.authority != nil && !clientHasMTLS(ah.client) {
 		resp, err := sessionauth.FetchToken(ctx, &sessionauth.FetchTokenRequest{
 			ClientID: "buildkit-client",
 			Host:     ah.host,

@@ -69,11 +69,32 @@ var DefaultClient = &http.Client{
 	Transport: DefaultTransport,
 }
 
+// TracingTransport wraps an http.RoundTripper with OpenTelemetry tracing.
+// It provides access to the base transport for checking TLS configuration.
+type TracingTransport struct {
+	base    http.RoundTripper
+	wrapped http.RoundTripper
+}
+
+// RoundTrip implements http.RoundTripper.
+func (t *TracingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return t.wrapped.RoundTrip(req)
+}
+
+// BaseTransport returns the underlying transport before tracing was applied.
+// This is useful for inspecting TLS configuration.
+func (t *TracingTransport) BaseTransport() http.RoundTripper {
+	return t.base
+}
+
 func NewTransport(rt http.RoundTripper) http.RoundTripper {
-	return otelhttp.NewTransport(rt,
-		otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})),
-		otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
-			return otelhttptrace.NewClientTrace(ctx, otelhttptrace.WithoutSubSpans())
-		}),
-	)
+	return &TracingTransport{
+		base: rt,
+		wrapped: otelhttp.NewTransport(rt,
+			otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})),
+			otelhttp.WithClientTrace(func(ctx context.Context) *httptrace.ClientTrace {
+				return otelhttptrace.NewClientTrace(ctx, otelhttptrace.WithoutSubSpans())
+			}),
+		),
+	}
 }

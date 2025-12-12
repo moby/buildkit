@@ -186,7 +186,11 @@ func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 		// make a copy so authorizer is set on unique instance
 		res := make([]docker.RegistryHost, len(v))
 		copy(res, v)
-		auth := newDockerAuthorizer(res[0].Client, r.handler, r.sm, r.g)
+		// Use the last host's client (the actual registry, not mirrors) to ensure
+		// mTLS client certificates are properly propagated to OAuth token endpoints.
+		// Mirrors are added first to the slice in NewRegistryConfig, so the last
+		// entry is always the actual registry with the correct TLS configuration.
+		auth := newDockerAuthorizer(res[len(res)-1].Client, r.handler, r.sm, r.g)
 		for i := range res {
 			res[i].Authorizer = auth
 		}
