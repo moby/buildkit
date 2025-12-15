@@ -9,9 +9,11 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
@@ -36,13 +38,18 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, id int, opts exporter.ResolveOpts) (exporter.ExporterInstance, error) {
+	if opts.Target != exptypes.ExporterTargetUnknown && opts.Target != exptypes.ExporterTargetDirectory {
+		return nil, errors.Errorf("local exporter only supports directory target")
+	}
+	opts.Target = exptypes.ExporterTargetDirectory
+
 	i := &localExporterInstance{
 		id:            id,
-		attrs:         opt,
+		opts:          opts,
 		localExporter: e,
 	}
-	_, err := i.opts.Load(opt)
+	_, err := i.fsOpts.Load(opts.Attrs)
 	if err != nil {
 		return nil, err
 	}
@@ -52,10 +59,10 @@ func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 
 type localExporterInstance struct {
 	*localExporter
-	id    int
-	attrs map[string]string
+	id   int
+	opts exporter.ResolveOpts
 
-	opts CreateFSOpts
+	fsOpts CreateFSOpts
 }
 
 func (e *localExporterInstance) ID() int {
@@ -70,24 +77,28 @@ func (e *localExporterInstance) Type() string {
 	return client.ExporterLocal
 }
 
-func (e *localExporterInstance) Attrs() map[string]string {
-	return e.attrs
+func (e *localExporterInstance) Opts() exporter.ResolveOpts {
+	return e.opts
+}
+
+func (e *localExporterInstance) Target() exptypes.ExporterTarget {
+	return exptypes.ExporterTargetDirectory
 }
 
 func (e *localExporter) Config() *exporter.Config {
 	return exporter.NewConfig()
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+func (e *localExporterInstance) Export(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, inp *exporter.Source, _ exptypes.InlineCache, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-	if e.opts.Epoch == nil {
+	if e.fsOpts.Epoch == nil {
 		if tm, ok, err := epoch.ParseSource(inp); err != nil {
 			return nil, nil, err
 		} else if ok {
-			e.opts.Epoch = tm
+			e.fsOpts.Epoch = tm
 		}
 	}
 
@@ -117,7 +128,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	export := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []exporter.Attestation) func() error {
 		return func() error {
-			outputFS, cleanup, err := CreateFS(ctx, sessionID, k, ref, attestations, now, isMap, e.opts)
+			outputFS, cleanup, err := CreateFS(ctx, sessionID, k, ref, attestations, now, isMap, e.fsOpts)
 			if err != nil {
 				return err
 			}
@@ -126,7 +137,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			lbl := "copying files"
-			if !e.opts.UsePlatformSplit(isMap) {
+			if !e.fsOpts.UsePlatformSplit(isMap) {
 				// check for duplicate paths
 				err = fsWalk(ctx, outputFS, "", func(p string, entry os.DirEntry, err error) error {
 					if entry.IsDir() {
@@ -152,8 +163,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.ReplaceAll(k, "/", "_"),
 				}
-				if e.opts.Epoch != nil {
-					st.ModTime = e.opts.Epoch.UnixNano()
+				if e.fsOpts.Epoch != nil {
+					st.ModTime = e.fsOpts.Epoch.UnixNano()
 				}
 				outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: st}})
 				if err != nil {

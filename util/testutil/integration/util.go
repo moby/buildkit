@@ -20,6 +20,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// BuildkitSourcePath is the path where buildkit source can be found.
+//
+// (keep in sync with hack/test)
+const BuildkitSourcePath = "/mnt/buildkit"
+
 var ErrRequirements = errors.Errorf("missing requirements")
 
 type TmpDirWithName struct {

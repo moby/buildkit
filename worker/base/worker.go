@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/executor/resources"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
+	gatewayexporter "github.com/moby/buildkit/exporter/gateway"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
 	tarexporter "github.com/moby/buildkit/exporter/tar"
@@ -263,6 +264,15 @@ func (w *Worker) ID() string {
 
 func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
+}
+
+func (w *Worker) Info() client.WorkerInfo {
+	return client.WorkerInfo{
+		ID:              w.ID(),
+		Labels:          w.Labels(),
+		Platforms:       w.Platforms(false),
+		BuildkitVersion: w.BuildkitVersion(),
+	}
 }
 
 func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
@@ -509,6 +519,13 @@ func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...cli
 
 func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {
 	switch name {
+	case client.ExporterGateway:
+		return gatewayexporter.New(gatewayexporter.Opt{
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			LeaseManager:   w.LeaseManager(),
+			WorkerInfo:     w.Info(),
+		})
 	case client.ExporterImage:
 		return imageexporter.New(imageexporter.Opt{
 			Images:         w.ImageStore,

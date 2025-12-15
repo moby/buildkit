@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/errdefs"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/resources"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/exporter"
@@ -193,8 +194,9 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 
 	for _, e := range exp.Exporters {
 		rec.Exporters = append(rec.Exporters, &controlapi.Exporter{
-			Type:  e.Type(),
-			Attrs: e.Attrs(),
+			Type:   e.Type(),
+			Attrs:  e.Opts().Attrs,
+			Target: controlapi.ExporterTargetToPB(e.Opts().Target),
 		})
 	}
 
@@ -572,7 +574,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		var err error
 		select {
 		case <-fwd.Done():
-			res, err = fwd.Result()
+			res, err = fwd.Result(ctx)
 		case <-ctx.Done():
 			err = context.Cause(ctx)
 		}
@@ -644,6 +646,17 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
+	expRes, err := result.ConvertResult(res, func(res solver.ResultProxy) (solver.ResultProxy, error) {
+		return solver.NopReleaseResultProxy(res), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	src := &exporter.Source{
+		Result:         inp,
+		FrontendResult: expRes,
+	}
+
 	// Functions that create new objects in containerd (eg. content blobs) need to have a lease to ensure
 	// that the object is not garbage collected immediately. This is protected by the indivual components,
 	// but because creating a lease is not cheap and requires a disk write, we create a single lease here
@@ -663,7 +676,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
 	if exp.EnableSessionExporter {
-		exporters, err := s.getSessionExporters(ctx, j.SessionID, len(exp.Exporters), inp)
+		exporters, err := s.getSessionExporters(ctx, j.SessionID, len(exp.Exporters), src, req)
 		if err != nil {
 			return nil, err
 		}
@@ -671,7 +684,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	var exporterResponse map[string]string
-	exporterResponse, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, cached, inp)
+	exporterResponse, descrefs, err = s.runExporters(ctx, exp.Exporters, inlineCacheExporter, j, br, br, cached, src)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +714,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source) ([]exporter.ExporterInstance, error) {
+func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id int, inp *exporter.Source, req frontend.SolveRequest) ([]exporter.ExporterInstance, error) {
 	timeoutCtx, cancel := context.WithCancelCause(ctx)
 	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
@@ -740,12 +753,16 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 	}
 
 	var out []exporter.ExporterInstance
-	for i, req := range res.Exporters {
-		exp, err := w.Exporter(req.Type, s.sm)
+	for i, expReq := range res.Exporters {
+		exp, err := w.Exporter(expReq.Type, s.sm)
 		if err != nil {
 			return nil, err
 		}
-		expi, err := exp.Resolve(ctx, id+i, req.Attrs)
+		expi, err := exp.Resolve(ctx, id+i, exporter.ResolveOpts{
+			Target:        controlapi.ExporterTargetFromPB(expReq.Target),
+			Attrs:         expReq.Attrs,
+			FrontendAttrs: req.FrontendOpt,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -842,8 +859,8 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 	return res, done(err)
 }
 
-func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *exporter.Source) (exporterResponse map[string]string, descrefs []exporter.DescriptorReference, err error) {
-	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp)
+func (s *Solver) runExporters(ctx context.Context, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, cached *result.Result[solver.CachedResult], inp *exporter.Source) (exporterResponse map[string]string, descrefs []exporter.DescriptorReference, err error) {
+	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp.Result)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -875,7 +892,7 @@ func (s *Solver) runExporters(ctx context.Context, exporters []exporter.Exporter
 					return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
 				})
 
-				resps[i], descs[i], err = exp.Export(ctx, inp, inlineCache, job.SessionID)
+				resps[i], descs[i], err = exp.Export(ctx, llbBridge, exec, inp, inlineCache, job.SessionID)
 				if err != nil {
 					return err
 				}

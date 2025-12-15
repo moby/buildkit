@@ -1,17 +1,15 @@
 package client
 
 import (
+	"context"
+
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/result"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
-func AttestationToPB[T any](a *result.Attestation[T]) (*pb.Attestation, error) {
-	if a.ContentFunc != nil {
-		return nil, errors.Errorf("attestation callback cannot be sent through gateway")
-	}
-
+func AttestationToPB[T any](ctx context.Context, a *result.Attestation[T]) (*pb.Attestation, error) {
 	subjects := make([]*pb.InTotoSubject, len(a.InToto.Subjects))
 	for i, subject := range a.InToto.Subjects {
 		subjects[i] = &pb.InTotoSubject{
@@ -21,10 +19,20 @@ func AttestationToPB[T any](a *result.Attestation[T]) (*pb.Attestation, error) {
 		}
 	}
 
+	var content []byte
+	if a.ContentFunc != nil {
+		var err error
+		content, err = a.ContentFunc(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get attestation content")
+		}
+	}
+
 	return &pb.Attestation{
 		Kind:                a.Kind,
 		Metadata:            a.Metadata,
 		Path:                a.Path,
+		Content:             content,
 		InTotoPredicateType: a.InToto.PredicateType,
 		InTotoSubjects:      subjects,
 	}, nil
@@ -46,10 +54,19 @@ func AttestationFromPB[T any](a *pb.Attestation) (*result.Attestation[T], error)
 		}
 	}
 
+	var contentF func(context.Context) ([]byte, error)
+	if a.Content != nil {
+		content := a.Content
+		contentF = func(ctx context.Context) ([]byte, error) {
+			return content, nil
+		}
+	}
+
 	return &result.Attestation[T]{
-		Kind:     a.Kind,
-		Metadata: a.Metadata,
-		Path:     a.Path,
+		Kind:        a.Kind,
+		Metadata:    a.Metadata,
+		Path:        a.Path,
+		ContentFunc: contentF,
 		InToto: result.InTotoAttestation{
 			PredicateType: a.InTotoPredicateType,
 			Subjects:      subjects,

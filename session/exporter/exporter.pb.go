@@ -7,6 +7,7 @@
 package exporter
 
 import (
+	control "github.com/moby/buildkit/api/services/control"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -121,6 +122,7 @@ type ExporterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=Type,proto3" json:"Type,omitempty"`
 	Attrs         map[string]string      `protobuf:"bytes,2,rep,name=Attrs,proto3" json:"Attrs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Target        control.ExporterTarget `protobuf:"varint,3,opt,name=Target,proto3,enum=moby.buildkit.v1.ExporterTarget" json:"Target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,11 +171,18 @@ func (x *ExporterRequest) GetAttrs() map[string]string {
 	return nil
 }
 
+func (x *ExporterRequest) GetTarget() control.ExporterTarget {
+	if x != nil {
+		return x.Target
+	}
+	return control.ExporterTarget(0)
+}
+
 var File_github_com_moby_buildkit_session_exporter_exporter_proto protoreflect.FileDescriptor
 
 const file_github_com_moby_buildkit_session_exporter_exporter_proto_rawDesc = "" +
 	"\n" +
-	"8github.com/moby/buildkit/session/exporter/exporter.proto\x12\x10moby.exporter.v1\"\xb9\x01\n" +
+	"8github.com/moby/buildkit/session/exporter/exporter.proto\x12\x10moby.exporter.v1\x1a;github.com/moby/buildkit/api/services/control/control.proto\"\xb9\x01\n" +
 	"\x14FindExportersRequest\x12P\n" +
 	"\bmetadata\x18\x01 \x03(\v24.moby.exporter.v1.FindExportersRequest.MetadataEntryR\bmetadata\x12\x12\n" +
 	"\x04refs\x18\x02 \x03(\tR\x04refs\x1a;\n" +
@@ -181,10 +190,11 @@ const file_github_com_moby_buildkit_session_exporter_exporter_proto_rawDesc = ""
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"X\n" +
 	"\x15FindExportersResponse\x12?\n" +
-	"\texporters\x18\x01 \x03(\v2!.moby.exporter.v1.ExporterRequestR\texporters\"\xa3\x01\n" +
+	"\texporters\x18\x01 \x03(\v2!.moby.exporter.v1.ExporterRequestR\texporters\"\xdd\x01\n" +
 	"\x0fExporterRequest\x12\x12\n" +
 	"\x04Type\x18\x01 \x01(\tR\x04Type\x12B\n" +
-	"\x05Attrs\x18\x02 \x03(\v2,.moby.exporter.v1.ExporterRequest.AttrsEntryR\x05Attrs\x1a8\n" +
+	"\x05Attrs\x18\x02 \x03(\v2,.moby.exporter.v1.ExporterRequest.AttrsEntryR\x05Attrs\x128\n" +
+	"\x06Target\x18\x03 \x01(\x0e2 .moby.buildkit.v1.ExporterTargetR\x06Target\x1a8\n" +
 	"\n" +
 	"AttrsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -211,18 +221,20 @@ var file_github_com_moby_buildkit_session_exporter_exporter_proto_goTypes = []an
 	(*ExporterRequest)(nil),       // 2: moby.exporter.v1.ExporterRequest
 	nil,                           // 3: moby.exporter.v1.FindExportersRequest.MetadataEntry
 	nil,                           // 4: moby.exporter.v1.ExporterRequest.AttrsEntry
+	(control.ExporterTarget)(0),   // 5: moby.buildkit.v1.ExporterTarget
 }
 var file_github_com_moby_buildkit_session_exporter_exporter_proto_depIdxs = []int32{
 	3, // 0: moby.exporter.v1.FindExportersRequest.metadata:type_name -> moby.exporter.v1.FindExportersRequest.MetadataEntry
 	2, // 1: moby.exporter.v1.FindExportersResponse.exporters:type_name -> moby.exporter.v1.ExporterRequest
 	4, // 2: moby.exporter.v1.ExporterRequest.Attrs:type_name -> moby.exporter.v1.ExporterRequest.AttrsEntry
-	0, // 3: moby.exporter.v1.Exporter.FindExporters:input_type -> moby.exporter.v1.FindExportersRequest
-	1, // 4: moby.exporter.v1.Exporter.FindExporters:output_type -> moby.exporter.v1.FindExportersResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 3: moby.exporter.v1.ExporterRequest.Target:type_name -> moby.buildkit.v1.ExporterTarget
+	0, // 4: moby.exporter.v1.Exporter.FindExporters:input_type -> moby.exporter.v1.FindExportersRequest
+	1, // 5: moby.exporter.v1.Exporter.FindExporters:output_type -> moby.exporter.v1.FindExportersResponse
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_github_com_moby_buildkit_session_exporter_exporter_proto_init() }

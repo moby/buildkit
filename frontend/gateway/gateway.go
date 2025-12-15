@@ -16,12 +16,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/distribution/reference"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/config"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -116,11 +118,6 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		return nil, errors.Errorf("no source specified for gateway")
 	}
 
-	var img dockerspec.DockerOCIImage
-	var mfstDigest digest.Digest
-	var rootFS cache.MutableRef
-	var readonly bool // TODO: try to switch to read-only by default.
-
 	var frontendDef *opspb.Definition
 
 	err := gf.checkSourceIsAllowed(source)
@@ -132,59 +129,9 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	if err != nil {
 		return nil, err
 	}
-	dc, err := dockerui.NewClient(c)
+	st, img, mfstDigest, err := LoadImage(ctx, c, source)
 	if err != nil {
 		return nil, err
-	}
-	nc, err := dc.NamedContext(source, dockerui.ContextOpt{
-		CaptureDigest: &mfstDigest,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var st *llb.State
-	if nc != nil {
-		var dockerImage *dockerspec.DockerOCIImage
-		st, dockerImage, err = nc.Load(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if dockerImage != nil {
-			img = *dockerImage
-		}
-	}
-	if st == nil {
-		sourceRef, err := reference.ParseNormalizedNamed(source)
-		if err != nil {
-			return nil, err
-		}
-
-		imr := sourceresolver.NewImageMetaResolver(llbBridge)
-		ref, dgst, config, err := imr.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), sourceresolver.Opt{})
-		if err != nil {
-			return nil, err
-		}
-
-		sourceRef, err = reference.ParseNormalizedNamed(ref)
-		if err != nil {
-			return nil, err
-		}
-
-		mfstDigest = dgst
-
-		if err := json.Unmarshal(config, &img); err != nil {
-			return nil, err
-		}
-
-		if dgst != "" {
-			sourceRef, err = reference.WithDigest(sourceRef, dgst)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		src := llb.Image(sourceRef.String(), &markTypeFrontend{})
-		st = &src
 	}
 
 	def, err := st.Marshal(ctx)
@@ -216,69 +163,25 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
-	rootFS, err = workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef, session.NewGroup(sid))
+	rootFS, err := workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef, session.NewGroup(sid))
 	if err != nil {
 		return nil, err
 	}
 	defer rootFS.Release(context.TODO())
 
-	args := []string{"/run"}
-	env := []string{}
-	cwd := "/"
-	if img.Config.Env != nil {
-		env = img.Config.Env
-	}
-	if img.Config.Entrypoint != nil {
-		args = img.Config.Entrypoint
-	}
-	if img.Config.WorkingDir != "" {
-		cwd = img.Config.WorkingDir
-	}
-	i := 0
-	for k, v := range opts {
-		env = append(env, fmt.Sprintf("BUILDKIT_FRONTEND_OPT_%d", i)+"="+k+"="+v)
-		i++
-	}
-
-	env = append(env, "BUILDKIT_SESSION_ID="+sid)
-
-	dt, err := json.Marshal(gf.workers.WorkerInfos())
+	meta, err := GetEnv(*img, opts, gf.workers, sid)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal workers array")
-	}
-	env = append(env, "BUILDKIT_WORKERS="+string(dt))
-
-	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
-
-	meta := executor.Meta{
-		Env:                       env,
-		Args:                      args,
-		Cwd:                       cwd,
-		ReadonlyRootFS:            readonly,
-		RemoveMountStubsRecursive: true,
+		return nil, err
 	}
 
-	if v, ok := img.Config.Labels["moby.buildkit.frontend.network.none"]; ok {
-		if ok, _ := strconv.ParseBool(v); ok {
-			meta.NetMode = opspb.NetMode_NONE
-		}
+	err = CheckCaps(*img, opts, inputs, mfstDigest)
+	if err != nil {
+		return nil, err
 	}
 
-	curCaps := getCaps(img.Config.Labels["moby.buildkit.frontend.caps"])
-	addCapsForKnownFrontends(curCaps, mfstDigest)
-	reqCaps := getCaps(opts["frontend.caps"])
-	if len(inputs) > 0 {
-		reqCaps["moby.buildkit.frontend.inputs"] = struct{}{}
-	}
-
-	for c := range reqCaps {
-		if _, ok := curCaps[c]; !ok {
-			return nil, stack.Enable(grpcerrors.WrapCode(errdefs.NewUnsupportedFrontendCapError(c), codes.Unimplemented))
-		}
-	}
-
-	lbf, ctx := serveLLBBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
-	defer lbf.conn.Close()
+	lbf := NewBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
+	ctx = lbf.Serve(ctx)
+	defer lbf.Close()
 	defer lbf.Discard()
 
 	mdmnt, release, err := metadataMount(frontendDef)
@@ -293,23 +196,142 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		mnts = append(mnts, *mdmnt)
 	}
 
-	_, err = exec.Run(ctx, "", container.MountWithSession(rootFS, session.NewGroup(sid)), mnts, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
+	connIn, connOut := lbf.Conn()
+	_, err = exec.Run(ctx, "", container.MountWithSession(rootFS, session.NewGroup(sid)), mnts, executor.ProcessInfo{Meta: *meta, Stdin: connIn, Stdout: connOut, Stderr: os.Stderr}, nil)
 	if err != nil {
-		if errdefs.IsCanceled(ctx, err) && lbf.isErrServerClosed {
-			err = errors.Errorf("frontend grpc server closed unexpectedly")
-		}
-		// An existing error (set via Return rpc) takes
-		// precedence over this error, which in turn takes
-		// precedence over a success reported via Return.
-		lbf.mu.Lock()
-		if lbf.err == nil {
-			lbf.result = nil
-			lbf.err = err
-		}
-		lbf.mu.Unlock()
+		lbf.SetResult(nil, err)
+	}
+	return lbf.Result(ctx)
+}
+
+func GetEnv(img dockerspec.DockerOCIImage, opts map[string]string, workers worker.Infos, sid string) (meta *executor.Meta, _ error) {
+	meta = &executor.Meta{
+		RemoveMountStubsRecursive: true,
+		// TODO: try to switch to read-only by default
+		// ReadonlyRootFS: false,
 	}
 
-	return lbf.Result()
+	if img.Config.Entrypoint == nil {
+		meta.Args = []string{"/run"}
+	} else {
+		meta.Args = img.Config.Entrypoint
+	}
+
+	if img.Config.Env == nil {
+		meta.Env = []string{}
+	} else {
+		meta.Env = img.Config.Env
+	}
+
+	if img.Config.WorkingDir == "" {
+		meta.Cwd = "/"
+	} else {
+		meta.Cwd = img.Config.WorkingDir
+	}
+
+	i := 0
+	for k, v := range opts {
+		meta.Env = append(meta.Env, fmt.Sprintf("BUILDKIT_FRONTEND_OPT_%d", i)+"="+k+"="+v)
+		i++
+	}
+
+	meta.Env = append(meta.Env, "BUILDKIT_SESSION_ID="+sid)
+
+	dt, err := json.Marshal(workers)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal workers array")
+	}
+	meta.Env = append(meta.Env, "BUILDKIT_WORKERS="+string(dt))
+
+	meta.Env = append(meta.Env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
+
+	if v, ok := img.Config.Labels["moby.buildkit.frontend.network.none"]; ok {
+		if ok, _ := strconv.ParseBool(v); ok {
+			meta.NetMode = opspb.NetMode_NONE
+		}
+	}
+
+	return meta, nil
+}
+
+func CheckCaps(img dockerspec.DockerOCIImage, opts map[string]string, inputs map[string]*opspb.Definition, mfstDigest digest.Digest) error {
+	curCaps := getCaps(img.Config.Labels["moby.buildkit.frontend.caps"])
+	addCapsForKnownFrontends(curCaps, mfstDigest)
+
+	reqCaps := getCaps(opts["frontend.caps"])
+	if len(inputs) > 0 {
+		reqCaps["moby.buildkit.frontend.inputs"] = struct{}{}
+	}
+
+	for c := range reqCaps {
+		if _, ok := curCaps[c]; !ok {
+			return stack.Enable(grpcerrors.WrapCode(errdefs.NewUnsupportedFrontendCapError(c), codes.Unimplemented))
+		}
+	}
+
+	return nil
+}
+
+func LoadImage(ctx context.Context, c *forwarder.BridgeClient, source string) (st *llb.State, img *dockerspec.DockerOCIImage, mfstDigest digest.Digest, err error) {
+	dc, err := dockerui.NewClient(c)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	nc, err := dc.NamedContext(source, dockerui.ContextOpt{
+		CaptureDigest: &mfstDigest,
+	})
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if nc != nil {
+		var dockerImage *dockerspec.DockerOCIImage
+		st, dockerImage, err = nc.Load(ctx)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		if dockerImage != nil {
+			img = dockerImage
+		}
+	}
+	if st == nil {
+		sourceRef, err := reference.ParseNormalizedNamed(source)
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		imr := sourceresolver.NewImageMetaResolver(c.FrontendLLBBridge)
+		ref, dgst, config, err := imr.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), sourceresolver.Opt{})
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		sourceRef, err = reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, nil, "", err
+		}
+
+		mfstDigest = dgst
+
+		if err := json.Unmarshal(config, &img); err != nil {
+			return nil, nil, "", err
+		}
+
+		if dgst != "" {
+			sourceRef, err = reference.WithDigest(sourceRef, dgst)
+			if err != nil {
+				return nil, nil, "", err
+			}
+		}
+
+		src := llb.Image(sourceRef.String(), &markTypeFrontend{})
+		st = &src
+	}
+
+	return st, img, mfstDigest, nil
+}
+
+func MetadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
+	return metadataMount(def)
 }
 
 func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
@@ -398,17 +420,18 @@ func (lbf *llbBridgeForwarder) setResult(r *frontend.Result, err error) (*pb.Ret
 		return nil, errors.New("gateway return must be either result or err")
 	}
 
-	if lbf.result != nil || lbf.err != nil {
+	if lbf.done {
 		return nil, errors.New("gateway result is already set")
 	}
 
 	lbf.result = r
 	lbf.err = err
 	close(lbf.doneCh)
+	lbf.done = true
 	return &pb.ReturnResponse{}, nil
 }
 
-func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
+func (lbf *llbBridgeForwarder) Result(ctx context.Context) (*frontend.Result, error) {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
@@ -417,6 +440,9 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	}
 
 	if lbf.err != nil {
+		if errdefs.IsCanceled(ctx, lbf.err) && lbf.isErrServerClosed {
+			return nil, errors.Errorf("frontend grpc server closed unexpectedly")
+		}
 		return nil, lbf.err
 	}
 
@@ -424,10 +450,6 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 }
 
 func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) LLBBridgeForwarder {
-	return newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
-}
-
-func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:       ctx,
 		llbBridge:     llbBridge,
@@ -441,34 +463,9 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		sm:            sm,
 		ctrs:          map[string]gwclient.Container{},
 		executor:      exec,
+		storeFilter:   &storeFilter{},
 	}
 	return lbf
-}
-
-func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context) {
-	ctx, cancel := context.WithCancelCause(ctx)
-	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
-	serverOpt := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
-		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
-		grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
-		grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
-	}
-	server := grpc.NewServer(serverOpt...)
-	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
-	pb.RegisterLLBBridgeServer(server, lbf)
-
-	go func() {
-		serve(ctx, server, lbf.conn)
-		select {
-		case <-ctx.Done():
-		default:
-			lbf.isErrServerClosed = true
-		}
-		cancel(errors.WithStack(context.Canceled))
-	}()
-
-	return lbf, ctx
 }
 
 type pipe struct {
@@ -529,9 +526,20 @@ func (d dummyAddr) String() string {
 
 type LLBBridgeForwarder interface {
 	pb.LLBBridgeServer
+
+	Serve(ctx context.Context, attachables ...session.Attachable) context.Context
 	Done() <-chan struct{}
-	Result() (*frontend.Result, error)
+	Close() error
 	Discard()
+
+	Result(ctx context.Context) (*frontend.Result, error)
+	SetResult(r *frontend.Result, err error)
+
+	Store(store content.Store) content.Store
+
+	// Conn returns the stdin and stdout pipes that can be used to communicate
+	// using the gateway API
+	Conn() (io.ReadCloser, io.WriteCloser)
 }
 
 type llbBridgeForwarder struct {
@@ -543,6 +551,7 @@ type llbBridgeForwarder struct {
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
+	done              bool
 	doneCh            chan struct{} // closed when result or err become valid through a call to a Return
 	result            *frontend.Result
 	err               error
@@ -553,8 +562,45 @@ type llbBridgeForwarder struct {
 	sm                *session.Manager
 	executor          executor.Executor
 	*pipe
-	ctrs   map[string]gwclient.Container
-	ctrsMu sync.Mutex
+	ctrs        map[string]gwclient.Container
+	ctrsMu      sync.Mutex
+	storeFilter *storeFilter
+}
+
+func (lbf *llbBridgeForwarder) Serve(ctx context.Context, attachables ...session.Attachable) context.Context {
+	ctx, cancel := context.WithCancelCause(ctx)
+	serverOpt := []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
+		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
+		grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
+		grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
+	}
+	server := grpc.NewServer(serverOpt...)
+	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
+	pb.RegisterLLBBridgeServer(server, lbf)
+	for _, a := range attachables {
+		a.Register(server)
+	}
+
+	go func() {
+		serve(ctx, server, lbf.conn)
+		select {
+		case <-ctx.Done():
+		default:
+			lbf.isErrServerClosed = true
+		}
+		cancel(errors.WithStack(context.Canceled))
+	}()
+
+	return ctx
+}
+
+func (lbf *llbBridgeForwarder) Conn() (io.ReadCloser, io.WriteCloser) {
+	return lbf.Stdin, lbf.Stdout
+}
+
+func (lbf *llbBridgeForwarder) Close() error {
+	return lbf.conn.Close()
 }
 
 func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.ResolveSourceMetaRequest) (*pb.ResolveSourceMetaResponse, error) {
@@ -734,81 +780,10 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		return nil, errors.Errorf("solve did not return default result")
 	}
 
-	pbRes := &pb.Result{
-		Metadata: res.Metadata,
+	pbRes, defaultID, err := lbf.stashResult(ctx, res, req)
+	if err != nil {
+		return nil, err
 	}
-	var defaultID string
-
-	lbf.mu.Lock()
-
-	if res.Refs != nil {
-		ids := make(map[string]string, len(res.Refs))
-		defs := make(map[string]*opspb.Definition, len(res.Refs))
-		for k, ref := range res.Refs {
-			var id string
-			var def *opspb.Definition
-			if ref != nil {
-				id = identity.NewID()
-				def = ref.Definition()
-				lbf.refs[id] = ref
-			}
-			ids[k] = id
-			defs[k] = def
-		}
-
-		if req.AllowResultArrayRef {
-			refMap := make(map[string]*pb.Ref, len(res.Refs))
-			for k, id := range ids {
-				refMap[k] = &pb.Ref{Id: id, Def: defs[k]}
-			}
-			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
-		} else {
-			pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: ids}}
-		}
-	} else {
-		ref := res.Ref
-		var id string
-		var def *opspb.Definition
-		if ref != nil {
-			id = identity.NewID()
-			def = ref.Definition()
-			lbf.refs[id] = ref
-		}
-		defaultID = id
-
-		if req.AllowResultArrayRef {
-			pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Id: id, Def: def}}
-		} else {
-			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
-		}
-	}
-
-	if res.Attestations != nil {
-		pbRes.Attestations = map[string]*pb.Attestations{}
-		for k, atts := range res.Attestations {
-			for _, att := range atts {
-				pbAtt, err := gwclient.AttestationToPB(&att)
-				if err != nil {
-					lbf.mu.Unlock()
-					return nil, err
-				}
-
-				if att.Ref != nil {
-					id := identity.NewID()
-					def := att.Ref.Definition()
-					lbf.refs[id] = att.Ref
-					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
-				}
-
-				if pbRes.Attestations[k] == nil {
-					pbRes.Attestations[k] = &pb.Attestations{}
-				}
-				pbRes.Attestations[k].Attestation = append(pbRes.Attestations[k].Attestation, pbAtt)
-			}
-		}
-	}
-
-	lbf.mu.Unlock()
 
 	// compatibility mode for older clients
 	if req.Final {
@@ -988,11 +963,19 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			Details: in.Error.Details,
 		})))
 	}
-	r := &frontend.Result{
-		Metadata: in.Result.Metadata,
-	}
 
-	switch res := in.Result.Result.(type) {
+	r, err := lbf.loadResult(in.Result)
+	if err != nil {
+		return nil, err
+	}
+	return lbf.setResult(r, nil)
+}
+
+func (lbf *llbBridgeForwarder) loadResult(pbRes *pb.Result) (*frontend.Result, error) {
+	r := &frontend.Result{
+		Metadata: pbRes.Metadata,
+	}
+	switch res := pbRes.Result.(type) {
 	case *pb.Result_RefDeprecated:
 		ref, err := lbf.cloneRef(res.RefDeprecated)
 		if err != nil {
@@ -1023,8 +1006,8 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 	}
 
-	if in.Result.Attestations != nil {
-		for k, pbAtts := range in.Result.Attestations {
+	if pbRes.Attestations != nil {
+		for k, pbAtts := range pbRes.Attestations {
 			for _, pbAtt := range pbAtts.Attestation {
 				att, err := gwclient.AttestationFromPB[solver.ResultProxy](pbAtt)
 				if err != nil {
@@ -1042,7 +1025,152 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 	}
 
-	return lbf.setResult(r, nil)
+	return r, nil
+}
+
+func (lbf *llbBridgeForwarder) stashResult(ctx context.Context, res *frontend.Result, req *pb.SolveRequest) (*pb.Result, string, error) {
+	var defaultID string
+	pbRes := &pb.Result{
+		Metadata: res.Metadata,
+	}
+
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	if res.Refs != nil {
+		ids := make(map[string]string, len(res.Refs))
+		defs := make(map[string]*opspb.Definition, len(res.Refs))
+		for k, ref := range res.Refs {
+			var id string
+			var def *opspb.Definition
+			if ref != nil {
+				id = identity.NewID()
+				def = ref.Definition()
+				lbf.refs[id] = ref
+			}
+			ids[k] = id
+			defs[k] = def
+		}
+
+		if req != nil && req.AllowResultArrayRef {
+			refMap := make(map[string]*pb.Ref, len(res.Refs))
+			for k, id := range ids {
+				refMap[k] = &pb.Ref{Id: id, Def: defs[k]}
+			}
+			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
+		} else {
+			pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: ids}}
+		}
+	} else {
+		ref := res.Ref
+		var id string
+		var def *opspb.Definition
+		if ref != nil {
+			id = identity.NewID()
+			def = ref.Definition()
+			lbf.refs[id] = ref
+		}
+		defaultID = id
+
+		if req != nil && req.AllowResultArrayRef {
+			pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Id: id, Def: def}}
+		} else {
+			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
+		}
+	}
+
+	if res.Attestations != nil {
+		pbRes.Attestations = map[string]*pb.Attestations{}
+		for k, atts := range res.Attestations {
+			for _, att := range atts {
+				pbAtt, err := gwclient.AttestationToPB(ctx, &att)
+				if err != nil {
+					return nil, "", err
+				}
+
+				if att.Ref != nil {
+					id := identity.NewID()
+					def := att.Ref.Definition()
+					lbf.refs[id] = att.Ref
+					pbAtt.Ref = &pb.Ref{Id: id, Def: def}
+				}
+
+				if pbRes.Attestations[k] == nil {
+					pbRes.Attestations[k] = &pb.Attestations{}
+				}
+				pbRes.Attestations[k].Attestation = append(pbRes.Attestations[k].Attestation, pbAtt)
+			}
+		}
+	}
+
+	return pbRes, defaultID, nil
+}
+
+func (lbf *llbBridgeForwarder) SetResult(result *frontend.Result, err error) {
+	lbf.mu.Lock()
+	if result != nil {
+		lbf.result = result
+	}
+	if err != nil && lbf.err == nil {
+		// An existing error (set via Return rpc) takes
+		// precedence over this error
+		lbf.err = err
+		lbf.result = nil
+	}
+	lbf.mu.Unlock()
+}
+
+func (lbf *llbBridgeForwarder) GetReturn(ctx context.Context, in *pb.GetReturnRequest) (*pb.GetReturnResponse, error) {
+	res, err := lbf.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("no result to export")
+	}
+
+	pbRes, _, err := lbf.stashResult(ctx, res, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := &pb.GetReturnResponse{
+		Result: pbRes,
+	}
+	return resp, nil
+}
+
+func (lbf *llbBridgeForwarder) Store(store content.Store) content.Store {
+	return newFilteredStore(store, lbf.storeFilter)
+}
+
+func (lbf *llbBridgeForwarder) GetRemote(ctx context.Context, in *pb.GetRemoteRequest) (*pb.GetRemoteResponse, error) {
+	r, err := lbf.getImmutableRef(ctx, in.Ref)
+	if err != nil {
+		return nil, err
+	}
+
+	rc := config.RefConfig{
+		Compression: pb.CompressionFromPB(in.Compression),
+	}
+	remotes, err := r.GetRemotes(ctx, true, rc, false, session.NewGroup(lbf.sid))
+	if err != nil {
+		return nil, err
+	}
+	remote := remotes[0]
+	if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+		if err := unlazier.Unlazy(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	resp := &pb.GetRemoteResponse{
+		Descriptors: make([]*pb.Descriptor, 0, len(remote.Descriptors)),
+	}
+	for _, desc := range remote.Descriptors {
+		resp.Descriptors = append(resp.Descriptors, pb.DescriptorToPB(desc))
+	}
+	lbf.storeFilter.allow(remote.Descriptors...)
+	return resp, nil
 }
 
 func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {
@@ -1669,13 +1797,8 @@ func toPBAttestationChain(ac *sourceresolver.AttestationChain) *pb.AttestationCh
 	}
 	for k, v := range ac.Blobs {
 		out.Blobs[k.String()] = &pb.Blob{
-			Descriptor_: &pb.Descriptor{
-				MediaType:   v.Descriptor.MediaType,
-				Size:        v.Descriptor.Size,
-				Digest:      string(v.Descriptor.Digest),
-				Annotations: maps.Clone(v.Descriptor.Annotations),
-			},
-			Data: v.Data,
+			Descriptor_: pb.DescriptorToPB(v.Descriptor),
+			Data:        v.Data,
 		}
 	}
 	return out

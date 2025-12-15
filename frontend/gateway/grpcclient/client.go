@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"os"
 	"strings"
@@ -14,8 +13,10 @@ import (
 	"time"
 
 	distreference "github.com/distribution/reference"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -41,7 +42,9 @@ const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
 type GrpcClient interface {
 	client.Client
-	Run(context.Context, client.BuildFunc) error
+
+	Build(context.Context, client.BuildFunc) error
+	Export(context.Context, *grpc.ClientConn, client.ExportFunc) error
 }
 
 func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
@@ -74,17 +77,22 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 	}, nil
 }
 
-func current() (GrpcClient, error) {
+func current() (GrpcClient, *grpc.ClientConn, error) {
 	if ep := product(); ep != "" {
 		apicaps.ExportedProduct = ep
 	}
 
 	ctx, conn, err := grpcClientConn(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	gc, err := New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return gc, conn, nil
 }
 
 func convertRef(ref client.Reference) (*pb.Ref, error) {
@@ -98,15 +106,20 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	return &pb.Ref{Id: r.id, Def: r.def}, nil
 }
 
+// Deprecated: use BuildFromEnvironment
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
-	client, err := current()
+	return BuildFromEnvironment(ctx, f)
+}
+
+func BuildFromEnvironment(ctx context.Context, f client.BuildFunc) error {
+	client, _, err := current()
 	if err != nil {
 		return errors.Wrapf(err, "failed to initialize client from environment")
 	}
-	return client.Run(ctx, f)
+	return client.Build(ctx, f)
 }
 
-func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError error) {
+func (c *grpcClient) Build(ctx context.Context, f client.BuildFunc) (retError error) {
 	export := c.caps.Supports(pb.CapReturnResult) == nil
 
 	var (
@@ -168,7 +181,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					attestations := map[string]*pb.Attestations{}
 					for k, as := range res.Attestations {
 						for _, a := range as {
-							pbAtt, err := client.AttestationToPB(&a)
+							pbAtt, err := client.AttestationToPB(ctx, &a)
 							if err != nil {
 								retError = err
 								continue
@@ -246,6 +259,60 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 	}
 
 	return nil
+}
+
+func ExportFromEnvironment(ctx context.Context, f client.ExportFunc) error {
+	client, conn, err := current()
+	if err != nil {
+		return errors.Wrapf(err, "failed to initialize client from environment")
+	}
+	return client.Export(ctx, conn, f)
+}
+
+func (c *grpcClient) Export(ctx context.Context, conn *grpc.ClientConn, f client.ExportFunc) (retError error) {
+	export := c.caps.Supports(pb.CapGatewayGetReturn) == nil
+	if !export {
+		return errors.New("gateway does not support export")
+	}
+
+	resp, err := c.client.GetReturn(ctx, &pb.GetReturnRequest{})
+	if err != nil {
+		return err
+	}
+	result, err := c.loadResult(resp.Result)
+	if err != nil {
+		return err
+	}
+	if result == nil {
+		return errors.Errorf("no result returned from gateway")
+	}
+
+	defer func() {
+		if retError != nil {
+			st, _ := status.FromError(grpcerrors.ToGRPC(ctx, retError))
+			stp := st.Proto()
+			req := &pb.ReturnRequest{}
+			req.Error = &spb.Status{
+				Code:    stp.Code,
+				Message: stp.Message,
+				Details: stp.Details,
+			}
+			_, _ = c.client.Return(ctx, req)
+		}
+	}()
+
+	defer func() {
+		err = c.execMsgs.Release()
+		if err != nil && retError != nil {
+			retError = err
+		}
+	}()
+
+	handle := client.ExportHandle{
+		Conn:   conn,
+		Target: exportTarget(),
+	}
+	return f(ctx, c, handle, result)
 }
 
 // defaultCaps returns the capabilities that were implemented when capabilities
@@ -416,53 +483,63 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		return nil, err
 	}
 
-	res = client.NewResult()
 	if resp.Result == nil {
+		res = client.NewResult()
 		if id := resp.Ref; id != "" {
 			c.requests[id] = req
 		}
 		res.SetRef(&reference{id: resp.Ref, c: c})
 	} else {
-		res.Metadata = resp.Result.Metadata
-		switch pbRes := resp.Result.Result.(type) {
-		case *pb.Result_RefDeprecated:
-			if id := pbRes.RefDeprecated; id != "" {
-				res.SetRef(&reference{id: id, c: c})
-			}
-		case *pb.Result_RefsDeprecated:
-			for k, v := range pbRes.RefsDeprecated.Refs {
-				var ref client.Reference
-				if v != "" {
-					ref = &reference{id: v, c: c}
-				}
-				res.AddRef(k, ref)
-			}
-		case *pb.Result_Ref:
-			if pbRes.Ref.Id != "" {
-				res.SetRef(newReference(c, pbRes.Ref))
-			}
-		case *pb.Result_Refs:
-			for k, v := range pbRes.Refs.Refs {
-				var ref client.Reference
-				if v.Id != "" {
-					ref = newReference(c, v)
-				}
-				res.AddRef(k, ref)
-			}
+		res, err = c.loadResult(resp.Result)
+		if err != nil {
+			return nil, err
 		}
+	}
 
-		if resp.Result.Attestations != nil {
-			for p, as := range resp.Result.Attestations {
-				for _, a := range as.Attestation {
-					att, err := client.AttestationFromPB[client.Reference](a)
-					if err != nil {
-						return nil, err
-					}
-					if a.Ref.Id != "" {
-						att.Ref = newReference(c, a.Ref)
-					}
-					res.AddAttestation(p, *att)
+	return res, nil
+}
+
+func (c *grpcClient) loadResult(pbRes *pb.Result) (*client.Result, error) {
+	res := client.NewResult()
+	res.Metadata = pbRes.Metadata
+	switch pbRes := pbRes.Result.(type) {
+	case *pb.Result_RefDeprecated:
+		if id := pbRes.RefDeprecated; id != "" {
+			res.SetRef(&reference{id: id, c: c})
+		}
+	case *pb.Result_RefsDeprecated:
+		for k, v := range pbRes.RefsDeprecated.Refs {
+			var ref client.Reference
+			if v != "" {
+				ref = &reference{id: v, c: c}
+			}
+			res.AddRef(k, ref)
+		}
+	case *pb.Result_Ref:
+		if pbRes.Ref.Id != "" {
+			res.SetRef(newReference(c, pbRes.Ref))
+		}
+	case *pb.Result_Refs:
+		for k, v := range pbRes.Refs.Refs {
+			var ref client.Reference
+			if v.Id != "" {
+				ref = newReference(c, v)
+			}
+			res.AddRef(k, ref)
+		}
+	}
+
+	if pbRes.Attestations != nil {
+		for p, as := range pbRes.Attestations {
+			for _, a := range as.Attestation {
+				att, err := client.AttestationFromPB[client.Reference](a)
+				if err != nil {
+					return nil, err
 				}
+				if a.Ref != nil && a.Ref.Id != "" {
+					att.Ref = newReference(c, a.Ref)
+				}
+				res.AddAttestation(p, *att)
 			}
 		}
 	}
@@ -591,25 +668,13 @@ func imgResponseFromPB(resp *pb.ResolveSourceImageResponse) *sourceresolver.Reso
 		}
 		for k, v := range resp.AttestationChain.Blobs {
 			ac.Blobs[digest.Digest(k)] = sourceresolver.Blob{
-				Descriptor: descriptorFromPB(v.GetDescriptor_()),
+				Descriptor: pb.DescriptorFromPB(v.GetDescriptor_()),
 				Data:       v.Data,
 			}
 		}
 		r.AttestationChain = ac
 	}
 	return r
-}
-
-func descriptorFromPB(pbDesc *pb.Descriptor) ocispecs.Descriptor {
-	if pbDesc == nil {
-		return ocispecs.Descriptor{}
-	}
-	return ocispecs.Descriptor{
-		MediaType:   pbDesc.GetMediaType(),
-		Size:        pbDesc.GetSize(),
-		Digest:      digest.Digest(pbDesc.GetDigest()),
-		Annotations: maps.Clone(pbDesc.GetAnnotations()),
-	}
 }
 
 func (c *grpcClient) resolveImageConfigViaSourceMetadata(ctx context.Context, ref string, opt sourceresolver.Opt, p *opspb.Platform) (string, digest.Digest, []byte, error) {
@@ -751,6 +816,18 @@ func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 		inputs[key] = llb.NewState(op)
 	}
 	return inputs, nil
+}
+
+func (c *grpcClient) GetReturn(ctx context.Context) (*client.Result, error) {
+	result, err := c.client.GetReturn(ctx, &pb.GetReturnRequest{})
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.loadResult(result.Result)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // procMessageForwarder is created per container process to act as the
@@ -1322,6 +1399,24 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 	return resp.Stat, nil
 }
 
+func (r *reference) GetRemote(ctx context.Context, cfg config.RefConfig) ([]ocispecs.Descriptor, error) {
+	if cfg.PreferNonDistributable {
+		return nil, errors.New("prefer-nondistributable is not supported over gateway")
+	}
+	resp, err := r.c.client.GetRemote(ctx, &pb.GetRemoteRequest{
+		Ref:         r.id,
+		Compression: pb.CompressionToPB(cfg.Compression),
+	})
+	if err != nil {
+		return nil, err
+	}
+	descs := make([]ocispecs.Descriptor, len(resp.Descriptors))
+	for i, d := range resp.Descriptors {
+		descs[i] = pb.DescriptorFromPB(d)
+	}
+	return descs, nil
+}
+
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
 	dialOpts := []grpc.DialOption{
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
@@ -1423,4 +1518,9 @@ func workers() []client.WorkerInfo {
 
 func product() string {
 	return os.Getenv("BUILDKIT_EXPORTEDPRODUCT")
+}
+
+func exportTarget() exptypes.ExporterTarget {
+	v := os.Getenv("BUILDKIT_EXPORTER_TARGET")
+	return exptypes.ExporterTarget(v)
 }

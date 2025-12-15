@@ -412,7 +412,7 @@ func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session
 		return nil, errors.WithStack(err)
 	}
 
-	return newStreamWriter(cc), nil
+	return NewStreamWriter(cc), nil
 }
 
 type InvalidSessionError struct {

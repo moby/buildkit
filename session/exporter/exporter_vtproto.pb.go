@@ -6,6 +6,7 @@ package exporter
 
 import (
 	fmt "fmt"
+	control "github.com/moby/buildkit/api/services/control"
 	protohelpers "github.com/planetscale/vtprotobuf/protohelpers"
 	proto "google.golang.org/protobuf/proto"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -78,6 +79,7 @@ func (m *ExporterRequest) CloneVT() *ExporterRequest {
 	}
 	r := new(ExporterRequest)
 	r.Type = m.Type
+	r.Target = m.Target
 	if rhs := m.Attrs; rhs != nil {
 		tmpContainer := make(map[string]string, len(rhs))
 		for k, v := range rhs {
@@ -186,6 +188,9 @@ func (this *ExporterRequest) EqualVT(that *ExporterRequest) bool {
 		if vx != vy {
 			return false
 		}
+	}
+	if this.Target != that.Target {
+		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
@@ -333,6 +338,11 @@ func (m *ExporterRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.Target != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Target))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.Attrs) > 0 {
 		for k := range m.Attrs {
 			v := m.Attrs[k]
@@ -420,6 +430,9 @@ func (m *ExporterRequest) SizeVT() (n int) {
 			mapEntrySize := 1 + len(k) + protohelpers.SizeOfVarint(uint64(len(k))) + 1 + len(v) + protohelpers.SizeOfVarint(uint64(len(v)))
 			n += mapEntrySize + 1 + protohelpers.SizeOfVarint(uint64(mapEntrySize))
 		}
+	}
+	if m.Target != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.Target))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -909,6 +922,25 @@ func (m *ExporterRequest) UnmarshalVT(dAtA []byte) error {
 			}
 			m.Attrs[mapkey] = mapvalue
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Target", wireType)
+			}
+			m.Target = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Target |= control.ExporterTarget(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

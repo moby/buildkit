@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/config"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -23,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -62,13 +65,6 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	res, err := c.FrontendLLBBridge.Solve(ctx, req, c.sid)
 	if err != nil {
 		return nil, c.wrapSolveError(err)
-	}
-	for _, atts := range res.Attestations {
-		for _, att := range atts {
-			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
-			}
-		}
 	}
 
 	c.mu.Lock()
@@ -186,13 +182,6 @@ func (c *BridgeClient) registerResultIDs(results ...solver.Result) (ids []string
 func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {
 	if r == nil {
 		return nil, nil
-	}
-	for _, atts := range r.Attestations {
-		for _, att := range atts {
-			if att.ContentFunc != nil {
-				return nil, errors.Errorf("attestation callback cannot be sent through gateway")
-			}
-		}
 	}
 
 	res, err := result.ConvertResult(r, func(r client.Reference) (solver.ResultProxy, error) {
@@ -379,6 +368,34 @@ func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.St
 		return nil, err
 	}
 	return cacheutil.StatFile(ctx, m, req.Path)
+}
+
+func (r *ref) GetRemote(ctx context.Context, cfg config.RefConfig) ([]ocispecs.Descriptor, error) {
+	if cfg.PreferNonDistributable {
+		return nil, errors.New("prefer-nondistributable is not supported over gateway")
+	}
+
+	rr, err := r.resultProxy.Result(ctx)
+	if err != nil {
+		return nil, r.c.wrapSolveError(err)
+	}
+	ref, ok := rr.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
+	}
+
+	remotes, err := ref.ImmutableRef.GetRemotes(ctx, true, cfg, false, session.NewGroup(r.c.sid))
+	if err != nil {
+		return nil, err
+	}
+	remote := remotes[0]
+	if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+		if err := unlazier.Unlazy(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	return remote.Descriptors, nil
 }
 
 func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {

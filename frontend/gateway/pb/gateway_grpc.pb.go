@@ -26,8 +26,10 @@ const (
 	LLBBridge_ReadDir_FullMethodName            = "/moby.buildkit.v1.frontend.LLBBridge/ReadDir"
 	LLBBridge_StatFile_FullMethodName           = "/moby.buildkit.v1.frontend.LLBBridge/StatFile"
 	LLBBridge_Evaluate_FullMethodName           = "/moby.buildkit.v1.frontend.LLBBridge/Evaluate"
+	LLBBridge_GetRemote_FullMethodName          = "/moby.buildkit.v1.frontend.LLBBridge/GetRemote"
 	LLBBridge_Ping_FullMethodName               = "/moby.buildkit.v1.frontend.LLBBridge/Ping"
 	LLBBridge_Return_FullMethodName             = "/moby.buildkit.v1.frontend.LLBBridge/Return"
+	LLBBridge_GetReturn_FullMethodName          = "/moby.buildkit.v1.frontend.LLBBridge/GetReturn"
 	LLBBridge_Inputs_FullMethodName             = "/moby.buildkit.v1.frontend.LLBBridge/Inputs"
 	LLBBridge_NewContainer_FullMethodName       = "/moby.buildkit.v1.frontend.LLBBridge/NewContainer"
 	LLBBridge_ReleaseContainer_FullMethodName   = "/moby.buildkit.v1.frontend.LLBBridge/ReleaseContainer"
@@ -53,8 +55,12 @@ type LLBBridgeClient interface {
 	StatFile(ctx context.Context, in *StatFileRequest, opts ...grpc.CallOption) (*StatFileResponse, error)
 	// apicaps:CapGatewayEvaluate
 	Evaluate(ctx context.Context, in *EvaluateRequest, opts ...grpc.CallOption) (*EvaluateResponse, error)
+	// apicaps:CapGatewayGetRemote
+	GetRemote(ctx context.Context, in *GetRemoteRequest, opts ...grpc.CallOption) (*GetRemoteResponse, error)
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
 	Return(ctx context.Context, in *ReturnRequest, opts ...grpc.CallOption) (*ReturnResponse, error)
+	// apicaps:CapGatewayGetReturn
+	GetReturn(ctx context.Context, in *GetReturnRequest, opts ...grpc.CallOption) (*GetReturnResponse, error)
 	// apicaps:CapFrontendInputs
 	Inputs(ctx context.Context, in *InputsRequest, opts ...grpc.CallOption) (*InputsResponse, error)
 	NewContainer(ctx context.Context, in *NewContainerRequest, opts ...grpc.CallOption) (*NewContainerResponse, error)
@@ -142,6 +148,16 @@ func (c *lLBBridgeClient) Evaluate(ctx context.Context, in *EvaluateRequest, opt
 	return out, nil
 }
 
+func (c *lLBBridgeClient) GetRemote(ctx context.Context, in *GetRemoteRequest, opts ...grpc.CallOption) (*GetRemoteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRemoteResponse)
+	err := c.cc.Invoke(ctx, LLBBridge_GetRemote_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *lLBBridgeClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PongResponse)
@@ -156,6 +172,16 @@ func (c *lLBBridgeClient) Return(ctx context.Context, in *ReturnRequest, opts ..
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReturnResponse)
 	err := c.cc.Invoke(ctx, LLBBridge_Return_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *lLBBridgeClient) GetReturn(ctx context.Context, in *GetReturnRequest, opts ...grpc.CallOption) (*GetReturnResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReturnResponse)
+	err := c.cc.Invoke(ctx, LLBBridge_GetReturn_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -233,8 +259,12 @@ type LLBBridgeServer interface {
 	StatFile(context.Context, *StatFileRequest) (*StatFileResponse, error)
 	// apicaps:CapGatewayEvaluate
 	Evaluate(context.Context, *EvaluateRequest) (*EvaluateResponse, error)
+	// apicaps:CapGatewayGetRemote
+	GetRemote(context.Context, *GetRemoteRequest) (*GetRemoteResponse, error)
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
 	Return(context.Context, *ReturnRequest) (*ReturnResponse, error)
+	// apicaps:CapGatewayGetReturn
+	GetReturn(context.Context, *GetReturnRequest) (*GetReturnResponse, error)
 	// apicaps:CapFrontendInputs
 	Inputs(context.Context, *InputsRequest) (*InputsResponse, error)
 	NewContainer(context.Context, *NewContainerRequest) (*NewContainerResponse, error)
@@ -272,11 +302,17 @@ func (UnimplementedLLBBridgeServer) StatFile(context.Context, *StatFileRequest) 
 func (UnimplementedLLBBridgeServer) Evaluate(context.Context, *EvaluateRequest) (*EvaluateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Evaluate not implemented")
 }
+func (UnimplementedLLBBridgeServer) GetRemote(context.Context, *GetRemoteRequest) (*GetRemoteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRemote not implemented")
+}
 func (UnimplementedLLBBridgeServer) Ping(context.Context, *PingRequest) (*PongResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
 func (UnimplementedLLBBridgeServer) Return(context.Context, *ReturnRequest) (*ReturnResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Return not implemented")
+}
+func (UnimplementedLLBBridgeServer) GetReturn(context.Context, *GetReturnRequest) (*GetReturnResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetReturn not implemented")
 }
 func (UnimplementedLLBBridgeServer) Inputs(context.Context, *InputsRequest) (*InputsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Inputs not implemented")
@@ -439,6 +475,24 @@ func _LLBBridge_Evaluate_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LLBBridge_GetRemote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRemoteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LLBBridgeServer).GetRemote(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LLBBridge_GetRemote_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LLBBridgeServer).GetRemote(ctx, req.(*GetRemoteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LLBBridge_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PingRequest)
 	if err := dec(in); err != nil {
@@ -471,6 +525,24 @@ func _LLBBridge_Return_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(LLBBridgeServer).Return(ctx, req.(*ReturnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LLBBridge_GetReturn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReturnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LLBBridgeServer).GetReturn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LLBBridge_GetReturn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LLBBridgeServer).GetReturn(ctx, req.(*GetReturnRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -590,12 +662,20 @@ var LLBBridge_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _LLBBridge_Evaluate_Handler,
 		},
 		{
+			MethodName: "GetRemote",
+			Handler:    _LLBBridge_GetRemote_Handler,
+		},
+		{
 			MethodName: "Ping",
 			Handler:    _LLBBridge_Ping_Handler,
 		},
 		{
 			MethodName: "Return",
 			Handler:    _LLBBridge_Return_Handler,
+		},
+		{
+			MethodName: "GetReturn",
+			Handler:    _LLBBridge_GetReturn_Handler,
 		},
 		{
 			MethodName: "Inputs",
