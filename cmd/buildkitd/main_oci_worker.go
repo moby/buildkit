@@ -525,7 +525,7 @@ func sourceWithSession(hosts docker.RegistryHosts, sm *session.Manager) sgzsourc
 			// Get source information based on labels and RegistryHosts containing
 			// session-based authorizer.
 			parse := sgzsource.FromDefaultLabels(func(ref reference.Spec) ([]docker.RegistryHost, error) {
-				return resolver.DefaultPool.GetResolver(hosts, named.String(), "pull", sm, session.NewGroup(sids...)).
+				return resolver.DefaultPool.GetResolver(hosts, named.String(), resolver.ScopeType{}, sm, session.NewGroup(sids...)).
 					HostsFunc(ref.Hostname())
 			})
 			if s, err := parse(map[string]string{
