@@ -2430,9 +2430,15 @@ Therefore, to avoid unintended operations in unknown directories, it's best prac
 ARG <name>[=<default value>] [<name>[=<default value>]...]
 ```
 
-The `ARG` instruction defines a variable that users can pass at build-time to
+The `ARG` instruction defines a variable that users can pass at build time to
 the builder with the `docker build` command using the `--build-arg <varname>=<value>`
-flag.
+flag. This variable can be used in subsequent instructions such as `FROM`, `ENV`,
+`WORKDIR`, and others using the `${VAR}` or `$VAR` template syntax.
+It is also passed to all subsequent `RUN` instructions as a build-time
+environment variable.
+
+Unlike `ENV`, an `ARG` variable is not embedded in the image and is not available
+in the final container.
 
 > [!WARNING]
 > It isn't recommended to use build arguments for passing secrets such as
