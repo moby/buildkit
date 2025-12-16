@@ -316,7 +316,7 @@ ARG NYDUS_VERSION
 ARG TARGETOS
 ARG TARGETARCH
 SHELL ["/bin/bash", "-c"]
-RUN wget https://github.com/dragonflyoss/image-service/releases/download/$NYDUS_VERSION/nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz
+RUN wget https://github.com/dragonflyoss/nydus/releases/download/$NYDUS_VERSION/nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz
 RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
 
 FROM gobuild-base AS gotestsum
