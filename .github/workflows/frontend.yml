@@ -125,7 +125,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@8fc70909404a502fd0eca6601b99b32fa7192b03
+    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
     needs:
       - prepare
       - test
@@ -138,13 +138,15 @@ jobs:
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: amd64
+      setup-qemu: true
       target: frontend-image-cross
-      output: image
-      push: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
-      envs: |
-        FRONTEND_CHANNEL=${{ matrix.channel }}
       cache: true
       cache-scope: frontend-${{ matrix.channel }}
+      output: image
+      push: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
+      sbom: true
+      set: |
+        *.args.FRONTEND_CHANNEL=${{ matrix.channel }}
       set-meta-annotations: true
       meta-images: |
         ${{ matrix.imageName }}
@@ -179,10 +181,6 @@ jobs:
         org.opencontainers.image.title=Dockerfile Frontend
         org.opencontainers.image.vendor=Moby
       meta-bake-target: frontend-meta-helper
-      setup-qemu: true
-      bake-sbom: true
-      bake-set: |
-        *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) && 'base' || '' }}
     secrets:
       registry-auths: |
         - registry: docker.io
