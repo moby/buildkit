@@ -50,22 +50,21 @@ jobs:
           fields: platforms
 
   binaries:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@8fc70909404a502fd0eca6601b99b32fa7192b03
+    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
     permissions:
       contents: read # same as global permission
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: amd64
-      target: release
-      output: local
-      push: ${{ github.event_name != 'pull_request' }}
-      artifact-name: buildkit
+      setup-qemu: true
+      artifact-name: buildkit-binaries
+      artifact-upload: true
       cache: true
       cache-scope: binaries
-      setup-qemu: true
-      bake-sbom: true
-      bake-set: |
-        *.no-cache-filter=${{ startsWith(github.ref, 'refs/tags/v') && 'gobuild-base' || '' }}
+      target: release
+      output: local
+      sbom: true
+      sign: ${{ github.event_name != 'pull_request' }}
 
   binaries-finalize:
     runs-on: ubuntu-24.04
@@ -77,8 +76,7 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           path: /tmp/buildx-output
-          pattern: ${{ needs.binaries.outputs.artifact-name }}*
-          merge-multiple: true
+          name: ${{ needs.binaries.outputs.artifact-name }}
       -
         name: Rename provenance and sbom
         run: |
@@ -91,7 +89,7 @@ jobs:
               mv "sbom-binaries.spdx.json" "${filename}.sbom.json"
               find . -name 'sbom*.json' -exec rm {} \;
               if [ -f "provenance.sigstore.json" ]; then
-                mv "provenance.sigstore.json" "${filename}.provenance.sigstore.json"
+                mv "provenance.sigstore.json" "${filename}.sigstore.json"
               fi
             )
           done
@@ -106,7 +104,7 @@ jobs:
         name: Upload release binaries
         uses: actions/upload-artifact@v6
         with:
-          name: release
+          name: buildkit-release
           path: ${{ env.DESTDIR }}/*
           if-no-files-found: error
 
@@ -226,7 +224,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@8fc70909404a502fd0eca6601b99b32fa7192b03
+    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
     needs:
       - image-prepare
       - test
@@ -239,15 +237,17 @@ jobs:
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: amd64
+      setup-qemu: true
       target: image-cross
+      cache: true
+      cache-scope: image
       output: image
       push: ${{ github.repository == 'moby/buildkit' && (github.event_name == 'schedule' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
-      envs: |
-        IMAGE_TARGET=${{ matrix.target }}
-        EXPORT_BASE=${{ matrix.base }}
-        BUILDKITD_TAGS=${{ matrix.buildTags }}
-      cache: true
-      cache-scope: image${{ matrix.target }}-${{ matrix.base }}
+      sbom: true
+      set: |
+        *.args.IMAGE_TARGET=${{ matrix.target }}
+        *.args.EXPORT_BASE=${{ matrix.base }}
+        *.args.BUILDKITD_TAGS=${{ matrix.buildTags }}
       set-meta-annotations: true
       meta-images: |
         ${{ matrix.imageName }}
@@ -283,10 +283,6 @@ jobs:
         org.opencontainers.image.title=BuildKit
         org.opencontainers.image.vendor=Moby
       meta-bake-target: meta-helper
-      setup-qemu: true
-      bake-sbom: true
-      bake-set: |
-        *.no-cache-filter=${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && 'buildkit-export-alpine,buildkit-export-ubuntu,gobuild-base,rootless' || '' }}
     secrets:
       registry-auths: |
         - registry: docker.io
@@ -352,7 +348,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: ${{ env.DESTDIR }}
-          name: release
+          name: buildkit-release
       -
         name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
