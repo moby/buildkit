@@ -1322,8 +1322,8 @@ The available `[OPTIONS]` are:
 | --------------------------------------- | -------------------------- |
 | [`--keep-git-dir`](#add---keep-git-dir) | 1.1                        |
 | [`--checksum`](#add---checksum)         | 1.6                        |
-| [`--chown`](#add---chown---chmod)       |                            |
-| [`--chmod`](#add---chown---chmod)       | 1.2                        |
+| [`--chmod`](#add---chmod)               | 1.2                        |
+| [`--chown`](#add---chown)               |                            |
 | [`--link`](#add---link)                 | 1.4                        |
 | [`--unpack`](#add---unpack)             | 1.17                       |
 | [`--exclude`](#add---exclude)           | 1.19                       |
@@ -1586,9 +1586,13 @@ ADD --checksum=be1f38e https://github.com/moby/buildkit.git#v0.26.2 /
 ADD --checksum=sha256:24454f830cdb571e2c4ad15481119c43b3cafd48dd869a9b2945d1036d1dc68d https://mirrors.edge.kernel.org/pub/linux/kernel/Historic/linux-0.01.tar.gz /
 ```
 
-### ADD --chown --chmod
+### ADD --chmod
 
-See [`COPY --chown --chmod`](#copy---chown---chmod).
+See [`COPY --chmod`](#copy---chmod).
+
+### ADD --chown
+
+See [`COPY --chown`](#copy---chown).
 
 ### ADD --link
 
@@ -1633,8 +1637,8 @@ The available `[OPTIONS]` are:
 | Option                             | Minimum Dockerfile version |
 | ---------------------------------- | -------------------------- |
 | [`--from`](#copy---from)           |                            |
-| [`--chown`](#copy---chown---chmod) |                            |
-| [`--chmod`](#copy---chown---chmod) | 1.2                        |
+| [`--chmod`](#copy---chmod)         | 1.2                        |
+| [`--chown`](#copy---chown)         |                            |
 | [`--link`](#copy---link)           | 1.4                        |
 | [`--parents`](#copy---parents)     | 1.20                       |
 | [`--exclude`](#copy---exclude)     | 1.19                       |
@@ -1804,32 +1808,52 @@ COPY --from=nginx:latest /etc/nginx/nginx.conf /nginx.conf
 The source path of `COPY --from` is always resolved from filesystem root of the
 image or stage that you specify.
 
-### COPY --chown --chmod
-
-> [!NOTE]
-> Only octal notation is currently supported. Non-octal support is tracked in
-> [moby/buildkit#1951](https://github.com/moby/buildkit/issues/1951).
+### COPY --chmod
 
 ```dockerfile
-COPY [--chown=<user>:<group>] [--chmod=<perms> ...] <src> ... <dest>
+COPY [--chmod=<perms>] <src> ... <dest>
 ```
 
-The `--chown` and `--chmod` features are only supported on Dockerfiles used to build Linux containers,
-and doesn't work on Windows containers. Since user and group ownership concepts do
-not translate between Linux and Windows, the use of `/etc/passwd` and `/etc/group` for
-translating user and group names to IDs restricts this feature to only be viable for
-Linux OS-based containers.
+The `--chmod` flag supports octal notation (e.g., `755`, `644`) and symbolic
+notation (e.g., `+x`, `g=u`). Symbolic notation (added in Dockerfile version 1.14)
+is useful when octal isn't flexible enough. For example, `u=rwX,go=rX` sets
+directories to 755 and files to 644, while preserving the executable bit on files
+that already have it. (Capital `X` means "executable only if it's a directory or
+already executable.")
 
-All files and directories copied from the build context are created with a UID and GID of `0` unless the
-optional `--chown` flag specifies a given username, groupname, or UID/GID
-combination to request specific ownership of the copied content. The
-format of the `--chown` flag allows for either username and groupname strings
-or direct integer UID and GID in any combination. Providing a username without
-groupname or a UID without GID will use the same numeric UID as the GID. If a
-username or groupname is provided, the container's root filesystem
-`/etc/passwd` and `/etc/group` files will be used to perform the translation
-from name to integer UID or GID respectively. The following examples show
-valid definitions for the `--chown` flag:
+For more information about symbolic notation syntax, see the
+[chmod(1) manual](https://man.freebsd.org/cgi/man.cgi?chmod).
+
+Examples using octal notation:
+
+```dockerfile
+COPY --chmod=755 app.sh /app/
+COPY --chmod=644 file.txt /data/
+ARG MODE=440
+COPY --chmod=$MODE . .
+```
+
+Examples using symbolic notation:
+
+```dockerfile
+COPY --chmod=+x script.sh /app/
+COPY --chmod=u=rwX,go=rX . /app/
+COPY --chmod=g=u config/ /config/
+```
+
+The `--chmod` flag is not supported when building Windows containers.
+
+### COPY --chown
+
+```dockerfile
+COPY [--chown=<user>:<group>] <src> ... <dest>
+```
+
+Sets ownership of copied files. Without this flag, files are created with UID
+and GID of 0.
+
+The flag accepts usernames, group names, UIDs, or GIDs in any combination.
+If you specify only a user, the GID is set to the same numeric value as the UID.
 
 ```dockerfile
 COPY --chown=55:mygroup files* /somedir/
@@ -1839,22 +1863,12 @@ COPY --chown=10:11 files* /somedir/
 COPY --chown=myuser:mygroup --chmod=644 files* /somedir/
 ```
 
-If the container root filesystem doesn't contain either `/etc/passwd` or
-`/etc/group` files and either user or group names are used in the `--chown`
-flag, the build will fail on the `COPY` operation. Using numeric IDs requires
-no lookup and does not depend on container root filesystem content.
+When using names instead of numeric IDs, BuildKit resolves them using
+`/etc/passwd` and `/etc/group` in the container's root filesystem. If these
+files are missing or don't contain the specified names, the build fails.
+Numeric IDs don't require this lookup.
 
-With the Dockerfile syntax version 1.10.0 and later,
-the `--chmod` flag supports variable interpolation,
-which lets you define the permission bits using build arguments:
-
-```dockerfile
-# syntax=docker/dockerfile:1.10
-FROM alpine
-WORKDIR /src
-ARG MODE=440
-COPY --chmod=$MODE . .
-```
+The `--chown` flag is not supported when building Windows containers.
 
 ### COPY --link
 
