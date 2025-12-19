@@ -725,11 +725,11 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runtime-spec v1.2.1
+# github.com/opencontainers/runtime-spec v1.3.0
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 github.com/opencontainers/runtime-spec/specs-go/features
-# github.com/opencontainers/runtime-tools v0.9.1-0.20250523060157-0ea5ed0382a2
+# github.com/opencontainers/runtime-tools v0.9.1-0.20251114084447-edf4cb3d2116
 ## explicit; go 1.21
 github.com/opencontainers/runtime-tools/generate
 github.com/opencontainers/runtime-tools/generate/seccomp
@@ -1199,12 +1199,12 @@ kernel.org/pub/linux/libs/security/libcap/psx
 # sigs.k8s.io/yaml v1.6.0
 ## explicit; go 1.22
 sigs.k8s.io/yaml
-# tags.cncf.io/container-device-interface v1.0.1
-## explicit; go 1.20
+# tags.cncf.io/container-device-interface v1.1.0
+## explicit; go 1.21
 tags.cncf.io/container-device-interface/internal/validation
 tags.cncf.io/container-device-interface/internal/validation/k8s
 tags.cncf.io/container-device-interface/pkg/cdi
 tags.cncf.io/container-device-interface/pkg/parser
-# tags.cncf.io/container-device-interface/specs-go v1.0.0
+# tags.cncf.io/container-device-interface/specs-go v1.1.0
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
