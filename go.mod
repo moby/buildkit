@@ -49,7 +49,7 @@ require (
 	github.com/klauspost/compress v1.18.2
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
-	github.com/moby/go-archive v0.1.0
+	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
 	github.com/moby/policy-helpers v0.0.0-20251105011237-bcaa71c99f14
