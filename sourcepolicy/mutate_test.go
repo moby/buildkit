@@ -130,7 +130,7 @@ func TestMutate(t *testing.T) {
 		op := tc.op
 		t.Run(op.String(), func(t *testing.T) {
 			src := op.GetSource()
-			mutated, err := mutate(ctx, src, tc.rule, &selectorCache{Selector: tc.rule.Selector}, src.GetIdentifier())
+			mutated, err := mutate(ctx, src, tc.rule, newSelectorCache(tc.rule.Selector), src.GetIdentifier())
 			require.Equal(t, tc.expected, mutated)
 			if tc.expectedErr != "" {
 				require.Error(t, err, tc.expectedErr)
