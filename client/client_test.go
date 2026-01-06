@@ -255,6 +255,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSourceMetaPolicySession,
 	testSourcePolicyParallelSession,
 	testSourcePolicySignedCommit,
+	testSourcePolicySessionConvert,
 }
 
 func TestIntegration(t *testing.T) {
