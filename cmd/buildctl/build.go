@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/containerd/continuity"
 	"github.com/docker/cli/cli/config"
+	"github.com/docker/cli/cli/config/configfile"
+	"github.com/docker/cli/cli/config/credentials"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
@@ -115,7 +118,58 @@ var buildCommand = cli.Command{
 			Name:  "debug-json-cache-metrics",
 			Usage: "Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.",
 		},
+		cli.StringFlag{
+			Name:  "docker-config",
+			Usage: "Pass in credential config file path. This will override DOCKER_CONFIG path used to fetch credential. You can pass a file path or a file descriptor or a pipe. eg: fd://3, pipe://tmp/pipe-config.json, /tmp/creds.json",
+		},
 	},
+}
+
+func loadCredentialFile(configFile *configfile.ConfigFile, configFilePath string) error {
+	file, err := os.Open(configFilePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	err = configFile.LoadFromReader(file)
+	if err != nil {
+		err = errors.Wrapf(err, "parsing config file (%s)", configFilePath)
+	}
+	return err
+}
+
+func processCredentialConfigFile(path string) (authprovider.AuthConfigProvider, error) {
+	if path == "" {
+		return nil, errors.Errorf("credential file path empty")
+	}
+	configFile := configfile.New("config-file")
+
+	switch {
+	case strings.HasPrefix(path, "fd://"):
+		fd, err := strconv.Atoi(strings.TrimPrefix(path, "fd://"))
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing file descriptor")
+		}
+		f := os.NewFile(uintptr(fd), "")
+		defer f.Close()
+		if err := configFile.LoadFromReader(f); err != nil {
+			return nil, errors.Wrapf(err, "loading config file %s", path)
+		}
+	case strings.HasPrefix(path, "pipe://"):
+		if err := loadCredentialFile(configFile, strings.TrimPrefix(path, "pipe://")); err != nil {
+			return nil, errors.Wrapf(err, "loading config file %s", path)
+		}
+	default:
+		if err := loadCredentialFile(configFile, path); err != nil {
+			return nil, errors.Wrapf(err, "loading config file %s", path)
+		}
+	}
+
+	if !configFile.ContainsAuth() {
+		configFile.CredentialsStore = credentials.DetectDefaultStore(configFile.CredentialsStore)
+	}
+
+	return configFile, nil
 }
 
 func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
@@ -182,7 +236,18 @@ func buildAction(clicontext *cli.Context) error {
 		bklog.L.Infof("tracing logs to %s", traceFile.Name())
 	}
 
-	dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
+	var dockerConfig authprovider.AuthConfigProvider
+	credentialConfigFilePath := clicontext.String("docker-config")
+	if credentialConfigFilePath != "" {
+		dockerConfig, err = processCredentialConfigFile(credentialConfigFilePath)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Load Default Credential Config.json from DOCKER_CONFIG directory
+		dockerConfig = config.LoadDefaultConfigFile(os.Stderr)
+	}
+
 	tlsConfigs, err := build.ParseRegistryAuthTLSContext(clicontext.StringSlice("registry-auth-tlscontext"))
 	if err != nil {
 		return err

@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
+	"github.com/docker/cli/cli/config/configfile"
+	"github.com/docker/cli/cli/config/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -202,4 +205,104 @@ func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
 		return nil, err
 	}
 	return bytes.NewBuffer(dt), nil
+}
+
+func TestProcessCredentialConfigFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	validConfigPath := filepath.Join(tmpDir, "valid-config.json")
+	validConfig := configfile.ConfigFile{
+		AuthConfigs: map[string]types.AuthConfig{
+			"https://index.docker.io/v1/": {
+				Username: "testuser",
+				Password: "testpassword",
+			},
+		},
+	}
+	validConfigData, err := json.Marshal(validConfig)
+	require.NoError(t, err)
+	err = os.WriteFile(validConfigPath, validConfigData, 0600)
+	require.NoError(t, err)
+
+	pipeFilePath := filepath.Join(tmpDir, "pipe-config.json")
+
+	tests := []struct {
+		name        string
+		path        string
+		expectError bool
+		setup       func() (string, error)
+		cleanup     func(*os.File)
+	}{
+		{
+			name:        "Credential Config as File",
+			path:        validConfigPath,
+			expectError: false,
+		},
+		{
+			name: "Credential Config as File Descriptor",
+			setup: func() (string, error) {
+				f, err := os.Open(validConfigPath)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("fd://%d", f.Fd()), nil
+			},
+			cleanup: func(f *os.File) {
+				f.Close()
+			},
+			expectError: false,
+		},
+		{
+			name: "Credential Config as Pipe",
+			path: "pipe://" + pipeFilePath,
+			setup: func() (string, error) {
+				err := syscall.Mkfifo(pipeFilePath, 0600)
+				if err != nil {
+					return "", err
+				}
+				go func() {
+					pipeWriter, err := os.OpenFile(pipeFilePath, os.O_WRONLY, 0600)
+					if err != nil {
+						return
+					}
+					defer pipeWriter.Close()
+					pipeWriter.Write(validConfigData)
+				}()
+
+				return fmt.Sprintf("pipe://%s", pipeFilePath), nil
+			},
+			cleanup: func(f *os.File) {
+				os.Remove(pipeFilePath)
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var f *os.File
+			if tt.setup != nil {
+				var err error
+				tt.path, err = tt.setup()
+				require.NoError(t, err)
+			}
+
+			if tt.cleanup != nil {
+				defer tt.cleanup(f)
+			}
+
+			configFile, err := processCredentialConfigFile(tt.path)
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, configFile)
+				authConfig, err := configFile.GetAuthConfig("https://index.docker.io/v1/")
+				if err != nil {
+					t.Fatal(err)
+				}
+				require.Equal(t, "testuser", authConfig.Username)
+				require.Equal(t, "testpassword", authConfig.Password)
+			}
+		})
+	}
 }
