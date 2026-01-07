@@ -319,7 +319,7 @@ func TestMatch(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			matches, err := match(&selectorCache{Selector: tc.src}, tc.ref, tc.src.Constraints, tc.attrs)
+			matches, err := match(newSelectorCache(tc.src), tc.ref, tc.src.Constraints, tc.attrs)
 			if !tc.xErr {
 				require.NoError(t, err)
 			} else {
