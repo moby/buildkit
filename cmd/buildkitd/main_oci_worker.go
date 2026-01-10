@@ -126,6 +126,10 @@ func init() {
 			Usage: "limit the number of parallel build steps that can run at the same time",
 			Value: defaultConf.Workers.OCI.MaxParallelism,
 		},
+		cli.BoolFlag{
+			Name:  "oci-isolate-cgroups",
+			Usage: "isolate cgroups to the cgroup hierarchy of the buildkitd process",
+		},
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -260,6 +264,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-max-parallelism") {
 		cfg.Workers.OCI.MaxParallelism = c.GlobalInt("oci-max-parallelism")
 	}
+	if c.GlobalIsSet("oci-isolate-cgroups") {
+		cfg.Workers.OCI.IsolateCgroups = c.GlobalBool("oci-isolate-cgroups")
+	}
 
 	return nil
 }
@@ -327,7 +334,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cdiManager)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cfg.IsolateCgroups, cdiManager)
 	if err != nil {
 		return nil, err
 	}
