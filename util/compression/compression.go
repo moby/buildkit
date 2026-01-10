@@ -35,6 +35,8 @@ type Type interface {
 type (
 	uncompressedType struct{}
 	gzipType         struct{}
+	igzipType        struct{}
+	pigzType         struct{}
 	estargzType      struct{}
 	zstdType         struct{}
 )
@@ -45,6 +47,12 @@ var (
 
 	// Gzip is used for blob data.
 	Gzip = gzipType{}
+
+	// Igzip is used for blob data.
+	Igzip = igzipType{}
+
+	// Pigz is used for blob data.
+	Pigz = pigzType{}
 
 	// EStargz is used for estargz data.
 	EStargz = estargzType{}
@@ -87,6 +95,10 @@ func parse(t string) (Type, error) {
 		return Uncompressed, nil
 	case Gzip.String():
 		return Gzip, nil
+	case Pigz.String():
+		return Pigz, nil
+	case Igzip.String():
+		return Igzip, nil
 	case EStargz.String():
 		return EStargz, nil
 	case Zstd.String():
