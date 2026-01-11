@@ -11,3 +11,8 @@ rules:
   truthy: disable
   line-length: disable
   document-start: disable
+  trailing-spaces: disable
+  comments:
+    require-starting-space: true
+    ignore-shebangs: true
+    min-spaces-from-content: 1
