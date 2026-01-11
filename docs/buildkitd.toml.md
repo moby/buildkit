@@ -229,3 +229,16 @@ certificateIssuer = ""
 subjectAlternativeName = ""
 buildSignerURI = ""
 ```
+
+## Environment variables
+
+### `BUILDKIT_PARALLEL_EXPORT`
+
+By default, image export and cache export run sequentially. Setting
+`BUILDKIT_PARALLEL_EXPORT=1` enables parallel execution of both export
+types, which can improve build times when both image and cache exports
+are configured.
+
+```bash
+BUILDKIT_PARALLEL_EXPORT=1 buildkitd
+```

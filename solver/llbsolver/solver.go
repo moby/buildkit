@@ -57,6 +57,17 @@ const (
 	keySourcePolicySession = "llb.sourcepolicysession"
 )
 
+// parallelExport enables parallel execution of image and cache exports.
+// This is an experimental feature that can be enabled by setting
+// BUILDKIT_PARALLEL_EXPORT=1.
+var parallelExport = false
+
+func init() {
+	if os.Getenv("BUILDKIT_PARALLEL_EXPORT") == "1" {
+		parallelExport = true
+	}
+}
+
 type ExporterRequest struct {
 	Exporters             []exporter.ExporterInstance
 	CacheExporters        []RemoteCacheExporter
@@ -671,14 +682,38 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	var exporterResponse map[string]string
-	exporterResponse, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
-	if err != nil {
-		return nil, err
-	}
+	var cacheExporterResponse map[string]string
 
-	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
-	if err != nil {
-		return nil, err
+	if parallelExport {
+		// Run image exporters and cache exporters in parallel.
+		eg, egCtx := errgroup.WithContext(ctx)
+
+		eg.Go(func() error {
+			var err error
+			exporterResponse, descrefs, err = s.runExporters(egCtx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
+			return err
+		})
+
+		eg.Go(func() error {
+			var err error
+			cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
+			return err
+		})
+
+		if err := eg.Wait(); err != nil {
+			return nil, err
+		}
+	} else {
+		// Sequential export (default behavior)
+		var err error
+		exporterResponse, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
+		if err != nil {
+			return nil, err
+		}
+		cacheExporterResponse, err = runCacheExporters(ctx, cacheExporters, j, cached, inp)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if exporterResponse == nil {
