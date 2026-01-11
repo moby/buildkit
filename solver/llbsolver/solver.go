@@ -669,14 +669,41 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	var exporterResponse map[string]string
-	exporterResponse, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
-	if err != nil {
-		return nil, err
-	}
+	var cacheExporterResponse map[string]string
 
-	cacheExporterResponse, err := runCacheExporters(ctx, cacheExporters, j, cached, inp)
-	if err != nil {
-		return nil, err
+	// Run in parallel when inline cache is not configured. Inline cache works
+	// by running the cache export first to generate metadata, which is then
+	// embedded into the image config before export. This means image export
+	// cannot start until inline cache completes, requiring sequential execution.
+	if inlineCacheExporter == nil {
+		eg, egCtx := errgroup.WithContext(ctx)
+
+		eg.Go(func() error {
+			var err error
+			exporterResponse, descrefs, err = s.runExporters(egCtx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
+			return err
+		})
+
+		eg.Go(func() error {
+			var err error
+			cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
+			return err
+		})
+
+		if err := eg.Wait(); err != nil {
+			return nil, err
+		}
+	} else {
+		// Sequential export when inline cache is configured.
+		var err error
+		exporterResponse, descrefs, err = s.runExporters(ctx, id, exp.Exporters, inlineCacheExporter, j, cached, inp)
+		if err != nil {
+			return nil, err
+		}
+		cacheExporterResponse, err = runCacheExporters(ctx, cacheExporters, j, cached, inp)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if exporterResponse == nil {
