@@ -73,10 +73,19 @@ ENV GOFLAGS=-mod=vendor
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
 RUN --mount=target=. <<'EOT'
-  git rev-parse HEAD 2>/dev/null || {
+  # if git is worktree (file starting with gitdir:) then skip verions check
+  if [ -f .git ] && head -1 .git | grep -q "^gitdir:"; then
+    echo >&2 "Skipping version check for worktree"
+    # set dev stubs
+    echo "-X github.com/moby/buildkit/version.Version=dev -X github.com/moby/buildkit/version.Revision=dev -X github.com/moby/buildkit/version.Package=github.com/moby/buildkit" > /tmp/.ldflags;
+    echo -n "dev" > /tmp/.version;
+    echo -n "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/.commit_date;
+    exit 0
+  fi
+  if ! git rev-parse HEAD 2>/dev/null; then
     echo >&2 "Failed to get git revision, make sure --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 is set when building from Git directly"
     exit 1
-  }
+  fi
   set -ex
   export PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi) COMMIT_DATE=$(git show -s --format=%cI HEAD);
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" > /tmp/.ldflags;
