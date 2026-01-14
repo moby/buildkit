@@ -147,6 +147,40 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+func testSourcePolicySessionDenyMessages(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("alpine").Marshal(ctx)
+	require.NoError(t, err)
+
+	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+		return &policysession.DecisionResponse{
+			Action: sourcepolicypb.PolicyAction_DENY,
+			DenyMessages: []*policysession.DenyMessage{
+				{Message: "policy blocked alpine"},
+				{Message: "use busybox instead"},
+			},
+		}, nil, nil
+	})
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		SourcePolicyProvider: p,
+	}, nil)
+	require.Error(t, err)
+
+	denyMessages := policysession.DenyMessages(err)
+	require.Len(t, denyMessages, 2)
+	require.Equal(t, "policy blocked alpine", denyMessages[0].GetMessage())
+	require.Equal(t, "use busybox instead", denyMessages[1].GetMessage())
+}
+
 func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 

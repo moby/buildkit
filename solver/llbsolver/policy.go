@@ -133,7 +133,8 @@ func (p *policyEvaluator) evaluate(ctx context.Context, op *pb.Op, max int) (boo
 			return true, nil
 		}
 		if decision.Action != spb.PolicyAction_ALLOW {
-			return false, errors.Errorf("source %q not allowed by policy: action %s", source.Identifier, decision.Action.String())
+			err := errors.Errorf("source %q not allowed by policy: action %s", source.Identifier, decision.Action.String())
+			return false, policysession.WrapDenyMessages(err, decision.GetDenyMessages())
 		}
 		return ok, nil
 	}

@@ -252,6 +252,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testGitResolveMutatedSource,
 	testImageResolveAttestationChainRequiresNetwork,
 	testSourcePolicySession,
+	testSourcePolicySessionDenyMessages,
 	testSourceMetaPolicySession,
 	testSourcePolicyParallelSession,
 	testSourcePolicySignedCommit,
