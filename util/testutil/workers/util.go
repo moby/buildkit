@@ -2,6 +2,7 @@ package workers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -95,7 +96,7 @@ func runBuildkitd(
 	debugAddress := getBuildkitdDebugAddr(tmpdir)
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // test utility
+	cmd := exec.CommandContext(context.TODO(), args[0], args[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(
 		os.Environ(),
 		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",

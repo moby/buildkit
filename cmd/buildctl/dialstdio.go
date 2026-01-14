@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net"
 	"os"
@@ -68,7 +69,8 @@ func dialer(address string, timeout time.Duration) (net.Conn, error) {
 	if addrParts[0] != "unix" {
 		return nil, errors.Errorf("invalid address %s (expected unix://, got %s://)", address, addrParts[0])
 	}
-	return net.DialTimeout(addrParts[0], addrParts[1], timeout)
+	dialer := net.Dialer{Timeout: timeout}
+	return dialer.DialContext(context.TODO(), addrParts[0], addrParts[1])
 }
 
 func copier(to halfWriteCloser, from halfReadCloser, debugDescription string) error {

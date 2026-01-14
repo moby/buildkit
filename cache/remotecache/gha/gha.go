@@ -332,7 +332,7 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 	signDone := progress.OneOff(ctx, fmt.Sprintf("signing cache index %s", dgst))
 	defer signDone(err)
 
-	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // defined in toml config
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // defined in toml config
 	cmd.Stdin = bytes.NewReader(dt)
 	var out bytes.Buffer
 	cmd.Stdout = &out

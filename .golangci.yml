@@ -121,6 +121,9 @@ linters:
       - linters:
           - revive
         text: if-return
+      - linters:
+          - revive
+        text: var-naming
     paths:
       - .*\.pb\.go$
       - examples
