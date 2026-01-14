@@ -250,7 +250,6 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for i, m := range req.Mounts {
-		i, m := i, m
 		eg.Go(func() error {
 			var workerRef *worker.WorkerRef
 			if m.Ref != nil {

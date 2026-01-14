@@ -1537,7 +1537,6 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				// StartedMessage so that Fd output will not potentially arrive
 				// to the client before "Started" as the container starts up.
 				for fd, file := range pio.serverReaders {
-					fd, file := fd, file
 					eg.Go(func() error {
 						defer func() {
 							file.Close()
