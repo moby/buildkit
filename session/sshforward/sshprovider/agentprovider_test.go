@@ -1,6 +1,7 @@
 package sshprovider_test
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -39,7 +40,8 @@ func TestToAgentSource(t *testing.T) {
 	require.ErrorContains(t, err, "raw mode only supported with socket paths")
 
 	sockPath := filepath.Join(dir, "test.sock")
-	l, err := net.Listen("unix", sockPath)
+	listener := net.ListenConfig{}
+	l, err := listener.Listen(context.TODO(), "unix", sockPath)
 	require.NoError(t, err)
 	defer l.Close()
 

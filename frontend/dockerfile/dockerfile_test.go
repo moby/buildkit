@@ -10441,9 +10441,9 @@ func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("powershell", "-command", args)
+			cmd = exec.CommandContext(context.TODO(), "powershell", "-command", args)
 		} else {
-			cmd = exec.Command("sh", "-c", args)
+			cmd = exec.CommandContext(context.TODO(), "sh", "-c", args)
 		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {

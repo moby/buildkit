@@ -156,20 +156,25 @@ options ndots:0 attempts:3
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
-			var input string
+			var input strings.Builder
 			if len(tc.inputNS) != 0 {
 				for _, ns := range tc.inputNS {
-					input += "nameserver " + ns + "\n"
+					input.WriteString("nameserver ")
+					input.WriteString(ns)
+					input.WriteByte('\n')
 				}
 			}
 			if len(tc.inputSearch) != 0 {
-				input += "search " + strings.Join(tc.inputSearch, " ") + "\n"
+				input.WriteString("search ")
+				input.WriteString(strings.Join(tc.inputSearch, " "))
+				input.WriteByte('\n')
 			}
 			if len(tc.inputOptions) != 0 {
-				input += "options " + strings.Join(tc.inputOptions, " ") + "\n"
+				input.WriteString("options ")
+				input.WriteString(strings.Join(tc.inputOptions, " "))
+				input.WriteByte('\n')
 			}
-			rc, err := Parse(bytes.NewBufferString(input), "")
+			rc, err := Parse(bytes.NewBufferString(input.String()), "")
 			require.NoError(t, err)
 			assert.Equal(t, tc.inputNS, a2s(rc.NameServers()))
 			assert.Equal(t, tc.inputSearch, rc.Search())
@@ -327,7 +332,6 @@ nameserver ::1
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
 			rc, err := Parse(bytes.NewBufferString(tc.input), "/etc/resolv.conf")
 			require.NoError(t, err)
 			if tc.overrideNS != nil {
@@ -508,7 +512,6 @@ options trust-ad ndots:0 attempts:3 edns0
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
 			rc, err := Parse(bytes.NewBufferString(tc.input), "/etc/resolv.conf")
 			require.NoError(t, err)
 

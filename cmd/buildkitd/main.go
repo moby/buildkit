@@ -708,7 +708,8 @@ func getListener(addr string, uid, gid int, secDescriptor string, tlsConfig *tls
 	case "fd":
 		return listenFD(listenAddr, tlsConfig)
 	case "tcp":
-		l, err := net.Listen("tcp", listenAddr)
+		listener := net.ListenConfig{}
+		l, err := listener.Listen(context.TODO(), "tcp", listenAddr)
 		if err != nil {
 			return nil, err
 		}

@@ -1021,7 +1021,8 @@ func testRawSocketMount(t *testing.T, sb integration.Sandbox) {
 
 	dir := t.TempDir()
 	sockPath := filepath.Join(dir, "test.sock")
-	l, err := net.Listen("unix", sockPath)
+	listener := net.ListenConfig{}
+	l, err := listener.Listen(context.TODO(), "unix", sockPath)
 	require.NoError(t, err)
 	defer l.Close()
 
@@ -11643,7 +11644,8 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 	tmpDir := integration.Tmpdir(t)
 	sockPath := filepath.Join(tmpDir.Name, "ssh_auth_sock")
 
-	l, err := net.Listen("unix", sockPath)
+	listener := net.ListenConfig{}
+	l, err := listener.Listen(context.TODO(), "unix", sockPath)
 	if err != nil {
 		return "", err
 	}
@@ -12139,19 +12141,19 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 	err = runInDir(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	commitHEAD := strings.TrimSpace(string(out))
 
-	cmd = exec.Command("git", "rev-parse", "v0.1")
+	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)
 	commitTag := strings.TrimSpace(string(out))
 
-	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1^{commit}")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -12718,13 +12720,13 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 	err = runInDir(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	cmd := exec.Command("git", "rev-parse", "v0.1")
+	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	commitTag := strings.TrimSpace(string(out))
 
-	cmd = exec.Command("git", "rev-parse", "v0.1^{commit}")
+	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1^{commit}")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -12813,9 +12815,9 @@ func runInDirEnv(dir string, env []string, cmds ...string) error {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("powershell", "-command", args)
+			cmd = exec.CommandContext(context.TODO(), "powershell", "-command", args)
 		} else {
-			cmd = exec.Command("sh", "-c", args)
+			cmd = exec.CommandContext(context.TODO(), "sh", "-c", args)
 		}
 		cmd.Env = append(os.Environ(), env...)
 		cmd.Dir = dir

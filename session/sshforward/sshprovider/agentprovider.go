@@ -194,7 +194,8 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 }
 
 func unixSocketDialer(path string) (net.Conn, error) {
-	return net.DialTimeout("unix", path, 2*time.Second)
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+	return dialer.DialContext(context.TODO(), "unix", path)
 }
 
 type readOnlyAgent struct {

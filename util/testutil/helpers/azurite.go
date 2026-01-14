@@ -40,7 +40,8 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 		}
 	}()
 
-	l, err := net.Listen("tcp", "localhost:0")
+	listener := net.ListenConfig{}
+	l, err := listener.Listen(context.TODO(), "tcp", "localhost:0")
 	if err != nil {
 		return "", nil, err
 	}
@@ -56,7 +57,7 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	address = fmt.Sprintf("http://%s/%s", addr, opts.AccountName)
 
 	// start server
-	cmd := exec.Command(azuriteBin, "--disableProductStyleUrl", "--blobHost", host, "--blobPort", port, "--location", t.TempDir())
+	cmd := exec.CommandContext(context.TODO(), azuriteBin, "--disableProductStyleUrl", "--blobHost", host, "--blobPort", port, "--location", t.TempDir())
 	cmd.Env = append(os.Environ(), []string{
 		"AZURITE_ACCOUNTS=" + opts.AccountName + ":" + opts.AccountKey,
 	}...)
@@ -77,11 +78,10 @@ func waitAzurite(ctx context.Context, address string, d time.Duration) error {
 	step := 1 * time.Second
 	i := 0
 	for {
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s?comp=list", address), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s?comp=list", address), nil)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create request")
 		}
-		req = req.WithContext(ctx)
 		if resp, err := http.DefaultClient.Do(req); err == nil {
 			resp.Body.Close()
 			break

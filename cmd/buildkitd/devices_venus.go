@@ -1,5 +1,4 @@
 //go:build venus
-// +build venus
 
 package main
 
