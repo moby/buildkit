@@ -17,6 +17,9 @@ ARG MINIO_MC_VERSION=RELEASE.2025-08-13T08-35-41Z
 ARG AZURITE_VERSION=3.35.0
 ARG GOTESTSUM_VERSION=v1.13.0
 ARG DELVE_VERSION=v1.25.2
+ARG DOCKER_VERSION=29.1
+ARG DOCKER_CLI_VERSION=${DOCKER_VERSION}
+ARG BUILDX_VERSION=0.30.1
 
 ARG EXPORT_BASE=alpine
 ARG ALPINE_VERSION=3.23
@@ -35,6 +38,10 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 
 # golatest is alias for Go base image
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golatest
+
+FROM moby/moby-bin:$DOCKER_VERSION AS docker-engine
+FROM dockereng/cli-bin:$DOCKER_CLI_VERSION AS docker-cli
+FROM docker/buildx-bin:$BUILDX_VERSION AS docker-buildx
 
 # gobuild-base is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
@@ -66,10 +73,19 @@ ENV GOFLAGS=-mod=vendor
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
 RUN --mount=target=. <<'EOT'
-  git rev-parse HEAD 2>/dev/null || {
+  # if git is worktree (file starting with gitdir:) then skip verions check
+  if [ -f .git ] && head -1 .git | grep -q "^gitdir:"; then
+    echo >&2 "Skipping version check for worktree"
+    # set dev stubs
+    echo "-X github.com/moby/buildkit/version.Version=dev -X github.com/moby/buildkit/version.Revision=dev -X github.com/moby/buildkit/version.Package=github.com/moby/buildkit" > /tmp/.ldflags;
+    echo -n "dev" > /tmp/.version;
+    echo -n "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/.commit_date;
+    exit 0
+  fi
+  if ! git rev-parse HEAD 2>/dev/null; then
     echo >&2 "Failed to get git revision, make sure --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 is set when building from Git directly"
     exit 1
-  }
+  fi
   set -ex
   export PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi) COMMIT_DATE=$(git show -s --format=%cI HEAD);
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" > /tmp/.ldflags;
@@ -452,6 +468,9 @@ COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin
 COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
+COPY --link --from=docker-engine / /usr/bin/
+COPY --link --from=docker-cli / /usr/bin/
+COPY --link --from=docker-buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/
 COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --link hack/fixtures/dns-cni.conflist /etc/buildkit/dns-cni.conflist
