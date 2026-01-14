@@ -322,7 +322,7 @@ func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
 		return nil, nil, err
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "frontend.bin"), dt, 0400); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "frontend.bin"), dt, 0o400); err != nil {
 		return nil, nil, err
 	}
 
@@ -1159,6 +1159,93 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 	lbf.ctrs[in.ContainerID] = ctr
 	return &pb.NewContainerResponse{}, nil
+}
+
+func (lbf *llbBridgeForwarder) ReadFileContainer(ctx context.Context, in *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	bklog.G(ctx).Debugf("|<--- ReadFileContainer %s@%d", in.Ref, in.MountIndex)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s@%d not found", in.Ref, in.MountIndex)
+	}
+
+	var fileRange *gwclient.FileRange
+	if in.Range != nil {
+		fileRange = &gwclient.FileRange{
+			Length: int(in.Range.Length),
+			Offset: int(in.Range.Offset),
+		}
+	}
+	req := gwclient.ReadContainerRequest{
+		ReadRequest: gwclient.ReadRequest{
+			Filename: in.FilePath,
+			Range:    fileRange,
+		},
+		MountIndex: int(in.MountIndex),
+	}
+
+	data, err := ctr.ReadFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ReadFileResponse{
+		Data: data,
+	}, nil
+}
+
+func (lbf *llbBridgeForwarder) ReadDirContainer(ctx context.Context, in *pb.ReadDirRequest) (*pb.ReadDirResponse, error) {
+	bklog.G(ctx).Debugf("|<--- ReadDirContainer %s@%d", in.Ref, in.MountIndex)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s@%d not found", in.Ref, in.MountIndex)
+	}
+
+	req := gwclient.ReadDirContainerRequest{
+		ReadDirRequest: gwclient.ReadDirRequest{
+			Path:           in.DirPath,
+			IncludePattern: in.IncludePattern,
+		},
+		MountIndex: int(in.MountIndex),
+	}
+
+	files, err := ctr.ReadDir(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ReadDirResponse{
+		Entries: files,
+	}, nil
+}
+
+func (lbf *llbBridgeForwarder) StatFileContainer(ctx context.Context, in *pb.StatFileRequest) (*pb.StatFileResponse, error) {
+	bklog.G(ctx).Debugf("|<--- StatFileContainer %s@%d", in.Ref, in.MountIndex)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.Ref]
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("container details for %s@%d not found", in.Ref, in.MountIndex)
+	}
+
+	req := gwclient.StatContainerRequest{
+		StatRequest: gwclient.StatRequest{
+			Path: in.Path,
+		},
+		MountIndex: int(in.MountIndex),
+	}
+
+	stat, err := ctr.StatFile(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.StatFileResponse{
+		Stat: stat,
+	}, nil
 }
 
 func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.ReleaseContainerRequest) (*pb.ReleaseContainerResponse, error) {
