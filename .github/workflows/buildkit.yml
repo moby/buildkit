@@ -245,7 +245,7 @@ jobs:
       push: ${{ github.repository == 'moby/buildkit' && (github.event_name == 'schedule' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
       sbom: true
       set: |
-        *.args.IMAGE_TARGET=${{ matrix.target }}
+        *.target=${{ matrix.target }}
         *.args.EXPORT_BASE=${{ matrix.base }}
         *.args.BUILDKITD_TAGS=${{ matrix.buildTags }}
       set-meta-annotations: true
