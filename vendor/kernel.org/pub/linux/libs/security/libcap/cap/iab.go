@@ -478,7 +478,7 @@ func IABGetPID(pid int) (*IAB, error) {
 	if err != nil {
 		return nil, err
 	}
-	iab := &IAB{}
+	iab := NewIAB()
 	for _, line := range strings.Split(string(d), "\n") {
 		if !strings.HasPrefix(line, "Cap") {
 			continue
@@ -497,8 +497,8 @@ func IABGetPID(pid int) (*IAB, error) {
 			continue
 		}
 	}
-	if len(iab.i) != words || len(iab.a) != words || len(iab.nb) != words {
-		return nil, ErrBadValue
+	if err := iab.good(); err != nil {
+		return nil, err
 	}
 	return iab, nil
 }

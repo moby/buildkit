@@ -23,11 +23,11 @@ require (
 	github.com/containerd/containerd/v2 v2.2.1
 	github.com/containerd/continuity v0.4.5
 	github.com/containerd/errdefs v1.0.0
-	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.6
+	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
 	github.com/containerd/go-cni v1.1.13
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
-	github.com/containerd/nydus-snapshotter v0.15.4
+	github.com/containerd/nydus-snapshotter v0.15.10
 	github.com/containerd/platforms v1.0.0-rc.2
 	github.com/containerd/stargz-snapshotter v0.17.0
 	github.com/containerd/stargz-snapshotter/estargz v0.17.0
@@ -74,7 +74,7 @@ require (
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sigstore/sigstore-go v1.1.4-0.20251124094504-b5fe07a5a7d7
 	github.com/sirupsen/logrus v1.9.3
-	github.com/spdx/tools-golang v0.5.5
+	github.com/spdx/tools-golang v0.5.7
 	github.com/stretchr/testify v1.11.1
 	github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 	github.com/tonistiigi/fsutil v0.0.0-20251211185533-a2aa163d723f
@@ -111,7 +111,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.11
-	kernel.org/pub/linux/libs/security/libcap/cap v1.2.76
+	kernel.org/pub/linux/libs/security/libcap/cap v1.2.77
 	tags.cncf.io/container-device-interface v1.1.0
 )
 
@@ -119,7 +119,7 @@ require (
 	cyphar.com/go-pathrs v0.2.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 // indirect
-	github.com/anchore/go-struct-converter v0.0.0-20221118182256-c68fdcfa2092 // indirect
+	github.com/anchore/go-struct-converter v0.1.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.13 // indirect
@@ -231,7 +231,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	kernel.org/pub/linux/libs/security/libcap/psx v1.2.76 // indirect
+	kernel.org/pub/linux/libs/security/libcap/psx v1.2.77 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 	tags.cncf.io/container-device-interface/specs-go v1.1.0 // indirect
 )
