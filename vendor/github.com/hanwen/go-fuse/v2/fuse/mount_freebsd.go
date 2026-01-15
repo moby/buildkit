@@ -7,6 +7,10 @@ import (
 	"syscall"
 )
 
+func getMaxWrite() int {
+	return 1 << 20
+}
+
 func callMountFuseFs(mountPoint string, opts *MountOptions) (devFuseFd int, err error) {
 	bin, err := fusermountBinary()
 	if err != nil {

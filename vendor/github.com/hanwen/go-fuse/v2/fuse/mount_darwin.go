@@ -13,6 +13,10 @@ import (
 	"syscall"
 )
 
+func getMaxWrite() int {
+	return 1 << 20
+}
+
 func unixgramSocketpair() (l, r *os.File, err error) {
 	fd, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
 	if err != nil {

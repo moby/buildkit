@@ -157,12 +157,14 @@ type ReadResult interface {
 type MountOptions struct {
 	AllowOther bool
 
-	// Options are passed as -o string to fusermount.
+	// Options are the options passed as -o string to fusermount.
 	Options []string
 
-	// Default is _DEFAULT_BACKGROUND_TASKS, 12.  This numbers
-	// controls the allowed number of requests that relate to
-	// async I/O.  Concurrency for synchronous I/O is not limited.
+	// MaxBackground controls the maximum number of allowed backgruond
+	// asynchronous I/O requests.
+	//
+	// If unset, the default is _DEFAULT_BACKGROUND_TASKS, 12.
+	// Concurrency for synchronous I/O is not limited.
 	MaxBackground int
 
 	// MaxWrite is the max size for read and write requests. If 0, use
@@ -203,35 +205,37 @@ type MountOptions struct {
 	// (up to MaxWrite or VM_READAHEAD_PAGES=128 kiB, whichever is less).
 	MaxReadAhead int
 
-	// If IgnoreSecurityLabels is set, all security related xattr
-	// requests will return NO_DATA without passing through the
-	// user defined filesystem.  You should only set this if you
+	// IgnoreSecurityLabels, if set, makes security related xattr
+	// requests return NO_DATA without passing through the
+	// user defined filesystem. You should only set this if you
 	// file system implements extended attributes, and you are not
 	// interested in security labels.
 	IgnoreSecurityLabels bool // ignoring labels should be provided as a fusermount mount option.
 
-	// If RememberInodes is set, we will never forget inodes.
+	// RememberInodes, if set, makes go-fuse never forget inodes.
 	// This may be useful for NFS.
 	RememberInodes bool
 
-	// Values shown in "df -T" and friends
-	// First column, "Filesystem"
+	// FsName is the name of the filesystem, shown in "df -T"
+	// and friends (as the first column, "Filesystem").
 	FsName string
 
-	// Second column, "Type", will be shown as "fuse." + Name
+	// Name is the "fuse.<name>" suffix, shown in "df -T" and friends
+	// (as the second column, "Type")
 	Name string
 
-	// If set, wrap the file system in a single-threaded locking wrapper.
+	// SingleThreaded, if set, wraps the file system in a single-threaded
+	// locking wrapper.
 	SingleThreaded bool
 
-	// If set, return ENOSYS for Getxattr calls, so the kernel does not issue any
-	// Xattr operations at all.
+	// DisableXAttrs, if set, returns ENOSYS for Getxattr calls, so the kernel
+	// does not issue any Xattr operations at all.
 	DisableXAttrs bool
 
-	// If set, print debugging information.
+	// Debug, if set, enables verbose debugging information.
 	Debug bool
 
-	// If set, sink for debug statements.
+	// Logger, if set, is an alternate log sink for debug statements.
 	//
 	// To increase signal/noise ratio Go-FUSE uses abbreviations in its debug log
 	// output. Here is how to read it:
@@ -269,20 +273,21 @@ type MountOptions struct {
 	//     tx 11:     OK, {tA=1s {M040755 SZ=0 L=1 1000:1000 B0*0 i0:1 A 0.000000 M 0.000000 C 0.000000}}
 	Logger *log.Logger
 
-	// If set, ask kernel to forward file locks to FUSE. If using,
-	// you must implement the GetLk/SetLk/SetLkw methods.
+	// EnableLocks, if set, asks the kernel to forward file locks to FUSE
+	// When used, you must implement the GetLk/SetLk/SetLkw methods.
 	EnableLocks bool
 
-	// If set, the kernel caches all Readlink return values. The
-	// filesystem must use content notification to force the
+	// EnableSymlinkCaching, if set, makes the kernel cache all Readlink return values.
+	// The filesystem must use content notification to force the
 	// kernel to issue a new Readlink call.
 	EnableSymlinkCaching bool
 
-	// If set, ask kernel not to do automatic data cache invalidation.
-	// The filesystem is fully responsible for invalidating data cache.
+	// ExplicitDataCacheControl, if set, asks the kernel not to do automatic
+	// data cache invalidation. The filesystem is fully responsible for
+	// invalidating data cache.
 	ExplicitDataCacheControl bool
 
-	// SyncRead is off by default, which means that go-fuse enable the
+	// SyncRead, if set, makes go-fuse enable the
 	// FUSE_CAP_ASYNC_READ capability.
 	// The kernel then submits multiple concurrent reads to service
 	// userspace requests and kernel readahead.
@@ -299,14 +304,14 @@ type MountOptions struct {
 	// for more details.
 	SyncRead bool
 
-	// If set, fuse will first attempt to use syscall.Mount instead of
+	// DirectMount, if set, makes go-fuse first attempt to use syscall.Mount instead of
 	// fusermount to mount the filesystem. This will not update /etc/mtab
 	// but might be needed if fusermount is not available.
 	// Also, Server.Unmount will attempt syscall.Unmount before calling
 	// fusermount.
 	DirectMount bool
 
-	// DirectMountStrict is like DirectMount but no fallback to fusermount is
+	// DirectMountStrict, if set, is like DirectMount but no fallback to fusermount is
 	// performed. If both DirectMount and DirectMountStrict are set,
 	// DirectMountStrict wins.
 	DirectMountStrict bool
@@ -318,34 +323,36 @@ type MountOptions struct {
 	// by the kernel. See `man 2 mount` for details about MS_MGC_VAL.
 	DirectMountFlags uintptr
 
-	// EnableAcls enables kernel ACL support.
+	// EnableAcl, if set, enables kernel ACL support.
 	//
 	// See the comments to FUSE_CAP_POSIX_ACL
 	// in https://github.com/libfuse/libfuse/blob/master/include/fuse_common.h
 	// for details.
 	EnableAcl bool
 
-	// Disable ReadDirPlus capability so ReadDir is used instead. Simple
-	// directory queries (i.e. 'ls' without '-l') can be faster with
-	// ReadDir, as no per-file stat calls are needed
+	// DisableReadDirPlus, if set, disables the ReadDirPlus capability so
+	// ReadDir is used instead. Simple directory queries (i.e. 'ls' without
+	// '-l') can be faster with ReadDir, as no per-file stat calls are needed.
 	DisableReadDirPlus bool
 
-	// Disable splicing from files to the FUSE device.
+	// DisableSplice, if set, disables splicing from files to the FUSE device.
 	DisableSplice bool
 
-	// Maximum stacking depth for passthrough files. Defaults to 1.
+	// MaxStackDepth is the maximum stacking depth for passthrough files.
+	// If unset, the default is 1.
 	MaxStackDepth int
 
-	// Enable ID-mapped mount if the Kernel supports it.
-	// ID-mapped mount allows the device to be mounted on the system
-	// with the IDs remapped (via mount_setattr, move_mount syscalls) to
-	// those of the user on the local system.
+	// RawFileSystem, if set, enables an ID-mapped mount if the Kernel supports
+	// it.
 	//
-	// Enabling this flag automatically sets the "default_permissions"
-	// mount option. This is required by FUSE to delegate the UID/GID-based
-	// permission checks to the kernel. For requests that create new inodes,
-	// FUSE will send the mapped UID/GIDs. For all other requests, FUSE
-	// will send "-1".
+	// An ID-mapped mount allows the device to be mounted on the system with the
+	// IDs remapped (via mount_setattr, move_mount syscalls) to those of the
+	// user on the local system.
+	//
+	// Enabling this flag automatically sets the "default_permissions" mount
+	// option. This is required by FUSE to delegate the UID/GID-based permission
+	// checks to the kernel. For requests that create new inodes, FUSE will send
+	// the mapped UID/GIDs. For all other requests, FUSE will send "-1".
 	IDMappedMount bool
 }
 
@@ -370,11 +377,13 @@ type MountOptions struct {
 // API call, any incoming request data it wants to reference should be
 // copied over.
 //
-// If a FUSE API call is canceled (which is signaled by closing the
-// `cancel` channel), the API call should return EINTR. In this case,
-// the outstanding request data is not reused, so the API call may
-// return EINTR without ensuring that child contexts have successfully
-// completed.
+// If a FS operation is interrupted, the `cancel` channel is
+// closed. The fileystem can honor this request by returning EINTR. In
+// this case, the outstanding request data is not reused. Interrupts
+// occur if the process accessing the file system receives any signal
+// that is not ignored. In particular, the Go runtime uses signals to
+// manage goroutine preemption, so Go programs under load naturally
+// generate interupt opcodes when they access a FUSE filesystem.
 type RawFileSystem interface {
 	String() string
 

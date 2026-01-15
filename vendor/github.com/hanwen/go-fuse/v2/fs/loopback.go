@@ -30,6 +30,8 @@ type LoopbackRoot struct {
 	// NewNode returns a new InodeEmbedder to be used to respond
 	// to a LOOKUP/CREATE/MKDIR/MKNOD opcode. If not set, use a
 	// LoopbackNode.
+	//
+	// Deprecated: use NodeWrapChilder instead.
 	NewNode func(rootData *LoopbackRoot, parent *Inode, name string, st *syscall.Stat_t) InodeEmbedder
 
 	// RootNode is the root of the Loopback. This must be set if
@@ -226,8 +228,8 @@ func (n *LoopbackNode) Rename(ctx context.Context, name string, newParent InodeE
 		return syscall.EXDEV
 	}
 
-	if flags&RENAME_EXCHANGE != 0 {
-		return n.renameExchange(name, e2.loopbackNode(), newName)
+	if flags != 0 {
+		return n.rename2(name, e2.loopbackNode(), newName, flags)
 	}
 
 	p1 := filepath.Join(n.path(), name)
@@ -261,7 +263,7 @@ func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mo
 	return ch, lf, 0, 0
 }
 
-func (n *LoopbackNode) renameExchange(name string, newParent *LoopbackNode, newName string) syscall.Errno {
+func (n *LoopbackNode) rename2(name string, newParent *LoopbackNode, newName string, flags uint32) syscall.Errno {
 	fd1, err := syscall.Open(n.path(), syscall.O_DIRECTORY, 0)
 	if err != nil {
 		return ToErrno(err)
@@ -269,10 +271,10 @@ func (n *LoopbackNode) renameExchange(name string, newParent *LoopbackNode, newN
 	defer syscall.Close(fd1)
 	p2 := newParent.path()
 	fd2, err := syscall.Open(p2, syscall.O_DIRECTORY, 0)
-	defer syscall.Close(fd2)
 	if err != nil {
 		return ToErrno(err)
 	}
+	defer syscall.Close(fd2)
 
 	var st syscall.Stat_t
 	if err := syscall.Fstat(fd1, &st); err != nil {
@@ -291,7 +293,7 @@ func (n *LoopbackNode) renameExchange(name string, newParent *LoopbackNode, newN
 		return syscall.EBUSY
 	}
 
-	return ToErrno(renameat.Renameat(fd1, name, fd2, newName, renameat.RENAME_EXCHANGE))
+	return ToErrno(renameat.Renameat(fd1, name, fd2, newName, uint(flags)))
 }
 
 var _ = (NodeSymlinker)((*LoopbackNode)(nil))
@@ -358,7 +360,7 @@ var _ = (NodeOpener)((*LoopbackNode)(nil))
 
 // Symlink-safe through use of OpenSymlinkAware.
 func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
-	flags = flags &^ syscall.O_APPEND
+	flags = flags &^ (syscall.O_APPEND | fuse.FMODE_EXEC)
 
 	f, err := openat.OpenSymlinkAware(n.RootData.Path, n.relativePath(), int(flags), 0)
 	if err != nil {

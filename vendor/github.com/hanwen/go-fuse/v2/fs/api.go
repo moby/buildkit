@@ -83,11 +83,11 @@
 // File descriptor: a handle returned to opening a file. File
 // descriptors always refer to a single inode.
 //
-// Dirent: a dirent maps (parent inode number, name string) tuple to
+// Dentry: a dirent maps (parent inode number, name string) tuple to
 // child inode, thus representing a parent/child relation (or the
-// absense thereof). Dirents do not have an equivalent type inside
+// absense thereof). Dentries do not have an equivalent type inside
 // Go-FUSE, but the result of Lookup operation essentially is a
-// dirent, which the kernel puts in a cache.
+// dentry, which the kernel puts in a cache.
 //
 // # Kernel caching
 //
@@ -101,11 +101,11 @@
 // attribute timeout fields in fuse.AttrOut and fuse.EntryOut, which
 // get be populated from Getattr and Lookup
 //
-// 3. Directory entries (parent/child relations in the FS tree):
+// 3. Dentries (parent/child relations in the FS tree):
 // controlled with the timeout fields in fuse.EntryOut, and
 // invalidated with Inode.NotifyEntry and Inode.NotifyDelete.
 //
-// Without Directory Entry timeouts, every operation on file "a/b/c"
+// Without entry timeouts, every operation on file "a/b/c"
 // must first do lookups for "a", "a/b" and "a/b/c", which is
 // expensive because of context switches between the kernel and the
 // FUSE process.
@@ -123,6 +123,16 @@
 //	  EntryTimeout: &sec,
 //	  AttrTimeout: &sec,
 //	}
+//
+// # Interrupts
+//
+// If the process accessing a FUSE file system is interrupted, the
+// kernel sends an interrupt message, which cancels the context passed
+// to the NodeXxxxx methods. If the file system chooses to honor this
+// cancellation, the method must return [syscall.EINTR].  All unmasked
+// signals generate an interrupt. In particular, the SIGURG signal
+// (which the Go runtime uses for managing goroutine preemption) also
+// generates an interrupt.
 //
 // # Locking
 //
@@ -192,6 +202,15 @@
 //			break
 //		}
 //	}
+//
+// The library tries to reserve fd 3, because FUSE mounts are created
+// by calling "fusermount" with an inherited file descriptor, but the
+// same problem may occur for other file descriptors.
+//
+// 1c. If the executable is on the FUSE mount. In this case, the child
+// calls exec, which reads the file to execute, which triggers an OPEN
+// opcode. This can be worked around by invoking the subprocess
+// through a wrapper, eg `bash -c file/on/fuse-mount`.
 //
 // 2. The Go runtime uses the epoll system call to understand which
 // goroutines can respond to I/O.  The runtime assumes that epoll does
@@ -269,16 +288,18 @@ type NodeStatfser interface {
 
 // Access should return if the caller can access the file with the
 // given mode.  This is used for two purposes: to determine if a user
-// may enter a directory, and to answer to implement the access system
+// may enter a directory, and to implement the access system
 // call.  In the latter case, the context has data about the real
 // UID. For example, a root-SUID binary called by user susan gets the
 // UID and GID for susan here.
 //
 // If not defined, a default implementation will check traditional
-// unix permissions of the Getattr result agains the caller. If so, it
-// is necessary to either return permissions from GetAttr/Lookup or
-// set Options.DefaultPermissions in order to allow chdir into the
-// FUSE mount.
+// unix permissions of the Getattr result agains the caller. If access
+// permissions must be obeyed precisely, the filesystem should return
+// permissions from GetAttr/Lookup, and set [Options.NullPermissions].
+// Without [Options.NullPermissions], a missing permission (mode =
+// 0000) is interpreted as 0755 for directories, and chdir is always
+// allowed.
 type NodeAccesser interface {
 	Access(ctx context.Context, mask uint32) syscall.Errno
 }
@@ -292,7 +313,7 @@ type NodeAccesser interface {
 // is assumed, and the 'blocks' field is set accordingly. The 'f'
 // argument is provided for consistency, however, in practice the
 // kernel never sends a file handle, even if the Getattr call
-// originated from a fstat system call.
+// originated from an fstat system call.
 type NodeGetattrer interface {
 	Getattr(ctx context.Context, f FileHandle, out *fuse.AttrOut) syscall.Errno
 }
@@ -497,6 +518,28 @@ type NodeLookuper interface {
 	Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*Inode, syscall.Errno)
 }
 
+// NodeWrapChilder wraps a FS node implementation in another one. If
+// defined, it is called automatically from NewInode and
+// NewPersistentInode. Thus, existing file system implementations,
+// even from other packages, can be customized by wrapping them.  The
+// following example is a loopback file system that forbids deletions.
+//
+//	type NoDelete struct {
+//	   *fs.LoopbackNode
+//	}
+//	func (w *NoDelete) Unlink(ctx context.Context, name string) syscall.Errno {
+//	   return syscall.EPERM
+//	}
+//	func (w *NoDelete) WrapChild(ctx context.Context, ops fs.InodeEmbedder) fs.InodeEmbedder {
+//	   return &NoDelete{ops.(*LoopbackNode)}
+//	}
+//
+// See also the LoopbackReuse example for a more practical
+// application.
+type NodeWrapChilder interface {
+	WrapChild(ctx context.Context, ops InodeEmbedder) InodeEmbedder
+}
+
 // OpenDir opens a directory Inode for reading its
 // contents. The actual reading is driven from Readdir, so
 // this method is just for performing sanity/permission
@@ -688,6 +731,17 @@ type FileReaddirenter interface {
 	Readdirent(ctx context.Context) (*fuse.DirEntry, syscall.Errno)
 }
 
+// FileLookuper is a directory handle that supports lookup. If this is
+// defined, FileLookuper.Lookup on the directory is called for
+// READDIRPLUS calls, rather than NodeLookuper.Lookup. The name passed
+// in will always be the last name produced by Readdirent. If a child
+// with the given name already exists, that should be returned. In
+// case of directory seeks that straddle response boundaries,
+// Readdirent may be called without a subsequent Lookup call.
+type FileLookuper interface {
+	Lookup(ctx context.Context, name string, out *fuse.EntryOut) (child *Inode, errno syscall.Errno)
+}
+
 // FileFsyncer is a directory that supports fsyncdir.
 type FileFsyncdirer interface {
 	Fsyncdir(ctx context.Context, flags uint32) syscall.Errno
@@ -706,47 +760,51 @@ type FileReleasedirer interface {
 	Releasedir(ctx context.Context, releaseFlags uint32)
 }
 
-// Options sets options for the entire filesystem
+// Options are options for the entire filesystem.
 type Options struct {
-	// MountOptions contain the options for mounting the fuse server
+	// MountOptions contain the options for mounting the fuse server.
 	fuse.MountOptions
 
-	// If set to nonnil, this defines the overall entry timeout
-	// for the file system. See fuse.EntryOut for more information.
+	// EntryTimeout, if non-nil, defines the overall entry timeout
+	// for the file system. See [fuse.EntryOut] for more information.
 	EntryTimeout *time.Duration
 
-	// If set to nonnil, this defines the overall attribute
-	// timeout for the file system. See fuse.EntryOut for more
+	// AttrTimeout, if non-nil, defines the overall attribute
+	// timeout for the file system. See [fuse.AttrOut] for more
 	// information.
 	AttrTimeout *time.Duration
 
-	// If set to nonnil, this defines the overall entry timeout
-	// for failed lookups (fuse.ENOENT). See fuse.EntryOut for
+	// NegativeTimeout, if non-nil, defines the overall entry timeout
+	// for failed lookups (fuse.ENOENT). See [fuse.EntryOut] for
 	// more information.
 	NegativeTimeout *time.Duration
 
-	// Automatic inode numbers are handed out sequentially
-	// starting from this number. If unset, use 2^63.
+	// FirstAutomaticIno is start of the automatic inode numbers that are handed
+	// out sequentially.
+	//
+	// If unset, the default is 2^63.
 	FirstAutomaticIno uint64
 
-	// OnAdd is an alternative way to specify the OnAdd
+	// OnAdd, if non-nil, is an alternative way to specify the OnAdd
 	// functionality of the root node.
 	OnAdd func(ctx context.Context)
 
-	// NullPermissions if set, leaves null file permissions
+	// NullPermissions, if set, leaves null file permissions
 	// alone. Otherwise, they are set to 755 (dirs) or 644 (other
 	// files.), which is necessary for doing a chdir into the FUSE
 	// directories.
 	NullPermissions bool
 
-	// If nonzero, replace default (zero) UID with the given UID
+	// UID, if nonzero, is the default UID to use instead of the
+	// zero (zero) UID.
 	UID uint32
 
-	// If nonzero, replace default (zero) GID with the given GID
+	// GID, if nonzero, is the default GID to use instead of the
+	// zero (zero) GID.
 	GID uint32
 
-	// ServerCallbacks can be provided to stub out notification
-	// functions for testing a filesystem without mounting it.
+	// ServerCallbacks are optional callbacks to stub out notification functions
+	// for testing a filesystem without mounting it.
 	ServerCallbacks ServerCallbacks
 
 	// Logger is a sink for diagnostic messages. Diagnostic

@@ -139,6 +139,9 @@ type DirectoryCacheConfig struct {
 
 	// Direct disables on-memory data cache. Default is true for saving memory usage.
 	Direct bool `toml:"direct" default:"true" json:"direct"`
+
+	// FadvDontNeed forcefully clean fscache pagecache for saving memory. Default is false.
+	FadvDontNeed bool `toml:"fadv_dontneed" json:"fadv_dontneed"`
 }
 
 // FuseConfig is configuration for FUSE fs.

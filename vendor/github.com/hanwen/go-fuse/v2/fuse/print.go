@@ -54,6 +54,8 @@ var (
 		{CAP_NO_EXPORT_SUPPORT, "NO_EXPORT_SUPPORT"},
 		{CAP_HAS_RESEND, "HAS_RESEND"},
 		{CAP_ALLOW_IDMAP, "ALLOW_IDMAP"},
+		{CAP_OVER_IO_URING, "IO_URING"},
+		{CAP_REQUEST_TIMEOUT, "REQUEST_TIMEOUT"},
 	})
 	releaseFlagNames = newFlagNames([]flagNameEntry{
 		{RELEASE_FLUSH, "FLUSH"},
@@ -95,6 +97,11 @@ var (
 	})
 	getAttrFlagNames = newFlagNames([]flagNameEntry{
 		{FUSE_GETATTR_FH, "FH"},
+	})
+	renameFlagNames = newFlagNames([]flagNameEntry{
+		{1, "NOREPLACE"},
+		{2, "EXCHANGE"},
+		{4, "WHITEOUT"},
 	})
 )
 
@@ -176,7 +183,7 @@ func (in *Rename1In) string() string {
 }
 
 func (in *RenameIn) string() string {
-	return fmt.Sprintf("{i%d %x}", in.Newdir, in.Flags)
+	return fmt.Sprintf("{i%d %s}", in.Newdir, flagString(renameFlagNames, int64(in.Flags), "0"))
 }
 
 func (in *SetAttrIn) string() string {

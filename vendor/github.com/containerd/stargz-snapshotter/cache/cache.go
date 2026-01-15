@@ -27,6 +27,7 @@ import (
 
 	"github.com/containerd/stargz-snapshotter/util/cacheutil"
 	"github.com/containerd/stargz-snapshotter/util/namedmutex"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -61,6 +62,9 @@ type DirectoryCacheConfig struct {
 	// Direct forcefully enables direct mode for all operation in cache.
 	// Thus operation won't use on-memory caches.
 	Direct bool
+
+	// FadvDontNeed forcefully clean fscache pagecache for saving memory.
+	FadvDontNeed bool
 }
 
 // TODO: contents validation.
@@ -173,6 +177,7 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 		wipDirectory: wipdir,
 		bufPool:      bufPool,
 		direct:       config.Direct,
+		fadvDontNeed: config.FadvDontNeed,
 	}
 	dc.syncAdd = config.SyncAdd
 	return dc, nil
@@ -188,8 +193,9 @@ type directoryCache struct {
 
 	bufPool *sync.Pool
 
-	syncAdd bool
-	direct  bool
+	syncAdd      bool
+	direct       bool
+	fadvDontNeed bool
 
 	closed   bool
 	closedMu sync.Mutex
@@ -244,6 +250,12 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 		return &reader{
 			ReaderAt: file,
 			closeFunc: func() error {
+				if dc.fadvDontNeed {
+					if err := dropFilePageCache(file); err != nil {
+						fmt.Printf("Warning: failed to drop page cache: %v\n", err)
+					}
+				}
+
 				// In passthough model, close will be toke over by go-fuse
 				// If "passThrough" option is specified, "direct" option also will
 				// be specified, so adding this branch here is enough
@@ -301,6 +313,13 @@ func (dc *directoryCache) Add(key string, opts ...Option) (Writer, error) {
 				errs = append(errs, fmt.Errorf("failed to create cache directory %q: %w", c, err))
 				return errors.Join(errs...)
 			}
+
+			if dc.fadvDontNeed {
+				if err := dropFilePageCache(wip); err != nil {
+					fmt.Printf("Warning: failed to drop page cache: %v\n", err)
+				}
+			}
+
 			return os.Rename(wip.Name(), c)
 		},
 		abortFunc: func() error {
@@ -462,4 +481,17 @@ func (w *writeCloser) Close() error { return w.closeFunc() }
 
 func nopWriteCloser(w io.Writer) io.WriteCloser {
 	return &writeCloser{w, func() error { return nil }}
+}
+
+func dropFilePageCache(file *os.File) error {
+	if file == nil {
+		return nil
+	}
+
+	fd := file.Fd()
+	err := unix.Fadvise(int(fd), 0, 0, unix.FADV_DONTNEED)
+	if err != nil {
+		return fmt.Errorf("posix_fadvise failed, ret=%d", err)
+	}
+	return nil
 }
