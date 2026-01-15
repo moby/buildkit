@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -39,18 +40,30 @@ var (
 	//   '-' and '_' (period, dash and underscore).
 	// - A key cannot start with a number.
 	QualifierKeyPattern = regexp.MustCompile(`^[A-Za-z\.\-_][0-9A-Za-z\.\-_]*$`)
+	// TypePattern describes a valid type:
+	//
+	// - The type must be composed only of ASCII letters and numbers, '.',
+	// '+' and '-' (period, plus and dash).
+	// - A type cannot start with a number.
+	TypePattern = regexp.MustCompile(`^[A-Za-z\.\-\+][0-9A-Za-z\.\-\+]*$`)
 )
 
 // These are the known purl types as defined in the spec. Some of these require
 // special treatment during parsing.
 // https://github.com/package-url/purl-spec#known-purl-types
 var (
+	// TypeAlpm is a pkg:alpm purl.
+	TypeAlpm = "alpm"
+	// TypeApk is a pkg:apk purl.
+	TypeApk = "apk"
 	// TypeBitbucket is a pkg:bitbucket purl.
 	TypeBitbucket = "bitbucket"
-	// TypeCocoapods is a pkg:cocoapods purl.
-	TypeCocoapods = "cocoapods"
+	// TypeBitnami is a pkg:bitnami purl.
+	TypeBitnami = "bitnami"
 	// TypeCargo is a pkg:cargo purl.
 	TypeCargo = "cargo"
+	// TypeCocoapods is a pkg:cocoapods purl.
+	TypeCocoapods = "cocoapods"
 	// TypeComposer is a pkg:composer purl.
 	TypeComposer = "composer"
 	// TypeConan is a pkg:conan purl.
@@ -75,6 +88,10 @@ var (
 	TypeHackage = "hackage"
 	// TypeHex is a pkg:hex purl.
 	TypeHex = "hex"
+	// TypeHuggingface is pkg:huggingface purl.
+	TypeHuggingface = "huggingface"
+	// TypeMLflow is pkg:mlflow purl.
+	TypeMLFlow = "mlflow"
 	// TypeMaven is a pkg:maven purl.
 	TypeMaven = "maven"
 	// TypeNPM is a pkg:npm purl.
@@ -83,16 +100,156 @@ var (
 	TypeNuget = "nuget"
 	// TypeOCI is a pkg:oci purl
 	TypeOCI = "oci"
+	// TypePub is a pkg:pub purl.
+	TypePub = "pub"
 	// TypePyPi is a pkg:pypi purl.
 	TypePyPi = "pypi"
+	// TypeQPKG is a pkg:qpkg purl.
+	TypeQpkg = "qpkg"
 	// TypeRPM is a pkg:rpm purl.
 	TypeRPM = "rpm"
+	// TypeSWID is pkg:swid purl
+	TypeSWID = "swid"
 	// TypeSwift is pkg:swift purl
 	TypeSwift = "swift"
-	// TypeHuggingface is pkg:huggingface purl.
-	TypeHuggingface = "huggingface"
-	// TypeMLflow is pkg:mlflow purl.
-	TypeMLFlow = "mlflow"
+
+	// KnownTypes is a map of types that are officially supported by the spec.
+	// See https://github.com/package-url/purl-spec/blob/master/PURL-TYPES.rst#known-purl-types
+	KnownTypes = map[string]struct{}{
+		TypeAlpm:        {},
+		TypeApk:         {},
+		TypeBitbucket:   {},
+		TypeBitnami:     {},
+		TypeCargo:       {},
+		TypeCocoapods:   {},
+		TypeComposer:    {},
+		TypeConan:       {},
+		TypeConda:       {},
+		TypeCran:        {},
+		TypeDebian:      {},
+		TypeDocker:      {},
+		TypeGem:         {},
+		TypeGeneric:     {},
+		TypeGithub:      {},
+		TypeGolang:      {},
+		TypeHackage:     {},
+		TypeHex:         {},
+		TypeHuggingface: {},
+		TypeMaven:       {},
+		TypeMLFlow:      {},
+		TypeNPM:         {},
+		TypeNuget:       {},
+		TypeOCI:         {},
+		TypePub:         {},
+		TypePyPi:        {},
+		TypeQpkg:        {},
+		TypeRPM:         {},
+		TypeSWID:        {},
+		TypeSwift:       {},
+	}
+
+	TypeApache      = "apache"
+	TypeAndroid     = "android"
+	TypeAtom        = "atom"
+	TypeBower       = "bower"
+	TypeBrew        = "brew"
+	TypeBuildroot   = "buildroot"
+	TypeCarthage    = "carthage"
+	TypeChef        = "chef"
+	TypeChocolatey  = "chocolatey"
+	TypeClojars     = "clojars"
+	TypeCoreos      = "coreos"
+	TypeCpan        = "cpan"
+	TypeCtan        = "ctan"
+	TypeCrystal     = "crystal"
+	TypeDrupal      = "drupal"
+	TypeDtype       = "dtype"
+	TypeDub         = "dub"
+	TypeElm         = "elm"
+	TypeEclipse     = "eclipse"
+	TypeGitea       = "gitea"
+	TypeGitlab      = "gitlab"
+	TypeGradle      = "gradle"
+	TypeGuix        = "guix"
+	TypeHaxe        = "haxe"
+	TypeHelm        = "helm"
+	TypeJulia       = "julia"
+	TypeLua         = "lua"
+	TypeMelpa       = "melpa"
+	TypeMeteor      = "meteor"
+	TypeNim         = "nim"
+	TypeNix         = "nix"
+	TypeOpam        = "opam"
+	TypeOpenwrt     = "openwrt"
+	TypeOsgi        = "osgi"
+	TypeP2          = "p2"
+	TypePear        = "pear"
+	TypePecl        = "pecl"
+	TypePERL6       = "perl6"
+	TypePlatformio  = "platformio"
+	TypeEbuild      = "ebuild"
+	TypePuppet      = "puppet"
+	TypeSourceforge = "sourceforge"
+	TypeSublime     = "sublime"
+	TypeTerraform   = "terraform"
+	TypeVagrant     = "vagrant"
+	TypeVim         = "vim"
+	TypeWORDPRESS   = "wordpress"
+	TypeYocto       = "yocto"
+
+	// CandidateTypes is a map of types that are not yet officially supported by the spec,
+	// but are being considered for inclusion.
+	// See https://github.com/package-url/purl-spec/blob/master/PURL-TYPES.rst#other-candidate-types-to-define
+	CandidateTypes = map[string]struct{}{
+		TypeApache:      {},
+		TypeAndroid:     {},
+		TypeAtom:        {},
+		TypeBower:       {},
+		TypeBrew:        {},
+		TypeBuildroot:   {},
+		TypeCarthage:    {},
+		TypeChef:        {},
+		TypeChocolatey:  {},
+		TypeClojars:     {},
+		TypeCoreos:      {},
+		TypeCpan:        {},
+		TypeCtan:        {},
+		TypeCrystal:     {},
+		TypeDrupal:      {},
+		TypeDtype:       {},
+		TypeDub:         {},
+		TypeElm:         {},
+		TypeEclipse:     {},
+		TypeGitea:       {},
+		TypeGitlab:      {},
+		TypeGradle:      {},
+		TypeGuix:        {},
+		TypeHaxe:        {},
+		TypeHelm:        {},
+		TypeJulia:       {},
+		TypeLua:         {},
+		TypeMelpa:       {},
+		TypeMeteor:      {},
+		TypeNim:         {},
+		TypeNix:         {},
+		TypeOpam:        {},
+		TypeOpenwrt:     {},
+		TypeOsgi:        {},
+		TypeP2:          {},
+		TypePear:        {},
+		TypePecl:        {},
+		TypePERL6:       {},
+		TypePlatformio:  {},
+		TypeEbuild:      {},
+		TypePuppet:      {},
+		TypeSourceforge: {},
+		TypeSublime:     {},
+		TypeTerraform:   {},
+		TypeVagrant:     {},
+		TypeVim:         {},
+		TypeWORDPRESS:   {},
+		TypeYocto:       {},
+	}
 )
 
 // Qualifier represents a single key=value qualifier in the package url
@@ -109,6 +266,15 @@ func (q Qualifier) String() string {
 // Qualifiers is a slice of key=value pairs, with order preserved as it appears
 // in the package URL.
 type Qualifiers []Qualifier
+
+// urlQuery returns a raw URL query with all the qualifiers as keys + values.
+func (q Qualifiers) urlQuery() (rawQuery string) {
+	v := make(url.Values)
+	for _, qq := range q {
+		v.Add(qq.Key, qq.Value)
+	}
+	return v.Encode()
+}
 
 // QualifiersFromMap constructs a Qualifiers slice from a string map. To get a
 // deterministic qualifier order (despite maps not providing any iteration order
@@ -147,6 +313,33 @@ func (qq Qualifiers) String() string {
 	return strings.Join(kvPairs, "&")
 }
 
+func (qq *Qualifiers) Normalize() error {
+	qs := *qq
+	normedQQ := make(Qualifiers, 0, len(qs))
+	for _, q := range qs {
+		if q.Key == "" {
+			return fmt.Errorf("key is missing from qualifier: %v", q)
+		}
+		if q.Value == "" {
+			// Empty values are equivalent to the key being omitted from the PackageURL.
+			continue
+		}
+		key := strings.ToLower(q.Key)
+		if !validQualifierKey(key) {
+			return fmt.Errorf("invalid qualifier key: %q", key)
+		}
+		normedQQ = append(normedQQ, Qualifier{key, q.Value})
+	}
+	sort.Slice(normedQQ, func(i, j int) bool { return normedQQ[i].Key < normedQQ[j].Key })
+	for i := 1; i < len(normedQQ); i++ {
+		if normedQQ[i-1].Key == normedQQ[i].Key {
+			return fmt.Errorf("duplicate qualifier key: %q", normedQQ[i].Key)
+		}
+	}
+	*qq = normedQQ
+	return nil
+}
+
 // PackageURL is the struct representation of the parts that make a package url
 type PackageURL struct {
 	Type       string
@@ -174,39 +367,30 @@ func NewPackageURL(purlType, namespace, name, version string,
 // ToString returns the human-readable instance of the PackageURL structure.
 // This is the literal purl as defined by the spec.
 func (p *PackageURL) ToString() string {
-	// Start with the type and a colon
-	purl := fmt.Sprintf("pkg:%s/", p.Type)
-	// Add namespaces if provided
-	if p.Namespace != "" {
-		var ns []string
-		for _, item := range strings.Split(p.Namespace, "/") {
-			ns = append(ns, url.QueryEscape(item))
-		}
-		purl = purl + strings.Join(ns, "/") + "/"
-	}
-	// The name is always required and must be a percent-encoded string
-	// Use url.QueryEscape instead of PathEscape, as it handles @ signs
-	purl = purl + url.QueryEscape(p.Name)
-	// If a version is provided, add it after the at symbol
-	if p.Version != "" {
-		// A name must be a percent-encoded string
-		purl = purl + "@" + url.PathEscape(p.Version)
+	u := &url.URL{
+		Scheme:   "pkg",
+		RawQuery: p.Qualifiers.urlQuery(),
+		Fragment: p.Subpath,
 	}
 
-	// Iterate over qualifiers and make groups of key=value
-	var qualifiers []string
-	for _, q := range p.Qualifiers {
-		qualifiers = append(qualifiers, q.String())
+	paths := []string{p.Type}
+	// we need to escape each segment by itself, so that we don't escape "/" in the namespace.
+	for _, segment := range strings.Split(p.Namespace, "/") {
+		if segment == "" {
+			continue
+		}
+		paths = append(paths, escape(segment))
 	}
-	// If there are one or more key=value pairs, append on the package url
-	if len(qualifiers) != 0 {
-		purl = purl + "?" + strings.Join(qualifiers, "&")
+
+	nameWithVersion := escape(p.Name)
+	if p.Version != "" {
+		nameWithVersion += "@" + escape(p.Version)
 	}
-	// Add a subpath if available
-	if p.Subpath != "" {
-		purl = purl + "#" + p.Subpath
-	}
-	return purl
+
+	paths = append(paths, nameWithVersion)
+
+	u.Opaque = strings.Join(paths, "/")
+	return u.String()
 }
 
 func (p PackageURL) String() string {
@@ -215,138 +399,176 @@ func (p PackageURL) String() string {
 
 // FromString parses a valid package url string into a PackageURL structure
 func FromString(purl string) (PackageURL, error) {
-	initialIndex := strings.Index(purl, "#")
-	// Start with purl being stored in the remainder
-	remainder := purl
-	substring := ""
-	if initialIndex != -1 {
-		initialSplit := strings.SplitN(purl, "#", 2)
-		remainder = initialSplit[0]
-		rightSide := initialSplit[1]
-		rightSide = strings.TrimLeft(rightSide, "/")
-		rightSide = strings.TrimRight(rightSide, "/")
-		var rightSides []string
-
-		for _, item := range strings.Split(rightSide, "/") {
-			item = strings.Replace(item, ".", "", -1)
-			item = strings.Replace(item, "..", "", -1)
-			if item != "" {
-				i, err := url.PathUnescape(item)
-				if err != nil {
-					return PackageURL{}, fmt.Errorf("failed to unescape path: %s", err)
-				}
-				rightSides = append(rightSides, i)
-			}
-		}
-		substring = strings.Join(rightSides, "/")
-	}
-	qualifiers := Qualifiers{}
-	index := strings.LastIndex(remainder, "?")
-	// If we don't have anything to split then return an empty result
-	if index != -1 {
-		qualifier := remainder[index+1:]
-		for _, item := range strings.Split(qualifier, "&") {
-			kv := strings.Split(item, "=")
-			key := strings.ToLower(kv[0])
-			key, err := url.PathUnescape(key)
-			if err != nil {
-				return PackageURL{}, fmt.Errorf("failed to unescape qualifier key: %s", err)
-			}
-			if !validQualifierKey(key) {
-				return PackageURL{}, fmt.Errorf("invalid qualifier key: '%s'", key)
-			}
-			// TODO
-			//  - If the `key` is `checksums`, split the `value` on ',' to create
-			//    a list of `checksums`
-			if kv[1] == "" {
-				continue
-			}
-			value, err := url.PathUnescape(kv[1])
-			if err != nil {
-				return PackageURL{}, fmt.Errorf("failed to unescape qualifier value: %s", err)
-			}
-			qualifiers = append(qualifiers, Qualifier{key, value})
-		}
-		remainder = remainder[:index]
+	u, err := url.Parse(purl)
+	if err != nil {
+		return PackageURL{}, fmt.Errorf("failed to parse as URL: %w", err)
 	}
 
-	nextSplit := strings.SplitN(remainder, ":", 2)
-	if len(nextSplit) != 2 || nextSplit[0] != "pkg" {
-		return PackageURL{}, errors.New("scheme is missing")
-	}
-	// leading slashes after pkg: are to be ignored (pkg://maven is
-	// equivalent to pkg:maven)
-	remainder = strings.TrimLeft(nextSplit[1], "/")
-
-	nextSplit = strings.SplitN(remainder, "/", 2)
-	if len(nextSplit) != 2 {
-		return PackageURL{}, errors.New("type is missing")
-	}
-	// purl type is case-insensitive, canonical form is lower-case
-	purlType := strings.ToLower(nextSplit[0])
-	remainder = nextSplit[1]
-
-	index = strings.LastIndex(remainder, "/")
-	name := typeAdjustName(purlType, remainder[index+1:], qualifiers)
-	version := ""
-
-	atIndex := strings.Index(name, "@")
-	if atIndex != -1 {
-		v, err := url.PathUnescape(name[atIndex+1:])
-		if err != nil {
-			return PackageURL{}, fmt.Errorf("failed to unescape purl version: %s", err)
-		}
-		version = typeAdjustVersion(purlType, v)
-
-		unecapeName, err := url.PathUnescape(name[:atIndex])
-		if err != nil {
-			return PackageURL{}, fmt.Errorf("failed to unescape purl name: %s", err)
-		}
-		name = unecapeName
-	}
-	var namespaces []string
-
-	if index != -1 {
-		remainder = remainder[:index]
-
-		for _, item := range strings.Split(remainder, "/") {
-			if item != "" {
-				unescaped, err := url.PathUnescape(item)
-				if err != nil {
-					return PackageURL{}, fmt.Errorf("failed to unescape path: %s", err)
-				}
-				namespaces = append(namespaces, unescaped)
-			}
-		}
-	}
-	namespace := strings.Join(namespaces, "/")
-	namespace = typeAdjustNamespace(purlType, namespace)
-
-	// Fail if name is empty at this point
-	if name == "" {
-		return PackageURL{}, errors.New("name is required")
+	if u.Scheme != "pkg" {
+		return PackageURL{}, fmt.Errorf("purl scheme is not \"pkg\": %q", u.Scheme)
 	}
 
-	err := validCustomRules(purlType, name, namespace, version, qualifiers)
+	p := u.Opaque
+	// if a purl starts with pkg:/ or even pkg://, we need to fall back to host + path.
+	if p == "" {
+		p = strings.TrimPrefix(path.Join(u.Host, u.Path), "/")
+	}
+
+	typ, p, ok := strings.Cut(p, "/")
+	if !ok {
+		return PackageURL{}, fmt.Errorf("purl is missing type or name")
+	}
+	typ = strings.ToLower(typ)
+
+	qualifiers, err := parseQualifiers(u.RawQuery)
+	if err != nil {
+		return PackageURL{}, fmt.Errorf("invalid qualifiers: %w", err)
+	}
+	namespace, name, version, err := separateNamespaceNameVersion(p)
 	if err != nil {
 		return PackageURL{}, err
 	}
 
-	return PackageURL{
-		Type:       purlType,
+	pURL := PackageURL{
+		Qualifiers: qualifiers,
+		Type:       typ,
 		Namespace:  namespace,
 		Name:       name,
 		Version:    version,
-		Qualifiers: qualifiers,
-		Subpath:    substring,
-	}, nil
+		Subpath:    u.Fragment,
+	}
+
+	err = pURL.Normalize()
+	return pURL, err
+}
+
+// Normalize converts p to its canonical form, returning an error if p is invalid.
+func (p *PackageURL) Normalize() error {
+	typ := strings.ToLower(p.Type)
+	if !validType(typ) {
+		return fmt.Errorf("invalid type %q", typ)
+	}
+	namespace := strings.Trim(p.Namespace, "/")
+	if err := p.Qualifiers.Normalize(); err != nil {
+		return fmt.Errorf("invalid qualifiers: %v", err)
+	}
+	if p.Name == "" {
+		return errors.New("purl is missing name")
+	}
+	subpath := strings.Trim(p.Subpath, "/")
+	segs := strings.Split(p.Subpath, "/")
+	for i, s := range segs {
+		if (s == "." || s == "..") && i != 0 {
+			return fmt.Errorf("invalid Package URL subpath: %q", p.Subpath)
+		}
+	}
+	*p = PackageURL{
+		Type:       typ,
+		Namespace:  typeAdjustNamespace(typ, namespace),
+		Name:       typeAdjustName(typ, p.Name, p.Qualifiers),
+		Version:    typeAdjustVersion(typ, p.Version),
+		Qualifiers: p.Qualifiers,
+		Subpath:    subpath,
+	}
+	return validCustomRules(*p)
+}
+
+// escape the given string in a purl-compatible way.
+func escape(s string) string {
+	// for compatibility with other implementations and the purl-spec, we want to escape all
+	// characters, which is what "QueryEscape" does. The issue with QueryEscape is that it encodes
+	// " " (space) as "+", which is valid in a query, but invalid in a path (see
+	// https://stackoverflow.com/questions/2678551/when-should-space-be-encoded-to-plus-or-20) for
+	// context).
+	// To work around that, we replace the "+" signs with the path-compatible "%20".
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+func separateNamespaceNameVersion(path string) (ns, name, version string, err error) {
+	name = path
+
+	if namespaceSep := strings.LastIndex(name, "/"); namespaceSep != -1 {
+		ns, name = name[:namespaceSep], name[namespaceSep+1:]
+
+		ns, err = url.PathUnescape(ns)
+		if err != nil {
+			return "", "", "", fmt.Errorf("error unescaping namespace: %w", err)
+		}
+	}
+
+	if versionSep := strings.LastIndex(name, "@"); versionSep != -1 {
+		name, version = name[:versionSep], name[versionSep+1:]
+
+		version, err = url.PathUnescape(version)
+		if err != nil {
+			return "", "", "", fmt.Errorf("error unescaping version: %w", err)
+		}
+	}
+
+	name, err = url.PathUnescape(name)
+	if err != nil {
+		return "", "", "", fmt.Errorf("error unescaping name: %w", err)
+	}
+
+	if name == "" {
+		return "", "", "", fmt.Errorf("purl is missing name")
+	}
+
+	return ns, name, version, nil
+}
+
+func parseQualifiers(rawQuery string) (Qualifiers, error) {
+	// we need to parse the qualifiers ourselves and cannot rely on the `url.Query` type because
+	// that uses a map, meaning it's unordered. We want to keep the order of the qualifiers, so this
+	// function re-implements the `url.parseQuery` function based on our `Qualifier` type. Most of
+	// the code here is taken from `url.parseQuery`.
+	q := Qualifiers{}
+	for rawQuery != "" {
+		var key string
+		key, rawQuery, _ = strings.Cut(rawQuery, "&")
+		if strings.Contains(key, ";") {
+			return nil, fmt.Errorf("invalid semicolon separator in query")
+		}
+		if key == "" {
+			continue
+		}
+		key, value, _ := strings.Cut(key, "=")
+		key, err := url.QueryUnescape(key)
+		if err != nil {
+			return nil, fmt.Errorf("error unescaping qualifier key %q", key)
+		}
+
+		if !validQualifierKey(key) {
+			return nil, fmt.Errorf("invalid qualifier key: '%s'", key)
+		}
+
+		value, err = url.QueryUnescape(value)
+		if err != nil {
+			return nil, fmt.Errorf("error unescaping qualifier value %q", value)
+		}
+
+		q = append(q, Qualifier{
+			Key:   strings.ToLower(key),
+			Value: value,
+		})
+	}
+	return q, nil
 }
 
 // Make any purl type-specific adjustments to the parsed namespace.
 // See https://github.com/package-url/purl-spec#known-purl-types
 func typeAdjustNamespace(purlType, ns string) string {
 	switch purlType {
-	case TypeBitbucket, TypeDebian, TypeGithub, TypeGolang, TypeNPM, TypeRPM, TypeComposer:
+	case TypeAlpm,
+		TypeApk,
+		TypeBitbucket,
+		TypeComposer,
+		TypeDebian,
+		TypeGithub,
+		TypeGolang,
+		TypeNPM,
+		TypeRPM,
+		TypeQpkg:
 		return strings.ToLower(ns)
 	}
 	return ns
@@ -357,7 +579,15 @@ func typeAdjustNamespace(purlType, ns string) string {
 func typeAdjustName(purlType, name string, qualifiers Qualifiers) string {
 	quals := qualifiers.Map()
 	switch purlType {
-	case TypeBitbucket, TypeDebian, TypeGithub, TypeGolang, TypeNPM, TypeComposer:
+	case TypeAlpm,
+		TypeApk,
+		TypeBitbucket,
+		TypeBitnami,
+		TypeComposer,
+		TypeDebian,
+		TypeGithub,
+		TypeGolang,
+		TypeNPM:
 		return strings.ToLower(name)
 	case TypePyPi:
 		return strings.ToLower(strings.ReplaceAll(name, "_", "-"))
@@ -401,13 +631,18 @@ func validQualifierKey(key string) bool {
 	return QualifierKeyPattern.MatchString(key)
 }
 
+// validType validates a type against our TypePattern.
+func validType(typ string) bool {
+	return TypePattern.MatchString(typ)
+}
+
 // validCustomRules evaluates additional rules for each package url type, as specified in the package-url specification.
 // On success, it returns nil. On failure, a descriptive error will be returned.
-func validCustomRules(purlType, name, ns, version string, qualifiers Qualifiers) error {
-	q := qualifiers.Map()
-	switch purlType {
+func validCustomRules(p PackageURL) error {
+	q := p.Qualifiers.Map()
+	switch p.Type {
 	case TypeConan:
-		if ns != "" {
+		if p.Namespace != "" {
 			if val, ok := q["channel"]; ok {
 				if val == "" {
 					return errors.New("the qualifier channel must be not empty if namespace is present")
@@ -423,14 +658,14 @@ func validCustomRules(purlType, name, ns, version string, qualifiers Qualifiers)
 			}
 		}
 	case TypeSwift:
-		if ns == "" {
+		if p.Namespace == "" {
 			return errors.New("namespace is required")
 		}
-		if version == "" {
+		if p.Version == "" {
 			return errors.New("version is required")
 		}
 	case TypeCran:
-		if version == "" {
+		if p.Version == "" {
 			return errors.New("version is required")
 		}
 	}
