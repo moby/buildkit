@@ -16,6 +16,7 @@ func TestRefToPURL(t *testing.T) {
 	p := platforms.DefaultSpec()
 	testPlatform := &p
 
+	expDgst := url.QueryEscape(testDgst)
 	expPlatform := url.QueryEscape(platforms.Format(platforms.Normalize(p)))
 
 	tcases := []struct {
@@ -38,11 +39,11 @@ func TestRefToPURL(t *testing.T) {
 		},
 		{
 			ref:      "docker.io/library/alpine:latest@" + testDgst,
-			expected: "pkg:docker/alpine@latest?digest=" + testDgst,
+			expected: "pkg:docker/alpine@latest?digest=" + expDgst,
 		},
 		{
 			ref:      "docker.io/library/alpine@" + testDgst,
-			expected: "pkg:docker/alpine?digest=" + testDgst,
+			expected: "pkg:docker/alpine?digest=" + expDgst,
 		},
 		{
 			ref:      "user/test:v2",
@@ -64,7 +65,7 @@ func TestRefToPURL(t *testing.T) {
 		{
 			ref:      "busybox@" + testDgst,
 			platform: testPlatform,
-			expected: "pkg:docker/busybox?digest=" + testDgst + "&platform=" + expPlatform,
+			expected: "pkg:docker/busybox?digest=" + expDgst + "&platform=" + expPlatform,
 		},
 		{
 			ref: "inv:al:id",
@@ -93,6 +94,7 @@ func TestPURLToRef(t *testing.T) {
 	p.OSVersion = "" // OSVersion is not supported in PURL
 	testPlatform := &p
 
+	encDgst := url.QueryEscape(testDgst)
 	encPlatform := url.QueryEscape(platforms.Format(platforms.Normalize(p)))
 
 	tcases := []struct {
@@ -110,11 +112,11 @@ func TestPURLToRef(t *testing.T) {
 			expected: "docker.io/library/alpine:latest",
 		},
 		{
-			purl:     "pkg:docker/alpine?digest=" + testDgst,
+			purl:     "pkg:docker/alpine?digest=" + encDgst,
 			expected: "docker.io/library/alpine@" + testDgst,
 		},
 		{
-			purl:     "pkg:docker/library/alpine@3.15?digest=" + testDgst,
+			purl:     "pkg:docker/library/alpine@3.15?digest=" + encDgst,
 			expected: "docker.io/library/alpine:3.15@" + testDgst,
 		},
 		{
