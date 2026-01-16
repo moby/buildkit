@@ -237,9 +237,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	// We own the lease and release it when Export returns, unless we transfer
-	// ownership to descref for deferred push. Caller releases descref after
-	// finalize completes.
+	// On success, we create descref which holds the lease's done function.
+	// The solver will release descref after recording the descriptor in build
+	// history. On error (descref is nil), we release the lease here.
 	defer func() {
 		if descref == nil {
 			done(context.WithoutCancel(ctx))
@@ -376,7 +376,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
 	if len(namesToPush) == 0 {
-		return resp, exporter.NoOpFinalize, nil, nil
+		// Still create descref so descriptor is recorded in build history
+		descref = NewDescriptorReference(*desc, done)
+		return resp, exporter.NoOpFinalize, descref, nil
 	}
 
 	// Push happens later in finalize - transfer lease ownership to descref.
