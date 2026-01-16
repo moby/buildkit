@@ -237,6 +237,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// We own the lease and release it when Export returns, unless we transfer
+	// ownership to descref for deferred push. Caller releases descref after
+	// finalize completes.
 	defer func() {
 		if descref == nil {
 			done(context.WithoutCancel(ctx))
@@ -247,11 +250,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	defer func() {
-		if err == nil {
-			descref = NewDescriptorReference(*desc, done)
-		}
-	}()
 
 	resp := make(map[string]string)
 
@@ -381,6 +379,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return resp, exporter.NoOpFinalize, nil, nil
 	}
 
+	// Push happens later in finalize - transfer lease ownership to descref.
+	// Caller (solver) will release descref after finalize completes.
+	descref = NewDescriptorReference(*desc, done)
+
 	// Create finalize callback for pushing
 	srcCopy := src
 	sessionID := buildInfo.SessionID
@@ -399,7 +401,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil
 	}
 
-	return resp, finalize, nil, nil
+	return resp, finalize, descref, nil
 }
 
 func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Source, sessionID string, targetName string, dgst digest.Digest) error {

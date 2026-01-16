@@ -687,14 +687,12 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// since Export creates artifacts before returning.
 	eg, egCtx := errgroup.WithContext(ctx)
 	for _, finalize := range finalizers {
-		finalize := finalize
 		eg.Go(func() error {
 			return finalize(egCtx)
 		})
 	}
 	cacheResps := make([]map[string]string, len(cacheFinalizers))
 	for i, cf := range cacheFinalizers {
-		i, cf := i, cf
 		eg.Go(func() (err error) {
 			err = inBuilderContext(egCtx, j, cf.name, cf.id, func(ctx context.Context, _ solver.JobContext) error {
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
