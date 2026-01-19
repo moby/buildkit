@@ -39,7 +39,6 @@ package fs
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"sync"
 	"time"
@@ -71,7 +70,6 @@ const (
 	defaultMaxConcurrency = 2
 )
 
-var fusermountBin = []string{"fusermount", "fusermount3"}
 var (
 	nsLock = sync.Mutex{}
 
@@ -349,16 +347,10 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 		NullPermissions: true,
 	})
 	mountOpts := &fuse.MountOptions{
-		AllowOther: true,     // allow users other than root&mounter to access fs
-		FsName:     "stargz", // name this filesystem as "stargz"
-		Debug:      fs.debug,
-	}
-	if isFusermountBinExist() {
-		log.G(ctx).Infof("fusermount detected")
-		mountOpts.Options = []string{"suid"} // option for fusermount; allow setuid inside container
-	} else {
-		log.G(ctx).WithError(err).Infof("%s not installed; trying direct mount", fusermountBin)
-		mountOpts.DirectMount = true
+		AllowOther:  true,     // allow users other than root&mounter to access fs
+		FsName:      "stargz", // name this filesystem as "stargz"
+		Debug:       fs.debug,
+		DirectMount: true,
 	}
 	server, err := fuse.NewServer(rawFS, mountpoint, mountOpts)
 	if err != nil {
@@ -504,13 +496,4 @@ func neighboringLayers(manifest ocispec.Manifest, target ocispec.Descriptor) (de
 		}
 	}
 	return
-}
-
-func isFusermountBinExist() bool {
-	for _, b := range fusermountBin {
-		if _, err := exec.LookPath(b); err == nil {
-			return true
-		}
-	}
-	return false
 }

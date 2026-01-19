@@ -97,6 +97,7 @@ type rawBridge struct {
 	//
 	// A simple incrementing counter is used as the NodeID (see `nextNodeID`).
 	kernelNodeIds map[uint64]*Inode
+
 	// nextNodeID is the next free NodeID. Increment after copying the value.
 	nextNodeId uint64
 	// nodeCountHigh records the highest number of entries we had in the
@@ -1192,7 +1193,13 @@ func (b *rawBridge) readDirMaybeLookup(cancel <-chan struct{}, input *fuse.ReadI
 			continue
 		}
 
-		child, errno := b.lookup(ctx, n, de.Name, entryOut)
+		var child *Inode
+		if fileLookupper, ok := f.file.(FileLookuper); ok {
+			child, errno = fileLookupper.Lookup(ctx, de.Name, entryOut)
+		} else {
+			child, errno = b.lookup(ctx, n, de.Name, entryOut)
+		}
+
 		if errno != 0 {
 			if b.options.NegativeTimeout != nil {
 				entryOut.SetEntryTimeout(*b.options.NegativeTimeout)
@@ -1200,6 +1207,7 @@ func (b *rawBridge) readDirMaybeLookup(cancel <-chan struct{}, input *fuse.ReadI
 				// TODO: maybe simply not produce the dirent here?
 				// test?
 			}
+			// TODO: should break?
 		} else {
 			child, _ = b.addNewChild(n, de.Name, child, nil, 0, entryOut)
 			child.setEntryOut(entryOut)

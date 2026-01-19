@@ -505,10 +505,9 @@ type chunkData struct {
 
 func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (uintptr, error) {
 	var (
-		offset           int64
-		firstChunkOffset int64
-		totalSize        int64
-		hasLargeChunk    bool
+		offset        int64
+		totalSize     int64
+		hasLargeChunk bool
 	)
 
 	var chunks []chunkData
@@ -530,7 +529,7 @@ func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (u
 		offset = chunkOffset + chunkSize
 	}
 
-	id := genID(sf.id, firstChunkOffset, totalSize)
+	id := genID(sf.id, 0, totalSize)
 
 	// cache.PassThrough() is necessary to take over files
 	r, err := sf.gr.cache.Get(id, cache.PassThrough())

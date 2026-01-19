@@ -36,5 +36,9 @@ const (
 
 	O_ANYWRITE = uint32(os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREATE | os.O_TRUNC)
 
+	// FMODE_EXEC is a passed to OPEN requests if the file is
+	// being executed.
+	FMODE_EXEC = 0x20
+
 	logicalBlockSize = 512
 )

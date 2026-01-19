@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -255,4 +256,24 @@ func fusermountBinary() (string, error) {
 
 func umountBinary() (string, error) {
 	return lookPathFallback("umount", "/bin")
+}
+
+func getMaxWrite() int {
+	return maxPageLimit() * syscall.Getpagesize()
+}
+
+func maxPageLimit() (lim int) {
+	lim = 256
+
+	d, err := os.ReadFile("/proc/sys/fs/fuse/max_pages_limit")
+	if err != nil {
+		return lim
+	}
+
+	newLim, err := strconv.Atoi(string(d))
+	if err != nil {
+		return lim
+	}
+
+	return newLim
 }

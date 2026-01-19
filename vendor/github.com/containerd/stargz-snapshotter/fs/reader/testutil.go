@@ -32,7 +32,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/containerd/stargz-snapshotter/cache"
@@ -64,7 +63,34 @@ var (
 	MockReadAtOutput = 4194304
 )
 
-func TestSuiteReader(t *testing.T, store metadata.Store) {
+// TestingT is the minimal set of testing.T required to run the
+// tests defined in TestSuiteReader. This interface exists to prevent
+// leaking the testing package from being exposed outside tests.
+type TestingT interface {
+	Cleanup(func())
+	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+	Logf(format string, args ...any)
+}
+
+// Runner allows running subtests of TestingT. This exists instead of adding
+// a Run method to TestingT interface because the Run implementation of
+// testing.T would not satisfy the interface.
+type Runner func(t TestingT, name string, fn func(t TestingT))
+
+type TestRunner struct {
+	TestingT
+	Runner Runner
+}
+
+func (r *TestRunner) Run(name string, run func(*TestRunner)) {
+	r.Runner(r.TestingT, name, func(t TestingT) {
+		run(&TestRunner{TestingT: t, Runner: r.Runner})
+	})
+}
+
+func TestSuiteReader(t *TestRunner, store metadata.Store) {
 	testFileReadAt(t, store)
 	testCacheVerify(t, store)
 	testFailReader(t, store)
@@ -72,7 +98,7 @@ func TestSuiteReader(t *testing.T, store metadata.Store) {
 	testProcessBatchChunks(t)
 }
 
-func testFileReadAt(t *testing.T, factory metadata.Store) {
+func testFileReadAt(t *TestRunner, factory metadata.Store) {
 	sizeCond := map[string]int64{
 		"single_chunk": sampleChunkSize - sampleMiddleOffset,
 		"multi_chunks": sampleChunkSize + sampleMiddleOffset,
@@ -109,7 +135,7 @@ func testFileReadAt(t *testing.T, factory metadata.Store) {
 					for cc, cacheExcept := range cacheCond {
 						for srcCompressionName, srcCompression := range srcCompressions {
 							srcCompression := srcCompression()
-							t.Run(fmt.Sprintf("reading_%s_%s_%s_%s_%s_%s", sn, in, bo, fn, cc, srcCompressionName), func(t *testing.T) {
+							t.Run(fmt.Sprintf("reading_%s_%s_%s_%s_%s_%s", sn, in, bo, fn, cc, srcCompressionName), func(t *TestRunner) {
 								if filesize > int64(len(sampleData1)) {
 									t.Fatal("sample file size is larger than sample data")
 								}
@@ -199,7 +225,7 @@ func testFileReadAt(t *testing.T, factory metadata.Store) {
 	}
 }
 
-func newExceptFile(t *testing.T, fr metadata.File, except ...region) metadata.File {
+func newExceptFile(t TestingT, fr metadata.File, except ...region) metadata.File {
 	er := exceptFile{fr: fr, t: t}
 	er.except = map[region]bool{}
 	for _, reg := range except {
@@ -211,7 +237,7 @@ func newExceptFile(t *testing.T, fr metadata.File, except ...region) metadata.Fi
 type exceptFile struct {
 	fr     metadata.File
 	except map[region]bool
-	t      *testing.T
+	t      TestingT
 }
 
 func (er *exceptFile) ReadAt(p []byte, offset int64) (int, error) {
@@ -225,7 +251,7 @@ func (er *exceptFile) ChunkEntryForOffset(offset int64) (off int64, size int64, 
 	return er.fr.ChunkEntryForOffset(offset)
 }
 
-func makeFile(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, comp tutil.Compression) (*file, func() error) {
+func makeFile(t TestingT, contents []byte, chunkSize int, factory metadata.Store, comp tutil.Compression) (*file, func() error) {
 	testName := "test"
 	sr, dgst, err := tutil.BuildEStargz([]tutil.TarEntry{
 		tutil.File(testName, string(contents)),
@@ -265,7 +291,7 @@ func makeFile(t *testing.T, contents []byte, chunkSize int, factory metadata.Sto
 	return f, vr.Close
 }
 
-func testCacheVerify(t *testing.T, factory metadata.Store) {
+func testCacheVerify(t *TestRunner, factory metadata.Store) {
 	for _, skipVerify := range [2]bool{true, false} {
 		for _, invalidChunkBeforeVerify := range [2]bool{true, false} {
 			for _, invalidChunkAfterVerify := range [2]bool{true, false} {
@@ -273,7 +299,7 @@ func testCacheVerify(t *testing.T, factory metadata.Store) {
 					srcCompression := srcCompression()
 					name := fmt.Sprintf("test_cache_verify_%v_%v_%v_%v",
 						skipVerify, invalidChunkBeforeVerify, invalidChunkAfterVerify, srcCompressionName)
-					t.Run(name, func(t *testing.T) {
+					t.Run(name, func(t *TestRunner) {
 						sr, tocDgst, err := tutil.BuildEStargz([]tutil.TarEntry{
 							tutil.File("a", sampleData1+"a"),
 							tutil.File("b", sampleData1+"b"),
@@ -483,11 +509,11 @@ func prepareMap(mr metadata.Reader, id uint32, p string) (off2id map[int64]uint3
 	return off2id, id2path, nil
 }
 
-func testFailReader(t *testing.T, factory metadata.Store) {
+func testFailReader(t *TestRunner, factory metadata.Store) {
 	testFileName := "test"
 	for srcCompressionName, srcCompression := range srcCompressions {
 		srcCompression := srcCompression()
-		t.Run(fmt.Sprintf("%v", srcCompressionName), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%v", srcCompressionName), func(t *TestRunner) {
 			for _, rs := range []bool{true, false} {
 				for _, vs := range []bool{true, false} {
 					stargzFile, tocDigest, err := tutil.BuildEStargz([]tutil.TarEntry{
@@ -595,8 +621,12 @@ func (bev *testChunkVerifier) verifier(id uint32, chunkDigest string) (digest.Ve
 	return &testVerifier{bev.success}, nil
 }
 
-func testPreReader(t *testing.T, factory metadata.Store) {
-	data64KB := string(tutil.RandomBytes(t, 64000))
+func testPreReader(t *TestRunner, factory metadata.Store) {
+	randomData, err := tutil.RandomBytes(64000)
+	if err != nil {
+		t.Fatalf("failed rand.Read: %v", err)
+	}
+	data64KB := string(randomData)
 	tests := []struct {
 		name         string
 		chunkSize    int
@@ -666,7 +696,7 @@ func testPreReader(t *testing.T, factory metadata.Store) {
 	for _, tt := range tests {
 		for srcCompresionName, srcCompression := range srcCompressions {
 			srcCompression := srcCompression()
-			t.Run(tt.name+"-"+srcCompresionName, func(t *testing.T) {
+			t.Run(tt.name+"-"+srcCompresionName, func(t *TestRunner) {
 				opts := []tutil.BuildEStargzOption{
 					tutil.WithEStargzOptions(estargz.WithCompression(srcCompression)),
 				}
@@ -705,7 +735,7 @@ func testPreReader(t *testing.T, factory metadata.Store) {
 	}
 }
 
-type check func(*testing.T, *reader, *calledReaderAt)
+type check func(TestingT, *reader, *calledReaderAt)
 
 type chunkInfo struct {
 	name        string
@@ -715,7 +745,7 @@ type chunkInfo struct {
 }
 
 func hasFileContentsOffset(name string, off int64, contents string, fromCache bool) check {
-	return func(t *testing.T, r *reader, cr *calledReaderAt) {
+	return func(t TestingT, r *reader, cr *calledReaderAt) {
 		tid, err := lookup(r, name)
 		if err != nil {
 			t.Fatalf("failed to lookup %q", name)
@@ -750,7 +780,7 @@ func hasFileContentsOffset(name string, off int64, contents string, fromCache bo
 }
 
 func hasFileContentsWithPreCached(name string, off int64, contents string, extra ...chunkInfo) check {
-	return func(t *testing.T, r *reader, cr *calledReaderAt) {
+	return func(t TestingT, r *reader, cr *calledReaderAt) {
 		tid, err := lookup(r, name)
 		if err != nil {
 			t.Fatalf("failed to lookup %q", name)
@@ -870,7 +900,7 @@ func (f *mockFile) ReadAt(p []byte, offset int64) (int, error) {
 	return MockReadAtOutput, nil
 }
 
-func testProcessBatchChunks(t *testing.T) {
+func testProcessBatchChunks(t *TestRunner) {
 	type testCase struct {
 		name               string
 		setupMock          func()
@@ -878,7 +908,7 @@ func testProcessBatchChunks(t *testing.T) {
 		expectErrorInHoles bool
 	}
 
-	runTest := func(t *testing.T, tc testCase) {
+	runTest := func(t TestingT, tc testCase) {
 		if tc.setupMock != nil {
 			tc.setupMock()
 		}
@@ -1000,7 +1030,7 @@ func testProcessBatchChunks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(t *TestRunner) {
 			runTest(t, tc)
 		})
 	}

@@ -11,5 +11,10 @@ func openatNoSymlinks(dirfd int, path string, flags int, mode uint32) (fd int, e
 		Mode:    uint64(mode),
 		Resolve: unix.RESOLVE_NO_SYMLINKS,
 	}
-	return unix.Openat2(dirfd, path, &how)
+	fd, err = unix.Openat2(dirfd, path, &how)
+	if err != nil && err == unix.ENOSYS {
+		flags |= unix.O_NOFOLLOW | unix.O_CLOEXEC
+		fd, err = unix.Openat(dirfd, path, flags, mode)
+	}
+	return fd, err
 }

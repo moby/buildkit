@@ -310,6 +310,8 @@ const (
 	CAP_NO_EXPORT_SUPPORT    = (1 << 38)
 	CAP_HAS_RESEND           = (1 << 39)
 	CAP_ALLOW_IDMAP          = (1 << 40)
+	CAP_OVER_IO_URING        = (1 << 41)
+	CAP_REQUEST_TIMEOUT      = (1 << 42)
 )
 
 type InitIn struct {
@@ -340,7 +342,9 @@ type InitOut struct {
 	Padding             uint16
 	Flags2              uint32
 	MaxStackDepth       uint32
-	Unused              [6]uint32
+	RequestTimeout      uint16
+
+	_Unused [11]uint16
 }
 
 func (o *InitOut) Flags64() uint64 {

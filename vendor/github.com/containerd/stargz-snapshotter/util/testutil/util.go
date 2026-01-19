@@ -18,14 +18,13 @@ package testutil
 
 import (
 	"crypto/rand"
-	"testing"
 )
 
 // RandomBytes returns the specified number of random bytes
-func RandomBytes(t *testing.T, n int) []byte {
+func RandomBytes(n int) ([]byte, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		t.Fatalf("failed rand.Read: %v", err)
+		return nil, err
 	}
-	return b
+	return b, nil
 }
