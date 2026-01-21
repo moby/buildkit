@@ -185,5 +185,5 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, nil, report(err)
 	}
 	report(nil)
-	return nil, exporter.NoOpFinalize, nil, nil
+	return nil, nil, nil, nil
 }

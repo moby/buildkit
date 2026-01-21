@@ -186,7 +186,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	if err := eg.Wait(); err != nil {
 		return nil, nil, nil, err
 	}
-	return nil, exporter.NoOpFinalize, nil, nil
+	return nil, nil, nil, nil
 }
 
 func NewProgressHandler(ctx context.Context, id string) func(int, bool) {

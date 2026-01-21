@@ -687,6 +687,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// since Export creates artifacts before returning.
 	eg, egCtx := errgroup.WithContext(ctx)
 	for _, finalize := range finalizers {
+		if finalize == nil {
+			continue
+		}
 		eg.Go(func() error {
 			return finalize(egCtx)
 		})

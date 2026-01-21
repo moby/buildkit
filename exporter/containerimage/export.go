@@ -378,7 +378,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	if len(namesToPush) == 0 {
 		// Still create descref so descriptor is recorded in build history
 		descref = NewDescriptorReference(*desc, done)
-		return resp, exporter.NoOpFinalize, descref, nil
+		return resp, nil, descref, nil
 	}
 
 	// Push happens later in finalize - transfer lease ownership to descref.

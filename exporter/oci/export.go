@@ -269,13 +269,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 			w.Close()
 			if grpcerrors.Code(err) == codes.AlreadyExists {
-				return resp, exporter.NoOpFinalize, nil, report(nil)
+				return resp, nil, nil, report(nil)
 			}
 			return nil, nil, nil, report(err)
 		}
 		err = w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
-			return resp, exporter.NoOpFinalize, nil, report(nil)
+			return resp, nil, nil, report(nil)
 		}
 		if err != nil {
 			return nil, nil, nil, report(err)
@@ -292,7 +292,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}
 
-	return resp, exporter.NoOpFinalize, nil, nil
+	return resp, nil, nil, nil
 }
 
 func normalizedNames(name string) ([]string, error) {
