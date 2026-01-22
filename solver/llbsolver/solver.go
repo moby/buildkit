@@ -677,14 +677,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	cacheFinalizers, err := prepareCacheExporters(ctx, cacheExporters, j, cached, inp)
-	if err != nil {
-		return nil, err
-	}
-
-	// Run all finalize callbacks in parallel. Cache exporters have already
-	// prepared their cache records and can see the layers in the content store
-	// since Export creates artifacts before returning.
+	// Run image finalize and cache export in parallel.
+	// Image Export has already created layers in the content store,
+	// so cache exporters can see and reuse them.
 	eg, egCtx := errgroup.WithContext(ctx)
 	for _, finalize := range finalizers {
 		if finalize == nil {
@@ -694,18 +689,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return finalize(egCtx)
 		})
 	}
-	cacheResps := make([]map[string]string, len(cacheFinalizers))
-	for i, cf := range cacheFinalizers {
+	cacheResps := make([]map[string]string, len(cacheExporters))
+	for i, exp := range cacheExporters {
 		eg.Go(func() (err error) {
-			err = inBuilderContext(egCtx, j, cf.name, cf.id, func(ctx context.Context, _ solver.JobContext) error {
-				finalizeDone := progress.OneOff(ctx, "sending cache export")
-				resp, err := cf.finalize(ctx)
-				cacheResps[i] = resp
-				return finalizeDone(err)
-			})
-			if cf.ignoreError {
-				err = nil
-			}
+			cacheResps[i], err = runCacheExporter(egCtx, exp, j, cached, inp, i)
 			return err
 		})
 	}
@@ -811,59 +798,37 @@ func validateSourcePolicy(pol *spb.Policy) error {
 	return nil
 }
 
-// cacheExporterFinalize is a finalize callback for a cache exporter
-type cacheExporterFinalize struct {
-	name        string
-	id          string
-	ignoreError bool
-	finalize    func(ctx context.Context) (map[string]string, error)
-}
-
-func prepareCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) ([]cacheExporterFinalize, error) {
-	eg, ctx := errgroup.WithContext(ctx)
+func runCacheExporter(ctx context.Context, exp RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef], i int) (resp map[string]string, err error) {
 	g := session.NewGroup(j.SessionID)
-	finalizers := make([]cacheExporterFinalize, len(exporters))
-	for i, exp := range exporters {
-		eg.Go(func() (err error) {
-			id := fmt.Sprint(j.SessionID, "-cache-", i)
-			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
-				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
-				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
-					ctx := withDescHandlerCacheOpts(ctx, ref)
+	id := fmt.Sprint(j.SessionID, "-cache-", i)
+	err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
+		prepareDone := progress.OneOff(ctx, "preparing build cache for export")
+		if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
+			ctx := withDescHandlerCacheOpts(ctx, ref)
 
-					// Configure compression
-					compressionConfig := exp.Config().Compression
+			// Configure compression
+			compressionConfig := exp.Config().Compression
 
-					// all keys have same export chain so exporting others is not needed
-					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
-						ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
-						Mode:           exp.CacheExportMode,
-						Session:        g,
-						CompressionOpt: &compressionConfig,
-					})
-					return err
-				}); err != nil {
-					return prepareDone(err)
-				}
-				prepareDone(nil)
-				finalizers[i] = cacheExporterFinalize{
-					name:        exp.Name(),
-					id:          id,
-					ignoreError: exp.IgnoreError,
-					finalize:    exp.Finalize,
-				}
-				return nil
+			// all keys have same export chain so exporting others is not needed
+			_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+				ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
+				Mode:           exp.CacheExportMode,
+				Session:        g,
+				CompressionOpt: &compressionConfig,
 			})
-			if exp.IgnoreError {
-				err = nil
-			}
 			return err
-		})
+		}); err != nil {
+			return prepareDone(err)
+		}
+		prepareDone(nil)
+		finalizeDone := progress.OneOff(ctx, "sending cache export")
+		resp, err = exp.Finalize(ctx)
+		return finalizeDone(err)
+	})
+	if exp.IgnoreError {
+		err = nil
 	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-	return finalizers, nil
+	return resp, err
 }
 
 func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, inlineExporter inlineCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult]) (*result.Result[*exptypes.InlineCacheEntry], error) {
