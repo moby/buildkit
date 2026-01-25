@@ -736,6 +736,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			sourceMap:           opt.SourceMap,
 			lint:                lint,
 			dockerIgnoreMatcher: dockerIgnoreMatcher,
+			automounts:          opt.Automounts,
 		}
 
 		for _, cmd := range d.commands {
@@ -885,6 +886,7 @@ type dispatchOpt struct {
 	sourceMap           *llb.SourceMap
 	lint                *linter.Linter
 	dockerIgnoreMatcher *patternmatcher.PatternMatcher
+	automounts          []string
 }
 
 func getEnv(state llb.State) shell.EnvGetter {
@@ -1308,6 +1310,12 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		return err
 	}
 	opt = append(opt, runMounts...)
+
+	automountOpts, err := dispatchAutomounts(d, dopt)
+	if err != nil {
+		return err
+	}
+	opt = append(opt, automountOpts...)
 
 	securityOpt, err := dispatchRunSecurity(c)
 	if err != nil {

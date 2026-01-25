@@ -95,6 +95,10 @@ var buildCommand = cli.Command{
 			Name:  "ssh",
 			Usage: "Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]",
 		},
+		cli.StringSliceFlag{
+			Name:  "automount",
+			Usage: "Automatically apply mounts to all RUN commands, e.g. --automount type=bind,source=ca.crt,target=/etc/ssl/certs/ca-certificates.crt",
+		},
 		cli.StringFlag{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
@@ -265,6 +269,12 @@ func buildAction(clicontext *cli.Context) error {
 	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))
 	if err != nil {
 		return errors.Wrap(err, "invalid opt")
+	}
+
+	if automounts := clicontext.StringSlice("automount"); len(automounts) > 0 {
+		for k, v := range build.ParseAutomount(automounts) {
+			solveOpt.FrontendAttrs[k] = v
+		}
 	}
 
 	solveOpt.LocalMounts, err = build.ParseLocal(clicontext.StringSlice("local"))
