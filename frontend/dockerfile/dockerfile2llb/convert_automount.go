@@ -19,6 +19,12 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 
 	var out []llb.RunOption
 
+	// Create a no-op expander that doesn't expand variables
+	// Automounts should not support variable expansion
+	noopExpander := func(word string) (string, error) {
+		return word, nil
+	}
+
 	for _, automountSpec := range opt.automounts {
 		// Use a simple pass-through expander for automount specs.
 		// NOTE: This intentionally does NOT perform any variable or build-arg expansion.
