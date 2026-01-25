@@ -20,7 +20,10 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 	var out []llb.RunOption
 
 	for _, automountSpec := range opt.automounts {
-		// Use a simple pass-through expander since automount specs are literal (not from Dockerfile)
+		// Use a simple pass-through expander for automount specs.
+		// NOTE: This intentionally does NOT perform any variable or build-arg expansion.
+		// Automounts are specified at the CLI level and treated as literal values, so
+		// patterns like "source=${MY_VAR}" will not be expanded here.
 		expander := func(s string) (string, error) {
 			return s, nil
 		}
