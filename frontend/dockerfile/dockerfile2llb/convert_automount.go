@@ -38,15 +38,10 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 				return nil, errors.Errorf("automount cannot reference Dockerfile stage %q: only external images and named contexts are allowed", mount.From)
 			}
 			
-			// Create an unregistered state for external image or named context
-			// This follows the same pattern as detectRunMount for external references
-			src := &dispatchState{
-				stage:        instructions.Stage{BaseName: mount.From},
-				deps:         make(map[*dispatchState]instructions.Command),
-				paths:        make(map[string]struct{}),
-				unregistered: true,
-			}
-			st = src.state
+			// Use llb.Image() for external images/named contexts
+			// This is simpler than creating an unregistered dispatch state since we don't
+			// need the full dispatch machinery for external references in automounts
+			st = llb.Image(mount.From)
 		} else if mount.Type == instructions.MountTypeCache {
 			// For cache mounts without a from, use scratch like regular mounts do
 			st = llb.Scratch()
