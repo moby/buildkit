@@ -29,14 +29,26 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 			return nil, errors.Wrapf(err, "failed to parse automount %q", automountSpec)
 		}
 
-		// Automounts don't support "from" - they always use the build context
-		if mount.From != "" {
-			return nil, errors.Errorf("automount does not support 'from' option: %q", automountSpec)
-		}
-
-		// For cache mounts without a from, use scratch like regular mounts do
+		// Determine the source state for the mount
 		st := opt.buildContext
-		if mount.Type == instructions.MountTypeCache {
+		
+		if mount.From != "" {
+			// Check if 'from' references a Dockerfile stage (disallowed for automounts)
+			if _, ok := opt.allDispatchStates.findStateByName(mount.From); ok {
+				return nil, errors.Errorf("automount cannot reference Dockerfile stage %q: only external images and named contexts are allowed", mount.From)
+			}
+			
+			// Create an unregistered state for external image or named context
+			// This follows the same pattern as detectRunMount for external references
+			src := &dispatchState{
+				stage:        instructions.Stage{BaseName: mount.From},
+				deps:         make(map[*dispatchState]instructions.Command),
+				paths:        make(map[string]struct{}),
+				unregistered: true,
+			}
+			st = src.state
+		} else if mount.Type == instructions.MountTypeCache {
+			// For cache mounts without a from, use scratch like regular mounts do
 			st = llb.Scratch()
 		}
 
@@ -49,7 +61,7 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 		}
 
 		// Track context paths for bind mounts
-		if mount.Type == instructions.MountTypeBind {
+		if mount.Type == instructions.MountTypeBind && mount.From == "" {
 			d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
 		}
 	}

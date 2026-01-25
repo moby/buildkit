@@ -279,8 +279,23 @@ RUN echo test2
 	})
 	require.NoError(t, err)
 
-	// Test that automount with 'from' fails
+	// Test that automount with 'from' referencing external image works
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=bind,from=alpine:latest,source=/src,target=/mnt/src",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test that automount with 'from' referencing a Dockerfile stage fails
+	dfWithStage := `FROM scratch AS stage1
+RUN echo test
+FROM scratch
+RUN echo test2
+`
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(dfWithStage), ConvertOpt{
 		Config: dockerui.Config{
 			Automounts: []string{
 				"type=bind,from=stage1,source=/src,target=/mnt/src",
@@ -288,7 +303,7 @@ RUN echo test2
 		},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "automount does not support 'from' option")
+	require.Contains(t, err.Error(), "automount cannot reference Dockerfile stage")
 
 	// Test invalid automount spec
 	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
