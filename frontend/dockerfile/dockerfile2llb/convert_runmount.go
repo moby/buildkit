@@ -8,6 +8,7 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
@@ -78,7 +79,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			}
 		}
 
-		runOpt, err := dispatchMount(d, mount, st, opt)
+		runOpt, err := dispatchMount(d, mount, st, opt, c.Location())
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +103,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 // dispatchMount converts a single mount specification to an LLB run option.
 // This is shared between dispatchRunMounts (for RUN --mount=...) and
 // dispatchAutomounts (for --automount CLI flag).
-func dispatchMount(d *dispatchState, mount *instructions.Mount, st llb.State, opt dispatchOpt) (llb.RunOption, error) {
+func dispatchMount(d *dispatchState, mount *instructions.Mount, st llb.State, opt dispatchOpt, loc []parser.Range) (llb.RunOption, error) {
 	var mountOpts []llb.MountOption
 
 	if mount.Type == instructions.MountTypeTmpfs {
@@ -112,10 +113,10 @@ func dispatchMount(d *dispatchState, mount *instructions.Mount, st llb.State, op
 		))
 	}
 	if mount.Type == instructions.MountTypeSecret {
-		return dispatchSecret(d, mount, nil)
+		return dispatchSecret(d, mount, loc)
 	}
 	if mount.Type == instructions.MountTypeSSH {
-		return dispatchSSH(d, mount, nil)
+		return dispatchSSH(d, mount, loc)
 	}
 	if mount.ReadOnly {
 		mountOpts = append(mountOpts, llb.Readonly)

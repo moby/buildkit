@@ -20,7 +20,11 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 	var out []llb.RunOption
 
 	for _, automountSpec := range opt.automounts {
-		mount, err := instructions.ParseMount(automountSpec, nil)
+		// Use a simple pass-through expander since automount specs are literal (not from Dockerfile)
+		expander := func(s string) (string, error) {
+			return s, nil
+		}
+		mount, err := instructions.ParseMount(automountSpec, expander)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse automount %q", automountSpec)
 		}
@@ -36,7 +40,7 @@ func dispatchAutomounts(d *dispatchState, opt dispatchOpt) ([]llb.RunOption, err
 			st = llb.Scratch()
 		}
 
-		runOpt, err := dispatchMount(d, mount, st, opt)
+		runOpt, err := dispatchMount(d, mount, st, opt, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to dispatch automount %q", automountSpec)
 		}
