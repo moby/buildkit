@@ -1305,17 +1305,17 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		opt = append(opt, llb.WithProxy(*proxy))
 	}
 
-	runMounts, err := dispatchRunMounts(d, c, sources, dopt)
-	if err != nil {
-		return err
-	}
-	opt = append(opt, runMounts...)
-
 	automountOpts, err := dispatchAutomounts(d, dopt)
 	if err != nil {
 		return err
 	}
 	opt = append(opt, automountOpts...)
+
+	runMounts, err := dispatchRunMounts(d, c, sources, dopt)
+	if err != nil {
+		return err
+	}
+	opt = append(opt, runMounts...)
 
 	securityOpt, err := dispatchRunSecurity(c)
 	if err != nil {
