@@ -2,6 +2,7 @@ package dockerfile
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -60,21 +61,57 @@ func testChmodNonOctal(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 
-	expectedCommands := ""
-	copyCommands := ""
-	verifyCommands := ""
+	var expectedCommands strings.Builder
+	var copyCommands strings.Builder
+	var verifyCommands strings.Builder
 
 	for _, tc := range tcases {
 		if tc.isDir {
 			// create nested input dir because COPY copies directory contents
-			expectedCommands += "RUN mkdir -p /input/dirs/" + tc.dst + " && cp -a /input/" + tc.src + " /input/dirs/" + tc.dst + "/" + tc.dst + "\n"
-			expectedCommands += "RUN cp -a /input/dirs/" + tc.dst + "/. /expected/ && chmod " + tc.mode + " /expected/" + tc.dst + "\n"
-			copyCommands += "COPY --from=base --chmod=" + tc.mode + " /input/dirs/" + tc.dst + " /\n"
+			expectedCommands.WriteString("RUN mkdir -p /input/dirs/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteString(" && cp -a /input/")
+			expectedCommands.WriteString(tc.src)
+			expectedCommands.WriteString(" /input/dirs/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteByte('/')
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteByte('\n')
+			expectedCommands.WriteString("RUN cp -a /input/dirs/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteString("/. /expected/ && chmod ")
+			expectedCommands.WriteString(tc.mode)
+			expectedCommands.WriteString(" /expected/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteByte('\n')
+			copyCommands.WriteString("COPY --from=base --chmod=")
+			copyCommands.WriteString(tc.mode)
+			copyCommands.WriteString(" /input/dirs/")
+			copyCommands.WriteString(tc.dst)
+			copyCommands.WriteString(" /\n")
 		} else {
-			expectedCommands += "RUN cp -a /input/" + tc.src + " /expected/" + tc.dst + " && chmod " + tc.mode + " /expected/" + tc.dst + "\n"
-			copyCommands += "COPY --from=base --chmod=" + tc.mode + " /input/" + tc.src + " /" + tc.dst + "\n"
+			expectedCommands.WriteString("RUN cp -a /input/")
+			expectedCommands.WriteString(tc.src)
+			expectedCommands.WriteString(" /expected/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteString(" && chmod ")
+			expectedCommands.WriteString(tc.mode)
+			expectedCommands.WriteString(" /expected/")
+			expectedCommands.WriteString(tc.dst)
+			expectedCommands.WriteByte('\n')
+			copyCommands.WriteString("COPY --from=base --chmod=")
+			copyCommands.WriteString(tc.mode)
+			copyCommands.WriteString(" /input/")
+			copyCommands.WriteString(tc.src)
+			copyCommands.WriteString(" /")
+			copyCommands.WriteString(tc.dst)
+			copyCommands.WriteByte('\n')
 		}
-		verifyCommands += "RUN [ \"$(stat -c %A /actual/" + tc.dst + ")\" = \"$(stat -c %A /expected/" + tc.dst + ")\" ]\n"
+		verifyCommands.WriteString("RUN [ \"$(stat -c %A /actual/")
+		verifyCommands.WriteString(tc.dst)
+		verifyCommands.WriteString(")\" = \"$(stat -c %A /expected/")
+		verifyCommands.WriteString(tc.dst)
+		verifyCommands.WriteString(")\" ]\n")
 	}
 
 	dockerfile := fmt.Appendf(nil, `
@@ -97,7 +134,7 @@ FROM base
 COPY --from=result / /actual/
 %s
 
-`, expectedCommands, copyCommands, verifyCommands)
+`, expectedCommands.String(), copyCommands.String(), verifyCommands.String())
 
 	dir := integration.Tmpdir(
 		t,

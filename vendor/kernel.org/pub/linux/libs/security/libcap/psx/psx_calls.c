@@ -48,7 +48,9 @@
     || defined(__mips__) || defined(__loongarch__) \
     || defined(__powerpc__) || defined(__s390__) || defined(__riscv) \
     || defined(__alpha__) || defined(__hppa__) || defined(__sh__) \
-    || defined(__m68k__) || defined(__sparc__)
+    || defined(__m68k__) || defined(__sparc__) || defined(__arc__) \
+    || defined(__microblaze__) || defined(__or1k__) \
+    || defined(__xtensa__)
 
 #undef _NSIG
 #undef _NSIG_BPW
@@ -68,16 +70,17 @@
 #define _NSIG_WORDS  (_NSIG / _NSIG_BPW)
 
 #if defined(__x86_64__) || defined(__i386__) \
-    || defined(__arm__) \
-    || defined(__powerpc__)
+    || defined(__arm__) || defined(__powerpc__) \
+    || defined(__arc__)
 /* field used */
 #define SA_RESTORER  0x04000000
 #endif /* architectures that use SA_RESTORER */
 
 #if defined(SA_RESTORER) \
     || defined(__aarch64__) \
-    || defined(__m68k__) || defined(__sh__) || defined(__sparc__) \
-    || defined(__s390__) || defined(__sparc__)
+    || defined(__m68k__) || defined(__sh__) \
+    || defined(__s390__) || defined(__sparc__) \
+    || defined(__xtensa__)
 /* field defined */
 #define _HAS_SA_RESTORER   void *sa_restorer;
 #else
@@ -91,7 +94,7 @@ typedef struct {
 #define sigset_t psx_sigset_t
 
 struct psx_sigaction {
-#if defined(__m68k__) || defined(__alpha__)
+#if defined(__m68k__) || defined(__alpha__) || defined(__xtensa__)
     void *sa_handler;
     sigset_t sa_mask;
     unsigned long sa_flags;
@@ -201,6 +204,8 @@ static void psx_posix_syscall_actor(int signum, siginfo_t *info, void *ignore) {
 	    __asm__ __volatile__("\npsx_restorer:\n\tmov r7,#173\n\tswi 0\n");
 #elif defined(__powerpc__)
 	    __asm__ __volatile__("\npsx_restorer:\n\tli 0, 172\n\tsc\n");
+#elif defined(__arc__)
+	    __asm__ __volatile__("\npsx_restorer:\n\tmov r8, 139\n\ttrap_s 0\n");
 #else
 #error "unsupported architecture - https://bugzilla.kernel.org/show_bug.cgi?id=219687"
 #endif /* supported architectures */

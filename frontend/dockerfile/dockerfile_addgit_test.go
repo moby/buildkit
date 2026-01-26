@@ -2,6 +2,7 @@ package dockerfile
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -70,13 +71,13 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	err = runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
 	commitHashV2 := strings.TrimSpace(string(commitHashB))
 
-	revParseCmd = exec.Command("git", "rev-parse", "v0.0.3")
+	revParseCmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.3")
 	revParseCmd.Dir = gitDir
 	commitHashB, err = revParseCmd.Output()
 	require.NoError(t, err)
@@ -286,7 +287,7 @@ func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
 	err = runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.Command("git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
@@ -433,7 +434,7 @@ COPY foo out
 	require.NoError(t, err)
 
 	// get commit SHA for v0.0.2
-	cmd := exec.Command("git", "rev-parse", "v0.0.2")
+	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
 	cmd.Dir = gitDir
 	dt, err := cmd.CombinedOutput()
 	require.NoError(t, err)
@@ -441,7 +442,7 @@ COPY foo out
 	require.Len(t, commitHashV2, 40)
 
 	// get commit SHA for latest
-	cmd = exec.Command("git", "rev-parse", "latest")
+	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "latest")
 	cmd.Dir = gitDir
 	dt, err = cmd.CombinedOutput()
 	require.NoError(t, err)

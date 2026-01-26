@@ -2,6 +2,7 @@ package dockerd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -140,7 +141,7 @@ func (d *Daemon) StartWithError(daemonLogs map[string]*bytes.Buffer, providedArg
 	}
 
 	d.args = append(d.args, providedArgs...)
-	d.cmd = exec.Command(dockerdBinary, d.args...)
+	d.cmd = exec.CommandContext(context.TODO(), dockerdBinary, d.args...)
 	d.cmd.Env = append(d.envs, "DOCKER_SERVICE_PREFER_OFFLINE_IMAGE=1", "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1")
 
 	if daemonLogs != nil {

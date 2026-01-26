@@ -1,5 +1,4 @@
 //go:build nvidia
-// +build nvidia
 
 package main
 

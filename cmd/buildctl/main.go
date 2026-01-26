@@ -12,6 +12,7 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/ssh"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
@@ -145,6 +146,11 @@ func handleErr(debug bool, err error) {
 	}
 	for _, s := range errdefs.Sources(err) {
 		s.Print(os.Stderr)
+	}
+	for _, msg := range policysession.DenyMessages(err) {
+		if msg.GetMessage() != "" {
+			fmt.Fprintf(os.Stderr, "policy deny: %s\n", msg.GetMessage())
+		}
 	}
 	if debug {
 		fmt.Fprintf(os.Stderr, "error: %+v", stack.Formatter(err))

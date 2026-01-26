@@ -39,7 +39,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"testing"
 	"time"
 
 	"github.com/containerd/containerd/v2/pkg/reference"
@@ -76,7 +75,33 @@ type layerConfig struct {
 	passThroughConfig passThroughConfig
 }
 
-func TestSuiteLayer(t *testing.T, store metadata.Store) {
+// TestingT is the minimal set of testing.T required to run the
+// tests defined in TestSuiteLayer. This interface exists to prevent
+// leaking the testing package from being exposed outside tests.
+type TestingT interface {
+	Errorf(format string, args ...any)
+	Fatal(args ...any)
+	Fatalf(format string, args ...any)
+	Logf(format string, args ...any)
+}
+
+// Runner allows running subtests of TestingT. This exists instead of adding
+// a Run method to TestingT interface because the Run implementation of
+// testing.T would not satisfy the interface.
+type Runner func(t TestingT, name string, fn func(t TestingT))
+
+type TestRunner struct {
+	TestingT
+	Runner Runner
+}
+
+func (r *TestRunner) Run(name string, run func(*TestRunner)) {
+	r.Runner(r.TestingT, name, func(t TestingT) {
+		run(&TestRunner{TestingT: t, Runner: r.Runner})
+	})
+}
+
+func TestSuiteLayer(t *TestRunner, store metadata.Store) {
 	for _, lc := range []layerConfig{
 		{
 			name: "default",
@@ -117,10 +142,14 @@ func TestSuiteLayer(t *testing.T, store metadata.Store) {
 
 var testStateLayerDigest = digest.FromString("dummy")
 
-func testPrefetch(t *testing.T, factory metadata.Store, lc layerConfig) {
-	data64KB := string(tutil.RandomBytes(t, 64000))
+func testPrefetch(t *TestRunner, factory metadata.Store, lc layerConfig) {
+	randomData, err := tutil.RandomBytes(64000)
+	if err != nil {
+		t.Fatalf("failed rand.Read: %v", err)
+	}
+	data64KB := string(randomData)
 	defaultPrefetchSize := int64(10000)
-	landmarkPosition := func(t *testing.T, l *layer) int64 {
+	landmarkPosition := func(t TestingT, l *layer) int64 {
 		if l.r == nil {
 			t.Fatalf("layer hasn't been verified yet")
 		}
@@ -140,7 +169,7 @@ func testPrefetch(t *testing.T, factory metadata.Store, lc layerConfig) {
 		in               []tutil.TarEntry
 		wantNum          int      // number of chunks wanted in the cache
 		wants            []string // filenames to compare
-		prefetchSize     func(*testing.T, *layer) int64
+		prefetchSize     func(TestingT, *layer) int64
 		prioritizedFiles []string
 	}{
 		{
@@ -218,7 +247,7 @@ func testPrefetch(t *testing.T, factory metadata.Store, lc layerConfig) {
 	for _, tt := range tests {
 		for srcCompressionName, srcCompression := range srcCompressions {
 			cl := srcCompression()
-			t.Run("testPrefetch-"+tt.name+"-"+srcCompressionName+"-"+lc.name, func(t *testing.T) {
+			t.Run("testPrefetch-"+tt.name+"-"+srcCompressionName+"-"+lc.name, func(t *TestRunner) {
 				chunkSize := sampleChunkSize
 				if tt.chunkSize > 0 {
 					chunkSize = tt.chunkSize
@@ -345,7 +374,7 @@ func isDup(a, b region) bool {
 	return b.end >= a.begin
 }
 
-func newBlob(t *testing.T, sr *io.SectionReader) *sampleBlob {
+func newBlob(t TestingT, sr *io.SectionReader) *sampleBlob {
 	return &sampleBlob{
 		t: t,
 		r: sr,
@@ -353,7 +382,7 @@ func newBlob(t *testing.T, sr *io.SectionReader) *sampleBlob {
 }
 
 type sampleBlob struct {
-	t *testing.T
+	t TestingT
 
 	r                    *io.SectionReader
 	readCalled           bool
@@ -418,7 +447,7 @@ const (
 	lastChunkOffset1   = sampleChunkSize * (int64(len(sampleData1)) / sampleChunkSize)
 )
 
-func testNodeRead(t *testing.T, factory metadata.Store, lc layerConfig) {
+func testNodeRead(t *TestRunner, factory metadata.Store, lc layerConfig) {
 	sizeCond := map[string]int64{
 		"single_chunk": sampleChunkSize - sampleMiddleOffset,
 		"multi_chunks": sampleChunkSize + sampleMiddleOffset,
@@ -443,7 +472,7 @@ func testNodeRead(t *testing.T, factory metadata.Store, lc layerConfig) {
 				for fn, filesize := range fileSizeCond {
 					for _, srcCompression := range srcCompressions {
 						cl := srcCompression()
-						t.Run(fmt.Sprintf("reading_%s_%s_%s_%s_%s", sn, in, bo, fn, lc.name), func(t *testing.T) {
+						t.Run(fmt.Sprintf("reading_%s_%s_%s_%s_%s", sn, in, bo, fn, lc.name), func(t *TestRunner) {
 							if filesize > int64(len(sampleData1)) {
 								t.Fatal("sample file size is larger than sample data")
 							}
@@ -498,7 +527,7 @@ func testNodeRead(t *testing.T, factory metadata.Store, lc layerConfig) {
 	}
 }
 
-func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metadata.Store, cl tutil.Compression, lc layerConfig) (_ *file, closeFn func() error) {
+func makeNodeReader(t TestingT, contents []byte, chunkSize int, factory metadata.Store, cl tutil.Compression, lc layerConfig) (_ *file, closeFn func() error) {
 	testName := "test"
 	sr, tocDgst, err := tutil.BuildEStargz(
 		[]tutil.TarEntry{tutil.File(testName, string(contents))},
@@ -526,16 +555,20 @@ func makeNodeReader(t *testing.T, contents []byte, chunkSize int, factory metada
 	return f.(*file), r.Close
 }
 
-func testNodes(t *testing.T, factory metadata.Store, lc layerConfig) {
+func testNodes(t *TestRunner, factory metadata.Store, lc layerConfig) {
 	for _, o := range []OverlayOpaqueType{OverlayOpaqueAll, OverlayOpaqueTrusted, OverlayOpaqueUser} {
 		testNodesWithOpaque(t, factory, o, lc)
 	}
 }
 
-func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpaqueType, lc layerConfig) {
-	data64KB := string(tutil.RandomBytes(t, 64000))
+func testNodesWithOpaque(t *TestRunner, factory metadata.Store, opaque OverlayOpaqueType, lc layerConfig) {
+	randomData, err := tutil.RandomBytes(64000)
+	if err != nil {
+		t.Fatalf("failed rand.Read: %v", err)
+	}
+	data64KB := string(randomData)
 	hasOpaque := func(entry string) check {
-		return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+		return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 			for _, k := range opaqueXattrs[opaque] {
 				hasNodeXattrs(entry, k, opaqueXattrValue)(t, root, cc, cr)
 			}
@@ -741,7 +774,7 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 	for _, tt := range tests {
 		for _, srcCompression := range srcCompressions {
 			cl := srcCompression()
-			t.Run(tt.name+"-"+lc.name, func(t *testing.T) {
+			t.Run(tt.name+"-"+lc.name, func(t *TestRunner) {
 				opts := []tutil.BuildEStargzOption{
 					tutil.WithEStargzOptions(estargz.WithCompression(cl)),
 				}
@@ -772,7 +805,7 @@ func testNodesWithOpaque(t *testing.T, factory metadata.Store, opaque OverlayOpa
 	}
 }
 
-func getRootNode(t *testing.T, r metadata.Reader, opaque OverlayOpaqueType, tocDgst digest.Digest, cc cache.BlobCache, lc layerConfig) *node {
+func getRootNode(t TestingT, r metadata.Reader, opaque OverlayOpaqueType, tocDgst digest.Digest, cc cache.BlobCache, lc layerConfig) *node {
 	vr, err := reader.NewReader(r, cc, digest.FromString(""))
 	if err != nil {
 		t.Fatalf("failed to create reader: %v", err)
@@ -806,10 +839,10 @@ func (tb *testBlobState) Refresh(ctx context.Context, host source.RegistryHosts,
 }
 func (tb *testBlobState) Close() error { return nil }
 
-type check func(*testing.T, *node, cache.BlobCache, *calledReaderAt)
+type check func(TestingT, *node, cache.BlobCache, *calledReaderAt)
 
 func fileNotExist(file string) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		if _, _, err := getDirentAndNode(t, root, file); err == nil {
 			t.Errorf("Node %q exists", file)
 		}
@@ -817,7 +850,7 @@ func fileNotExist(file string) check {
 }
 
 func hasFileDigest(filename string, digest string) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, filename)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", filename, err)
@@ -846,7 +879,7 @@ func hasFileDigest(filename string, digest string) check {
 }
 
 func hasSize(name string, size int) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -862,7 +895,7 @@ func hasSize(name string, size int) check {
 }
 
 func hasExtraMode(name string, mode os.FileMode) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -881,7 +914,7 @@ func hasExtraMode(name string, mode os.FileMode) check {
 }
 
 func hasValidWhiteout(name string) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		ent, n, err := getDirentAndNode(t, root, name)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", name, err)
@@ -917,7 +950,7 @@ func hasValidWhiteout(name string) check {
 }
 
 func hasNodeXattrs(entry, name, value string) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		_, n, err := getDirentAndNode(t, root, entry)
 		if err != nil {
 			t.Fatalf("failed to get node %q: %v", entry, err)
@@ -958,7 +991,7 @@ func hasNodeXattrs(entry, name, value string) check {
 	}
 }
 
-func hasEntry(t *testing.T, name string, ents fusefs.DirStream) (fuse.DirEntry, bool) {
+func hasEntry(t TestingT, name string, ents fusefs.DirStream) (fuse.DirEntry, bool) {
 	for ents.HasNext() {
 		de, errno := ents.Next()
 		if errno != 0 {
@@ -971,8 +1004,8 @@ func hasEntry(t *testing.T, name string, ents fusefs.DirStream) (fuse.DirEntry, 
 	return fuse.DirEntry{}, false
 }
 
-func hasStateFile(t *testing.T, id string) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+func hasStateFile(t TestingT, id string) check {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 
 		// Check the state dir is hidden on OpenDir for "/"
 		ents, errno := root.Readdir(context.Background())
@@ -1069,7 +1102,7 @@ func hasStateFile(t *testing.T, id string) check {
 
 // getDirentAndNode gets dirent and node at the specified path at once and makes
 // sure that the both of them exist.
-func getDirentAndNode(t *testing.T, root *node, path string) (ent fuse.DirEntry, n *fusefs.Inode, err error) {
+func getDirentAndNode(t TestingT, root *node, path string) (ent fuse.DirEntry, n *fusefs.Inode, err error) {
 	dir, base := filepath.Split(filepath.Clean(path))
 
 	// get the target's parent directory.
@@ -1145,7 +1178,7 @@ type chunkInfo struct {
 }
 
 func hasFileContentsWithPreCached(name string, off int64, contents string, extra ...chunkInfo) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		buf := readFile(t, root, name, int64(len(contents)), off)
 		if len(buf) != len(contents) {
 			t.Fatalf("failed to read contents %q (off:%d, want:%q) got %q", name, off, longBytesView([]byte(contents)), longBytesView(buf))
@@ -1167,7 +1200,7 @@ func hasFileContentsWithPreCached(name string, off int64, contents string, extra
 }
 
 func hasFileContentsOffset(name string, off int64, contents string, fromCache bool) check {
-	return func(t *testing.T, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
 		cr.called = nil // reset test
 		buf := readFile(t, root, name, int64(len(contents)), off)
 		if len(buf) != len(contents) {
@@ -1189,7 +1222,7 @@ func hasFileContentsOffset(name string, off int64, contents string, fromCache bo
 	}
 }
 
-func readFile(t *testing.T, root *node, filename string, size, off int64) []byte {
+func readFile(t TestingT, root *node, filename string, size, off int64) []byte {
 	_, n, err := getDirentAndNode(t, root, filename)
 	if err != nil {
 		t.Fatalf("failed to get node %q: %v", filename, err)

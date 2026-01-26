@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	// Linux v4.20+ caps requests at 1 MiB. Older kernels at 128 kiB.
+	// Linux v4.20+ caps requests at 1 MiB. Older kernels at 128
+	// kiB. Deprecated: current linux kernels allow tuning this
+	// using sysctl.
 	MAX_KERNEL_WRITE = 1024 * 1024
 
 	// Linux kernel constant from include/uapi/linux/fuse.h
@@ -175,8 +177,9 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 	if o.MaxWrite == 0 {
 		o.MaxWrite = defaultMaxWrite
 	}
-	if o.MaxWrite > MAX_KERNEL_WRITE {
-		o.MaxWrite = MAX_KERNEL_WRITE
+	kernelMaxWrite := getMaxWrite()
+	if o.MaxWrite > kernelMaxWrite {
+		o.MaxWrite = kernelMaxWrite
 	}
 	if o.MaxStackDepth == 0 {
 		o.MaxStackDepth = 1

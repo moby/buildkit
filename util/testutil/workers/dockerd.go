@@ -207,7 +207,8 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 	f.Close()
 	os.Remove(localPath)
 
-	listener, err := net.Listen(buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
+	listenerConfig := net.ListenConfig{}
+	listener, err := listenerConfig.Listen(context.TODO(), buildkitdNetworkProtocol, getBuildkitdNetworkAddr(localPath))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "dockerd listener error: %s", integration.FormatLogs(cfg.Logs))
 	}

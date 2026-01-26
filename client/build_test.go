@@ -174,7 +174,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
-		st := llb.Scratch().File(llb.Mkfile("/dummy", 0600, []byte("foo")))
+		st := llb.Scratch().File(llb.Mkfile("/dummy", 0o600, []byte("foo")))
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
@@ -660,7 +660,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 	tmpdir := integration.Tmpdir(t)
 
-	err = os.WriteFile(filepath.Join(tmpdir.Name, "local-file"), []byte("local"), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir.Name, "local-file"), []byte("local"), 0o644)
 	require.NoError(t, err)
 
 	a := agent.NewKeyring()
@@ -690,31 +690,51 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 			// TODO How do we get a results.Ref for a cache mount, tmpfs mount
 		}
 
-		containerMounts := []client.Mount{{
-			Dest:      "/cached",
-			MountType: pb.MountType_CACHE,
-			CacheOpt: &pb.CacheOpt{
-				ID:      t.Name(),
-				Sharing: pb.CacheSharingOpt_SHARED,
+		containerMounts := []client.Mount{
+			{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
 			},
-		}, {
-			Dest:      "/tmpfs",
-			MountType: pb.MountType_TMPFS,
-		}, {
-			Dest:      "/run/secrets/mysecret",
-			MountType: pb.MountType_SECRET,
-			SecretOpt: &pb.SecretOpt{
-				ID: "/run/secrets/mysecret",
+			{
+				Dest:      "/foo",
+				MountType: pb.MountType_BIND,
 			},
-		}, {
-			Dest:      sockPath,
-			MountType: pb.MountType_SSH,
-			SSHOpt: &pb.SSHOpt{
-				ID: t.Name(),
+			{
+				Dest:      "/local",
+				MountType: pb.MountType_BIND,
 			},
-		}}
+			{
+				Dest:      "/cached",
+				MountType: pb.MountType_CACHE,
+				CacheOpt: &pb.CacheOpt{
+					ID:      t.Name(),
+					Sharing: pb.CacheSharingOpt_SHARED,
+				},
+			},
+			{
+				Dest:      "/tmpfs",
+				MountType: pb.MountType_TMPFS,
+			},
+			{
+				Dest:      "/run/secrets/mysecret",
+				MountType: pb.MountType_SECRET,
+				SecretOpt: &pb.SecretOpt{
+					ID: "/run/secrets/mysecret",
+				},
+			},
+			{
+				Dest:      sockPath,
+				MountType: pb.MountType_SSH,
+				SSHOpt: &pb.SSHOpt{
+					ID: t.Name(),
+				},
+			},
+		}
 
-		for mountpoint, st := range mounts {
+		// Fill in mount references.
+		for i, m := range containerMounts {
+			st := mounts[m.Dest]
+
 			def, err := st.Marshal(ctx)
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to marshal state")
@@ -726,11 +746,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 			if err != nil {
 				return nil, errors.Wrap(err, "failed to solve")
 			}
-			containerMounts = append(containerMounts, client.Mount{
-				Dest:      mountpoint,
-				MountType: pb.MountType_BIND,
-				Ref:       r.Ref,
-			})
+			containerMounts[i].Ref = r.Ref
 		}
 
 		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{Mounts: containerMounts})
@@ -744,6 +760,43 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		})
 		require.NoError(t, err)
 		defer pid1.Wait()
+
+		files := []struct {
+			index int
+			path  string
+			data  []byte
+		}{
+			{0, "/root-file", []byte(nil)},
+			{1, "/foo-file", []byte(nil)},
+			{2, "/local-file", []byte(`local`)},
+			{3, "/cache-file", []byte(nil)},
+		}
+		for _, file := range files {
+			cpath := containerMounts[file.index].Dest + file.path
+			pid, err := ctr.Start(ctx, client.StartRequest{
+				Args: []string{"test", "-f", cpath},
+			})
+			require.NoError(t, err, "cannot start container to check for file: %s", cpath)
+			err = pid.Wait()
+			require.NoError(t, err, "process for checking file failed: %s", cpath)
+
+			_, err = ctr.StatFile(ctx, client.StatContainerRequest{
+				StatRequest: client.StatRequest{
+					Path: file.path,
+				},
+				MountIndex: file.index,
+			})
+			require.NoError(t, err, "stat file for %q on mount %d failed", file.path, file.index)
+
+			b, err := ctr.ReadFile(ctx, client.ReadContainerRequest{
+				ReadRequest: client.ReadRequest{
+					Filename: file.path,
+				},
+				MountIndex: file.index,
+			})
+			require.NoError(t, err, "read file for %q on mount %d failed", file.path, file.index)
+			require.Equal(t, file.data, b)
+		}
 
 		pid, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/root-file"},
@@ -1280,8 +1333,8 @@ func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		id := identity.NewID()
 		input := llb.Scratch().File(
-			llb.Mkdir("/found", 0700).
-				Mkfile("/found/data", 0600, []byte(id)),
+			llb.Mkdir("/found", 0o700).
+				Mkfile("/found/data", 0o600, []byte(id)),
 		)
 
 		st := llb.Image("busybox:latest").Run(
@@ -1442,7 +1495,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 			"rootfs and readwrite mount",
 			llb.Image("busybox:latest").Run(
 				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
-				llb.AddMount("/rw", llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id)))),
+				llb.AddMount("/rw", llb.Scratch().File(llb.Mkfile("foo", 0o700, []byte(id)))),
 			).Root(),
 			2,
 			[]string{"/data", "/rw/data", "/rw/foo"},
@@ -1460,7 +1513,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
 				llb.AddMount(
 					"/rw",
-					llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id))),
+					llb.Scratch().File(llb.Mkfile("foo", 0o700, []byte(id))),
 					llb.ForceNoOutput,
 				),
 			).Root(),
@@ -1579,8 +1632,8 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 
 	id := identity.NewID()
 	input := llb.Scratch().File(
-		llb.Mkdir("/found", 0700).
-			Mkfile("/found/data", 0600, []byte(id)),
+		llb.Mkdir("/found", 0o700).
+			Mkfile("/found/data", 0o600, []byte(id)),
 	)
 
 	st := llb.Image("busybox:latest").Run(
@@ -1691,9 +1744,9 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 		}{{
 			"mkfile",
 			llb.Scratch().File(
-				llb.Mkdir("/found", 0700).
-					Mkfile("/found/foo", 0600, []byte(id)).
-					Mkfile("/notfound/foo", 0600, []byte(id)),
+				llb.Mkdir("/found", 0o700).
+					Mkfile("/found/foo", 0o600, []byte(id)).
+					Mkfile("/notfound/foo", 0o600, []byte(id)),
 			),
 			0, 3, "/input/found/foo",
 		}, {
@@ -1701,7 +1754,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 			llb.Image("busybox").File(
 				llb.Copy(
 					llb.Scratch().File(
-						llb.Mkdir("/foo", 0600).Mkfile("/foo/bar", 0700, []byte(id)),
+						llb.Mkdir("/foo", 0o600).Mkfile("/foo/bar", 0o700, []byte(id)),
 					),
 					"/foo/bar",
 					"/notfound/baz",
@@ -1712,7 +1765,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 			"copy from action",
 			llb.Image("busybox").File(
 				llb.Copy(
-					llb.Mkdir("/foo", 0600).Mkfile("/foo/bar", 0700, []byte(id)).WithState(llb.Scratch()),
+					llb.Mkdir("/foo", 0o600).Mkfile("/foo/bar", 0o700, []byte(id)).WithState(llb.Scratch()),
 					"/foo/bar",
 					"/notfound/baz",
 				),

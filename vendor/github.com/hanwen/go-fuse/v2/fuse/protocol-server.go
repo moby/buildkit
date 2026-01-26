@@ -67,11 +67,6 @@ func (ms *protocolServer) handleRequest(h *operationHandler, req *request) {
 	if req.suppressReply {
 		return
 	}
-	if req.inHeader().Opcode == _OP_INIT && ms.kernelSettings.Minor <= 22 {
-		// v8-v22 don't have TimeGran and further fields.
-		// This includes osxfuse (a.k.a. macfuse).
-		req.outHeader().Length = uint32(sizeOfOutHeader) + 24
-	}
 	if req.fdData != nil && ms.opts.DisableSplice {
 		req.outPayload, req.status = req.fdData.Bytes(req.outPayload)
 		req.fdData = nil

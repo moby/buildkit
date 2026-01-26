@@ -39,6 +39,7 @@ func init() {
 
 	openFlagNames.set(syscall.O_DIRECT, "DIRECT")
 	openFlagNames.set(syscall_O_NOATIME, "NOATIME")
+	openFlagNames.set(FMODE_EXEC, "EXEC")
 	initFlagNames.set(CAP_NO_OPENDIR_SUPPORT, "NO_OPENDIR_SUPPORT")
 	initFlagNames.set(CAP_EXPLICIT_INVAL_DATA, "EXPLICIT_INVAL_DATA")
 	initFlagNames.set(CAP_MAP_ALIGNMENT, "MAP_ALIGNMENT")

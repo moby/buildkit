@@ -4,7 +4,6 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"strings"
 
@@ -44,13 +43,18 @@ func getLocalListener(listenerPath, secDescriptor string) (net.Listener, error) 
 func groupToSecurityDescriptor(group string) (string, error) {
 	sddl := "D:P(A;;GA;;;BA)(A;;GA;;;SY)"
 	if group != "" {
+		var b strings.Builder
+		b.WriteString(sddl)
 		for g := range strings.SplitSeq(group, ",") {
 			sid, err := winio.LookupSidByName(g)
 			if err != nil {
 				return "", errors.Wrapf(err, "failed to lookup sid for group %s", g)
 			}
-			sddl += fmt.Sprintf("(A;;GRGW;;;%s)", sid)
+			b.WriteString("(A;;GRGW;;;")
+			b.WriteString(sid)
+			b.WriteByte(')')
 		}
+		sddl = b.String()
 	}
 	return sddl, nil
 }

@@ -147,6 +147,40 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+func testSourcePolicySessionDenyMessages(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("alpine").Marshal(ctx)
+	require.NoError(t, err)
+
+	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+		return &policysession.DecisionResponse{
+			Action: sourcepolicypb.PolicyAction_DENY,
+			DenyMessages: []*policysession.DenyMessage{
+				{Message: "policy blocked alpine"},
+				{Message: "use busybox instead"},
+			},
+		}, nil, nil
+	})
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		SourcePolicyProvider: p,
+	}, nil)
+	require.Error(t, err)
+
+	denyMessages := policysession.DenyMessages(err)
+	require.Len(t, denyMessages, 2)
+	require.Equal(t, "policy blocked alpine", denyMessages[0].GetMessage())
+	require.Equal(t, "use busybox instead", denyMessages[1].GetMessage())
+}
+
 func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
@@ -630,4 +664,144 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
 		})
 	}
+}
+
+func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	type tcase struct {
+		name          string
+		state         func() llb.State
+		callbacks     []policysession.PolicyCallback
+		expectedError string
+	}
+
+	tcases := []tcase{
+		{
+			name:  "convert and allow",
+			state: func() llb.State { return llb.Image("alpine") },
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Image)
+					src := req.Source.Source
+					src.Identifier = "docker-image://docker.io/library/busybox:latest"
+					if src.Attrs == nil {
+						src.Attrs = map[string]string{}
+					}
+					src.Attrs["foo"] = "bar"
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Update: src,
+					}, nil, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/busybox:latest", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Image)
+					require.Equal(t, "bar", req.Source.Source.Attrs["foo"])
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_ALLOW,
+					}, nil, nil
+				},
+			},
+		},
+		{
+			name:  "convert and deny",
+			state: func() llb.State { return llb.Image("alpine") },
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Image)
+					src := req.Source.Source
+					if src.Attrs == nil {
+						src.Attrs = map[string]string{}
+					}
+					src.Attrs["foo"] = "bar"
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Update: src,
+					}, nil, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Image)
+					require.Equal(t, "bar", req.Source.Source.Attrs["foo"])
+					src := req.Source.Source
+					src.Attrs["foo"] = "baz"
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Update: src,
+					}, nil, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+					require.Nil(t, req.Source.Image)
+					require.Equal(t, "baz", req.Source.Source.Attrs["foo"])
+					return &policysession.DecisionResponse{
+						Action: sourcepolicypb.PolicyAction_DENY,
+					}, nil, nil
+				},
+			},
+			expectedError: "not allowed by policy",
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := tc.state()
+			def, err := st.Marshal(ctx)
+			require.NoError(t, err)
+
+			callCounter := 0
+
+			p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				if callCounter >= len(tc.callbacks) {
+					return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+				}
+				cb := tc.callbacks[callCounter]
+				callCounter++
+				return cb(ctx, req)
+			})
+
+			_, err = c.Solve(ctx, def, SolveOpt{
+				SourcePolicyProvider: p,
+			}, nil)
+			if tc.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
+		})
+	}
+
+	// policy loop test
+	t.Run("convert loop", func(t *testing.T) {
+		def, err := llb.Image("alpine").Marshal(ctx)
+		require.NoError(t, err)
+
+		calls := 0
+
+		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+			require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
+			require.Nil(t, req.Source.Image)
+			calls++
+			return &policysession.DecisionResponse{
+				Action: sourcepolicypb.PolicyAction_CONVERT,
+				Update: req.Source.Source,
+			}, nil, nil
+		})
+		_, err = c.Solve(ctx, def, SolveOpt{
+			SourcePolicyProvider: p,
+		}, nil)
+		require.ErrorContains(t, err, "too many policy requests")
+		require.Equal(t, 10, calls) // this is not strict value but just to make sure calls happened. future version may optimize this with less calls.
+	})
 }

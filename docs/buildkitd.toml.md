@@ -213,4 +213,19 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
 [system]
   # how often buildkit scans for changes in the supported emulated platforms
   platformsCacheMaxAge = "1h"
+
+
+# optional signed cache configuration for GitHub Actions backend
+[ghacache.sign]
+# command that signs the payload in stdin and outputs the signature to stdout. Normally you want cosign to produce the signature bytes.
+cmd = ""
+[ghacache.verify]
+required = false
+[ghacache.verify.policy]
+timestampThreshold = 1
+tlogThreshold = 1
+# cetificate properties that need to match. Simple wildcards (*) are supported.
+certificateIssuer = ""
+subjectAlternativeName = ""
+buildSignerURI = ""
 ```
