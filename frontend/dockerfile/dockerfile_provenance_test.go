@@ -1349,7 +1349,6 @@ ENV FOO=bar
 
 // https://github.com/moby/buildkit/issues/3562
 func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1361,8 +1360,8 @@ func testDuplicatePlatformProvenance(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(
 		`
-FROM alpine as base-linux
-FROM nanoserver as base-windows
+FROM alpine AS base-linux
+FROM nanoserver AS base-windows
 FROM base-$TARGETOS
 `,
 	)
@@ -1370,10 +1369,15 @@ FROM base-$TARGETOS
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
+
+	platform := integration.UnixOrWindows(
+		"linux/amd64,linux/amd64",     //Linux worker: duplicate call on platform
+		"windows/amd64,windows/amd64", //Windows worker: duplicate call on platform
+	)
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max",
-			"platform":          "linux/amd64,linux/amd64",
+			"platform":          platform,
 		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
