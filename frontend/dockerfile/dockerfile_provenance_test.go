@@ -1371,8 +1371,8 @@ FROM base-$TARGETOS
 	)
 
 	platform := integration.UnixOrWindows(
-		"linux/amd64,linux/amd64",     //Linux worker: duplicate call on platform
-		"windows/amd64,windows/amd64", //Windows worker: duplicate call on platform
+		"linux/amd64,linux/amd64",     // Linux worker: duplicate call on platform
+		"windows/amd64,windows/amd64", // Windows worker: duplicate call on platform
 	)
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
