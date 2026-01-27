@@ -16,6 +16,7 @@ package otlptracegrpc
 
 import (
 	"context"
+	stderrors "errors"
 	"sync"
 	"time"
 
@@ -80,7 +81,8 @@ func (c *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.Resourc
 		c.lock.Lock()
 		defer c.lock.Unlock()
 		if c.tracesClient == nil {
-			return errNoClient
+			// Intentionally using a stdlib error here; see https://github.com/moby/buildkit/commit/f57b3ef89b3053048e7f46d0296d98bcef79448b
+			return stderrors.New("no client")
 		}
 
 		_, err := c.tracesClient.Export(ctx, &coltracepb.ExportTraceServiceRequest{
