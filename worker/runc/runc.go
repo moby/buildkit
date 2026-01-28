@@ -40,7 +40,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, cdiManager *cdidevices.Manager) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, isolateCgroups bool, cdiManager *cdidevices.Manager) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -59,7 +59,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		cmds = append(cmds, binary)
 	}
 
-	rm, err := resources.NewMonitor()
+	rm, err := resources.NewMonitor(isolateCgroups)
 	if err != nil {
 		return opt, err
 	}
@@ -79,6 +79,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		SELinux:             selinux,
 		TracingSocket:       traceSocket,
 		DefaultCgroupParent: defaultCgroupParent,
+		RootCgroup:          rm.RootCgroup(),
 		ResourceMonitor:     rm,
 		CDIManager:          cdiManager,
 	}, np)
