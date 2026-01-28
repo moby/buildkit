@@ -46,13 +46,13 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hiddeco/sshsig v0.2.0
 	github.com/in-toto/in-toto-golang v0.9.0
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.18.3
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
-	github.com/moby/policy-helpers v0.0.0-20251206004813-9fcc1a9ec5c9
+	github.com/moby/policy-helpers v0.0.0-20260127165209-eeebf1a0ab2b
 	github.com/moby/profiles/seccomp v0.1.0
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/moby/sys/reexec v0.1.0
