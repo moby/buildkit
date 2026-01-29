@@ -125,7 +125,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
+    uses: docker/github-builder/.github/workflows/bake.yml@v1
     needs:
       - prepare
       - test
@@ -145,8 +145,8 @@ jobs:
       output: image
       push: ${{ github.repository == 'moby/buildkit' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/dockerfile/')) }}
       sbom: true
-      set: |
-        *.args.FRONTEND_CHANNEL=${{ matrix.channel }}
+      vars: |
+        FRONTEND_CHANNEL=${{ matrix.channel }}
       set-meta-annotations: true
       meta-images: |
         ${{ matrix.imageName }}

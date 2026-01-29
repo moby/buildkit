@@ -50,7 +50,7 @@ jobs:
           fields: platforms
 
   binaries:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
+    uses: docker/github-builder/.github/workflows/bake.yml@v1
     permissions:
       contents: read # same as global permission
       id-token: write # for signing attestation(s) with GitHub OIDC Token
@@ -224,7 +224,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder-experimental/.github/workflows/bake.yml@7643588149117bf0ca3a906caa3968c70484027a
+    uses: docker/github-builder/.github/workflows/bake.yml@v1
     needs:
       - image-prepare
       - test
@@ -244,10 +244,10 @@ jobs:
       output: image
       push: ${{ github.repository == 'moby/buildkit' && (github.event_name == 'schedule' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
       sbom: true
-      set: |
-        *.target=${{ matrix.target }}
-        *.args.EXPORT_BASE=${{ matrix.base }}
-        *.args.BUILDKITD_TAGS=${{ matrix.buildTags }}
+      vars: |
+        IMAGE_TARGET=${{ matrix.target }}
+        EXPORT_BASE=${{ matrix.base }}
+        BUILDKITD_TAGS=${{ matrix.buildTags }}
       set-meta-annotations: true
       meta-images: |
         ${{ matrix.imageName }}
