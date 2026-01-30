@@ -2616,6 +2616,8 @@ func getSecretsRegex() (*regexp.Regexp, *regexp.Regexp) {
 
 		allowTokens := []string{
 			"public",
+			"file",
+			"version",
 		}
 		allowPattern := `(?i)(?:_|^)(?:` + strings.Join(allowTokens, "|") + `)(?:_|$)`
 		secretsAllowRegexp = regexp.MustCompile(allowPattern)
