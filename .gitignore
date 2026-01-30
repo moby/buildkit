@@ -4,3 +4,4 @@
 bin
 .certs
 .tmp
+__debug_bin.exe*
