@@ -89,6 +89,8 @@ jobs:
         name: Build
         uses: docker/bake-action@v6
         with:
+          files: |
+            ./docker-bake.hcl
           targets: integration-tests-base
           set: |
             *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
@@ -110,11 +112,13 @@ jobs:
           - containerd-rootless
           - containerd-1.7
           - containerd-2.0
-          - containerd-snapshotter-stargz
+          # Disabled: requires kernel modules not available on GitHub-hosted runners
+          # - containerd-snapshotter-stargz
           - oci
           - oci-rootless
           - oci-rootless-slirp4netns-detachnetns
-          - oci-snapshotter-stargz
+          # Disabled: requires kernel modules not available on GitHub-hosted runners
+          # - oci-snapshotter-stargz
         pkg: ${{ fromJson(needs.prepare.outputs.pkgs) }}
         kind: ${{ fromJson(needs.prepare.outputs.kinds) }}
         tags: ${{ fromJson(needs.prepare.outputs.tags) }}
@@ -155,6 +159,8 @@ jobs:
         name: Build test image
         uses: docker/bake-action@v6
         with:
+          files: |
+            ./docker-bake.hcl
           targets: integration-tests
           set: |
             *.cache-from=type=gha,scope=${{ inputs.cache_scope }}
