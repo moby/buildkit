@@ -18,13 +18,30 @@ type Exporter interface {
 	Resolve(context.Context, int, map[string]string) (ExporterInstance, error)
 }
 
+// FinalizeFunc completes an export operation after all exports have created
+// their artifacts. It may perform network operations like pushing to a registry.
+// FinalizeFunc is safe to call concurrently with other FinalizeFunc calls.
+type FinalizeFunc func(ctx context.Context) error
+
 type ExporterInstance interface {
 	ID() int
 	Name() string
 	Config() *Config
 	Type() string
 	Attrs() map[string]string
-	Export(ctx context.Context, src *Source, buildInfo ExportBuildInfo) (map[string]string, DescriptorReference, error)
+
+	// Export performs the export operation and optionally returns a finalize
+	// callback. This separates work that must run sequentially from work that
+	// can run in parallel with other exports (e.g., cache export).
+	//
+	// For exporters that complete all work during Export (tar, local),
+	// return nil for the finalize callback.
+	Export(ctx context.Context, src *Source, buildInfo ExportBuildInfo) (
+		response map[string]string,
+		finalize FinalizeFunc,
+		ref DescriptorReference,
+		err error,
+	)
 }
 
 type ExportBuildInfo struct {
