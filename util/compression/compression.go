@@ -54,9 +54,10 @@ var (
 )
 
 type Config struct {
-	Type  Type
-	Force bool
-	Level *int
+	Type    Type
+	Force   bool
+	Level   *int
+	Variant string
 }
 
 func New(t Type) Config {
@@ -72,6 +73,11 @@ func (c Config) SetForce(v bool) Config {
 
 func (c Config) SetLevel(l int) Config {
 	c.Level = &l
+	return c
+}
+
+func (c Config) SetVariant(v string) Config {
+	c.Variant = v
 	return c
 }
 
