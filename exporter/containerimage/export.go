@@ -298,14 +298,20 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 				for _, sfx := range sfx {
 					img.Name = targetName + sfx
-					if _, err := e.opt.Images.Update(imageClientCtx, img); err != nil {
-						if !errors.Is(err, cerrdefs.ErrNotFound) {
-							return nil, nil, nil, tagDone(err)
-						}
+					for { // handle possible race between Update and Create
+						if _, err := e.opt.Images.Update(imageClientCtx, img); err != nil {
+							if !errors.Is(err, cerrdefs.ErrNotFound) {
+								return nil, nil, nil, tagDone(err)
+							}
 
-						if _, err := e.opt.Images.Create(imageClientCtx, img); err != nil {
-							return nil, nil, nil, tagDone(err)
+							if _, err := e.opt.Images.Create(imageClientCtx, img); err != nil {
+								if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
+									return nil, nil, nil, tagDone(err)
+								}
+								continue
+							}
 						}
+						break
 					}
 				}
 				tagDone(nil)
