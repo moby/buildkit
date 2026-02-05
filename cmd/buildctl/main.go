@@ -44,6 +44,7 @@ func main() {
 	app.Name = "buildctl"
 	app.Usage = "build utility"
 	app.Version = version.Version
+	app.EnableBashCompletion = true
 
 	defaultAddress := os.Getenv("BUILDKIT_HOST")
 	if defaultAddress == "" {
