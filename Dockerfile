@@ -221,7 +221,7 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
-RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables \
+RUN apk add --no-cache fuse3 git openssh openssl pigz xz iptables ip6tables util-linux-misc \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
@@ -398,7 +398,9 @@ EOT
 FROM buildkit-export AS buildkit-linux
 COPY --link --from=binaries / /usr/bin/
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
-ENTRYPOINT ["buildkitd"]
+COPY --link hack/buildkitd-entrypoint /usr/bin/buildkitd-entrypoint
+COPY --link hack/with-cgroupfs-remount /usr/bin/with-cgroupfs-remount
+ENTRYPOINT ["/usr/bin/buildkitd-entrypoint"]
 
 FROM buildkit-linux AS buildkit-linux-debug
 COPY --link --from=dlv /out/dlv /usr/bin/dlv
