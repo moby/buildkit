@@ -20,7 +20,7 @@ import (
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
 	"github.com/moby/sys/userns"
-	"github.com/pelletier/go-toml"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/semaphore"
@@ -321,11 +321,11 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Runtime.Name != "" {
 		opts := getRuntimeOptionsType(cfg.Runtime.Name)
 
-		t, err := toml.TreeFromMap(cfg.Runtime.Options)
+		b, err := toml.Marshal(cfg.Runtime.Options)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse runtime options config")
 		}
-		err = t.Unmarshal(opts)
+		err = toml.Unmarshal(b, opts)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse runtime options config")
 		}
