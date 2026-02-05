@@ -7,7 +7,7 @@ const (
 type ExporterOptKey string
 
 // Options keys supported by all exporters.
-var (
+const (
 	// Clamp produced timestamps. For more information see the
 	// SOURCE_DATE_EPOCH specification.
 	// Value: int (number of seconds since Unix epoch)

@@ -42,7 +42,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		})
 	}
 
-	cb := func(ref string, s *session.Session, opts map[string]string) error {
+	opt.s.runGateway = func(ref string, s *session.Session, opts map[string]string) error {
 		if feOpts == nil {
 			feOpts = map[string]string{}
 		}
@@ -62,7 +62,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		return nil
 	}
 
-	return c.solve(ctx, nil, cb, opt, statusChan)
+	return c.solve(ctx, opt, statusChan)
 }
 
 func (c *Client) gatewayClientForBuild(buildid string) *gatewayClientForBuild {
