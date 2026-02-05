@@ -244,6 +244,9 @@ ENV apikey=bar sunflower=foo
 ENV git_key=
 ENV PUBLIC_KEY=
 ARG public_token
+ARG SECRET_PASSPHRASE_FILE
+ENV password_file=bar secret_File=baz
+ARG AUTH_MODULE_VERSION
 # check=skip=SecretsUsedInArgOrEnv // allow secret in environment
 ENV password=bar
 # check=skip=SecretsUsedInArgOrEnv // allow secret in arg
