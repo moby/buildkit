@@ -85,7 +85,7 @@ func setMountState(cmd *RunCommand, expander SingleWordExpander) error {
 	}
 	mounts := make([]*Mount, len(st.flag.StringValues))
 	for i, str := range st.flag.StringValues {
-		m, err := parseMount(str, expander)
+		m, err := ParseMount(str, expander)
 		if err != nil {
 			return err
 		}
@@ -130,7 +130,9 @@ type Mount struct {
 	GID  *uint64
 }
 
-func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
+// ParseMount parses a mount specification string (e.g. "type=bind,source=/src,target=/dst")
+// and returns a Mount struct. The expander parameter is used for variable expansion.
+func ParseMount(val string, expander SingleWordExpander) (*Mount, error) {
 	fields, err := csvvalue.Fields(val, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse csv mounts")
