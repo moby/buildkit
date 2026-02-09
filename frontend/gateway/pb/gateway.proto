@@ -155,6 +155,7 @@ message ResolveSourceMetaResponse {
 message ResolveSourceImageRequest {
 	bool NoConfig = 1;
 	bool AttestationChain = 2;
+	repeated string ResolveAttestations = 3;
 }
 
 message AttestationChain {

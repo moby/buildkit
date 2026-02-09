@@ -73,6 +73,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
+	policyimage "github.com/moby/policy-helpers/image"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -251,6 +252,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHTTPResolveMultiBuild,
 	testGitResolveMutatedSource,
 	testImageResolveAttestationChainRequiresNetwork,
+	testImageResolveAttestationChainLocal,
+	testImageResolveProvenanceAttestation,
 	testSourcePolicySession,
 	testSourcePolicySessionDenyMessages,
 	testSourceMetaPolicySession,
@@ -12402,6 +12405,216 @@ func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integratio
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testImageResolveProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target, platform := buildProvenanceImage(ctx, t, c, sb)
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: "docker-image://" + target,
+		}, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				NoConfig: true,
+				ResolveAttestations: []string{
+					policyimage.SLSAProvenancePredicateType02,
+					policyimage.SLSAProvenancePredicateType1,
+				},
+				Platform:    &platform,
+				ResolveMode: pb.AttrImageResolveModeForcePull,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Image)
+		require.NotNil(t, md.Image.AttestationChain)
+		ac := md.Image.AttestationChain
+		require.NotEmpty(t, ac.AttestationManifest)
+		att := ac.Blobs[ac.AttestationManifest]
+		require.NotEmpty(t, att.Data)
+
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(att.Data, &manifest))
+		require.NotEmpty(t, manifest.Layers)
+		var (
+			stmtBytes  []byte
+			foundLayer ocispecs.Descriptor
+		)
+		for _, layer := range manifest.Layers {
+			if !isSLSAPredicateType(layer.Annotations["in-toto.io/predicate-type"]) {
+				continue
+			}
+			blob, ok := ac.Blobs[layer.Digest]
+			if !ok {
+				continue
+			}
+			stmtBytes = blob.Data
+			foundLayer = layer
+			break
+		}
+		require.NotEmpty(t, stmtBytes)
+		require.Contains(t, []string{
+			policyimage.SLSAProvenancePredicateType02,
+			policyimage.SLSAProvenancePredicateType1,
+		}, foundLayer.Annotations["in-toto.io/predicate-type"])
+
+		var stmt intoto.Statement
+		require.NoError(t, json.Unmarshal(stmtBytes, &stmt))
+		require.Equal(t, "https://in-toto.io/Statement/v0.1", stmt.Type)
+		require.Contains(t, []string{
+			policyimage.SLSAProvenancePredicateType02,
+			policyimage.SLSAProvenancePredicateType1,
+		}, stmt.PredicateType)
+		require.Equal(t, stmt.Subject[0].Digest["sha256"], ac.ImageManifest.Hex())
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testImageResolveAttestationChainLocal(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target, platform := buildProvenanceImage(ctx, t, c, sb)
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+			Identifier: "docker-image://" + target,
+		}, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				NoConfig:         true,
+				AttestationChain: true,
+				Platform:         &platform,
+				ResolveMode:      pb.AttrImageResolveModeForcePull,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.NotNil(t, md.Image)
+		require.NotNil(t, md.Image.AttestationChain)
+		ac := md.Image.AttestationChain
+		require.NotEmpty(t, ac.AttestationManifest)
+		att := ac.Blobs[ac.AttestationManifest]
+		require.NotEmpty(t, att.Data)
+
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(att.Data, &manifest))
+		require.NotEmpty(t, manifest.Layers)
+		found := false
+		for _, layer := range manifest.Layers {
+			if isSLSAPredicateType(layer.Annotations["in-toto.io/predicate-type"]) {
+				found = true
+				break
+			}
+		}
+		require.True(t, found)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+func buildProvenanceImage(ctx context.Context, t *testing.T, c *Client, sb integration.Sandbox) (string, ocispecs.Platform) {
+	t.Helper()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	platform := platforms.Normalize(platforms.DefaultSpec())
+	platformKey := platforms.Format(platform)
+	target := registry + "/buildkit/testprovenance:latest"
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+
+		st := llb.Scratch().File(
+			llb.Mkfile("/greeting", 0600, []byte("hello provenance")),
+		)
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		_, err = ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+		res.AddRef(platformKey, ref)
+
+		img := ocispecs.Image{
+			Platform: platform,
+		}
+		config, err := json.Marshal(img)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal image config")
+		}
+		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, platformKey), config)
+
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: platformKey, Platform: platform}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	return target, platform
+}
+
+// isSLSAPredicateType reports whether the predicate type represents SLSA provenance.
+func isSLSAPredicateType(v string) bool {
+	switch v {
+	case policyimage.SLSAProvenancePredicateType02, policyimage.SLSAProvenancePredicateType1:
+		return true
+	default:
+		return false
+	}
 }
 
 func testHTTPPruneAfterCacheKey(t *testing.T, sb integration.Sandbox) {

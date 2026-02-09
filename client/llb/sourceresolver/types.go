@@ -39,10 +39,11 @@ type MetaResponse struct {
 }
 
 type ResolveImageOpt struct {
-	Platform         *ocispecs.Platform
-	ResolveMode      string
-	NoConfig         bool
-	AttestationChain bool
+	Platform            *ocispecs.Platform
+	ResolveMode         string
+	NoConfig            bool
+	AttestationChain    bool
+	ResolveAttestations []string
 }
 
 type ResolveImageResponse struct {
