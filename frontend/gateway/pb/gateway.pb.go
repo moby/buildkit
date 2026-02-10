@@ -1069,11 +1069,12 @@ func (x *ResolveSourceMetaResponse) GetHTTP() *ResolveSourceHTTPResponse {
 }
 
 type ResolveSourceImageRequest struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	NoConfig         bool                   `protobuf:"varint,1,opt,name=NoConfig,proto3" json:"NoConfig,omitempty"`
-	AttestationChain bool                   `protobuf:"varint,2,opt,name=AttestationChain,proto3" json:"AttestationChain,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	NoConfig            bool                   `protobuf:"varint,1,opt,name=NoConfig,proto3" json:"NoConfig,omitempty"`
+	AttestationChain    bool                   `protobuf:"varint,2,opt,name=AttestationChain,proto3" json:"AttestationChain,omitempty"`
+	ResolveAttestations []string               `protobuf:"bytes,3,rep,name=ResolveAttestations,proto3" json:"ResolveAttestations,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResolveSourceImageRequest) Reset() {
@@ -1118,6 +1119,13 @@ func (x *ResolveSourceImageRequest) GetAttestationChain() bool {
 		return x.AttestationChain
 	}
 	return false
+}
+
+func (x *ResolveSourceImageRequest) GetResolveAttestations() []string {
+	if x != nil {
+		return x.ResolveAttestations
+	}
+	return nil
 }
 
 type AttestationChain struct {
@@ -3318,10 +3326,11 @@ const file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_rawDesc = 
 	"\x06Source\x18\x01 \x01(\v2\f.pb.SourceOpR\x06Source\x12K\n" +
 	"\x05Image\x18\x02 \x01(\v25.moby.buildkit.v1.frontend.ResolveSourceImageResponseR\x05Image\x12E\n" +
 	"\x03Git\x18\x03 \x01(\v23.moby.buildkit.v1.frontend.ResolveSourceGitResponseR\x03Git\x12H\n" +
-	"\x04HTTP\x18\x04 \x01(\v24.moby.buildkit.v1.frontend.ResolveSourceHTTPResponseR\x04HTTP\"c\n" +
+	"\x04HTTP\x18\x04 \x01(\v24.moby.buildkit.v1.frontend.ResolveSourceHTTPResponseR\x04HTTP\"\x95\x01\n" +
 	"\x19ResolveSourceImageRequest\x12\x1a\n" +
 	"\bNoConfig\x18\x01 \x01(\bR\bNoConfig\x12*\n" +
-	"\x10AttestationChain\x18\x02 \x01(\bR\x10AttestationChain\"\xd7\x02\n" +
+	"\x10AttestationChain\x18\x02 \x01(\bR\x10AttestationChain\x120\n" +
+	"\x13ResolveAttestations\x18\x03 \x03(\tR\x13ResolveAttestations\"\xd7\x02\n" +
 	"\x10AttestationChain\x12\x12\n" +
 	"\x04Root\x18\x01 \x01(\tR\x04Root\x12$\n" +
 	"\rImageManifest\x18\x02 \x01(\tR\rImageManifest\x120\n" +

@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -523,9 +524,15 @@ func (c *grpcClient) ResolveSourceMetadata(ctx context.Context, op *opspb.Source
 		SourcePolicies: opt.SourcePolicies,
 	}
 	if opt.ImageOpt != nil {
+		attestationChain := opt.ImageOpt.AttestationChain
+		if len(opt.ImageOpt.ResolveAttestations) > 0 {
+			attestationChain = true
+		}
+		req.ResolveMode = opt.ImageOpt.ResolveMode
 		req.Image = &pb.ResolveSourceImageRequest{
-			NoConfig:         opt.ImageOpt.NoConfig,
-			AttestationChain: opt.ImageOpt.AttestationChain,
+			NoConfig:            opt.ImageOpt.NoConfig,
+			AttestationChain:    attestationChain,
+			ResolveAttestations: slices.Clone(opt.ImageOpt.ResolveAttestations),
 		}
 	}
 

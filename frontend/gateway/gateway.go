@@ -591,6 +591,7 @@ func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.Re
 	if req.Image != nil {
 		resolveopt.ImageOpt.NoConfig = req.Image.NoConfig
 		resolveopt.ImageOpt.AttestationChain = req.Image.AttestationChain
+		resolveopt.ImageOpt.ResolveAttestations = slices.Clone(req.Image.ResolveAttestations)
 	}
 	resolveopt.OCILayoutOpt = &sourceresolver.ResolveOCILayoutOpt{
 		Platform: platform,
