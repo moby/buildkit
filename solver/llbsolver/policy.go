@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -99,6 +100,7 @@ func (p *policyEvaluator) evaluate(ctx context.Context, op *pb.Op, max int) (boo
 				}
 				op.ImageOpt.NoConfig = metareq.Image.NoConfig
 				op.ImageOpt.AttestationChain = metareq.Image.AttestationChain
+				op.ImageOpt.ResolveAttestations = slices.Clone(metareq.Image.ResolveAttestations)
 			}
 
 			if metareq.Git != nil {

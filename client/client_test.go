@@ -257,6 +257,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSourcePolicySession,
 	testSourcePolicySessionDenyMessages,
 	testSourceMetaPolicySession,
+	testSourceMetaPolicySessionResolveAttestations,
 	testSourcePolicyParallelSession,
 	testSourcePolicySignedCommit,
 	testSourcePolicySessionConvert,
@@ -12590,7 +12591,7 @@ func buildProvenanceImage(ctx context.Context, t *testing.T, c *Client, sb integ
 
 	_, err = c.Build(ctx, SolveOpt{
 		FrontendAttrs: map[string]string{
-			"attest:provenance": "mode=max",
+			"attest:provenance": "mode=max,version=v1",
 		},
 		Exports: []ExportEntry{
 			{

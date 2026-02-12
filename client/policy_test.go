@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/containerd/platforms"
+	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -21,6 +22,8 @@ import (
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
+	policyimage "github.com/moby/policy-helpers/image"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -268,6 +271,101 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, len(tc.callbacks), callCounter, "not all policy callbacks were called")
 		})
 	}
+}
+
+func testSourceMetaPolicySessionResolveAttestations(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target, platform := buildProvenanceImage(ctx, t, c, sb)
+	sourceID := "docker-image://" + target
+	requestedPredicateType := policyimage.SLSAProvenancePredicateType1
+
+	callbackCalls := 0
+	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		switch callbackCalls {
+		case 0:
+			callbackCalls++
+			require.Equal(t, sourceID, req.Source.Source.Identifier)
+			require.Nil(t, req.Source.Image)
+			return nil, &pb.ResolveSourceMetaRequest{
+				Source:   req.Source.Source,
+				Platform: req.Platform,
+				Image: &pb.ResolveSourceImageRequest{
+					NoConfig:            true,
+					ResolveAttestations: []string{requestedPredicateType},
+				},
+			}, nil
+		case 1:
+			callbackCalls++
+			require.Equal(t, sourceID, req.Source.Source.Identifier)
+			require.NotNil(t, req.Source.Image)
+			require.Empty(t, req.Source.Image.Config)
+			require.NotNil(t, req.Source.Image.AttestationChain)
+			ac := req.Source.Image.AttestationChain
+			require.NotEmpty(t, ac.AttestationManifest)
+
+			att, ok := ac.Blobs[ac.AttestationManifest]
+			require.True(t, ok)
+			require.NotEmpty(t, att.Data)
+
+			var manifest ocispecs.Manifest
+			require.NoError(t, json.Unmarshal(att.Data, &manifest))
+			require.NotEmpty(t, manifest.Layers)
+
+			foundRequestedType := false
+
+			imageManifestDigest, err := digest.Parse(ac.ImageManifest)
+			require.NoError(t, err)
+
+			for _, layer := range manifest.Layers {
+				layerPredicateType := layer.Annotations["in-toto.io/predicate-type"]
+				if layerPredicateType != requestedPredicateType {
+					continue
+				}
+				foundRequestedType = true
+
+				blob, ok := ac.Blobs[string(layer.Digest)]
+				require.True(t, ok, "missing blob for requested predicate type %q", layerPredicateType)
+				require.NotEmpty(t, blob.Data, "empty blob data for requested predicate type %q", layerPredicateType)
+
+				var stmt intoto.Statement
+				require.NoError(t, json.Unmarshal(blob.Data, &stmt))
+				require.Equal(t, "https://in-toto.io/Statement/v0.1", stmt.Type)
+				require.Equal(t, layerPredicateType, stmt.PredicateType)
+				require.NotEmpty(t, stmt.Subject)
+				require.Equal(t, imageManifestDigest.Hex(), stmt.Subject[0].Digest["sha256"])
+			}
+			require.True(t, foundRequestedType, "requested predicate type %q not found in attestation manifest layers", requestedPredicateType)
+
+			return &policysession.DecisionResponse{
+				Action: sourcepolicypb.PolicyAction_ALLOW,
+			}, nil, nil
+		default:
+			return nil, nil, errors.Errorf("too many policy callbacks: %d", callbackCalls)
+		}
+	})
+
+	_, err = c.Build(ctx, SolveOpt{
+		SourcePolicyProvider: p,
+	}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		_, err := c.ResolveSourceMetadata(ctx, &opspb.SourceOp{
+			Identifier: sourceID,
+		}, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				Platform: &platform,
+			},
+		})
+		return nil, err
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 2, callbackCalls)
 }
 
 func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
