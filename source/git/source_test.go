@@ -1732,18 +1732,30 @@ func testCheckSignatures(t *testing.T, keepGitDir bool, format string) {
 
 	fixturesBase := os.Getenv("BUILDKIT_TEST_SIGN_FIXTURES")
 
-	pubkey, err := os.ReadFile(fixturesBase + "/user1.gpg.pub")
+	user1GPGPub, err := os.ReadFile(fixturesBase + "/user1.gpg.pub")
 	require.NoError(t, err)
 
-	err = gitsign.VerifySignature(ob, pubkey, nil)
+	err = gitsign.VerifySignature(ob, user1GPGPub, nil)
 	require.NoError(t, err)
 
-	pubkey, err = os.ReadFile(fixturesBase + "/user2.gpg.pub")
+	user2GPGPub, err := os.ReadFile(fixturesBase + "/user2.gpg.pub")
 	require.NoError(t, err)
 
-	err = gitsign.VerifySignature(ob, pubkey, nil)
+	err = gitsign.VerifySignature(ob, user2GPGPub, nil)
 	require.ErrorContains(t, err, "signature made by unknown entity")
 	require.ErrorContains(t, err, "signature by")
+
+	mergedWrongFirst := append(append([]byte{}, user2GPGPub...), '\n')
+	mergedWrongFirst = append(mergedWrongFirst, user1GPGPub...)
+
+	err = gitsign.VerifySignature(ob, mergedWrongFirst, nil)
+	require.NoError(t, err)
+
+	mergedRightFirst := append(append([]byte{}, user1GPGPub...), '\n')
+	mergedRightFirst = append(mergedRightFirst, user2GPGPub...)
+
+	err = gitsign.VerifySignature(ob, mergedRightFirst, nil)
+	require.NoError(t, err)
 
 	id = &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "v1.2.3"}
 
