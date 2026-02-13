@@ -57,9 +57,9 @@ func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyD
 		return err
 	}
 
-	ents, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(pubKeyData))
+	ents, err := readAllArmoredKeyRings(pubKeyData)
 	if err != nil {
-		return errors.Wrap(err, "failed to read armored public key")
+		return err
 	}
 
 	// add addition algorithm constraints
@@ -96,6 +96,39 @@ func verifyPGPSignature(obj *gitobject.GitObject, sig *packet.Signature, pubKeyD
 	}
 
 	return nil
+}
+
+// readAllArmoredKeyRings parses one or more concatenated armored OpenPGP key
+// blocks and returns a combined entity list for signature verification.
+func readAllArmoredKeyRings(pubKeyData []byte) (openpgp.EntityList, error) {
+	var ents openpgp.EntityList
+	r := bytes.NewReader(pubKeyData)
+
+	for {
+		block, err := armor.Decode(r)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to decode armored public key")
+		}
+
+		if block.Type != openpgp.PublicKeyType && block.Type != openpgp.PrivateKeyType {
+			return nil, errors.Errorf("expected public or private key block, got: %s", block.Type)
+		}
+
+		el, err := openpgp.ReadKeyRing(block.Body)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read armored public key")
+		}
+		ents = append(ents, el...)
+	}
+
+	if len(ents) == 0 {
+		return nil, errors.New("failed to read armored public key: no armored data found")
+	}
+
+	return ents, nil
 }
 
 func verifySSHSignature(obj *gitobject.GitObject, sig *sshsig.Signature, pubKeyData []byte) error {

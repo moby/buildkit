@@ -633,7 +633,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 					},
 				},
 			},
-			expectedErr: "failed to read armored public key: openpgp",
+			expectedErr: "failed to read armored public key",
 			state: func() llb.State {
 				return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0"))
 			},
