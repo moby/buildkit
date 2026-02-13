@@ -101,7 +101,7 @@ func TestImageBlobSource(t *testing.T) {
 	require.Equal(t, true, ok)
 	require.Nil(t, vtx.Platform)
 
-	require.Equal(t, "docker-image-blob://docker.io/myuser/myrepo@"+string(blobDgst), src.Source.Identifier)
+	require.Equal(t, "docker-image+blob://docker.io/myuser/myrepo@"+string(blobDgst), src.Source.Identifier)
 }
 
 func TestStateSourceMapMarshal(t *testing.T) {
