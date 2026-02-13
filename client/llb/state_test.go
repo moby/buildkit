@@ -104,6 +104,35 @@ func TestImageBlobSource(t *testing.T) {
 	require.Equal(t, "docker-image+blob://docker.io/myuser/myrepo@"+string(blobDgst), src.Source.Identifier)
 }
 
+func TestOCILayoutBlobSource(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	blobDgst := digest.FromBytes([]byte("foo"))
+
+	s := OCILayoutBlob("myrepo/blob@"+string(blobDgst), ImageBlobOCIStore("sid", "store0"))
+	def, err := s.Marshal(ctx)
+	require.NoError(t, err)
+
+	m, arr := parseDef(t, def.Def)
+	_ = m
+	require.Equal(t, 2, len(arr))
+
+	dgst, idx := last(t, arr)
+	require.Equal(t, 0, idx)
+
+	vtx, ok := m[dgst]
+	require.Equal(t, true, ok)
+
+	src, ok := vtx.Op.(*pb.Op_Source)
+	require.Equal(t, true, ok)
+	require.Nil(t, vtx.Platform)
+
+	require.Equal(t, "oci-layout+blob://docker.io/myrepo/blob@"+string(blobDgst), src.Source.Identifier)
+	require.Equal(t, "sid", src.Source.Attrs[pb.AttrOCILayoutSessionID])
+	require.Equal(t, "store0", src.Source.Attrs[pb.AttrOCILayoutStoreID])
+}
+
 func TestStateSourceMapMarshal(t *testing.T) {
 	t.Parallel()
 

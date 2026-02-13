@@ -134,7 +134,7 @@ func (c *Capture) AddImage(i provenancetypes.ImageSource) {
 
 func (c *Capture) AddImageBlob(i provenancetypes.ImageBlobSource) {
 	for _, v := range c.Sources.ImageBlobs {
-		if v.Ref == i.Ref {
+		if v.Ref == i.Ref && v.Local == i.Local {
 			return
 		}
 	}

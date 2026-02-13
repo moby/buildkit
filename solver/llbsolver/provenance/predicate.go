@@ -41,7 +41,11 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 	}
 
 	for _, s := range srcs.ImageBlobs {
-		uri, err := purl.RefToPURL(packageurl.TypeDocker, s.Ref, nil)
+		purlType := packageurl.TypeDocker
+		if s.Local {
+			purlType = packageurl.TypeOCI
+		}
+		uri, err := purl.RefToPURL(purlType, s.Ref, nil)
 		if err != nil {
 			return nil, err
 		}
