@@ -1,9 +1,13 @@
 package compression
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"os/exec"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
@@ -12,6 +16,12 @@ import (
 
 func (c gzipType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
+		switch comp.Variant {
+		case "igzip":
+			return gzipCmdWriter(ctx, "igzip", comp)(dest)
+		case "pigz":
+			return gzipCmdWriter(ctx, "pigz", comp)(dest)
+		}
 		return gzipWriter(comp)(dest)
 	}, nil
 }
@@ -62,5 +72,46 @@ func gzipWriter(comp Config) func(io.Writer) (io.WriteCloser, error) {
 			level = *comp.Level
 		}
 		return gzip.NewWriterLevel(dest, level)
+	}
+}
+
+type writeCloserWrapper struct {
+	io.Writer
+	closer func() error
+}
+
+func (w *writeCloserWrapper) Close() error {
+	return w.closer()
+}
+
+func gzipCmdWriter(ctx context.Context, cmd string, comp Config) func(io.Writer) (io.WriteCloser, error) {
+	return func(dest io.Writer) (io.WriteCloser, error) {
+		reader, writer := io.Pipe()
+		args := []string{"-c"}
+		if comp.Level != nil {
+			args = append(args, fmt.Sprintf("-%d", *comp.Level))
+		}
+		command := exec.CommandContext(ctx, cmd, args...)
+		command.Stdin = reader
+		command.Stdout = dest
+
+		var errBuf bytes.Buffer
+		command.Stderr = &errBuf
+
+		if err := command.Start(); err != nil {
+			return nil, err
+		}
+
+		return &writeCloserWrapper{
+			Writer: writer,
+			closer: func() error {
+				closeErr := writer.Close()
+				waitErr := command.Wait()
+				if waitErr != nil {
+					return fmt.Errorf("%s: %s", waitErr, errBuf.String())
+				}
+				return errors.Join(closeErr, waitErr)
+			},
+		}, nil
 	}
 }
