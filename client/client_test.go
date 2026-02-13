@@ -77,6 +77,7 @@ import (
 	policyimage "github.com/moby/policy-helpers/image"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	packageurl "github.com/package-url/packageurl-go"
 	"github.com/pkg/errors"
 	"github.com/spdx/tools-golang/spdx"
 	"github.com/stretchr/testify/assert"
@@ -11605,8 +11606,12 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, json.Unmarshal(provDt, &stmt))
 
-	expectedName, err := purl.RefToPURL("docker-blob", registry+"/foo/blobtest@"+l.Digest.String(), nil)
+	expectedName, err := purl.RefToPURL(packageurl.TypeDocker, registry+"/foo/blobtest@"+l.Digest.String(), nil)
 	require.NoError(t, err)
+	purlObj, err := packageurl.FromString(expectedName)
+	require.NoError(t, err)
+	purlObj.Qualifiers = append(purlObj.Qualifiers, packageurl.Qualifier{Key: "ref_type", Value: "blob"})
+	expectedName = purlObj.ToString()
 
 	found := false
 	for _, m := range stmt.Predicate.Materials {

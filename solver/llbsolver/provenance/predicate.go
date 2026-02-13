@@ -41,7 +41,14 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 	}
 
 	for _, s := range srcs.ImageBlobs {
-		uri, err := purl.RefToPURL("docker-blob", s.Ref, nil)
+		uri, err := purl.RefToPURL(packageurl.TypeDocker, s.Ref, nil)
+		if err != nil {
+			return nil, err
+		}
+		uri, err = setPURLQualifier(uri, packageurl.Qualifier{
+			Key:   "ref_type",
+			Value: "blob",
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -83,6 +90,21 @@ func digestSetForCommit(commit string) slsa.DigestSet {
 		dset["sha1"] = commit
 	}
 	return dset
+}
+
+func setPURLQualifier(uri string, q packageurl.Qualifier) (string, error) {
+	p, err := packageurl.FromString(uri)
+	if err != nil {
+		return "", err
+	}
+	for i, qq := range p.Qualifiers {
+		if qq.Key == q.Key {
+			p.Qualifiers[i].Value = q.Value
+			return p.ToString(), nil
+		}
+	}
+	p.Qualifiers = append(p.Qualifiers, q)
+	return p.ToString(), nil
 }
 
 func findMaterial(srcs provenancetypes.Sources, uri string) (*slsa.ProvenanceMaterial, bool) {

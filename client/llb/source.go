@@ -151,7 +151,7 @@ func ImageBlob(ref string, opts ...ImageBlobOption) State {
 		repoName = digested.String()
 	}
 
-	source := NewSource("docker-image-blob://"+repoName, attrs, bi.Constraints)
+	source := NewSource("docker-image+blob://"+repoName, attrs, bi.Constraints)
 	if err != nil {
 		source.err = err
 	}
