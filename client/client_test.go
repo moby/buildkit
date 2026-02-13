@@ -58,6 +58,7 @@ import (
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
+	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/sourcepolicy"
@@ -237,6 +238,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testRegistryEmptyCacheExport,
 	testSnapshotWithMultipleBlobs,
 	testImageBlobSource,
+	testOCILayoutBlobSource,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
 	testExportLocalForcePlatformSplit,
@@ -758,6 +760,9 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	destDir := t.TempDir()
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "",
+		},
 		Exports: []ExportEntry{
 			{
 				Type:      ExporterLocal,
@@ -11597,12 +11602,8 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	var stmt struct {
-		Predicate struct {
-			Materials []struct {
-				URI    string            `json:"uri"`
-				Digest map[string]string `json:"digest"`
-			} `json:"materials"`
-		} `json:"predicate"`
+		intoto.StatementHeader
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(provDt, &stmt))
 
@@ -11618,6 +11619,109 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 		if m.URI == expectedName {
 			found = true
 			require.Equal(t, l.Digest.Hex(), m.Digest["sha256"])
+			break
+		}
+	}
+	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.Materials)
+}
+
+func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("alpine")
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	ociDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterOCI,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+				OutputDir: ociDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	indexDt, err := os.ReadFile(filepath.Join(ociDir, ocispecs.ImageIndexFile))
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(indexDt, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+
+	var mfst ocispecs.Manifest
+	mfstDt, err := os.ReadFile(filepath.Join(ociDir, "blobs/sha256", index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+	err = json.Unmarshal(mfstDt, &mfst)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(mfst.Layers), 1)
+	layer := mfst.Layers[0]
+
+	store, err := local.NewStore(ociDir)
+	require.NoError(t, err)
+	csID := "my-blob-content-store"
+
+	blob := llb.OCILayoutBlob("not/real@"+layer.Digest.String(), llb.ImageBlobOCIStore("", csID), llb.Filename("layer.tar.gz"), llb.Chown(123, 456))
+	st = llb.Image("alpine").Run(llb.Shlex(`sh -c 'sha256sum /layers/layer.tar.gz | cut -d" " -f0 > /out/checksum && stat -c "%u-%g-%s" /layers/layer.tar.gz > /out/stat'`), llb.AddMount("/layers", blob, llb.Readonly)).AddMount("/out", llb.Scratch())
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "",
+		},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		OCIStores: map[string]content.Store{
+			csID: store,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "stat"))
+	require.NoError(t, err)
+	require.Equal(t, "123-456-"+strconv.FormatInt(layer.Size, 10), strings.TrimSpace(string(dt)))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "checksum"))
+	require.NoError(t, err)
+	require.Equal(t, layer.Digest.Hex(), strings.TrimSpace(string(dt)))
+
+	provDt, err := os.ReadFile(filepath.Join(destDir, "provenance.json"))
+	require.NoError(t, err)
+
+	var stmt struct {
+		intoto.StatementHeader
+		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(provDt, &stmt))
+
+	expectedName, err := purl.RefToPURL(packageurl.TypeOCI, "not/real@"+layer.Digest.String(), nil)
+	require.NoError(t, err)
+	purlObj, err := packageurl.FromString(expectedName)
+	require.NoError(t, err)
+	purlObj.Qualifiers = append(purlObj.Qualifiers, packageurl.Qualifier{Key: "ref_type", Value: "blob"})
+	expectedName = purlObj.ToString()
+
+	found := false
+	for _, m := range stmt.Predicate.Materials {
+		if m.URI == expectedName {
+			found = true
+			require.Equal(t, layer.Digest.Hex(), m.Digest["sha256"])
 			break
 		}
 	}

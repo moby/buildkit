@@ -100,6 +100,8 @@ func (s *SourceOp) Inputs() []Output {
 type ImageBlobInfo struct {
 	constraintsWrapper
 	fileinfoWrapper
+	sessionID string
+	storeID   string
 }
 
 type ImageBlobOption interface {
@@ -152,6 +154,60 @@ func ImageBlob(ref string, opts ...ImageBlobOption) State {
 	}
 
 	source := NewSource("docker-image+blob://"+repoName, attrs, bi.Constraints)
+	if err != nil {
+		source.err = err
+	}
+	return NewState(source.Output())
+}
+
+// OCILayoutBlob returns a state that represents a single digest-addressed blob from an OCI layout store.
+func OCILayoutBlob(ref string, opts ...ImageBlobOption) State {
+	bi := &ImageBlobInfo{}
+	for _, o := range opts {
+		o.SetImageBlobOption(bi)
+	}
+	attrs := map[string]string{}
+
+	if bi.Filename != "" {
+		attrs[pb.AttrHTTPFilename] = bi.Filename
+	}
+	if bi.Perm != 0 {
+		attrs[pb.AttrHTTPPerm] = "0" + strconv.FormatInt(int64(bi.Perm), 8)
+	}
+	if bi.UID != 0 {
+		attrs[pb.AttrHTTPUID] = strconv.Itoa(bi.UID)
+	}
+	if bi.GID != 0 {
+		attrs[pb.AttrHTTPGID] = strconv.Itoa(bi.GID)
+	}
+	if bi.sessionID != "" {
+		attrs[pb.AttrOCILayoutSessionID] = bi.sessionID
+	}
+	if bi.storeID != "" {
+		attrs[pb.AttrOCILayoutStoreID] = bi.storeID
+	}
+
+	addCap(&bi.Constraints, pb.CapSourceImageBlob)
+
+	var digested reference.Digested
+
+	r, err := reference.ParseNormalizedNamed(ref)
+	if err == nil {
+		if _, tagged := r.(reference.Tagged); tagged {
+			err = errors.Errorf("tagged image reference not allowed for blob reference")
+		} else if ref, ok := r.(reference.Digested); !ok {
+			err = errors.Errorf("checksum required in blob reference")
+		} else {
+			digested = ref
+		}
+	}
+
+	repoName := "invalid"
+	if digested != nil {
+		repoName = digested.String()
+	}
+
+	source := NewSource("oci-layout+blob://"+repoName, attrs, bi.Constraints)
 	if err != nil {
 		source.err = err
 	}
@@ -257,6 +313,12 @@ type imageOptionFunc func(*ImageInfo)
 
 func (fn imageOptionFunc) SetImageOption(ii *ImageInfo) {
 	fn(ii)
+}
+
+type imageBlobOptionFunc func(*ImageBlobInfo)
+
+func (fn imageBlobOptionFunc) SetImageBlobOption(ib *ImageBlobInfo) {
+	fn(ib)
 }
 
 var MarkImageInternal = imageOptionFunc(func(ii *ImageInfo) {
@@ -682,6 +744,14 @@ func OCIStore(sessionID string, storeID string) OCILayoutOption {
 	return ociLayoutOptionFunc(func(oi *OCILayoutInfo) {
 		oi.sessionID = sessionID
 		oi.storeID = storeID
+	})
+}
+
+// ImageBlobOCIStore returns an [ImageBlobOption] that configures the OCI layout session/store used by [OCILayoutBlob].
+func ImageBlobOCIStore(sessionID string, storeID string) ImageBlobOption {
+	return imageBlobOptionFunc(func(ib *ImageBlobInfo) {
+		ib.sessionID = sessionID
+		ib.storeID = storeID
 	})
 }
 

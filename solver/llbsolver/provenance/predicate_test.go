@@ -37,3 +37,28 @@ func TestSLSAMaterialsImageBlobPURL(t *testing.T) {
 
 	require.Equal(t, dgst.Hex(), ms[0].Digest[dgst.Algorithm().String()])
 }
+
+func TestSLSAMaterialsOCILayoutBlobPURL(t *testing.T) {
+	t.Parallel()
+
+	dgst := digest.FromString("blobdata")
+	ms, err := slsaMaterials(provenancetypes.Sources{
+		ImageBlobs: []provenancetypes.ImageBlobSource{
+			{
+				Ref:    "example.com/ns/repo@" + dgst.String(),
+				Digest: dgst,
+				Local:  true,
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, ms, 1)
+
+	p, err := packageurl.FromString(ms[0].URI)
+	require.NoError(t, err)
+	require.Equal(t, packageurl.TypeOCI, p.Type)
+
+	q := p.Qualifiers.Map()
+	require.Equal(t, "blob", q["ref_type"])
+	require.Equal(t, dgst.String(), q["digest"])
+}

@@ -65,6 +65,7 @@ type ImageSource struct {
 type ImageBlobSource struct {
 	Ref    string
 	Digest digest.Digest
+	Local  bool
 }
 
 type GitSource struct {

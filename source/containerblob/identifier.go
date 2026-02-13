@@ -15,6 +15,9 @@ import (
 
 type ImageBlobIdentifier struct {
 	Reference  reference.Spec
+	SchemeName string
+	SessionID  string
+	StoreID    string
 	RecordType client.UsageRecordType
 	Filename   string
 	Perm       int
@@ -22,7 +25,7 @@ type ImageBlobIdentifier struct {
 	GID        int
 }
 
-func NewImageBlobIdentifier(str string) (*ImageBlobIdentifier, error) {
+func NewImageBlobIdentifier(str string, scheme string) (*ImageBlobIdentifier, error) {
 	ref, err := reference.Parse(str)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -31,13 +34,19 @@ func NewImageBlobIdentifier(str string) (*ImageBlobIdentifier, error) {
 	if ref.Object == "" {
 		return nil, errors.WithStack(reference.ErrObjectRequired)
 	}
-	return &ImageBlobIdentifier{Reference: ref}, nil
+	return &ImageBlobIdentifier{
+		Reference:  ref,
+		SchemeName: scheme,
+	}, nil
 }
 
 var _ source.Identifier = (*ImageBlobIdentifier)(nil)
 
-func (*ImageBlobIdentifier) Scheme() string {
-	return srctypes.DockerImageBlobScheme
+func (id *ImageBlobIdentifier) Scheme() string {
+	if id.SchemeName == "" {
+		return srctypes.DockerImageBlobScheme
+	}
+	return id.SchemeName
 }
 
 func (id *ImageBlobIdentifier) Capture(c *provenance.Capture, pin string) error {
@@ -62,6 +71,7 @@ func (id *ImageBlobIdentifier) Capture(c *provenance.Capture, pin string) error 
 	c.AddImageBlob(provenancetypes.ImageBlobSource{
 		Ref:    id.Reference.String(),
 		Digest: dgst,
+		Local:  id.Scheme() == srctypes.OCIBlobScheme,
 	})
 	return nil
 }

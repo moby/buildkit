@@ -33,11 +33,18 @@ func NewSource(opt SourceOpt) (*Source, error) {
 }
 
 func (is *Source) Schemes() []string {
-	return []string{srctypes.DockerImageBlobScheme}
+	return []string{srctypes.DockerImageBlobScheme, srctypes.OCIBlobScheme}
 }
 
 func (is *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
-	return is.registryIdentifier(ref, attrs, platform)
+	switch scheme {
+	case srctypes.DockerImageBlobScheme:
+		return is.registryIdentifier(ref, attrs, platform)
+	case srctypes.OCIBlobScheme:
+		return is.ociLayoutIdentifier(ref, attrs, platform)
+	default:
+		return nil, errors.Errorf("invalid image blob scheme %s", scheme)
+	}
 }
 
 func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
@@ -52,12 +59,30 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	}, nil
 }
 
-func (is *Source) registryIdentifier(ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
-	id, err := NewImageBlobIdentifier(ref)
+func (is *Source) registryIdentifier(ref string, attrs map[string]string, _ *pb.Platform) (source.Identifier, error) {
+	id, err := NewImageBlobIdentifier(ref, srctypes.DockerImageBlobScheme)
 	if err != nil {
 		return nil, err
 	}
+	return is.parseIdentifierAttrs(id, attrs, false)
+}
 
+func (is *Source) ociLayoutIdentifier(ref string, attrs map[string]string, _ *pb.Platform) (source.Identifier, error) {
+	id, err := NewImageBlobIdentifier(ref, srctypes.OCIBlobScheme)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := is.parseIdentifierAttrs(id, attrs, true)
+	if err != nil {
+		return nil, err
+	}
+	if id.StoreID == "" {
+		return nil, errors.Errorf("oci-layout blob source requires store id")
+	}
+	return parsed, nil
+}
+
+func (is *Source) parseIdentifierAttrs(id *ImageBlobIdentifier, attrs map[string]string, allowOCIStore bool) (source.Identifier, error) {
 	for k, v := range attrs {
 		switch k {
 		case pb.AttrHTTPFilename:
@@ -86,6 +111,14 @@ func (is *Source) registryIdentifier(ref string, attrs map[string]string, platfo
 				return nil, err
 			}
 			id.RecordType = rt
+		case pb.AttrOCILayoutSessionID:
+			if allowOCIStore {
+				id.SessionID = v
+			}
+		case pb.AttrOCILayoutStoreID:
+			if allowOCIStore {
+				id.StoreID = v
+			}
 		}
 	}
 
