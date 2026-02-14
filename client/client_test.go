@@ -260,6 +260,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSourceMetaPolicySessionResolveAttestations,
 	testSourcePolicyParallelSession,
 	testSourcePolicySignedCommit,
+	testSourcePolicySessionHTTPChecksumAssist,
 	testSourcePolicySessionConvert,
 }
 

@@ -73,3 +73,10 @@ cat >"${BUILDKIT_TEST_SIGN_FIXTURES}/${USERNAME}.gpg.gitconfig" <<EOF
 EOF
 
 gpg --armor --export "$FP" >"${USERNAME}.gpg.pub"
+
+# generate pre-signed detached signature fixture for HTTP checksum assist tests
+printf '%s' "http payload for detached signature verification" >"${USERNAME}.http.artifact"
+gpg --batch --yes --pinentry-mode loopback --passphrase test \
+  --local-user "$FP" --armor \
+  --output "${USERNAME}.http.artifact.asc" \
+  --detach-sign "${USERNAME}.http.artifact"
