@@ -20,9 +20,26 @@ See [Build secrets](https://docs.docker.com/build/building/secrets/).
 
 ## Examples
 
-❌ Bad: `AWS_SECRET_ACCESS_KEY` is a secret value.
+❌ Bad: using ARG to pass AWS credentials.
 
 ```dockerfile
-FROM scratch
+ARG AWS_ACCESS_KEY_ID
 ARG AWS_SECRET_ACCESS_KEY
+RUN aws s3 cp s3://my-bucket/file .
+```
+
+✅ Good: using secret mounts with environment variables.
+
+```dockerfile
+RUN --mount=type=secret,id=aws_key_id,env=AWS_ACCESS_KEY_ID \
+    --mount=type=secret,id=aws_secret_key,env=AWS_SECRET_ACCESS_KEY \
+    aws s3 cp s3://my-bucket/file .
+```
+
+To build with these secrets:
+
+```console
+$ docker buildx build \
+    --secret id=aws_key_id,env=AWS_ACCESS_KEY_ID \
+    --secret id=aws_secret_key,env=AWS_SECRET_ACCESS_KEY .
 ```
