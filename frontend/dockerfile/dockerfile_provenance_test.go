@@ -22,7 +22,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
-	provenanceCommon "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
+	slsa1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -172,7 +172,7 @@ RUN echo ok> /foo
 				require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 				require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
 
-				if slsaVersion == "v1" {
+				if slsaVersion == "" || slsaVersion == "v1" {
 					require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 				} else {
 					require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
@@ -189,7 +189,7 @@ RUN echo ok> /foo
 					expCustom = provenancetypes.ProvenanceCustomEnv{}
 				}
 
-				if slsaVersion == "v1" {
+				if slsaVersion == "" || slsaVersion == "v1" {
 					type stmtT struct {
 						Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 					}
@@ -514,7 +514,7 @@ COPY myapp.Dockerfile /
 			_, isClient := f.(*clientFrontend)
 			_, isGateway := f.(*gatewayFrontend)
 
-			if slsaVersion == "v1" {
+			if slsaVersion == "" || slsaVersion == "v1" {
 				require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 
 				type stmtT struct {
@@ -706,31 +706,30 @@ RUN echo "ok-$TARGETARCH" > /foo
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-		require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
+		require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 		type stmtT struct {
-			Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+			Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 		}
 		var stmt stmtT
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 		pred := stmt.Predicate
 
-		require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-		require.Equal(t, "", pred.Builder.ID)
-		require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+		require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
+		require.Equal(t, "", pred.RunDetails.Builder.ID)
+		require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 		if isGateway {
-			require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
-			require.Contains(t, pred.Materials[0].URI, "buildkit_test")
-			require.Contains(t, pred.Materials[1].URI, "pkg:docker/busybox@latest")
-			require.Contains(t, pred.Materials[1].URI, url.PathEscape(p))
+			require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "buildkit_test")
+			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, "pkg:docker/busybox@latest")
+			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, url.PathEscape(p))
 		} else {
-			require.Equal(t, 1, len(pred.Materials), "%+v", pred.Materials)
-			require.Contains(t, pred.Materials[0].URI, "pkg:docker/busybox@latest")
-			require.Contains(t, pred.Materials[0].URI, url.PathEscape(p))
+			require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "pkg:docker/busybox@latest")
+			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, url.PathEscape(p))
 		}
 
-		args := pred.Invocation.Parameters.Args
+		args := pred.BuildDefinition.ExternalParameters.Request.Args
 		if isClient {
 			require.Equal(t, 0, len(args), "%+v", args)
 		} else if isGateway {
@@ -888,27 +887,26 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
+	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
-	require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-	require.Equal(t, "", pred.Builder.ID)
-	require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
+	require.Equal(t, "", pred.RunDetails.Builder.ID)
+	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
-	args := pred.Invocation.Parameters.Args
+	args := pred.BuildDefinition.ExternalParameters.Request.Args
 	require.Equal(t, 2, len(args), "%+v", args)
 	require.Equal(t, "The", args["build-arg:FOO"])
 	require.Equal(t, "armtarget", args["target"])
 
-	require.Equal(t, 2, len(pred.Invocation.Parameters.Locals))
-	require.Equal(t, 1, len(pred.Materials))
-	require.Contains(t, pred.Materials[0].URI, "docker/busybox")
+	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/busybox")
 
 	// amd64
 	img = imgs.Find("linux/amd64")
@@ -921,24 +919,23 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
+	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	stmt = stmtT{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred = stmt.Predicate
 
-	require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-	require.Equal(t, "", pred.Builder.ID)
-	require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
+	require.Equal(t, "", pred.RunDetails.Builder.ID)
+	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
-	args = pred.Invocation.Parameters.Args
+	args = pred.BuildDefinition.ExternalParameters.Request.Args
 	require.Equal(t, 2, len(args), "%+v", args)
 	require.Equal(t, "Moby", args["build-arg:FOO"])
 	require.Equal(t, "x86target", args["target"])
 
-	require.Equal(t, 2, len(pred.Invocation.Parameters.Locals))
-	require.Equal(t, 1, len(pred.Materials))
-	require.Contains(t, pred.Materials[0].URI, "docker/alpine")
+	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/alpine")
 }
 
 func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
@@ -1034,26 +1031,25 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
-	require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
-
+	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
-	require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-	require.Equal(t, "", pred.Builder.ID)
-	require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
+	require.Equal(t, "", pred.RunDetails.Builder.ID)
+	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
-	args := pred.Invocation.Parameters.Args
+	args := pred.BuildDefinition.ExternalParameters.Request.Args
 	require.Equal(t, 0, len(args), "%+v", args)
-	require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
+	require.Equal(t, 0, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
 
-	require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
-	require.Contains(t, pred.Materials[0].URI, integration.UnixOrWindows("docker/alpine", "docker/nanoserver"))
-	require.Contains(t, pred.Materials[1].URI, "README.md")
+	require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, integration.UnixOrWindows("docker/alpine", "docker/nanoserver"))
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, "README.md")
 }
 
 func testSecretSSHProvenance(t *testing.T, sb integration.Sandbox) {
@@ -1117,21 +1113,21 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
-	require.Equal(t, 2, len(pred.Invocation.Parameters.Secrets), "%+v", pred.Invocation.Parameters.Secrets)
-	require.Equal(t, "mysecret", pred.Invocation.Parameters.Secrets[0].ID)
-	require.True(t, pred.Invocation.Parameters.Secrets[0].Optional)
-	require.Equal(t, "othersecret", pred.Invocation.Parameters.Secrets[1].ID)
-	require.True(t, pred.Invocation.Parameters.Secrets[1].Optional)
+	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Secrets), "%+v", pred.BuildDefinition.ExternalParameters.Request.Secrets)
+	require.Equal(t, "mysecret", pred.BuildDefinition.ExternalParameters.Request.Secrets[0].ID)
+	require.True(t, pred.BuildDefinition.ExternalParameters.Request.Secrets[0].Optional)
+	require.Equal(t, "othersecret", pred.BuildDefinition.ExternalParameters.Request.Secrets[1].ID)
+	require.True(t, pred.BuildDefinition.ExternalParameters.Request.Secrets[1].Optional)
 
-	require.Equal(t, 1, len(pred.Invocation.Parameters.SSH), "%+v", pred.Invocation.Parameters.SSH)
-	require.Equal(t, "default", pred.Invocation.Parameters.SSH[0].ID)
-	require.True(t, pred.Invocation.Parameters.SSH[0].Optional)
+	require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.SSH), "%+v", pred.BuildDefinition.ExternalParameters.Request.SSH)
+	require.Equal(t, "default", pred.BuildDefinition.ExternalParameters.Request.SSH[0].ID)
+	require.True(t, pred.BuildDefinition.ExternalParameters.Request.SSH[0].Optional)
 }
 
 func testOCILayoutProvenance(t *testing.T, sb integration.Sandbox) {
@@ -1244,22 +1240,23 @@ EOF
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
 	if isGateway {
-		require.Len(t, pred.Materials, 2)
+		require.Len(t, pred.BuildDefinition.ResolvedDependencies, 2)
 	} else {
-		require.Len(t, pred.Materials, 1)
+		require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1)
 	}
-	var material *provenanceCommon.ProvenanceMaterial
-	for _, m := range pred.Materials {
+	var material *slsa1.ResourceDescriptor
+	for i := range pred.BuildDefinition.ResolvedDependencies {
+		m := &pred.BuildDefinition.ResolvedDependencies[i]
 		if strings.Contains(m.URI, "/foo") {
-			require.Nil(t, material, pred.Materials)
-			material = &m
+			require.Nil(t, material, pred.BuildDefinition.ResolvedDependencies)
+			material = m
 		}
 	}
 	require.NotNil(t, material)
@@ -1498,13 +1495,13 @@ ADD bar bar`)
 
 	att := imgs.FindAttestation(expPlatform)
 	type stmtT struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	var stmt stmtT
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
-	def := pred.BuildConfig.Definition
+	def := pred.BuildDefinition.InternalParameters.BuildConfig.Definition
 
 	steps := map[string]provenancetypes.BuildStep{}
 	for _, step := range def {
@@ -1513,7 +1510,7 @@ ADD bar bar`)
 	// ensure all IDs are unique
 	require.Equal(t, len(steps), len(def))
 
-	src := pred.Metadata.BuildKitMetadata.Source
+	src := pred.RunDetails.Metadata.BuildKitMetadata.Source
 
 	lines := make([]bool, bytes.Count(dockerfile, []byte("\n"))+1)
 
@@ -1773,13 +1770,13 @@ RUN date +%s > /b.txt
 	require.NotNil(t, att)
 
 	var stmt struct {
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
 	// Search for the layer list for step0.
-	metadata := pred.Metadata
+	metadata := pred.RunDetails.Metadata
 	require.NotNil(t, metadata)
 
 	layers := metadata.BuildKitMetadata.Layers["step0:0"]
@@ -1838,7 +1835,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.NotEqual(t, 0, len(dt))
 
-	var pred provenancetypes.ProvenancePredicateSLSA02
+	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(dt, &pred))
 }
 
@@ -1898,7 +1895,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.NotEqual(t, 0, len(dt))
 
-	var pred provenancetypes.ProvenancePredicateSLSA02
+	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(dt, &pred))
 }
 
@@ -1955,7 +1952,7 @@ COPY --from=base /out /
 		require.NoError(t, err)
 		require.NotEqual(t, 0, len(dt))
 
-		var pred provenancetypes.ProvenancePredicateSLSA02
+		var pred provenancetypes.ProvenancePredicateSLSA1
 		require.NoError(t, json.Unmarshal(dt, &pred))
 	}
 }
@@ -2017,7 +2014,7 @@ COPY --from=base /out /
 		require.NoError(t, err)
 		require.NotEqual(t, 0, len(dt))
 
-		var pred provenancetypes.ProvenancePredicateSLSA02
+		var pred provenancetypes.ProvenancePredicateSLSA1
 		require.NoError(t, json.Unmarshal(dt, &pred))
 	}
 }
