@@ -181,8 +181,8 @@ FROM scratch AS cni-plugins-export-squashed
 COPY --from=cni-plugins-export / /
 
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS binfmt-filter
-# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv10.0.4-57
-COPY --link --from=tonistiigi/binfmt:buildkit-v10.0.4-57@sha256:370775754cd56094fff210b44968bf15777aed7eb3302df4f7ab2b647630899e / /out/
+# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv10.1.3-61
+COPY --link --from=tonistiigi/binfmt:buildkit-v10.1.3-61@sha256:56fdcdd479f1aa32667b84d248579c7e1d4c28c45a10ed89ad31103bf5635bc7 / /out/
 WORKDIR /out/
 RUN rm -f buildkit-qemu-loongarch64 buildkit-qemu-mips64 buildkit-qemu-mips64el
 
