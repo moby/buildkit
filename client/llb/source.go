@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -705,10 +706,28 @@ func HTTP(url string, opts ...HTTPOption) State {
 		hi.Header.setAttrs(attrs)
 		addCap(&hi.Constraints, pb.CapSourceHTTPHeader)
 	}
+	if hi.Signature != nil {
+		if len(hi.Signature.PubKey) > 0 {
+			attrs[pb.AttrHTTPSignatureVerifyPubKey] = string(hi.Signature.PubKey)
+		}
+		if len(hi.Signature.Signature) > 0 {
+			attrs[pb.AttrHTTPSignatureVerify] = string(hi.Signature.Signature)
+		}
+		addCap(&hi.Constraints, pb.CapSourceHTTPSignatureVerify)
+	}
 
 	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
 	return NewState(source.Output())
+}
+
+// HTTPSignatureInfo configures detached-signature verification for HTTP
+// sources. The current implementation uses inline armored signatures.
+type HTTPSignatureInfo struct {
+	PubKey []byte
+
+	// Signature is an inline detached armored OpenPGP signature.
+	Signature []byte
 }
 
 type HTTPInfo struct {
@@ -720,6 +739,7 @@ type HTTPInfo struct {
 	GID              int
 	AuthHeaderSecret string
 	Header           *HTTPHeader
+	Signature        *HTTPSignatureInfo
 }
 
 type HTTPOption interface {
@@ -754,6 +774,17 @@ func Chown(uid, gid int) HTTPOption {
 	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.UID = uid
 		hi.GID = gid
+	})
+}
+
+// VerifyPGPSignature returns an [HTTPOption] for detached OpenPGP signature
+// verification of the downloaded HTTP payload.
+func VerifyPGPSignature(info HTTPSignatureInfo) HTTPOption {
+	return httpOptionFunc(func(hi *HTTPInfo) {
+		hi.Signature = &HTTPSignatureInfo{
+			PubKey:    slices.Clone(info.PubKey),
+			Signature: slices.Clone(info.Signature),
+		}
 	})
 }
 

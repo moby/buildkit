@@ -1,12 +1,10 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash"
@@ -20,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
@@ -31,7 +27,7 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
-	"github.com/moby/buildkit/util/gitutil/gitsign"
+	"github.com/moby/buildkit/util/pgpsign"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
 	policyimage "github.com/moby/policy-helpers/image"
@@ -934,10 +930,9 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 	require.NoError(t, err)
 	pubKeyData, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.gpg.pub"))
 	require.NoError(t, err)
-	sig, err := gitsign.ParseSignature(sigData)
+	sig, _, err := pgpsign.ParseArmoredDetachedSignature(sigData)
 	require.NoError(t, err)
-	require.NotNil(t, sig.PGPSignature)
-	keyring, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(pubKeyData))
+	keyring, err := pgpsign.ReadAllArmoredKeyRings(pubKeyData)
 	require.NoError(t, err)
 
 	httpSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -953,9 +948,9 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 	require.NoError(t, err)
 
 	t.Run("valid checksum request", func(t *testing.T) {
-		algo, err := toPBChecksumAlgo(sig.PGPSignature.Hash)
+		algo, err := toPBChecksumAlgo(sig.Hash)
 		require.NoError(t, err)
-		expectedDigest, err := payloadWithSuffixDigest(sig.PGPSignature.Hash, payload, sig.PGPSignature.HashSuffix)
+		expectedDigest, err := payloadWithSuffixDigest(sig.Hash, payload, sig.HashSuffix)
 		require.NoError(t, err)
 
 		callCounter := 0
@@ -969,7 +964,7 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 					HTTP: &pb.ResolveSourceHTTPRequest{
 						ChecksumRequest: &pb.ChecksumRequest{
 							Algo:   algo,
-							Suffix: slices.Clone(sig.PGPSignature.HashSuffix),
+							Suffix: slices.Clone(sig.HashSuffix),
 						},
 					},
 				}, nil
@@ -978,11 +973,13 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 				require.NotNil(t, req.Source.HTTP)
 				require.NotNil(t, req.Source.HTTP.ChecksumResponse)
 				require.Equal(t, expectedDigest, req.Source.HTTP.ChecksumResponse.Digest)
-				require.Equal(t, sig.PGPSignature.HashSuffix, req.Source.HTTP.ChecksumResponse.Suffix)
-				require.NoError(t, verifySignatureWithChecksumDigest(sig.PGPSignature, keyring, req.Source.HTTP.ChecksumResponse.Digest))
+				require.Equal(t, sig.HashSuffix, req.Source.HTTP.ChecksumResponse.Suffix)
+				responseDigest, err := digest.Parse(req.Source.HTTP.ChecksumResponse.Digest)
+				require.NoError(t, err)
+				require.NoError(t, pgpsign.VerifySignatureWithDigest(sig, keyring, responseDigest))
 				// Negative check: tampered digest must fail signature verification.
-				badDigest := tamperDigestHex(req.Source.HTTP.ChecksumResponse.Digest)
-				err := verifySignatureWithChecksumDigest(sig.PGPSignature, keyring, badDigest)
+				badDigest := tamperDigestHex(responseDigest)
+				err = pgpsign.VerifySignatureWithDigest(sig, keyring, badDigest)
 				require.Error(t, err)
 				require.ErrorContains(t, err, "failed to verify signature with checksum digest")
 				return &policysession.DecisionResponse{
@@ -1089,84 +1086,15 @@ func payloadWithSuffixDigest(algo crypto.Hash, payload, suffix []byte) (string, 
 	return fmt.Sprintf("%s:%x", algoName, h.Sum(nil)), nil
 }
 
-func verifySignatureWithChecksumDigest(sig *packet.Signature, keyring openpgp.EntityList, digestStr string) error {
-	algoPart, hexPart, ok := strings.Cut(digestStr, ":")
-	if !ok {
-		return errors.Errorf("invalid digest format %q", digestStr)
+func tamperDigestHex(dgst digest.Digest) digest.Digest {
+	hexPart := []byte(dgst.Encoded())
+	if len(hexPart) == 0 {
+		return dgst
 	}
-
-	algoName, err := checksumAlgoName(sig.Hash)
-	if err != nil {
-		return err
-	}
-	if algoPart != algoName {
-		return errors.Errorf("digest algorithm mismatch: %s != %s", algoPart, algoName)
-	}
-	sum, err := hex.DecodeString(hexPart)
-	if err != nil {
-		return errors.Wrap(err, "invalid digest hex")
-	}
-
-	h := &staticHash{sum: sum}
-	// simplistic verification only for testing purposes
-	for _, e := range keyring {
-		if e.PrimaryKey != nil && e.PrimaryKey.VerifySignature(h, sig) == nil {
-			return nil
-		}
-		for _, sub := range e.Subkeys {
-			if sub.PublicKey != nil && sub.PublicKey.VerifySignature(h, sig) == nil {
-				return nil
-			}
-		}
-	}
-	return errors.New("failed to verify signature with checksum digest")
-}
-
-func tamperDigestHex(digestStr string) string {
-	algoPart, hexPart, ok := strings.Cut(digestStr, ":")
-	if !ok || hexPart == "" {
-		return digestStr
-	}
-	h := []byte(hexPart)
-	if h[len(h)-1] == '0' {
-		h[len(h)-1] = '1'
+	if hexPart[len(hexPart)-1] == '0' {
+		hexPart[len(hexPart)-1] = '1'
 	} else {
-		h[len(h)-1] = '0'
+		hexPart[len(hexPart)-1] = '0'
 	}
-	return algoPart + ":" + string(h)
-}
-
-func checksumAlgoName(in crypto.Hash) (string, error) {
-	switch in {
-	case crypto.SHA256:
-		return "sha256", nil
-	case crypto.SHA384:
-		return "sha384", nil
-	case crypto.SHA512:
-		return "sha512", nil
-	default:
-		return "", errors.Errorf("unsupported signature hash algorithm %v", in)
-	}
-}
-
-type staticHash struct {
-	sum []byte
-}
-
-func (s *staticHash) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-func (s *staticHash) Sum(b []byte) []byte {
-	return append(b, s.sum...)
-}
-
-func (s *staticHash) Reset() {}
-
-func (s *staticHash) Size() int {
-	return len(s.sum)
-}
-
-func (s *staticHash) BlockSize() int {
-	return len(s.sum)
+	return digest.NewDigestFromEncoded(dgst.Algorithm(), string(hexPart))
 }

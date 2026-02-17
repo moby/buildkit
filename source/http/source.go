@@ -29,6 +29,7 @@ import (
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
+	"github.com/moby/buildkit/util/pgpsign"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
 	digest "github.com/opencontainers/go-digest"
@@ -111,6 +112,16 @@ func (hs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.GID = int(i)
 		case pb.AttrHTTPAuthHeaderSecret:
 			id.AuthHeaderSecret = v
+		case pb.AttrHTTPSignatureVerifyPubKey:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &HTTPSignatureVerifyOptions{}
+			}
+			id.VerifySignature.PubKey = []byte(v)
+		case pb.AttrHTTPSignatureVerify:
+			if id.VerifySignature == nil {
+				id.VerifySignature = &HTTPSignatureVerifyOptions{}
+			}
+			id.VerifySignature.Signature = []byte(v)
 		default:
 			if name, found := strings.CutPrefix(k, pb.AttrHTTPHeaderPrefix); found {
 				name = http.CanonicalHeaderKey(name)
@@ -126,6 +137,10 @@ func (hs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 	slices.SortFunc(id.Header, func(a, b HeaderField) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
+
+	if err := validateSignatureVerifyOptions(id.VerifySignature); err != nil {
+		return nil, err
+	}
 
 	return id, nil
 }
@@ -258,7 +273,14 @@ func (hs *httpSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.
 	if err := validateChecksumRequest(opt.ChecksumReq); err != nil {
 		return nil, err
 	}
+	if err := validateSignatureVerifyOptions(hs.src.VerifySignature); err != nil {
+		return nil, err
+	}
 	md, err := hs.resolveMetadataStatic(ctx, jobCtx)
+	if err != nil {
+		return nil, err
+	}
+	md, err = hs.handleSignatureVerification(ctx, jobCtx, md)
 	if err != nil {
 		return nil, err
 	}
@@ -550,6 +572,36 @@ func validateChecksumRequest(req *MetadataChecksumRequest) error {
 	}
 }
 
+func validateSignatureVerifyOptions(opt *HTTPSignatureVerifyOptions) error {
+	if opt == nil {
+		return nil
+	}
+	hasPubKey := len(opt.PubKey) > 0
+	hasSignature := len(opt.Signature) > 0
+	if hasPubKey == hasSignature {
+		return nil
+	}
+	return errors.New("http signature verification requires both pubkey and signature")
+}
+
+func (hs *httpSourceHandler) handleSignatureVerification(ctx context.Context, jobCtx solver.JobContext, in *Metadata) (*Metadata, error) {
+	out := *in
+	if hs.src.VerifySignature == nil {
+		return &out, nil
+	}
+	if hs.resolved == nil || hs.resolved.refID == "" {
+		md, err := hs.resolveMetadataRef(ctx, jobCtx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to resolve source reference for signature verification")
+		}
+		out = *md
+	}
+	if err := hs.verifySignature(ctx, out.Filename, hs.resolved.refID, hs.src.VerifySignature); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (hs *httpSourceHandler) handleChecksumRequest(ctx context.Context, jobCtx solver.JobContext, in *Metadata, opt MetadataOpts) (*Metadata, error) {
 	out := *in
 	if opt.ChecksumReq == nil {
@@ -569,6 +621,37 @@ func (hs *httpSourceHandler) handleChecksumRequest(ctx context.Context, jobCtx s
 	}
 	out.ChecksumResponse = resp
 	return &out, nil
+}
+
+func (hs *httpSourceHandler) verifySignature(ctx context.Context, filename, refID string, opts *HTTPSignatureVerifyOptions) error {
+	ref, err := hs.cache.Get(ctx, refID, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to load http source reference")
+	}
+	defer ref.Release(context.WithoutCancel(ctx))
+
+	mount, err := ref.Mount(ctx, false, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to mount http source reference")
+	}
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	if err != nil {
+		return errors.Wrap(err, "failed to mount local http source reference")
+	}
+	defer lm.Unmount()
+
+	fp := filepath.Join(dir, filepath.Base(filepath.Join("/", filename)))
+	f, err := os.Open(fp)
+	if err != nil {
+		return errors.Wrap(err, "failed to open http source payload")
+	}
+	defer f.Close()
+
+	if err := pgpsign.VerifyArmoredDetachedSignature(f, opts.Signature, opts.PubKey, nil); err != nil {
+		return errors.Wrap(err, "failed to verify pgp signature")
+	}
+	return nil
 }
 
 func (hs *httpSourceHandler) computeChecksumResponse(ctx context.Context, filename, refID string, req *MetadataChecksumRequest) (*MetadataChecksumResponse, error) {
