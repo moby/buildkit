@@ -748,9 +748,16 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	if hs.src.Perm != 0 {
 		perm = hs.src.Perm
 	}
-	fp := filepath.Join(dir, getFileName(hs.src.URL, hs.src.Filename, resp))
 
-	f, err := os.OpenFile(fp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(perm))
+	name := getFileName(hs.src.URL, hs.src.Filename, resp)
+
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, "", err
+	}
+	defer root.Close()
+
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(perm))
 	if err != nil {
 		return nil, "", err
 	}
@@ -781,7 +788,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	}
 
 	if gid != 0 || uid != 0 {
-		if err := os.Chown(fp, uid, gid); err != nil {
+		if err := root.Chown(name, uid, gid); err != nil {
 			return nil, "", err
 		}
 	}
@@ -794,7 +801,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 		}
 	}
 
-	if err := os.Chtimes(fp, mTime, mTime); err != nil {
+	if err := root.Chtimes(name, mTime, mTime); err != nil {
 		return nil, "", err
 	}
 
