@@ -136,6 +136,9 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.VerifySignature.IgnoreSignedTag = v == "true"
 		}
 	}
+	if err := validateGitRef(id.Ref); err != nil {
+		return nil, err
+	}
 
 	return id, nil
 }
@@ -548,10 +551,9 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 			return nil, err
 		}
 	}
-
 	// TODO: should we assume that remote tag is immutable? add a timer?
 
-	buf, err := tmpGit.Run(ctx, "ls-remote", gs.src.Remote, ref, ref+"^{}")
+	buf, err := tmpGit.Run(ctx, "ls-remote", "--", gs.src.Remote, ref, ref+"^{}")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
@@ -862,11 +864,10 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		}
 		gs.src.Ref = ref
 	}
-
 	doFetch := true
 	if gitutil.IsCommitSHA(ref) {
 		// skip fetch if commit already exists
-		if _, err := git.Run(ctx, "cat-file", "-e", ref+"^{commit}"); err == nil {
+		if _, err := git.Run(ctx, "cat-file", "-e", "--", ref+"^{commit}"); err == nil {
 			doFetch = false
 		}
 	}
@@ -896,7 +897,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		if gitutil.IsCommitSHA(ref) {
 			args = append(args, ref)
 		} else {
-			args = append(args, "--force", ref+":"+targetRef)
+			args = append(args, "--force", "--", ref+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
 			err := errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -1043,7 +1044,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "origin", pullref)
+		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "--", "origin", pullref)
 		if err != nil {
 			return nil, err
 		}
@@ -1167,6 +1168,13 @@ func isUnableToUpdateLocalRef(err error) bool {
 	}
 	return strings.Contains(msg, "(unable to update local ref)") ||
 		strings.Contains(msg, "refname conflict")
+}
+
+func validateGitRef(ref string) error {
+	if strings.HasPrefix(ref, "-") {
+		return errors.Errorf("invalid git ref %q", ref)
+	}
+	return nil
 }
 
 func (gs *gitSourceHandler) emptyGitCli(ctx context.Context, g session.Group, opts ...gitutil.Option) (*gitutil.GitCLI, func() error, error) {
