@@ -994,7 +994,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		}
 	}()
 
-	subdir := path.Clean(gs.src.Subdir)
+	subdir := path.Join("/", gs.src.Subdir)
 	if subdir == "/" {
 		subdir = "."
 	}
@@ -1087,6 +1087,11 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	}
 
 	if subdir != "." {
+		subdir = filepath.FromSlash(subdir)
+		if err := validateDirsOnly(cd, subdir); err != nil {
+			return nil, errors.Wrapf(err, "invalid subdir %v", subdir)
+		}
+
 		d, err := os.Open(filepath.Join(cd, subdir))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
@@ -1297,4 +1302,34 @@ func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 		}),
 	}, opts...)
 	return gitutil.NewGitCLI(opts...)
+}
+
+// validateDirsOnly checks that the given subpath in the repository
+// only contains directories without any symlinks or files.
+func validateDirsOnly(root string, subpath string) error {
+	rel := filepath.Clean(subpath)
+	rel = strings.TrimPrefix(rel, string(filepath.Separator))
+	if rel == "" || rel == "." {
+		return nil
+	}
+
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open root %q", root)
+	}
+	defer r.Close()
+
+	p := ""
+	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		p = filepath.Join(p, part)
+
+		fi, err := r.Lstat(p)
+		if err != nil {
+			return errors.Wrapf(err, "failed to lstat %q", p)
+		}
+		if !fi.IsDir() {
+			return errors.Errorf("git subpath %q contains non-directory %q", subpath, p)
+		}
+	}
+	return nil
 }
