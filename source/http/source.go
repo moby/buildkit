@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -955,16 +956,30 @@ func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group
 	return req, nil
 }
 
+func safeFileName(s string) string {
+	defaultName := "download"
+	name := filepath.Base(filepath.FromSlash(strings.TrimSpace(s)))
+	if name == "" || name == "." || name == ".." {
+		return defaultName
+	}
+	for _, r := range name {
+		if r == 0 || unicode.IsControl(r) {
+			return defaultName
+		}
+	}
+	return name
+}
+
 func getFileName(urlStr, manualFilename string, resp *http.Response) string {
 	if manualFilename != "" {
-		return manualFilename
+		return safeFileName(manualFilename)
 	}
 	if resp != nil {
 		if contentDisposition := resp.Header.Get("Content-Disposition"); contentDisposition != "" {
 			if _, params, err := mime.ParseMediaType(contentDisposition); err == nil {
 				if params["filename"] != "" && !strings.HasSuffix(params["filename"], "/") {
 					if filename := filepath.Base(filepath.FromSlash(params["filename"])); filename != "" {
-						return filename
+						return safeFileName(filename)
 					}
 				}
 			}
@@ -973,10 +988,10 @@ func getFileName(urlStr, manualFilename string, resp *http.Response) string {
 	u, err := url.Parse(urlStr)
 	if err == nil {
 		if base := path.Base(u.Path); base != "." && base != "/" {
-			return base
+			return safeFileName(base)
 		}
 	}
-	return "download"
+	return safeFileName("")
 }
 
 func searchHTTPURLDigest(ctx context.Context, store cache.MetadataStore, dgst digest.Digest) ([]cacheRefMetadata, error) {
