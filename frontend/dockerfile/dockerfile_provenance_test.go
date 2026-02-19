@@ -1673,7 +1673,7 @@ COPY bar bar2
 		require.Len(t, ev.Record.Exporters, 1)
 
 		for _, prov := range ev.Record.Result.Attestations {
-			if len(prov.Annotations) == 0 || prov.Annotations["in-toto.io/predicate-type"] != "https://slsa.dev/provenance/v0.2" {
+			if len(prov.Annotations) == 0 || prov.Annotations["in-toto.io/predicate-type"] != "https://slsa.dev/provenance/v1" {
 				t.Logf("skipping non-slsa provenance: %s", prov.MediaType)
 				continue
 			}
@@ -1689,10 +1689,12 @@ COPY bar bar2
 
 	require.NotEqual(t, 0, len(provDt))
 
-	var pred provenancetypes.ProvenancePredicateSLSA02
+	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(provDt, &pred))
 
-	sources := pred.Metadata.BuildKitMetadata.Source.Infos
+	require.NotNil(t, pred.RunDetails.Metadata)
+	require.NotNil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
+	sources := pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos
 
 	require.Equal(t, 1, len(sources))
 	require.Equal(t, "Dockerfile", sources[0].Filename)
