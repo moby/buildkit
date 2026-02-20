@@ -2,12 +2,18 @@ package client
 
 import (
 	"context"
+	"crypto"
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
+	"fmt"
+	"hash"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +27,7 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
+	"github.com/moby/buildkit/util/pgpsign"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
 	policyimage "github.com/moby/policy-helpers/image"
@@ -902,4 +909,192 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 		require.ErrorContains(t, err, "too many policy requests")
 		require.Equal(t, 10, calls) // this is not strict value but just to make sure calls happened. future version may optimize this with less calls.
 	})
+}
+
+func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	signFixturesPath, ok := os.LookupEnv("BUILDKIT_TEST_SIGN_FIXTURES")
+	if !ok {
+		t.Skip("missing BUILDKIT_TEST_SIGN_FIXTURES")
+	}
+
+	payload, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.http.artifact"))
+	require.NoError(t, err)
+	sigData, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.http.artifact.asc"))
+	require.NoError(t, err)
+	pubKeyData, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.gpg.pub"))
+	require.NoError(t, err)
+	sig, _, err := pgpsign.ParseArmoredDetachedSignature(sigData)
+	require.NoError(t, err)
+	keyring, err := pgpsign.ReadAllArmoredKeyRings(pubKeyData)
+	require.NoError(t, err)
+
+	httpSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/artifact.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer httpSrv.Close()
+
+	def, err := llb.Scratch().File(llb.Copy(llb.HTTP(httpSrv.URL+"/artifact.txt"), "artifact.txt", "/artifact.txt")).Marshal(ctx)
+	require.NoError(t, err)
+
+	t.Run("valid checksum request", func(t *testing.T) {
+		algo, err := toPBChecksumAlgo(sig.Hash)
+		require.NoError(t, err)
+		expectedDigest, err := payloadWithSuffixDigest(sig.Hash, payload, sig.HashSuffix)
+		require.NoError(t, err)
+
+		callCounter := 0
+		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+			switch callCounter {
+			case 0:
+				callCounter++
+				return nil, &pb.ResolveSourceMetaRequest{
+					Source:   req.Source.Source,
+					Platform: req.Platform,
+					HTTP: &pb.ResolveSourceHTTPRequest{
+						ChecksumRequest: &pb.ChecksumRequest{
+							Algo:   algo,
+							Suffix: slices.Clone(sig.HashSuffix),
+						},
+					},
+				}, nil
+			case 1:
+				callCounter++
+				require.NotNil(t, req.Source.HTTP)
+				require.NotNil(t, req.Source.HTTP.ChecksumResponse)
+				require.Equal(t, expectedDigest, req.Source.HTTP.ChecksumResponse.Digest)
+				require.Equal(t, sig.HashSuffix, req.Source.HTTP.ChecksumResponse.Suffix)
+				responseDigest, err := digest.Parse(req.Source.HTTP.ChecksumResponse.Digest)
+				require.NoError(t, err)
+				require.NoError(t, pgpsign.VerifySignatureWithDigest(sig, keyring, responseDigest))
+				// Negative check: tampered digest must fail signature verification.
+				badDigest := tamperDigestHex(responseDigest)
+				err = pgpsign.VerifySignatureWithDigest(sig, keyring, badDigest)
+				require.Error(t, err)
+				require.ErrorContains(t, err, "failed to verify signature with checksum digest")
+				return &policysession.DecisionResponse{
+					Action: sourcepolicypb.PolicyAction_ALLOW,
+				}, nil, nil
+			default:
+				return nil, nil, errors.Errorf("too many calls to policy callback %d", callCounter)
+			}
+		})
+
+		_, err = c.Solve(ctx, def, SolveOpt{
+			SourcePolicyProvider: p,
+		}, nil)
+		require.NoError(t, err)
+		require.Equal(t, 2, callCounter)
+	})
+
+	t.Run("oversized suffix denied", func(t *testing.T) {
+		callCounter := 0
+		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+			callCounter++
+			return nil, &pb.ResolveSourceMetaRequest{
+				Source:   req.Source.Source,
+				Platform: req.Platform,
+				HTTP: &pb.ResolveSourceHTTPRequest{
+					ChecksumRequest: &pb.ChecksumRequest{
+						Algo:   pb.ChecksumRequest_CHECKSUM_ALGO_SHA256,
+						Suffix: make([]byte, 4097),
+					},
+				},
+			}, nil
+		})
+
+		_, err = c.Solve(ctx, def, SolveOpt{
+			SourcePolicyProvider: p,
+		}, nil)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "suffix exceeds max size")
+		require.Equal(t, 1, callCounter)
+	})
+
+	t.Run("unsupported algo denied", func(t *testing.T) {
+		callCounter := 0
+		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+			callCounter++
+			return nil, &pb.ResolveSourceMetaRequest{
+				Source:   req.Source.Source,
+				Platform: req.Platform,
+				HTTP: &pb.ResolveSourceHTTPRequest{
+					ChecksumRequest: &pb.ChecksumRequest{
+						Algo:   pb.ChecksumRequest_ChecksumAlgo(99),
+						Suffix: []byte{1, 2, 3},
+					},
+				},
+			}, nil
+		})
+
+		_, err = c.Solve(ctx, def, SolveOpt{
+			SourcePolicyProvider: p,
+		}, nil)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "unsupported checksum algorithm")
+		require.Equal(t, 1, callCounter)
+	})
+}
+
+func toPBChecksumAlgo(in crypto.Hash) (pb.ChecksumRequest_ChecksumAlgo, error) {
+	switch in {
+	case crypto.SHA256:
+		return pb.ChecksumRequest_CHECKSUM_ALGO_SHA256, nil
+	case crypto.SHA384:
+		return pb.ChecksumRequest_CHECKSUM_ALGO_SHA384, nil
+	case crypto.SHA512:
+		return pb.ChecksumRequest_CHECKSUM_ALGO_SHA512, nil
+	default:
+		return 0, errors.Errorf("unsupported signature hash algorithm %v", in)
+	}
+}
+
+func payloadWithSuffixDigest(algo crypto.Hash, payload, suffix []byte) (string, error) {
+	var (
+		h        hash.Hash
+		algoName string
+	)
+	switch algo {
+	case crypto.SHA256:
+		h = sha256.New()
+		algoName = "sha256"
+	case crypto.SHA384:
+		h = sha512.New384()
+		algoName = "sha384"
+	case crypto.SHA512:
+		h = sha512.New()
+		algoName = "sha512"
+	default:
+		return "", errors.Errorf("unsupported signature hash algorithm %v", algo)
+	}
+	if _, err := h.Write(payload); err != nil {
+		return "", err
+	}
+	if _, err := h.Write(suffix); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s:%x", algoName, h.Sum(nil)), nil
+}
+
+func tamperDigestHex(dgst digest.Digest) digest.Digest {
+	hexPart := []byte(dgst.Encoded())
+	if len(hexPart) == 0 {
+		return dgst
+	}
+	if hexPart[len(hexPart)-1] == '0' {
+		hexPart[len(hexPart)-1] = '1'
+	} else {
+		hexPart[len(hexPart)-1] = '0'
+	}
+	return digest.NewDigestFromEncoded(dgst.Algorithm(), string(hexPart))
 }

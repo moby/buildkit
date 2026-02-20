@@ -120,6 +120,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildHTTPSourceAuthHeaderSecret,
 	testBuildHTTPSourceHostTokenSecret,
 	testBuildHTTPSourceHeader,
+	testBuildHTTPSourcePGPSignatureVerify,
 	testBuildPushAndValidate,
 	testBuildExportWithUncompressed,
 	testBuildExportScratch,
@@ -260,6 +261,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSourceMetaPolicySessionResolveAttestations,
 	testSourcePolicyParallelSession,
 	testSourcePolicySignedCommit,
+	testSourcePolicySessionHTTPChecksumAssist,
 	testSourcePolicySessionConvert,
 }
 
@@ -3613,6 +3615,93 @@ func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "application/vnd.foo", allReqs[0].Header.Get("accept"))
 	require.Equal(t, "fooagent", allReqs[0].Header.Get("user-agent"))
+}
+
+func testBuildHTTPSourcePGPSignatureVerify(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	signFixturesPath, ok := os.LookupEnv("BUILDKIT_TEST_SIGN_FIXTURES")
+	if !ok {
+		t.Skip("missing BUILDKIT_TEST_SIGN_FIXTURES")
+	}
+
+	payload, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.http.artifact"))
+	require.NoError(t, err)
+	sigData, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.http.artifact.asc"))
+	require.NoError(t, err)
+	pubKeyData, err := os.ReadFile(filepath.Join(signFixturesPath, "user1.gpg.pub"))
+	require.NoError(t, err)
+	wrongPubKeyData, err := os.ReadFile(filepath.Join(signFixturesPath, "user2.gpg.pub"))
+	require.NoError(t, err)
+
+	httpSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/artifact.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer httpSrv.Close()
+
+	solve := func(t *testing.T, state llb.State) error {
+		def, err := state.Marshal(sb.Context())
+		require.NoError(t, err)
+		tmpdir := t.TempDir()
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: tmpdir,
+				},
+			},
+		}, nil)
+		if err != nil {
+			return err
+		}
+		dt, err := os.ReadFile(filepath.Join(tmpdir, "artifact.txt"))
+		require.NoError(t, err)
+		require.Equal(t, payload, dt)
+		return nil
+	}
+
+	t.Run("valid-signature", func(t *testing.T) {
+		validState := llb.HTTP(
+			httpSrv.URL+"/artifact.txt",
+			llb.VerifyPGPSignature(llb.HTTPSignatureInfo{
+				PubKey:    pubKeyData,
+				Signature: sigData,
+			}),
+		)
+		require.NoError(t, solve(t, validState))
+	})
+
+	t.Run("wrong-pubkey", func(t *testing.T) {
+		invalidState := llb.HTTP(
+			httpSrv.URL+"/artifact.txt",
+			llb.VerifyPGPSignature(llb.HTTPSignatureInfo{
+				PubKey:    wrongPubKeyData,
+				Signature: sigData,
+			}),
+		)
+		err = solve(t, invalidState)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "failed to verify pgp signature")
+	})
+
+	t.Run("concatenated-pubkeys-right-key-second", func(t *testing.T) {
+		mergedPubKeys := append(append([]byte{}, wrongPubKeyData...), '\n')
+		mergedPubKeys = append(mergedPubKeys, pubKeyData...)
+		state := llb.HTTP(
+			httpSrv.URL+"/artifact.txt",
+			llb.VerifyPGPSignature(llb.HTTPSignatureInfo{
+				PubKey:    mergedPubKeys,
+				Signature: sigData,
+			}),
+		)
+		require.NoError(t, solve(t, state))
+	})
 }
 
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {

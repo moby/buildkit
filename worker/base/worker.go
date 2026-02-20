@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -480,16 +481,31 @@ func (w *Worker) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt
 		if w.HTTPSource == nil {
 			return nil, errors.New("http source is not supported")
 		}
-		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, jobCtx)
+		mdOpt := http.MetadataOpts{}
+		if opt.HTTPOpt != nil && opt.HTTPOpt.ChecksumReq != nil {
+			mdOpt.ChecksumReq = &http.MetadataChecksumRequest{
+				Algo:   http.MetadataChecksumAlgo(opt.HTTPOpt.ChecksumReq.Algo),
+				Suffix: slices.Clone(opt.HTTPOpt.ChecksumReq.Suffix),
+			}
+		}
+		md, err := w.HTTPSource.ResolveMetadata(ctx, idt, sm, jobCtx, mdOpt)
 		if err != nil {
 			return nil, err
+		}
+		var checksumResponse *sourceresolver.ResolveHTTPChecksumResponse
+		if md.ChecksumResponse != nil {
+			checksumResponse = &sourceresolver.ResolveHTTPChecksumResponse{
+				Digest: md.ChecksumResponse.Digest,
+				Suffix: slices.Clone(md.ChecksumResponse.Suffix),
+			}
 		}
 		return &sourceresolver.MetaResponse{
 			Op: op,
 			HTTP: &sourceresolver.ResolveHTTPResponse{
-				Digest:       md.Digest,
-				Filename:     md.Filename,
-				LastModified: md.LastModified,
+				Digest:           md.Digest,
+				Filename:         md.Filename,
+				LastModified:     md.LastModified,
+				ChecksumResponse: checksumResponse,
 			},
 		}, nil
 	}

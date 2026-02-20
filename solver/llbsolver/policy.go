@@ -108,6 +108,14 @@ func (p *policyEvaluator) evaluate(ctx context.Context, op *pb.Op, max int) (boo
 					ReturnObject: metareq.Git.ReturnObject,
 				}
 			}
+			if metareq.HTTP != nil && metareq.HTTP.ChecksumRequest != nil {
+				op.HTTPOpt = &sourceresolver.ResolveHTTPOpt{
+					ChecksumReq: &sourceresolver.ResolveHTTPChecksumRequest{
+						Algo:   fromPBHTTPChecksumAlgo(metareq.HTTP.ChecksumRequest.Algo),
+						Suffix: slices.Clone(metareq.HTTP.ChecksumRequest.Suffix),
+					},
+				}
+			}
 
 			resp, err := p.resolveSourceMetadata(ctx, metareq.Source, op, false)
 			if err != nil {
@@ -181,5 +189,18 @@ func toOCIPlatform(p *pb.Platform) *ocispecs.Platform {
 		Variant:      p.Variant,
 		OSVersion:    p.OSVersion,
 		OSFeatures:   p.OSFeatures,
+	}
+}
+
+func fromPBHTTPChecksumAlgo(in gatewaypb.ChecksumRequest_ChecksumAlgo) sourceresolver.ResolveHTTPChecksumAlgo {
+	switch in {
+	case gatewaypb.ChecksumRequest_CHECKSUM_ALGO_SHA256:
+		return sourceresolver.ResolveHTTPChecksumAlgoSHA256
+	case gatewaypb.ChecksumRequest_CHECKSUM_ALGO_SHA384:
+		return sourceresolver.ResolveHTTPChecksumAlgoSHA384
+	case gatewaypb.ChecksumRequest_CHECKSUM_ALGO_SHA512:
+		return sourceresolver.ResolveHTTPChecksumAlgoSHA512
+	default:
+		return sourceresolver.ResolveHTTPChecksumAlgo(in)
 	}
 }

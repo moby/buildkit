@@ -29,6 +29,8 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+const signFixturesPathEnv = "BUILDKIT_TEST_SIGN_FIXTURES"
+
 func TestHTTPSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
@@ -296,6 +298,91 @@ func TestHTTPChecksum(t *testing.T) {
 	ref = nil
 }
 
+func TestHTTPSignatureVerification(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	fixturesPath, ok := os.LookupEnv(signFixturesPathEnv)
+	if !ok {
+		t.Skip("missing BUILDKIT_TEST_SIGN_FIXTURES")
+	}
+
+	payload := readSignFixture(t, fixturesPath, "user1.http.artifact")
+	signature := readSignFixture(t, fixturesPath, "user1.http.artifact.asc")
+	pubKeyUser1 := readSignFixture(t, fixturesPath, "user1.gpg.pub")
+	pubKeyUser2 := readSignFixture(t, fixturesPath, "user2.gpg.pub")
+
+	hs, err := newHTTPSource(t)
+	require.NoError(t, err)
+
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/artifact": {
+			Etag:    identity.NewID(),
+			Content: payload,
+		},
+	})
+	defer server.Close()
+
+	t.Run("valid-signature", func(t *testing.T) {
+		id := &HTTPIdentifier{
+			URL: server.URL + "/artifact",
+			VerifySignature: &HTTPSignatureVerifyOptions{
+				PubKey:    pubKeyUser1,
+				Signature: signature,
+			},
+		}
+		h, err := hs.Resolve(ctx, id, nil, nil)
+		require.NoError(t, err)
+		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+		require.NoError(t, err)
+	})
+
+	t.Run("wrong-pubkey", func(t *testing.T) {
+		id := &HTTPIdentifier{
+			URL: server.URL + "/artifact",
+			VerifySignature: &HTTPSignatureVerifyOptions{
+				PubKey:    pubKeyUser2,
+				Signature: signature,
+			},
+		}
+		h, err := hs.Resolve(ctx, id, nil, nil)
+		require.NoError(t, err)
+		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "failed to verify pgp signature")
+	})
+
+	t.Run("multiblock-pubkey", func(t *testing.T) {
+		merged := append(append([]byte{}, pubKeyUser2...), '\n')
+		merged = append(merged, pubKeyUser1...)
+		id := &HTTPIdentifier{
+			URL: server.URL + "/artifact",
+			VerifySignature: &HTTPSignatureVerifyOptions{
+				PubKey:    merged,
+				Signature: signature,
+			},
+		}
+		h, err := hs.Resolve(ctx, id, nil, nil)
+		require.NoError(t, err)
+		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+		require.NoError(t, err)
+	})
+
+	t.Run("missing-signature", func(t *testing.T) {
+		id := &HTTPIdentifier{
+			URL: server.URL + "/artifact",
+			VerifySignature: &HTTPSignatureVerifyOptions{
+				PubKey: pubKeyUser1,
+			},
+		}
+		h, err := hs.Resolve(ctx, id, nil, nil)
+		require.NoError(t, err)
+		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "requires both pubkey and signature")
+	})
+}
+
 func TestPruneAfterCacheKey(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
@@ -510,4 +597,17 @@ func (s *simpleJobContext) Release() error {
 
 func (s *simpleJobContext) ResolverCache() solver.ResolverCache {
 	return nil
+}
+
+func readSignFixture(t *testing.T, fixturesPath, name string) []byte {
+	t.Helper()
+	p := filepath.Join(fixturesPath, name)
+	dt, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skipf("missing signing fixture at %s", p)
+		}
+		require.NoError(t, err)
+	}
+	return dt
 }

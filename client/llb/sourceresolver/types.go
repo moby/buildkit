@@ -28,6 +28,7 @@ type Opt struct {
 	ImageOpt     *ResolveImageOpt
 	OCILayoutOpt *ResolveOCILayoutOpt
 	GitOpt       *ResolveGitOpt
+	HTTPOpt      *ResolveHTTPOpt
 }
 
 type MetaResponse struct {
@@ -78,9 +79,32 @@ type ResolveGitResponse struct {
 }
 
 type ResolveHTTPResponse struct {
-	Digest       digest.Digest
-	Filename     string
-	LastModified *time.Time
+	Digest           digest.Digest
+	Filename         string
+	LastModified     *time.Time
+	ChecksumResponse *ResolveHTTPChecksumResponse
+}
+
+type ResolveHTTPOpt struct {
+	ChecksumReq *ResolveHTTPChecksumRequest
+}
+
+type ResolveHTTPChecksumAlgo int
+
+const (
+	ResolveHTTPChecksumAlgoSHA256 ResolveHTTPChecksumAlgo = iota
+	ResolveHTTPChecksumAlgoSHA384
+	ResolveHTTPChecksumAlgoSHA512
+)
+
+type ResolveHTTPChecksumRequest struct {
+	Algo   ResolveHTTPChecksumAlgo
+	Suffix []byte
+}
+
+type ResolveHTTPChecksumResponse struct {
+	Digest string
+	Suffix []byte
 }
 
 type ResolveOCILayoutOpt struct {
