@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -246,18 +245,11 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 			}
 		}
 
-		slsaVersion := provenancetypes.ProvenanceSLSA02
-		if v, ok := req.FrontendOpt["build-arg:BUILDKIT_HISTORY_PROVENANCE_V1"]; ok {
-			if b, err := strconv.ParseBool(v); err == nil && b {
-				slsaVersion = provenancetypes.ProvenanceSLSA1
-			}
-		}
-
 		makeProvenance := func(name string, res solver.ResultProxy, cap *provenance.Capture) (*controlapi.Descriptor, func(), error) {
 			span, ctx := tracing.StartSpan(ctx, fmt.Sprintf("create %s history provenance", name))
 			defer span.End()
 
-			pc, err := NewProvenanceCreator(ctx2, slsaVersion, cap, res, attrs, j, usage, s.provenanceEnv)
+			pc, err := NewProvenanceCreator(ctx2, provenancetypes.ProvenanceSLSA1, cap, res, attrs, j, usage, s.provenanceEnv)
 			if err != nil {
 				return nil, nil, err
 			}

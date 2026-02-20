@@ -25,7 +25,7 @@ func TestParse(t *testing.T) {
 				},
 				"provenance": {
 					"mode":    "max",
-					"version": "v0.2", // intentionally not const
+					"version": "v1", // intentionally not const
 				},
 			},
 		},

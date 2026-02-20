@@ -6,7 +6,7 @@ import (
 
 	"github.com/containerd/platforms"
 	slsa "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common"
-	slsa02 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2"
+	slsa1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	"github.com/moby/buildkit/frontend/dockerfile/dfgitutil"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/util/purl"
@@ -92,12 +92,18 @@ func findMaterial(srcs provenancetypes.Sources, uri string) (*slsa.ProvenanceMat
 	return nil, false
 }
 
-func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error) {
+func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error) {
 	materials, err := slsaMaterials(c.Sources)
 	if err != nil {
 		return nil, err
 	}
-	inv := provenancetypes.ProvenanceInvocationSLSA02{}
+	var resolvedDeps []slsa1.ResourceDescriptor
+	for _, m := range materials {
+		resolvedDeps = append(resolvedDeps, slsa1.ResourceDescriptor{
+			URI:    m.URI,
+			Digest: m.Digest,
+		})
+	}
 
 	args := maps.Clone(c.Args)
 
@@ -108,19 +114,20 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 		contextKey = "input:context"
 	}
 
+	ext := provenancetypes.ProvenanceExternalParametersSLSA1{}
 	if v, ok := args[contextKey]; ok && v != "" {
 		if m, ok := findMaterial(c.Sources, v); ok {
-			inv.ConfigSource.URI = m.URI
-			inv.ConfigSource.Digest = m.Digest
+			ext.ConfigSource.URI = m.URI
+			ext.ConfigSource.Digest = m.Digest
 		} else {
-			inv.ConfigSource.URI = v
+			ext.ConfigSource.URI = v
 		}
-		inv.ConfigSource.URI = urlutil.RedactCredentials(inv.ConfigSource.URI)
+		ext.ConfigSource.URI = urlutil.RedactCredentials(ext.ConfigSource.URI)
 		delete(args, contextKey)
 	}
 
 	if v, ok := args["filename"]; ok && v != "" {
-		inv.ConfigSource.EntryPoint = v
+		ext.ConfigSource.Path = v
 		delete(args, "filename")
 	}
 
@@ -137,28 +144,30 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 		}
 	}
 
-	inv.Environment.Platform = platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+	internal := provenancetypes.ProvenanceInternalParametersSLSA1{}
+	internal.BuilderPlatform = platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
-	inv.Parameters.Frontend = c.Frontend
-	inv.Parameters.Args = args
-
+	req := provenancetypes.Parameters{}
+	req.Frontend = c.Frontend
+	req.Args = args
 	for _, s := range c.Secrets {
-		inv.Parameters.Secrets = append(inv.Parameters.Secrets, &provenancetypes.Secret{
+		req.Secrets = append(req.Secrets, &provenancetypes.Secret{
 			ID:       s.ID,
 			Optional: s.Optional,
 		})
 	}
 	for _, s := range c.SSH {
-		inv.Parameters.SSH = append(inv.Parameters.SSH, &provenancetypes.SSH{
+		req.SSH = append(req.SSH, &provenancetypes.SSH{
 			ID:       s.ID,
 			Optional: s.Optional,
 		})
 	}
 	for _, s := range c.Sources.Local {
-		inv.Parameters.Locals = append(inv.Parameters.Locals, &provenancetypes.LocalSource{
+		req.Locals = append(req.Locals, &provenancetypes.LocalSource{
 			Name: s.Name,
 		})
 	}
+	ext.Request = req
 
 	incompleteMaterials := c.IncompleteMaterials
 	if !incompleteMaterials {
@@ -167,26 +176,28 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA02, error
 		}
 	}
 
-	pr := &provenancetypes.ProvenancePredicateSLSA02{
-		Invocation: inv,
-		ProvenancePredicate: slsa02.ProvenancePredicate{
-			BuildType: provenancetypes.BuildKitBuildType02,
-			Materials: materials,
-		},
-		Metadata: &provenancetypes.ProvenanceMetadataSLSA02{
-			ProvenanceMetadata: slsa02.ProvenanceMetadata{
-				Completeness: slsa02.ProvenanceComplete{
-					Parameters:  c.Frontend != "",
-					Environment: true,
-					Materials:   !incompleteMaterials,
-				},
+	pr := &provenancetypes.ProvenancePredicateSLSA1{
+		BuildDefinition: provenancetypes.ProvenanceBuildDefinitionSLSA1{
+			ProvenanceBuildDefinition: slsa1.ProvenanceBuildDefinition{
+				BuildType:            provenancetypes.BuildKitBuildType1,
+				ResolvedDependencies: resolvedDeps,
 			},
-			Hermetic: !incompleteMaterials && !c.NetworkAccess,
+			ExternalParameters: ext,
+			InternalParameters: internal,
+		},
+		RunDetails: provenancetypes.ProvenanceRunDetailsSLSA1{
+			Metadata: &provenancetypes.ProvenanceMetadataSLSA1{
+				Completeness: provenancetypes.BuildKitComplete{
+					Request:              c.Frontend != "",
+					ResolvedDependencies: !incompleteMaterials,
+				},
+				Hermetic: !incompleteMaterials && !c.NetworkAccess,
+			},
 		},
 	}
 
 	if len(vcs) > 0 {
-		pr.Metadata.BuildKitMetadata.VCS = vcs
+		pr.RunDetails.Metadata.BuildKitMetadata.VCS = vcs
 	}
 
 	return pr, nil
