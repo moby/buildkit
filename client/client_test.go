@@ -11603,7 +11603,7 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 
 	var stmt struct {
 		intoto.StatementHeader
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(provDt, &stmt))
 
@@ -11615,14 +11615,14 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 	expectedName = purlObj.ToString()
 
 	found := false
-	for _, m := range stmt.Predicate.Materials {
+	for _, m := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
 		if m.URI == expectedName {
 			found = true
 			require.Equal(t, l.Digest.Hex(), m.Digest["sha256"])
 			break
 		}
 	}
-	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.Materials)
+	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.BuildDefinition.ResolvedDependencies)
 }
 
 func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
@@ -11706,7 +11706,7 @@ func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
 
 	var stmt struct {
 		intoto.StatementHeader
-		Predicate provenancetypes.ProvenancePredicateSLSA02 `json:"predicate"`
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(provDt, &stmt))
 
@@ -11718,14 +11718,14 @@ func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
 	expectedName = purlObj.ToString()
 
 	found := false
-	for _, m := range stmt.Predicate.Materials {
+	for _, m := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
 		if m.URI == expectedName {
 			found = true
 			require.Equal(t, layer.Digest.Hex(), m.Digest["sha256"])
 			break
 		}
 	}
-	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.Materials)
+	require.True(t, found, "expected to find %q in %+v", expectedName, stmt.Predicate.BuildDefinition.ResolvedDependencies)
 }
 
 func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
