@@ -1344,8 +1344,22 @@ func (pio *processIO) Close() (err error) {
 			err = stack.Enable(err1)
 		}
 	}
+	for fd, w := range pio.processWriters {
+		delete(pio.processWriters, fd)
+		err1 := w.Close()
+		if err1 != nil && err == nil {
+			err = stack.Enable(err1)
+		}
+	}
 	for fd, w := range pio.serverReaders {
 		delete(pio.serverReaders, fd)
+		err1 := w.Close()
+		if err1 != nil && err == nil {
+			err = stack.Enable(err1)
+		}
+	}
+	for fd, w := range pio.serverWriters {
+		delete(pio.serverWriters, fd)
 		err1 := w.Close()
 		if err1 != nil && err == nil {
 			err = stack.Enable(err1)
@@ -1559,6 +1573,17 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pio.resize = proc.Resize
 				pio.signal = proc.Signal
 
+				bklog.G(ctx).Debugf("|---> Started Message %s", pid)
+				err = srv.Send(&pb.ExecMessage{
+					ProcessID: pid,
+					Input: &pb.ExecMessage_Started{
+						Started: &pb.StartedMessage{},
+					},
+				})
+				if err != nil {
+					return stack.Enable(err)
+				}
+
 				eg.Go(func() error {
 					<-pio.done
 					bklog.G(ctx).Debugf("|---> Done Message %s", pid)
@@ -1617,17 +1642,6 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					}
 					return stack.Enable(err)
 				})
-
-				bklog.G(ctx).Debugf("|---> Started Message %s", pid)
-				err = srv.Send(&pb.ExecMessage{
-					ProcessID: pid,
-					Input: &pb.ExecMessage_Started{
-						Started: &pb.StartedMessage{},
-					},
-				})
-				if err != nil {
-					return stack.Enable(err)
-				}
 
 				// start sending Fd output back to client, this is done after
 				// StartedMessage so that Fd output will not potentially arrive
