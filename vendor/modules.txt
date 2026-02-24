@@ -848,8 +848,8 @@ github.com/moby/sys/user
 # github.com/moby/sys/userns v0.1.0
 ## explicit; go 1.21
 github.com/moby/sys/userns
-# github.com/morikuni/aec v1.0.0
-## explicit
+# github.com/morikuni/aec v1.1.0
+## explicit; go 1.21
 github.com/morikuni/aec
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
