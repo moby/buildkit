@@ -256,12 +256,6 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 					}
 				}
 
-				// In passthough model, close will be toke over by go-fuse
-				// If "passThrough" option is specified, "direct" option also will
-				// be specified, so adding this branch here is enough
-				if opt.passThrough {
-					return nil
-				}
 				return file.Close()
 			},
 		}, nil

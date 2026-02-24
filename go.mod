@@ -27,15 +27,15 @@ require (
 	github.com/containerd/go-cni v1.1.13
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
-	github.com/containerd/nydus-snapshotter v0.15.10
+	github.com/containerd/nydus-snapshotter v0.15.11
 	github.com/containerd/platforms v1.0.0-rc.2
-	github.com/containerd/stargz-snapshotter v0.18.1
-	github.com/containerd/stargz-snapshotter/estargz v0.18.1
+	github.com/containerd/stargz-snapshotter v0.18.2
+	github.com/containerd/stargz-snapshotter/estargz v0.18.2
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/containernetworking/plugins v1.9.0
 	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v29.1.4+incompatible
+	github.com/docker/cli v29.2.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.13.0
 	github.com/golang/protobuf v1.5.4
@@ -46,13 +46,13 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hiddeco/sshsig v0.2.0
 	github.com/in-toto/in-toto-golang v0.9.0
-	github.com/klauspost/compress v1.18.3
+	github.com/klauspost/compress v1.18.4
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.0
-	github.com/moby/policy-helpers v0.0.0-20260127165209-eeebf1a0ab2b
+	github.com/moby/policy-helpers v0.0.0-20260211190020-824747bfdd3c
 	github.com/moby/profiles/seccomp v0.1.0
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/moby/sys/reexec v0.1.0
@@ -72,7 +72,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/procfs v0.17.0
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
-	github.com/sigstore/sigstore-go v1.1.4-0.20251124094504-b5fe07a5a7d7
+	github.com/sigstore/sigstore-go v1.1.4
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spdx/tools-golang v0.5.7
 	github.com/stretchr/testify v1.11.1
@@ -106,10 +106,10 @@ require (
 	golang.org/x/mod v0.31.0
 	golang.org/x/net v0.48.0
 	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/sys v0.40.0
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101
-	google.golang.org/grpc v1.76.0
+	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
 	kernel.org/pub/linux/libs/security/libcap/cap v1.2.77
 	tags.cncf.io/container-device-interface v1.1.0
@@ -167,25 +167,25 @@ require (
 	github.com/go-openapi/runtime v0.29.2 // indirect
 	github.com/go-openapi/spec v0.22.1 // indirect
 	github.com/go-openapi/strfmt v0.25.0 // indirect
-	github.com/go-openapi/swag v0.25.3 // indirect
-	github.com/go-openapi/swag/cmdutils v0.25.3 // indirect
-	github.com/go-openapi/swag/conv v0.25.3 // indirect
-	github.com/go-openapi/swag/fileutils v0.25.3 // indirect
-	github.com/go-openapi/swag/jsonname v0.25.3 // indirect
-	github.com/go-openapi/swag/jsonutils v0.25.3 // indirect
-	github.com/go-openapi/swag/loading v0.25.3 // indirect
-	github.com/go-openapi/swag/mangling v0.25.3 // indirect
-	github.com/go-openapi/swag/netutils v0.25.3 // indirect
-	github.com/go-openapi/swag/stringutils v0.25.3 // indirect
-	github.com/go-openapi/swag/typeutils v0.25.3 // indirect
-	github.com/go-openapi/swag/yamlutils v0.25.3 // indirect
+	github.com/go-openapi/swag v0.25.4 // indirect
+	github.com/go-openapi/swag/cmdutils v0.25.4 // indirect
+	github.com/go-openapi/swag/conv v0.25.4 // indirect
+	github.com/go-openapi/swag/fileutils v0.25.4 // indirect
+	github.com/go-openapi/swag/jsonname v0.25.4 // indirect
+	github.com/go-openapi/swag/jsonutils v0.25.4 // indirect
+	github.com/go-openapi/swag/loading v0.25.4 // indirect
+	github.com/go-openapi/swag/mangling v0.25.4 // indirect
+	github.com/go-openapi/swag/netutils v0.25.4 // indirect
+	github.com/go-openapi/swag/stringutils v0.25.4 // indirect
+	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
+	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
 	github.com/go-openapi/validate v0.25.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/certificate-transparency-go v1.3.2 // indirect
-	github.com/google/go-containerregistry v0.20.6 // indirect
+	github.com/google/go-containerregistry v0.20.7 // indirect
 	github.com/google/pprof v0.0.0-20250820193118-f64d9cf942d6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
@@ -213,8 +213,8 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
 	github.com/sigstore/rekor v1.4.3 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.0.1 // indirect
-	github.com/sigstore/sigstore v1.10.0 // indirect
-	github.com/sigstore/timestamp-authority/v2 v2.0.2 // indirect
+	github.com/sigstore/sigstore v1.10.4 // indirect
+	github.com/sigstore/timestamp-authority/v2 v2.0.3 // indirect
 	github.com/theupdateframework/go-tuf/v2 v2.3.0 // indirect
 	github.com/transparency-dev/formats v0.0.0-20251017110053-404c0d5b696c // indirect
 	github.com/transparency-dev/merkle v0.0.2 // indirect

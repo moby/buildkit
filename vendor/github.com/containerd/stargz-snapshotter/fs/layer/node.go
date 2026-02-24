@@ -30,13 +30,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/containerd/log"
+	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
@@ -76,7 +79,7 @@ var opaqueXattrs = map[OverlayOpaqueType][]string{
 	OverlayOpaqueUser:    {"user.overlay.opaque"},
 }
 
-func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32, opaque OverlayOpaqueType, pth passThroughConfig) (fusefs.InodeEmbedder, error) {
+func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseInode uint32, opaque OverlayOpaqueType, pth passThroughConfig, logFileAccess bool) (fusefs.InodeEmbedder, error) {
 	rootID := r.Metadata().RootID()
 	rootAttr, err := r.Metadata().GetAttr(rootID)
 	if err != nil {
@@ -87,12 +90,13 @@ func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseIno
 		return nil, fmt.Errorf("unknown overlay opaque type")
 	}
 	ffs := &fs{
-		r:            r,
-		layerDigest:  layerDgst,
-		baseInode:    baseInode,
-		rootID:       rootID,
-		opaqueXattrs: opq,
-		passThrough:  pth,
+		r:             r,
+		layerDigest:   layerDgst,
+		baseInode:     baseInode,
+		rootID:        rootID,
+		opaqueXattrs:  opq,
+		passThrough:   pth,
+		logFileAccess: logFileAccess,
 	}
 	ffs.s = ffs.newState(layerDgst, blob)
 	return &node{
@@ -104,17 +108,33 @@ func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob, baseIno
 
 // fs contains global metadata used by nodes
 type fs struct {
-	r            reader.Reader
-	s            *state
-	layerDigest  digest.Digest
-	baseInode    uint32
-	rootID       uint32
-	opaqueXattrs []string
-	passThrough  passThroughConfig
+	r             reader.Reader
+	s             *state
+	layerDigest   digest.Digest
+	baseInode     uint32
+	rootID        uint32
+	opaqueXattrs  []string
+	passThrough   passThroughConfig
+	logFileAccess bool
 }
 
 func (fs *fs) inodeOfState() uint64 {
 	return (uint64(fs.baseInode) << 32) | 1 // reserved
+}
+
+func (n *node) logAccessOnce(ctx context.Context) {
+	if n == nil || n.fs == nil || !n.fs.logFileAccess {
+		return
+	}
+	if !atomic.CompareAndSwapUint32(&n.accessed, 0, 1) {
+		return
+	}
+
+	log.G(ctx).WithFields(log.Fields{
+		"layer": n.fs.layerDigest.String(),
+		"size":  n.attr.Size,
+		"mode":  fmt.Sprintf("%#o", n.attr.Mode.Perm()),
+	}).Debugf("file accessed: %s", path.Join("/", n.Path(nil)))
 }
 
 func (fs *fs) inodeOfStatFile() uint64 {
@@ -132,9 +152,10 @@ func (fs *fs) inodeOfID(id uint32) (uint64, error) {
 // node is a filesystem inode abstraction.
 type node struct {
 	fusefs.Inode
-	fs   *fs
-	id   uint32
-	attr metadata.Attr
+	fs       *fs
+	id       uint32
+	accessed uint32
+	attr     metadata.Attr
 
 	ents       []fuse.DirEntry
 	entsCached bool
@@ -185,6 +206,11 @@ func (n *node) readdir() ([]fuse.DirEntry, syscall.Errno) {
 	var lastErr error
 	if err := n.fs.r.Metadata().ForeachChild(n.id, func(name string, id uint32, mode os.FileMode) bool {
 
+		// "." and ".." will be added later.
+		if name == "." || name == ".." {
+			return true
+		}
+
 		// We don't want to show prefetch landmarks in "/".
 		if isRoot && (name == estargz.PrefetchLandmark || name == estargz.NoPrefetchLandmark) {
 			return true
@@ -217,6 +243,11 @@ func (n *node) readdir() ([]fuse.DirEntry, syscall.Errno) {
 		n.fs.s.report(fmt.Errorf("node.Readdir: err = %v; lastErr = %v", err, lastErr))
 		return nil, syscall.EIO
 	}
+
+	// Append "." and ".." directories
+	ents = append(ents,
+		fuse.DirEntry{Mode: fuse.S_IFDIR, Name: "."},
+		fuse.DirEntry{Mode: fuse.S_IFDIR, Name: ".."})
 
 	// Append whiteouts if no entry replaces the target entry in the lower layer.
 	for w, id := range whiteouts {
@@ -347,6 +378,8 @@ func (n *node) Open(ctx context.Context, flags uint32) (fh fusefs.FileHandle, fu
 		return nil, 0, syscall.EIO
 	}
 
+	n.logAccessOnce(ctx)
+
 	f := &file{
 		n:  n,
 		ra: ra,
@@ -355,12 +388,13 @@ func (n *node) Open(ctx context.Context, flags uint32) (fh fusefs.FileHandle, fu
 
 	if n.fs.passThrough.enable {
 		if getter, ok := ra.(reader.PassthroughFdGetter); ok {
-			fd, err := getter.GetPassthroughFd(n.fs.passThrough.mergeBufferSize, n.fs.passThrough.mergeWorkerCount)
+			fd, cr, err := getter.GetPassthroughFd(n.fs.passThrough.mergeBufferSize, n.fs.passThrough.mergeWorkerCount)
 			if err != nil {
 				n.fs.s.report(fmt.Errorf("passThrough model failed due to node.Open: %v", err))
 				n.fs.passThrough.enable = false
 			} else {
 				f.InitFd(int(fd))
+				f.cr = cr
 			}
 		}
 	}
@@ -427,6 +461,7 @@ func (n *node) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errn
 var _ = (fusefs.NodeReadlinker)((*node)(nil))
 
 func (n *node) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
+	n.logAccessOnce(ctx)
 	ent := n.attr
 	return []byte(ent.LinkName), 0
 }
@@ -443,6 +478,7 @@ type file struct {
 	n  *node
 	ra io.ReaderAt
 	fd int
+	cr cache.Reader
 }
 
 var _ = (fusefs.FileReader)((*file)(nil))
@@ -482,6 +518,19 @@ func (f *file) PassthroughFd() (int, bool) {
 
 func (f *file) InitFd(fd int) {
 	f.fd = fd
+}
+
+var _ = (fusefs.FileReleaser)((*file)(nil))
+
+func (f *file) Release(ctx context.Context) syscall.Errno {
+	if f.cr != nil {
+		if err := f.cr.Close(); err != nil {
+			f.n.fs.s.report(fmt.Errorf("file.Release: failed to close cache reader: %v", err))
+			return syscall.EIO
+		}
+		f.cr = nil
+	}
+	return 0
 }
 
 // whiteout is a whiteout abstraction compliant to overlayfs.
