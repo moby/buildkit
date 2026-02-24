@@ -14,7 +14,7 @@ set -e
 
 if [ -e /sys/fs/cgroup/cgroup.controllers ]; then
   if [ "$(cut -d: -f3 /proc/self/cgroup)" != "/" ]; then
-    echo creating cgroup namespace
+    echo creating cgroup namespace >&2
     exec /usr/bin/unshare --cgroup --mount /usr/bin/with-cgroupfs-remount /usr/bin/buildkitd "$@"
   fi
 fi
