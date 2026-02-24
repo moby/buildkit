@@ -230,6 +230,16 @@ COPY ./Dockerfile .
 		Dockerfile:   dockerfile,
 		DockerIgnore: dockerignore,
 	})
+
+	// No warnings should occur if we copy the directory.
+	dockerfile = []byte(`
+FROM scratch
+COPY . .
+	`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile:   dockerfile,
+		DockerIgnore: dockerignore,
+	})
 }
 
 func testSecretsUsedInArgOrEnv(t *testing.T, sb integration.Sandbox) {
