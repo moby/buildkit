@@ -1344,8 +1344,7 @@ func (pio *processIO) Close() (err error) {
 			err = stack.Enable(err1)
 		}
 	}
-	for fd, w := range pio.processWriters {
-		delete(pio.processWriters, fd)
+	for _, w := range pio.processWriters {
 		err1 := w.Close()
 		if err1 != nil && err == nil {
 			err = stack.Enable(err1)
