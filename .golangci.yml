@@ -124,6 +124,9 @@ linters:
       - linters:
           - revive
         text: var-naming
+      - linters:
+          - staticcheck
+        text: "SA1019: .* is deprecated: .*in-toto/attestation"
     paths:
       - .*\.pb\.go$
       - examples
