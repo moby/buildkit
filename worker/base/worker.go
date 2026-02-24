@@ -38,6 +38,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/source/containerblob"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
@@ -145,6 +146,16 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	sm.Register(is)
 
 	var gitSource *git.Source
+	ibs, err := containerblob.NewSource(containerblob.SourceOpt{
+		ContentStore:  opt.ContentStore,
+		CacheAccessor: cm,
+		RegistryHosts: opt.RegistryHosts,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sm.Register(ibs)
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,

@@ -526,6 +526,7 @@ type ConstraintsOpt interface {
 	RunOption
 	LocalOption
 	HTTPOption
+	ImageBlobOption
 	ImageOption
 	GitOption
 	OCILayoutOption
@@ -551,6 +552,10 @@ func (fn constraintsOptFunc) SetOCILayoutOption(oi *OCILayoutInfo) {
 
 func (fn constraintsOptFunc) SetHTTPOption(hi *HTTPInfo) {
 	hi.applyConstraints(fn)
+}
+
+func (fn constraintsOptFunc) SetImageBlobOption(ii *ImageBlobInfo) {
+	ii.applyConstraints(fn)
 }
 
 func (fn constraintsOptFunc) SetImageOption(ii *ImageInfo) {

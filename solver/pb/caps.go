@@ -44,6 +44,8 @@ const (
 	CapSourceHTTPHeader          apicaps.CapID = "source.http.header"
 	CapSourceHTTPSignatureVerify apicaps.CapID = "source.http.signatureverify"
 
+	CapSourceImageBlob apicaps.CapID = "source.imageblob"
+
 	CapSourceOCILayout apicaps.CapID = "source.ocilayout"
 
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
@@ -291,6 +293,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceHTTPSignatureVerify,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceImageBlob,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
