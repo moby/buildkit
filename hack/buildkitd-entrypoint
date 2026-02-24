@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# For cgroup v2, ensure buildkitd has a namespaced view of /sys/fs/cgroup by
+# running in a new cgroup and mount namespace and remounting /sys/fs/cgroup.
+# Assume we are already in our own cgroup ns if the current cgroup path is
+# "/".
+#
+# Note this is a workaround for the lack of cgroupns control in the Kubernetes
+# API. If KEP-5714 is adopted, this can eventually be removed.
+#
+# See https://github.com/kubernetes/enhancements/issues/5714
+
+set -e
+
+if [ -e /sys/fs/cgroup/cgroup.controllers ]; then
+  if [ "$(cut -d: -f3 /proc/self/cgroup)" != "/" ]; then
+    echo creating cgroup namespace >&2
+    exec /usr/bin/unshare --cgroup --mount /usr/bin/with-cgroupfs-remount /usr/bin/buildkitd "$@"
+  fi
+fi
+
+exec /usr/bin/buildkitd "$@"
