@@ -58,7 +58,7 @@ and exported with your build result, in the root directory.
 | `filename`     | String         | `provenance.json` | Set filename for provenance attestation when exported with `local` or `tar` exporter              |
 | `reproducible` | `true`,`false` | `false`           | Explicitly marked as reproducible. See [reproducible](#reproducible)                              |
 | `inline-only`  | `true`,`false` | `false`           | Only embed provenance into exporters that support inline content. See [inline-only](#inline-only) |
-| `version`      | String         | `v0.2`            | SLSA provenance version to use (`v0.2` or `v1`)                                                   |
+| `version`      | String         | `v1`              | SLSA provenance version to use (`v0.2` or `v1`)                                                   |
 
 ### `mode`
 
@@ -137,7 +137,7 @@ build:
 ```json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
-  "predicateType": "https://slsa.dev/provenance/v0.2",
+  "predicateType": "https://slsa.dev/provenance/v1",
   "subject": [
     {
       "name": "pkg:docker/<registry>/<image>@<tag/digest>?platform=<platform>",
@@ -147,49 +147,52 @@ build:
     }
   ],
   "predicate": {
-    "builder": {
-      "id": ""
-    },
-    "buildType": "https://mobyproject.org/buildkit@v1",
-    "materials": [
-      {
-        "uri": "pkg:docker/alpine@latest?platform=linux%2Famd64",
-        "digest": {
-          "sha256": "8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4"
+    "buildDefinition": {
+      "buildType": "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
+      "externalParameters": {
+        "configSource": {
+          "path": "Dockerfile"
+        },
+        "request": {
+          "frontend": "dockerfile.v0",
+          "args": {},
+          "locals": [
+            {
+              "name": "context"
+            },
+            {
+              "name": "dockerfile"
+            }
+          ]
         }
-      }
-    ],
-    "invocation": {
-      "configSource": {
-        "entryPoint": "Dockerfile"
       },
-      "parameters": {
-        "frontend": "dockerfile.v0",
-        "args": {},
-        "locals": [
-          {
-            "name": "context"
-          },
-          {
-            "name": "dockerfile"
+      "internalParameters": {
+        "builderPlatform": "linux/amd64"
+      },
+      "resolvedDependencies": [
+        {
+          "uri": "pkg:docker/alpine@latest?platform=linux%2Famd64",
+          "digest": {
+            "sha256": "8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4"
           }
-        ]
-      },
-      "environment": {
-        "platform": "linux/amd64"
-      }
+        }
+      ]
     },
-    "metadata": {
-      "buildInvocationID": "yirbp1aosi1vqjmi3z6bc75nb",
-      "buildStartedOn": "2022-12-08T11:48:59.466513707Z",
-      "buildFinishedOn": "2022-12-08T11:49:01.256820297Z",
-      "reproducible": false,
-      "completeness": {
-        "parameters": true,
-        "environment": true,
-        "materials": false
+    "runDetails": {
+      "builder": {
+        "id": ""
       },
-      "https://mobyproject.org/buildkit@v1#metadata": {}
+      "metadata": {
+        "invocationId": "yirbp1aosi1vqjmi3z6bc75nb",
+        "startedOn": "2022-12-08T11:48:59.466513707Z",
+        "finishedOn": "2022-12-08T11:49:01.256820297Z",
+        "buildkit_reproducible": false,
+        "buildkit_completeness": {
+          "request": false,
+          "resolvedDependencies": false
+        },
+        "buildkit_metadata": {}
+      }
     }
   }
 }
@@ -200,7 +203,7 @@ For a similar build, but with `mode=max`:
 ```json
 {
   "_type": "https://in-toto.io/Statement/v0.1",
-  "predicateType": "https://slsa.dev/provenance/v0.2",
+  "predicateType": "https://slsa.dev/provenance/v1",
   "subject": [
     {
       "name": "pkg:docker/<registry>/<image>@<tag/digest>?platform=<platform>",
@@ -210,137 +213,82 @@ For a similar build, but with `mode=max`:
     }
   ],
   "predicate": {
-    "builder": {
-      "id": ""
-    },
-    "buildType": "https://mobyproject.org/buildkit@v1",
-    "materials": [
-      {
-        "uri": "pkg:docker/alpine@latest?platform=linux%2Famd64",
-        "digest": {
-          "sha256": "8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4"
-        }
-      }
-    ],
-    "invocation": {
-      "configSource": {
-        "entryPoint": "Dockerfile"
-      },
-      "parameters": {
-        "frontend": "dockerfile.v0",
-        "args": {},
-        "locals": [
-          {
-            "name": "context"
-          },
-          {
-            "name": "dockerfile"
-          }
-        ]
-      },
-      "environment": {
-        "platform": "linux/amd64"
-      }
-    },
-    "buildConfig": {
-      "llbDefinition": [
-        {
-          "id": "step0",
-          "op": {
-            "Op": {
-              "source": {
-                "identifier": "docker-image://docker.io/library/alpine:latest@sha256:8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4"
-              }
-            },
-            "platform": {
-              "Architecture": "amd64",
-              "OS": "linux"
-            },
-            "constraints": {}
-          }
+    "buildDefinition": {
+      "buildType": "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
+      "externalParameters": {
+        "configSource": {
+          "path": "Dockerfile"
         },
+        "request": {
+          "frontend": "dockerfile.v0",
+          "args": {},
+          "locals": [
+            {
+              "name": "context"
+            },
+            {
+              "name": "dockerfile"
+            }
+          ]
+        }
+      },
+      "internalParameters": {
+        "builderPlatform": "linux/amd64",
+        "buildConfig": {
+          "llbDefinition": [
+            {
+              "id": "step0"
+            },
+            {
+              "id": "step1",
+              "inputs": [
+                "step0:0"
+              ]
+            }
+          ]
+        }
+      },
+      "resolvedDependencies": [
         {
-          "id": "step1",
-          "op": {
-            "Op": null
-          },
-          "inputs": ["step0:0"]
+          "uri": "pkg:docker/alpine@latest?platform=linux%2Famd64",
+          "digest": {
+            "sha256": "8914eb54f968791faf6a8638949e480fef81e697984fba772b3976835194c6d4"
+          }
         }
       ]
     },
-    "metadata": {
-      "buildInvocationID": "46ue2x93k3xj5l463dektwldw",
-      "buildStartedOn": "2022-12-08T11:50:54.953375437Z",
-      "buildFinishedOn": "2022-12-08T11:50:55.447841328Z",
-      "reproducible": false,
-      "completeness": {
-        "parameters": true,
-        "environment": true,
-        "materials": false
+    "runDetails": {
+      "builder": {
+        "id": ""
       },
-      "https://mobyproject.org/buildkit@v1#metadata": {
-        "source": {
-          "locations": {
-            "step0": {
-              "locations": [
-                {
-                  "ranges": [
-                    {
-                      "start": {
-                        "line": 1
-                      },
-                      "end": {
-                        "line": 1
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "infos": [
-            {
-              "filename": "Dockerfile",
-              "data": "RlJPTSBhbHBpbmU6bGF0ZXN0Cg==",
-              "llbDefinition": [
-                {
-                  "id": "step0",
-                  "op": {
-                    "Op": {
-                      "source": {
-                        "identifier": "local://dockerfile",
-                        "attrs": {
-                          "local.differ": "none",
-                          "local.followpaths": "[\"Dockerfile\",\"Dockerfile.dockerignore\",\"dockerfile\"]",
-                          "local.session": "q2jnwdkas0i0iu4knchd92jaz",
-                          "local.sharedkeyhint": "dockerfile"
-                        }
-                      }
-                    },
-                    "constraints": {}
-                  }
-                },
-                {
-                  "id": "step1",
-                  "op": {
-                    "Op": null
-                  },
-                  "inputs": ["step0:0"]
-                }
-              ]
-            }
-          ]
+      "metadata": {
+        "invocationId": "46ue2x93k3xj5l463dektwldw",
+        "startedOn": "2022-12-08T11:50:54.953375437Z",
+        "finishedOn": "2022-12-08T11:50:55.447841328Z",
+        "buildkit_reproducible": false,
+        "buildkit_completeness": {
+          "request": true,
+          "resolvedDependencies": false
         },
-        "layers": {
-          "step0:0": [
-            [
+        "buildkit_metadata": {
+          "source": {
+            "infos": [
               {
-                "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-                "digest": "sha256:c158987b05517b6f2c5913f3acef1f2182a32345a304fe357e3ace5fadcad715",
-                "size": 3370706
+                "filename": "Dockerfile"
               }
             ]
-          ]
+          },
+          "layers": {
+            "step0:0": [
+              [
+                {
+                  "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                  "digest": "sha256:c158987b05517b6f2c5913f3acef1f2182a32345a304fe357e3ace5fadcad715",
+                  "size": 3370706
+                }
+              ]
+            ]
+          }
         }
       }
     }
