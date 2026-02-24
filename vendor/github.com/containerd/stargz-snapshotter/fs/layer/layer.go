@@ -336,7 +336,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 		enable:           r.config.PassThrough,
 		mergeBufferSize:  r.config.MergeBufferSize,
 		mergeWorkerCount: r.config.MergeWorkerCount,
-	})
+	}, r.config.LogFileAccess)
 	r.layerCacheMu.Lock()
 	cachedL, done2, added := r.layerCache.Add(name, l)
 	r.layerCacheMu.Unlock()
@@ -397,6 +397,7 @@ func newLayer(
 	blob *blobRef,
 	vr *reader.VerifiableReader,
 	pth passThroughConfig,
+	logFileAccess bool,
 ) *layer {
 	return &layer{
 		resolver:         resolver,
@@ -405,6 +406,7 @@ func newLayer(
 		verifiableReader: vr,
 		prefetchWaiter:   newWaiter(),
 		passThrough:      pth,
+		logFileAccess:    logFileAccess,
 	}
 }
 
@@ -426,6 +428,7 @@ type layer struct {
 	prefetchOnce        sync.Once
 	backgroundFetchOnce sync.Once
 	passThrough         passThroughConfig
+	logFileAccess       bool
 }
 
 func (l *layer) Info() Info {
@@ -524,6 +527,16 @@ func (l *layer) prefetch(ctx context.Context, prefetchSize int64) error {
 		prefetchSize = l.blob.Size()
 	}
 
+	threshold := l.resolver.config.PrefetchAsyncSize
+	if threshold > 0 && prefetchSize > threshold {
+		log.G(ctx).Infof(
+			"prefetch size %d > threshold %d; allow container run while prefetching in background",
+			prefetchSize,
+			threshold,
+		)
+		l.prefetchWaiter.done()
+	}
+
 	// Fetch the target range
 	downloadStart := time.Now()
 	err := l.blob.Cache(0, prefetchSize)
@@ -612,7 +625,7 @@ func (l *layer) RootNode(baseInode uint32) (fusefs.InodeEmbedder, error) {
 	if l.r == nil {
 		return nil, fmt.Errorf("layer hasn't been verified yet")
 	}
-	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType, l.passThrough)
+	return newNode(l.desc.Digest, l.r, l.blob, baseInode, l.resolver.overlayOpaqueType, l.passThrough, l.logFileAccess)
 }
 
 func (l *layer) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {

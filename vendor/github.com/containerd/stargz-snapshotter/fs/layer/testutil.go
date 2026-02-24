@@ -286,6 +286,7 @@ func testPrefetch(t *TestRunner, factory metadata.Store, lc layerConfig) {
 					&blobRef{blob, func(bool) {}},
 					vr,
 					lc.passThroughConfig,
+					false,
 				)
 				if err := l.Verify(dgst); err != nil {
 					t.Errorf("failed to verify reader: %v", err)
@@ -769,6 +770,16 @@ func testNodesWithOpaque(t *TestRunner, factory metadata.Store, opaque OverlayOp
 				hasFileContentsOffset("foo/foo1", int64(len(data64KB)-1), data64KB[len(data64KB)-1:], true),
 			},
 		},
+		{
+			name: "dir_dots",
+			in: []tutil.TarEntry{
+				tutil.Dir("test/"),
+			},
+			want: []check{
+				entryExists("test/."),
+				entryExists("test/.."),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -814,7 +825,7 @@ func getRootNode(t TestingT, r metadata.Reader, opaque OverlayOpaqueType, tocDgs
 	if err != nil {
 		t.Fatalf("failed to verify reader: %v", err)
 	}
-	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque, lc.passThroughConfig)
+	rootNode, err := newNode(testStateLayerDigest, rr, &testBlobState{10, 5}, 100, opaque, lc.passThroughConfig, false)
 	if err != nil {
 		t.Fatalf("failed to get root node: %v", err)
 	}
@@ -840,6 +851,14 @@ func (tb *testBlobState) Refresh(ctx context.Context, host source.RegistryHosts,
 func (tb *testBlobState) Close() error { return nil }
 
 type check func(TestingT, *node, cache.BlobCache, *calledReaderAt)
+
+func entryExists(name string) check {
+	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
+		if _, err := getDirent(t, root, name); err != nil {
+			t.Errorf("Node %q does not exist", name)
+		}
+	}
+}
 
 func fileNotExist(file string) check {
 	return func(t TestingT, root *node, cc cache.BlobCache, cr *calledReaderAt) {
@@ -1139,6 +1158,42 @@ func getDirentAndNode(t TestingT, root *node, path string) (ent fuse.DirEntry, n
 	n, errno = d.Lookup(context.Background(), base, &eo)
 	if errno != 0 {
 		err = fmt.Errorf("failed to lookup node %q: %v", path, errno)
+	}
+
+	return
+}
+
+func getDirent(t TestingT, root *node, path string) (ent fuse.DirEntry, err error) {
+	dir, base := filepath.Split(filepath.Clean(path))
+
+	// get the target's parent directory.
+	var eo fuse.EntryOut
+	d := root
+	for _, name := range strings.Split(dir, "/") {
+		if len(name) == 0 {
+			continue
+		}
+		di, errno := d.Lookup(context.Background(), name, &eo)
+		if errno != 0 {
+			err = fmt.Errorf("failed to lookup directory %q: %v", name, errno)
+			return
+		}
+		var ok bool
+		if d, ok = di.Operations().(*node); !ok {
+			err = fmt.Errorf("directory %q isn't a normal node", name)
+			return
+		}
+
+	}
+
+	// get the target's direntry.
+	ents, errno := d.Readdir(context.Background())
+	if errno != 0 {
+		err = fmt.Errorf("failed to open directory %q: %v", path, errno)
+	}
+	ent, ok := hasEntry(t, base, ents)
+	if !ok {
+		err = fmt.Errorf("direntry %q not found in the parent directory of %q", base, path)
 	}
 
 	return

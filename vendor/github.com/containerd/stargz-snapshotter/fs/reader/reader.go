@@ -55,7 +55,7 @@ type Reader interface {
 }
 
 type PassthroughFdGetter interface {
-	GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (uintptr, error)
+	GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (uintptr, cache.Reader, error)
 }
 
 // VerifiableReader produces a Reader with a given verifier.
@@ -503,7 +503,7 @@ type chunkData struct {
 	bufferPos int64
 }
 
-func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (uintptr, error) {
+func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (uintptr, cache.Reader, error) {
 	var (
 		offset        int64
 		totalSize     int64
@@ -536,18 +536,18 @@ func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (u
 	if err != nil {
 		if hasLargeChunk {
 			if err := sf.prefetchEntireFileSequential(id); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 		} else {
 			if err := sf.prefetchEntireFile(id, chunks, totalSize, mergeBufferSize, mergeWorkerCount); err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 		}
 
 		// just retry once to avoid exception stuck
 		r, err = sf.gr.cache.Get(id, cache.PassThrough())
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 
@@ -555,12 +555,11 @@ func (sf *file) GetPassthroughFd(mergeBufferSize int64, mergeWorkerCount int) (u
 	file, ok := readerAt.(*os.File)
 	if !ok {
 		r.Close()
-		return 0, fmt.Errorf("the cached ReaderAt is not of type *os.File, fd obtain failed")
+		return 0, nil, fmt.Errorf("the cached ReaderAt is not of type *os.File, fd obtain failed")
 	}
 
 	fd := file.Fd()
-	r.Close()
-	return fd, nil
+	return fd, r, nil
 }
 
 // prefetchEntireFileSequential uses the legacy sequential approach for processing chunks
