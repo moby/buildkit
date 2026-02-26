@@ -7,6 +7,7 @@ type RegistryConfig struct {
 	RootCAs      []string     `toml:"ca"`
 	KeyPairs     []TLSKeyPair `toml:"keypair"`
 	TLSConfigDir []string     `toml:"tlsconfigdir"`
+	Capabilities []string     `toml:"capabilities"`
 }
 
 type TLSKeyPair struct {
