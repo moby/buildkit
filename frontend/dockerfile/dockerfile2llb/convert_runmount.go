@@ -8,6 +8,7 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
@@ -77,73 +78,81 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 				return nil, errors.Errorf("cannot mount from stage %q to %q, stage needs to be defined before current command", mount.From, mount.Target)
 			}
 		}
-		var mountOpts []llb.MountOption
-		if mount.Type == instructions.MountTypeTmpfs {
-			st = llb.Scratch()
-			mountOpts = append(mountOpts, llb.Tmpfs(
-				llb.TmpfsSize(mount.SizeLimit),
-			))
+
+		runOpt, err := dispatchMount(d, mount, st, opt, c.Location())
+		if err != nil {
+			return nil, err
 		}
-		if mount.Type == instructions.MountTypeSecret {
-			secret, err := dispatchSecret(d, mount, c.Location())
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, secret)
-			continue
-		}
-		if mount.Type == instructions.MountTypeSSH {
-			ssh, err := dispatchSSH(d, mount, c.Location())
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, ssh)
-			continue
-		}
-		if mount.ReadOnly {
-			mountOpts = append(mountOpts, llb.Readonly)
-		} else if mount.Type == instructions.MountTypeBind && opt.llbCaps.Supports(pb.CapExecMountBindReadWriteNoOutput) == nil {
-			mountOpts = append(mountOpts, llb.ForceNoOutput)
-		}
-		if mount.Type == instructions.MountTypeCache {
-			sharing := llb.CacheMountShared
-			if mount.CacheSharing == instructions.MountSharingPrivate {
-				sharing = llb.CacheMountPrivate
-			}
-			if mount.CacheSharing == instructions.MountSharingLocked {
-				sharing = llb.CacheMountLocked
-			}
-			if mount.CacheID == "" {
-				mount.CacheID = path.Clean(mount.Target)
-			}
-			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID, sharing))
-		}
-		target := mount.Target
-		if !system.IsAbsolutePath(filepath.Clean(mount.Target)) {
-			dir, err := d.state.GetDir(context.TODO())
-			if err != nil {
-				return nil, err
-			}
-			target = filepath.Join("/", dir, mount.Target)
-		}
-		if target == "/" {
-			return nil, errors.Errorf("invalid mount target %q", target)
-		}
-		if src := path.Join("/", mount.Source); src != "/" {
-			mountOpts = append(mountOpts, llb.SourcePath(src))
-		} else if mount.UID != nil || mount.GID != nil || mount.Mode != nil {
-			st = setCacheUIDGID(mount, st)
-			mountOpts = append(mountOpts, llb.SourcePath("/cache"))
+		if runOpt != nil {
+			out = append(out, runOpt)
 		}
 
-		out = append(out, llb.AddMount(target, st, mountOpts...))
-
-		if mount.From == "" {
-			d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
-		} else {
-			source := sources[i]
-			source.paths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+		// Track paths for incremental context transfer
+		if mount.Type != instructions.MountTypeSecret && mount.Type != instructions.MountTypeSSH && mount.Type != instructions.MountTypeTmpfs {
+			if mount.From == "" {
+				d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+			} else {
+				source := sources[i]
+				source.paths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+			}
 		}
 	}
 	return out, nil
+}
+
+// dispatchMount converts a single mount specification to an LLB run option.
+// This is shared between dispatchRunMounts (for RUN --mount=...) and
+// dispatchAutomounts (for --automount CLI flag).
+func dispatchMount(d *dispatchState, mount *instructions.Mount, st llb.State, opt dispatchOpt, loc []parser.Range) (llb.RunOption, error) {
+	var mountOpts []llb.MountOption
+
+	if mount.Type == instructions.MountTypeTmpfs {
+		st = llb.Scratch()
+		mountOpts = append(mountOpts, llb.Tmpfs(
+			llb.TmpfsSize(mount.SizeLimit),
+		))
+	}
+	if mount.Type == instructions.MountTypeSecret {
+		return dispatchSecret(d, mount, loc)
+	}
+	if mount.Type == instructions.MountTypeSSH {
+		return dispatchSSH(d, mount, loc)
+	}
+	if mount.ReadOnly {
+		mountOpts = append(mountOpts, llb.Readonly)
+	} else if mount.Type == instructions.MountTypeBind && opt.llbCaps != nil && opt.llbCaps.Supports(pb.CapExecMountBindReadWriteNoOutput) == nil {
+		mountOpts = append(mountOpts, llb.ForceNoOutput)
+	}
+	if mount.Type == instructions.MountTypeCache {
+		sharing := llb.CacheMountShared
+		if mount.CacheSharing == instructions.MountSharingPrivate {
+			sharing = llb.CacheMountPrivate
+		}
+		if mount.CacheSharing == instructions.MountSharingLocked {
+			sharing = llb.CacheMountLocked
+		}
+		if mount.CacheID == "" {
+			mount.CacheID = path.Clean(mount.Target)
+		}
+		mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID, sharing))
+	}
+	target := mount.Target
+	if !system.IsAbsolutePath(filepath.Clean(mount.Target)) {
+		dir, err := d.state.GetDir(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+		target = filepath.Join("/", dir, mount.Target)
+	}
+	if target == "/" {
+		return nil, errors.Errorf("invalid mount target %q", target)
+	}
+	if src := path.Join("/", mount.Source); src != "/" {
+		mountOpts = append(mountOpts, llb.SourcePath(src))
+	} else if mount.UID != nil || mount.GID != nil || mount.Mode != nil {
+		st = setCacheUIDGID(mount, st)
+		mountOpts = append(mountOpts, llb.SourcePath("/cache"))
+	}
+
+	return llb.AddMount(target, st, mountOpts...), nil
 }

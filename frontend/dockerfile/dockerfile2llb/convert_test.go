@@ -230,3 +230,88 @@ RUN echo bar
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, baseImg.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", baseImg.Created.String())
 }
+
+func TestAutomounts(t *testing.T) {
+	t.Parallel()
+
+	// Test basic automount with bind mount
+	df := `FROM scratch
+RUN echo test
+RUN echo test2
+`
+	_, _, _, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=bind,source=/src,target=/mnt/src",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test automount with cache mount
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=cache,target=/cache",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test automount with tmpfs mount
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=tmpfs,target=/tmp/data",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test multiple automounts
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=bind,source=/src,target=/mnt/src",
+				"type=cache,target=/cache",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test that automount with 'from' referencing external image works
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=bind,from=alpine:latest,source=/src,target=/mnt/src",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Test that automount with 'from' referencing a Dockerfile stage fails
+	dfWithStage := `FROM scratch AS stage1
+RUN echo test
+FROM scratch
+RUN echo test2
+`
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(dfWithStage), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"type=bind,from=stage1,source=/src,target=/mnt/src",
+			},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "automount cannot reference Dockerfile stage")
+
+	// Test invalid automount spec
+	_, _, _, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+		Config: dockerui.Config{
+			Automounts: []string{
+				"invalid-mount-spec",
+			},
+		},
+	})
+	require.Error(t, err)
+}

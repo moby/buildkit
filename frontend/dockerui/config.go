@@ -29,6 +29,7 @@ const (
 	buildArgPrefix       = "build-arg:"
 	labelPrefix          = "label:"
 	localSessionIDPrefix = "local-sessionid:"
+	automountPrefix      = "automount:"
 
 	keyTarget           = "target"
 	keyCgroupParent     = "cgroup-parent"
@@ -75,6 +76,10 @@ type Config struct {
 	BuildPlatforms         []ocispecs.Platform
 	MultiPlatformRequested bool
 	SBOM                   *SBOM
+
+	// Automounts are mounts that are automatically applied to all RUN commands.
+	// These are specified via --automount on the command line.
+	Automounts []string
 }
 
 type Client struct {
@@ -287,6 +292,7 @@ func (bc *Client) init() error {
 
 	bc.BuildArgs = filter(opts, buildArgPrefix)
 	bc.Labels = filter(opts, labelPrefix)
+	bc.Automounts = filterValues(opts, automountPrefix)
 	bc.CacheIDNamespace = opts[keyCacheNSArg]
 	bc.CgroupParent = opts[keyCgroupParent]
 	bc.Target = opts[keyTarget]
