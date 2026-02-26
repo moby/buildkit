@@ -14,7 +14,7 @@ import (
 func TestFileMkdir(t *testing.T) {
 	t.Parallel()
 
-	st := Image("foo").File(Mkdir("/foo", 0700))
+	st := Image("foo").File(Mkdir("/foo", 0770))
 	def, err := st.Marshal(context.TODO())
 
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestFileMkdir(t *testing.T) {
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 
 	require.Equal(t, "/foo", mkdir.Path)
-	require.Equal(t, 0700, int(mkdir.Mode))
+	require.Equal(t, 0770, int(mkdir.Mode))
 	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
 
