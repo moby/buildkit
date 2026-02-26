@@ -35,7 +35,7 @@ message PruneRequest {
 }
 
 message DiskUsageRequest {
-	repeated string filter = 1; 
+	repeated string filter = 1;
 	int64 ageLimit = 2;
 }
 
@@ -105,10 +105,19 @@ message CacheOptionsEntry {
 	// Attrs are like mode=(min,max), ref=example.com:5000/foo/bar .
 	// See cache importer/exporter implementations' documentation.
 	map<string, string> Attrs = 2;
+	// ID identifies this exporter.
+	// ID should be treated by the exporter as opaque.
+	string ID = 3;
 }
 
 message SolveResponse {
-	map<string, string> ExporterResponse = 1;
+	// ExporterResponseDeprecated is a combined exporter response - it aggregates
+	// responses from all exporters (including cache exporters) running in parallel.
+	// It is deprecated in favor of the structured exporter responses but will be
+	// populated as long as it is supported.
+	map<string, string> ExporterResponseDeprecated = 1;
+	repeated ExporterResponse exporterResponses = 2;
+	repeated ExporterResponse cacheExporterResponses = 3;
 }
 
 message StatusRequest {
@@ -250,4 +259,23 @@ message Exporter {
 	string Type = 1;
 	// Attrs specifies exporter configuration
 	map<string, string> Attrs = 2;
+	// ID identifies this exporter.
+	// ID should be treated by the exporter as opaque.
+	string ID = 3;
+}
+
+// ExporterResponse describes the output of an exporter
+message ExporterResponse {
+	// Metadata describes the exporter
+	ExporterMetadata metadata = 1;
+	// Data is the exporter's output
+	map<string, string> data = 2;
+}
+
+// ExporterMetadata describes the output exporter
+message ExporterMetadata {
+	// ID identifies the exporter
+	string ID = 1;
+	// Type identifies the exporter type
+	string type = 2;
 }

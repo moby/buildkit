@@ -13,7 +13,6 @@ import (
 	"github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -34,31 +33,24 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	li := &localExporterInstance{
 		localExporter: e,
-		id:            id,
 		attrs:         opt,
 	}
 	_, err := li.opts.Load(opt)
 	if err != nil {
 		return nil, err
 	}
-	_ = opt
 
 	return li, nil
 }
 
 type localExporterInstance struct {
 	*localExporter
-	id    int
 	attrs map[string]string
 
 	opts local.CreateFSOpts
-}
-
-func (e *localExporterInstance) ID() int {
-	return e.id
 }
 
 func (e *localExporterInstance) Name() string {
@@ -172,7 +164,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, nil, err
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, nil, e.id, caller)
+	w, err := buildInfo.IO.CopyFileWriter(ctx, nil, caller)
 	if err != nil {
 		return nil, nil, nil, err
 	}

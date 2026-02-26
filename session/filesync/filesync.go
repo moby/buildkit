@@ -252,7 +252,7 @@ type FSSyncTarget interface {
 }
 
 type fsSyncTarget struct {
-	id     int
+	id     string
 	outdir string
 	f      FileOutputFunc
 }
@@ -261,14 +261,14 @@ func (target *fsSyncTarget) target() *fsSyncTarget {
 	return target
 }
 
-func WithFSSync(id int, f FileOutputFunc) FSSyncTarget {
+func WithFSSync(id string, f FileOutputFunc) FSSyncTarget {
 	return &fsSyncTarget{
 		id: id,
 		f:  f,
 	}
 }
 
-func WithFSSyncDir(id int, outdir string) FSSyncTarget {
+func WithFSSyncDir(id, outdir string) FSSyncTarget {
 	return &fsSyncTarget{
 		id:     id,
 		outdir: outdir,
@@ -277,16 +277,18 @@ func WithFSSyncDir(id int, outdir string) FSSyncTarget {
 
 func NewFSSyncTarget(targets ...FSSyncTarget) *SyncTarget {
 	st := &SyncTarget{
-		fs:      make(map[int]FileOutputFunc),
-		outdirs: make(map[int]string),
+		fs:      make(map[string]FileOutputFunc),
+		outdirs: make(map[string]string),
 	}
 	st.Add(targets...)
 	return st
 }
 
 type SyncTarget struct {
-	fs      map[int]FileOutputFunc
-	outdirs map[int]string
+	// maps exporter id -> file output handler
+	fs map[string]FileOutputFunc
+	// maps exporter id -> output directory
+	outdirs map[string]string
 }
 
 var _ session.Attachable = &SyncTarget{}
@@ -307,20 +309,16 @@ func (sp *SyncTarget) Register(server *grpc.Server) {
 	RegisterFileSendServer(server, sp)
 }
 
-func (sp *SyncTarget) chooser(ctx context.Context) int {
+func (sp *SyncTarget) chooser(ctx context.Context) string {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return 0
+		return ""
 	}
 	values := md[keyExporterID]
 	if len(values) == 0 {
-		return 0
+		return ""
 	}
-	id, err := strconv.ParseInt(values[0], 10, 64)
-	if err != nil {
-		return 0
-	}
-	return int(id)
+	return values[0]
 }
 
 func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
@@ -330,7 +328,7 @@ func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	}
 	f, ok := sp.fs[id]
 	if !ok {
-		return errors.Errorf("exporter %d not found", id)
+		return errors.Errorf("exporter %s not found", id)
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
@@ -356,7 +354,7 @@ func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	return writeTargetFile(stream, wc)
 }
 
-func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
+func CopyToCaller(ctx context.Context, fs fsutil.FS, id string, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
@@ -371,7 +369,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 	if existingVal, ok := opts[keyExporterID]; ok {
 		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
 	}
-	opts[keyExporterID] = []string{fmt.Sprint(id)}
+	opts[keyExporterID] = []string{id}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
@@ -382,7 +380,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 	return sendDiffCopy(cc, fs, progress)
 }
 
-func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session.Caller) (io.WriteCloser, error) {
+func CopyFileWriter(ctx context.Context, md map[string]string, id string, c session.Caller) (io.WriteCloser, error) {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return nil, errors.Errorf("method %s not supported by the client", method)
@@ -404,7 +402,7 @@ func CopyFileWriter(ctx context.Context, md map[string]string, id int, c session
 	if existingVal, ok := opts[keyExporterID]; ok {
 		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
 	}
-	opts[keyExporterID] = []string{fmt.Sprint(id)}
+	opts[keyExporterID] = []string{id}
 	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)

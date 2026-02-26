@@ -22,7 +22,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	controlgateway "github.com/moby/buildkit/control/gateway"
-	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/frontend"
@@ -411,18 +410,22 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var expis []exporter.ExporterInstance
-	for i, ex := range req.Exporters {
+	var expis []llbsolver.Exporter
+	for _, ex := range req.Exporters {
 		exp, err := w.Exporter(ex.Type, c.opt.SessionManager)
 		if err != nil {
 			return nil, err
 		}
 		bklog.G(ctx).Debugf("resolve exporter %s with %v", ex.Type, ex.Attrs)
-		expi, err := exp.Resolve(ctx, i, ex.Attrs)
+		expi, err := exp.Resolve(ctx, ex.Attrs)
 		if err != nil {
 			return nil, err
 		}
-		expis = append(expis, expi)
+		expis = append(expis, llbsolver.Exporter{
+			ID:               ex.ID,
+			ExporterAPIs:     llbsolver.NewExporterAPIs(ex.ID),
+			ExporterInstance: expi,
+		})
 	}
 
 	rest, dupes, err := findDuplicateCacheOptions(req.Cache.Exports)
@@ -442,7 +445,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		var exp llbsolver.RemoteCacheExporter
+		exp := llbsolver.RemoteCacheExporter{ID: e.ID}
 		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
@@ -545,9 +548,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &controlapi.SolveResponse{
-		ExporterResponse: resp.ExporterResponse,
-	}, nil
+	return resp, nil
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
