@@ -118,6 +118,9 @@ func main() {
 		debugEnabled = context.GlobalBool("debug")
 		// Use Format flag to control log formatter
 		logFormat := context.GlobalString("log-format")
+		if logFormat == "" {
+        		logFormat = os.Getenv("BUILDKITD_LOG_FORMAT")
+	        }  
 		switch logFormat {
 		case "json":
 			logrus.SetFormatter(&logrus.JSONFormatter{})

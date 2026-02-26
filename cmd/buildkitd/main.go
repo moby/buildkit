@@ -185,6 +185,7 @@ func main() {
 			Name:  "log-format",
 			Usage: "log formatter: json or text",
 			Value: "text",
+			EnvVar: "BUILDKITD_LOG_FORMAT",
 		},
 		cli.StringFlag{
 			Name:  "group",
