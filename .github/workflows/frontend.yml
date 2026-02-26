@@ -23,7 +23,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_TAG: "moby/buildkit:latest"
   SCOUT_VERSION: "1.13.0"
