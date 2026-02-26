@@ -284,7 +284,7 @@ Keys supported by image output:
 * `push-by-digest=true`: push unnamed image
 * `registry.insecure=true`: push to insecure HTTP registry
 * `oci-mediatypes=true`: use OCI mediatypes in configuration JSON instead of Docker's
-* `oci-artifact=false`: use OCI artifact format for attestations
+* `oci-artifact=true`: use OCI artifact format for attestations
 * `unpack=true`: unpack image after creation (for use with containerd)
 * `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`

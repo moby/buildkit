@@ -1310,7 +1310,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
-	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageManifest, desc.MediaType)
 	require.Greater(t, desc.Size, int64(0))
 }
 
@@ -3945,7 +3945,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		} else {
 			require.Len(t, ev.Record.Result.Results, 2)
 			require.Len(t, ev.Record.Exporters, 6)
-			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+			require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[0].MediaType)
 			require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
 		}
 		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
@@ -4971,9 +4971,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(mfst.Layers))
-		require.Equal(t, images.MediaTypeDockerSchema2LayerForeign, mfst.Layers[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayerNonDistributableGzip, mfst.Layers[0].MediaType)
 		require.Len(t, mfst.Layers[0].URLs, 1)
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[1].MediaType)
 
 		rc, err := fetcher.Fetch(ctx, ocispecs.Descriptor{Digest: mfst.Layers[0].Digest, Size: mfst.Layers[0].Size})
 		require.NoError(t, err)
@@ -5018,9 +5018,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(mfst.Layers))
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 		require.Len(t, mfst.Layers[0].URLs, 0)
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[1].MediaType)
 
 		rc, err := fetcher.Fetch(ctx, ocispecs.Descriptor{Digest: mfst.Layers[0].Digest, Size: mfst.Layers[0].Size})
 		require.NoError(t, err)
@@ -5085,7 +5085,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(mfst.Layers))
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 	}
 
 	// new layer with gzip compression
@@ -5154,8 +5154,8 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -5199,8 +5199,8 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -5561,10 +5561,10 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 
-	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageManifest, mfst.MediaType)
 	require.Equal(t, 3, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -9935,7 +9935,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "b", imgs.Images[0].Manifest.Annotations["a"])
 	require.Equal(t, "d", imgs2.Index.Annotations["c"])
 
-	require.Equal(t, images.MediaTypeDockerSchema2ManifestList, imgs.Index.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs.Index.MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
