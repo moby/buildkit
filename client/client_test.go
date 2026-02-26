@@ -2769,7 +2769,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, 2, len(mfst.Layers))
 	for _, layer := range mfst.Layers {
-		require.Contains(t, layer.MediaType, "application/vnd.oci.image.layer.v1.tar+zstd")
+		require.Contains(t, layer.MediaType, ocispecs.MediaTypeImageLayerZstd)
 	}
 }
 
@@ -3877,7 +3877,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 				Type: ExporterImage,
 				Attrs: map[string]string{
 					"name":           target2,
-					"oci-mediatypes": "true",
+					"oci-mediatypes": "false",
 				},
 			},
 		}...)
@@ -5281,7 +5281,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	lastLayer := mfst.Layers[len(mfst.Layers)-1]
-	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerZstd, lastLayer.MediaType)
 
 	zstdLayerDigest := lastLayer.Digest.Hex()
 	require.Equal(t, []byte{0x28, 0xb5, 0x2f, 0xfd}, m[ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest].Data[:4])
@@ -5317,7 +5317,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	lastLayer = mfst.Layers[len(mfst.Layers)-1]
-	require.Equal(t, images.MediaTypeDockerSchema2Layer+".zstd", lastLayer.MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2LayerZstd, lastLayer.MediaType)
 
 	require.Equal(t, lastLayer.Digest.Hex(), zstdLayerDigest)
 }
@@ -5404,9 +5404,9 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 
 			firstLayer := mfst.Layers[0]
 			if ociMediaTypes {
-				require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", firstLayer.MediaType)
+				require.Equal(t, ocispecs.MediaTypeImageLayerZstd, firstLayer.MediaType)
 			} else {
-				require.Equal(t, images.MediaTypeDockerSchema2Layer+".zstd", firstLayer.MediaType)
+				require.Equal(t, images.MediaTypeDockerSchema2LayerZstd, firstLayer.MediaType)
 			}
 
 			zstdLayerDigest := firstLayer.Digest.Hex()
@@ -6325,7 +6325,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	lastLayer := layerIndex.Manifests[len(layerIndex.Manifests)-2]
-	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerZstd, lastLayer.MediaType)
 
 	zstdLayerDigest := lastLayer.Digest.Hex()
 	dt, err = os.ReadFile(filepath.Join(destDir, ocispecs.ImageBlobsDir+"/sha256/"+zstdLayerDigest))
