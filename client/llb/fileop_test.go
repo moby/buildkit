@@ -1,7 +1,6 @@
 package llb
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ func TestFileMkdir(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkdir("/foo", 0700))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -49,7 +48,7 @@ func TestFileMkdirChain(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").Dir("/etc").File(Mkdir("/foo", 0700).Mkdir("bar", 0600, WithParents(true)).Mkdir("bar/baz", 0701, WithParents(false)))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -102,7 +101,7 @@ func TestFileMkdirMkfile(t *testing.T) {
 	t.Parallel()
 
 	st := Scratch().File(Mkdir("/foo", 0700).Mkfile("bar", 0700, []byte("data")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -148,7 +147,7 @@ func TestFileMkfile(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkfile("/foo", 0700, []byte("data")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -192,7 +191,7 @@ func TestFileSymlink(t *testing.T) {
 
 	const numOps = 2
 	const numActions = 6
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -244,7 +243,7 @@ func TestFileRm(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Rm("/foo"))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -285,7 +284,7 @@ func TestFileSimpleChains(t *testing.T) {
 			Rm("foo").
 				Mkfile("/abc", 0701, []byte("d1")),
 		)
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -353,7 +352,7 @@ func TestFileCopy(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").Dir("/tmp").File(Copy(Image("bar").Dir("/etc"), "foo", "bar"))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -394,7 +393,7 @@ func TestFileCopyFromAction(t *testing.T) {
 				Mkfile("foo/bar", 0600, []byte("dt")).
 				WithState(Scratch().Dir("/tmp")),
 			"foo/bar", "baz"))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -461,7 +460,7 @@ func TestFilePipeline(t *testing.T) {
 				Copy(Image("foo"), "in", "out").
 				Copy(Image("baz").Dir("/base"), "in2", "out2"),
 		)
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -563,7 +562,7 @@ func TestFileOwner(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkdir("/foo", 0700).Mkdir("bar", 0600, WithUIDGID(123, 456)).Mkdir("bar/baz", 0701, WithUser("foouser")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -602,7 +601,7 @@ func TestFileOwnerRoot(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("root:root")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -619,7 +618,7 @@ func TestFileOwnerWithGroup(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("foo:bar")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -636,7 +635,7 @@ func TestFileOwnerWithUIDAndGID(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("1000:1001")))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -660,7 +659,7 @@ func TestFileCopyOwner(t *testing.T) {
 				"src2", "dst", WithUser("user4")).
 			Copy(Image("foo"), "src3", "dst", WithUIDGID(1, 2)),
 		)
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -723,7 +722,7 @@ func TestFileCreatedTime(t *testing.T) {
 		Mkdir("/foo", 0700, WithCreatedTime(dt)).
 			Mkfile("bar", 0600, []byte{}, WithCreatedTime(dt2)).
 			Copy(Scratch(), "src", "dst", WithCreatedTime(dt3)))
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 
 	require.NoError(t, err)
 
@@ -789,7 +788,7 @@ func TestFileOpMarshalConsistency(t *testing.T) {
 		File(Copy(f2, "/a", "/b"))
 
 	for range 100 {
-		def, err := st.Marshal(context.TODO())
+		def, err := st.Marshal(t.Context())
 		require.NoError(t, err)
 
 		if prevDef != nil {
@@ -802,7 +801,7 @@ func TestFileOpMarshalConsistency(t *testing.T) {
 
 func TestParallelMarshal(t *testing.T) {
 	st := Scratch().File(Mkfile("/tmp", 0644, []byte("tmp 1")))
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	for range 100 {
 		eg.Go(func() error {
 			_, err := st.Marshal(ctx)

@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -38,7 +37,7 @@ func expKey(k *CacheKey) ExportableCacheKey {
 }
 
 func TestInMemoryCache(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	m := NewInMemoryCacheManager()
 
@@ -49,7 +48,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err := m.Records(context.TODO(), keys[0])
+	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -65,7 +64,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -99,7 +98,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -121,7 +120,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 2, len(matches))
 
@@ -151,7 +150,7 @@ func TestInMemoryCache(t *testing.T) {
 }
 
 func TestInMemoryCacheSelector(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	m := NewInMemoryCacheManager()
 
@@ -175,7 +174,7 @@ func TestInMemoryCacheSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err := m.Records(context.TODO(), keys[0])
+	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -185,7 +184,7 @@ func TestInMemoryCacheSelector(t *testing.T) {
 }
 
 func TestInMemoryCacheSelectorNested(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	m := NewInMemoryCacheManager()
 
@@ -203,7 +202,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err := m.Records(context.TODO(), keys[0])
+	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -223,7 +222,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -239,7 +238,8 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 func TestInMemoryCacheReleaseParent(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
+	ctx := t.Context()
+	m := NewCacheManager(ctx, identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), res0, time.Now())
@@ -253,7 +253,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err := m.Records(context.TODO(), keys[0])
+	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -265,7 +265,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 0, len(matches))
 
@@ -273,7 +273,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 
@@ -291,7 +291,8 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
+	ctx := t.Context()
+	m := NewCacheManager(ctx, identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), res0, time.Now())
@@ -305,13 +306,13 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	_, err = results2.Save(res1, time.Now()) // only add bar
 	require.NoError(t, err)
 
-	m = NewCacheManager(context.TODO(), identity.NewID(), storage, results2)
+	m = NewCacheManager(ctx, identity.NewID(), storage, results2)
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err := m.Records(context.TODO(), keys[0])
+	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 0, len(matches))
 
@@ -319,7 +320,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(keys))
 
-	matches, err = m.Records(context.TODO(), keys[0])
+	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
 	require.Equal(t, 1, len(matches))
 }
@@ -327,7 +328,8 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 func TestCarryOverFromSublink(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
+	ctx := t.Context()
+	m := NewCacheManager(ctx, identity.NewID(), storage, results)
 
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), "", 0), testResult("resultFoo"), time.Now())
 	require.NoError(t, err)

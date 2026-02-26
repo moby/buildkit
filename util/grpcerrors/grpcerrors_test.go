@@ -72,7 +72,7 @@ func TestFromGRPCPreserveUnknownTypes(t *testing.T) {
 
 		decodedErr := grpcerrors.FromGRPC(status.FromProto(pb).Err())
 
-		reEncodedErr := grpcerrors.ToGRPC(context.TODO(), decodedErr)
+		reEncodedErr := grpcerrors.ToGRPC(t.Context(), decodedErr)
 
 		reDecodedErr := grpcerrors.FromGRPC(reEncodedErr)
 		assertErrorProperties(t, reDecodedErr)
@@ -107,7 +107,7 @@ func TestFromGRPCPreserveTypes(t *testing.T) {
 	joined := stderrors.Join(decodedErr, typedErr)
 
 	// Re-encode and decode the joined error and ensure the unknown detail is preserved
-	reEncoded := grpcerrors.ToGRPC(context.TODO(), joined)
+	reEncoded := grpcerrors.ToGRPC(t.Context(), joined)
 	reDecoded := grpcerrors.FromGRPC(reEncoded)
 
 	require.Error(t, reDecoded)
@@ -201,19 +201,19 @@ func TestToGRPCMessage(t *testing.T) {
 	t.Run("avoid prepending grpc status code", func(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
-		decoded := grpcerrors.FromGRPC(grpcerrors.ToGRPC(context.TODO(), err))
+		decoded := grpcerrors.FromGRPC(grpcerrors.ToGRPC(t.Context(), err))
 		assert.Equal(t, err.Error(), decoded.Error())
 	})
 	t.Run("keep extra context", func(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
-		wrapped := errors.Wrap(grpcerrors.ToGRPC(context.TODO(), err), "extra context")
+		wrapped := errors.Wrap(grpcerrors.ToGRPC(t.Context(), err), "extra context")
 
 		anotherErr := errors.New("another error")
 		joined := stderrors.Join(wrapped, anotherErr)
 
 		// Check that wrapped.Error() starts with "extra context"
-		encoded := grpcerrors.ToGRPC(context.TODO(), joined)
+		encoded := grpcerrors.ToGRPC(t.Context(), joined)
 		decoded := grpcerrors.FromGRPC(encoded)
 
 		assert.ErrorContains(t, decoded, wrapped.Error()) //nolint:testifylint // error is not critical

@@ -1,7 +1,6 @@
 package sourcepolicy
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -53,7 +52,7 @@ func testLastRuleWins(t *testing.T) {
 	}
 
 	e := NewEngine(pol)
-	mut, err := e.Evaluate(context.Background(), &pb.SourceOp{
+	mut, err := e.Evaluate(t.Context(), &pb.SourceOp{
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	})
 	require.NoError(t, err)
@@ -85,7 +84,7 @@ func testMultiplePolicies(t *testing.T) {
 	}
 
 	e := NewEngine(pol)
-	mut, err := e.Evaluate(context.Background(), &pb.SourceOp{
+	mut, err := e.Evaluate(t.Context(), &pb.SourceOp{
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	})
 	require.ErrorIs(t, err, ErrSourceDenied)
@@ -131,7 +130,7 @@ func testConvertMultiple(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -161,7 +160,7 @@ func testConvertWildcard(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/golang:1.19",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -190,7 +189,7 @@ func testConvertRegex(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/golang:1.19",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -218,7 +217,7 @@ func testConvertHTTP(t *testing.T) {
 		Identifier: "https://example.com/foo",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -255,7 +254,7 @@ func testConvertLoop(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -300,7 +299,7 @@ func testAllowConvertDeny(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -334,7 +333,7 @@ func testConvertDeny(t *testing.T) {
 		Identifier: "docker-image://docker.io/library/busybox:latest",
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -370,7 +369,7 @@ func testConvert(t *testing.T) {
 				},
 			}
 
-			ctx := context.Background()
+			ctx := t.Context()
 			e := NewEngine([]*spb.Policy{pol})
 
 			mutated, err := e.Evaluate(ctx, op)
@@ -402,7 +401,7 @@ func testAllowDeny(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
@@ -439,7 +438,7 @@ func testDenyAll(t *testing.T) {
 			}
 
 			e := NewEngine([]*spb.Policy{pol})
-			ctx := context.Background()
+			ctx := t.Context()
 
 			op := &pb.SourceOp{
 				Identifier: ref,

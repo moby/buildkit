@@ -1,7 +1,6 @@
 package oci
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -104,7 +103,7 @@ func TestResolvConf(t *testing.T) {
 
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			tempDir := t.TempDir()
 			oldResolvconfPath := resolvconfPath
 			t.Cleanup(func() {

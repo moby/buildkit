@@ -30,9 +30,9 @@ func TestDefinitionEquivalence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.TODO()
+			ctx := t.Context()
 
-			def, err := tc.state.Marshal(context.TODO())
+			def, err := tc.state.Marshal(ctx)
 			require.NoError(t, err)
 
 			op, err := NewDefinitionOp(def.ToPB())
@@ -43,7 +43,7 @@ func TestDefinitionEquivalence(t *testing.T) {
 
 			st2 := NewState(op.Output())
 
-			def2, err := st2.Marshal(context.TODO())
+			def2, err := st2.Marshal(ctx)
 			require.NoError(t, err)
 			require.Equal(t, len(def.Def), len(def2.Def))
 			require.Equal(t, len(def.Metadata), len(def2.Metadata))
@@ -93,9 +93,9 @@ func TestDefinitionInputCache(t *testing.T) {
 		AddMount("/b2", stB.GetMount("/mnt")),
 	).Root()
 
-	ctx := context.TODO()
+	ctx := t.Context()
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(ctx)
 	require.NoError(t, err)
 
 	op, err := NewDefinitionOp(def.ToPB())
@@ -127,11 +127,11 @@ func TestDefinitionInputCache(t *testing.T) {
 		}
 		all = append(all, AddMount("/mnt", Scratch().Run(append([]RunOption{Shlex("args")}, sts...)...).Root()))
 	}
-	def, err = Scratch().Run(append([]RunOption{Shlex("args")}, all...)...).Root().Marshal(context.TODO())
+	def, err = Scratch().Run(append([]RunOption{Shlex("args")}, all...)...).Root().Marshal(ctx)
 	require.NoError(t, err)
 	op, err = NewDefinitionOp(def.ToPB())
 	require.NoError(t, err)
-	require.NoError(t, testParallelWalk(context.Background(), op.Output()))
+	require.NoError(t, testParallelWalk(ctx, op.Output()))
 }
 
 func TestDefinitionNil(t *testing.T) {
