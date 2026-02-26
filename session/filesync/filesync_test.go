@@ -1,7 +1,6 @@
 package filesync
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +15,7 @@ import (
 )
 
 func TestFileSyncIncludePatterns(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -41,7 +40,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 
 	dialer := session.Dialer(testutil.TestStream(testutil.Handler(m.HandleConn)))
 
-	g, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		return s.Run(ctx, dialer)

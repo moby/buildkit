@@ -1,7 +1,6 @@
 package authprovider
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -25,12 +24,12 @@ func TestFetchTokenCaching(t *testing.T) {
 	p := NewDockerAuthProvider(DockerAuthProviderConfig{
 		AuthConfigProvider: LoadAuthConfig(cfg),
 	}).(*authProvider)
-	res, err := p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
+	res, err := p.FetchToken(t.Context(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", res.Token)
 
 	cfg.AuthConfigs[DockerHubConfigfileKey] = types.AuthConfig{Username: "user", RegistryToken: "hunter3"}
-	res, err = p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
+	res, err = p.FetchToken(t.Context(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
 	require.NoError(t, err)
 
 	// Verify that we cached the result instead of returning hunter3.
@@ -47,12 +46,12 @@ func TestFetchTokenCaching(t *testing.T) {
 		},
 	}).(*authProvider)
 
-	res, err = p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
+	res, err = p.FetchToken(t.Context(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
 	require.NoError(t, err)
 	assert.Equal(t, "hunter2", res.Token)
 
 	cfg.AuthConfigs[DockerHubConfigfileKey] = types.AuthConfig{Username: "user", RegistryToken: "hunter3"}
-	res, err = p.FetchToken(context.Background(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
+	res, err = p.FetchToken(t.Context(), &auth.FetchTokenRequest{Host: DockerHubRegistryHost})
 	require.NoError(t, err)
 
 	// Verify that we re-fetched the token after it expired.

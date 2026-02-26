@@ -30,7 +30,7 @@ func init() {
 
 func TestSingleLevelActiveGraph(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -209,7 +209,7 @@ func TestSingleLevelActiveGraph(t *testing.T) {
 
 func TestSingleLevelCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -305,7 +305,7 @@ func TestSingleLevelCache(t *testing.T) {
 
 func TestSingleLevelCacheParallel(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -380,7 +380,7 @@ func TestSingleLevelCacheParallel(t *testing.T) {
 
 func TestMultiLevelCacheParallel(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -471,7 +471,7 @@ func TestMultiLevelCacheParallel(t *testing.T) {
 
 func TestSingleCancelCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -513,7 +513,7 @@ func TestSingleCancelCache(t *testing.T) {
 }
 func TestSingleCancelExec(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -556,7 +556,7 @@ func TestSingleCancelExec(t *testing.T) {
 
 func TestSingleCancelParallel(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -631,7 +631,7 @@ func TestSingleCancelParallel(t *testing.T) {
 
 func TestMultiLevelCalculation(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -714,7 +714,7 @@ func TestMultiLevelCalculation(t *testing.T) {
 
 func TestHugeGraph(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -774,7 +774,7 @@ func TestHugeGraph(t *testing.T) {
 // they are really needed
 func TestOptimizedCacheAccess(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -881,7 +881,7 @@ func TestOptimizedCacheAccess(t *testing.T) {
 // inputs that didn't.
 func TestOptimizedCacheAccess2(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -1032,7 +1032,7 @@ func TestOptimizedCacheAccess2(t *testing.T) {
 
 func TestSlowCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1111,7 +1111,7 @@ func TestSlowCache(t *testing.T) {
 // TestParallelInputs validates that inputs are processed in parallel
 func TestParallelInputs(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1167,7 +1167,7 @@ func TestParallelInputs(t *testing.T) {
 
 func TestErrorReturns(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1298,7 +1298,7 @@ func TestErrorReturns(t *testing.T) {
 
 func TestMultipleCacheSources(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -1416,7 +1416,7 @@ func TestMultipleCacheSources(t *testing.T) {
 
 func TestRepeatBuildWithIgnoreCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1540,7 +1540,7 @@ func TestRepeatBuildWithIgnoreCache(t *testing.T) {
 // with ignore-cache generates same slow cache key
 func TestIgnoreCacheResumeFromSlowCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1629,7 +1629,7 @@ func TestIgnoreCacheResumeFromSlowCache(t *testing.T) {
 
 func TestParallelBuildsIgnoreCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1786,7 +1786,7 @@ func TestParallelBuildsIgnoreCache(t *testing.T) {
 
 func TestSubbuild(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -1847,7 +1847,7 @@ func TestSubbuild(t *testing.T) {
 
 func TestCacheWithSelector(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -1981,7 +1981,7 @@ func TestCacheWithSelector(t *testing.T) {
 
 func TestCacheSlowWithSelector(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2080,7 +2080,7 @@ func TestCacheSlowWithSelector(t *testing.T) {
 
 func TestCacheExporting(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2161,7 +2161,7 @@ func TestCacheExporting(t *testing.T) {
 
 func TestCacheExportingModeMin(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2287,7 +2287,7 @@ func TestCacheExportingModeMin(t *testing.T) {
 
 func TestSlowCacheAvoidAccess(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2380,7 +2380,7 @@ func TestSlowCacheAvoidAccess(t *testing.T) {
 // moby/buildkit#648
 func TestSlowCacheAvoidLoadOnCache(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2532,7 +2532,7 @@ func TestSlowCacheAvoidLoadOnCache(t *testing.T) {
 
 func TestCacheMultipleMaps(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2650,7 +2650,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 func TestCacheInputMultipleMaps(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2741,7 +2741,7 @@ func TestCacheInputMultipleMaps(t *testing.T) {
 
 func TestCacheExportingPartialSelector(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -2939,7 +2939,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 func TestCacheExportingMergedKey(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -3028,7 +3028,7 @@ func TestMergedEdgesLookup(t *testing.T) {
 	// this test requires multiple runs to trigger the race
 	for range 20 {
 		func() {
-			ctx := context.TODO()
+			ctx := t.Context()
 
 			cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -3079,7 +3079,7 @@ func TestMergedEdgesCycle(t *testing.T) {
 	t.Parallel()
 
 	for range 20 {
-		ctx := context.TODO()
+		ctx := t.Context()
 
 		cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -3134,7 +3134,7 @@ func TestMergedEdgesCycleMultipleOwners(t *testing.T) {
 	t.Parallel()
 
 	for range 20 {
-		ctx := context.TODO()
+		ctx := t.Context()
 
 		cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -3197,7 +3197,7 @@ func TestMergedEdgesCycleMultipleOwners(t *testing.T) {
 }
 
 func TestCacheErrNotFound(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cm := newTrackingCacheManager(NewInMemoryCacheManager())
 	l := NewSolver(SolverOpt{
@@ -3249,7 +3249,7 @@ func TestCacheErrNotFound(t *testing.T) {
 func TestCacheLoadError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
@@ -3346,7 +3346,7 @@ func TestCacheLoadError(t *testing.T) {
 
 func TestInputRequestDeadlock(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
@@ -3485,7 +3485,7 @@ func TestUnknownBuildID(t *testing.T) {
 func TestStaleEdgeMerge(t *testing.T) {
 	// should not be possible to merge to an edge no longer in the actives map
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
