@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	attrLayerCompression = "compression"
-	attrForceCompression = "force-compression"
-	attrCompressionLevel = "compression-level"
+	attrLayerCompression   = "compression"
+	attrForceCompression   = "force-compression"
+	attrCompressionLevel   = "compression-level"
+	attrCompressionVariant = "compression-variant"
 )
 
 func ParseAttributes(attrs map[string]string) (Config, error) {
@@ -43,6 +44,9 @@ func ParseAttributes(attrs map[string]string) (Config, error) {
 			return Config{}, errors.Wrapf(err, "non-integer value %s specified for %s", v, attrCompressionLevel)
 		}
 		compressionConfig = compressionConfig.SetLevel(int(ii))
+	}
+	if v, ok := attrs[attrCompressionVariant]; ok {
+		compressionConfig = compressionConfig.SetVariant(v)
 	}
 	return compressionConfig, nil
 }
