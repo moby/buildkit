@@ -18,6 +18,7 @@ import (
 	"github.com/moby/sys/user"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	gowindows "golang.org/x/sys/windows"
 )
 
 const (
@@ -25,7 +26,14 @@ const (
 )
 
 func withProcessArgs(args ...string) oci.SpecOpts {
-	cmdLine := strings.Join(args, " ")
+	// TODO handle ArgsEscaped correctly here somehow (ie, avoid re-escaping args[0] if it's true)
+	// if ArgsEscaped { spec.CommandLine = args[0] + " "; args = args[1:] } else { spec.CommandLine = "" }
+	// and then specs.CommandLine += down below
+	escaped := make([]string, len(args))
+	for i, a := range args {
+		escaped[i] = gowindows.EscapeArg(a)
+	}
+	cmdLine := strings.Join(escaped, " ")
 	// This will set Args to nil and properly set the CommandLine option
 	// in the spec. On Windows we need to use CommandLine instead of Args.
 	return oci.WithProcessCommandLine(cmdLine)

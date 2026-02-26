@@ -1798,7 +1798,16 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Lint
 		args = withShell(d.image, args)
 	}
 	d.image.Config.Cmd = args
-	d.image.Config.ArgsEscaped = true //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
+	if d.image.OS == "windows" {
+		argsEscaped := c.PrependShell
+		// We warn here as Windows shell processing operates differently to Linux.
+		// Linux:   /bin/sh -c "echo hello" world   --> hello
+		// Windows: cmd /s /c "echo hello" world    --> hello world
+		if d.image.Config.ArgsEscaped != argsEscaped && len(d.image.Config.Entrypoint) > 0 {
+			// TODO error or warning about mixing CMD and ENTRYPOINT having unexpected results: https://github.com/moby/moby/blob/b8aa8579cad7b9c8712327093cbc602cfb6b417f/builder/dockerfile/dispatchers.go#L443
+		}
+		d.image.Config.ArgsEscaped = argsEscaped //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
+	}
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil, d.epoch)
 }
 
@@ -1812,6 +1821,23 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand, lin
 			lint.Run(&linter.RuleJSONArgsRecommended, c.Location(), msg)
 		}
 		args = withShell(d.image, args)
+	}
+	if d.image.OS == "windows" {
+		argsEscaped := c.PrependShell
+		// This warning is a little more complex than in dispatchCmd(), as the Windows base images (similar
+		// universally to almost every Linux image out there) have a single .Cmd field populated so that
+		// `docker run --rm image` starts the default shell which would typically be sh on Linux,
+		// or cmd on Windows. The catch to this is that if a dockerfile had `CMD ["c:\\windows\\system32\\cmd.exe"]`,
+		// we wouldn't be able to tell the difference. However, that would be highly unlikely, and besides, this
+		// is only trying to give a helpful warning of possibly unexpected results.
+		if d.image.Config.ArgsEscaped != argsEscaped &&
+			(len(d.image.Config.Cmd) > 1 ||
+				(len(d.image.Config.Cmd) == 1 &&
+					strings.ToLower(d.image.Config.Cmd[0]) != `c:\windows\system32\cmd.exe` &&
+					len(d.image.Config.Shell) == 0)) {
+			// TODO error or warning about mixing CMD and ENTRYPOINT having unexpected results: https://github.com/moby/moby/blob/b8aa8579cad7b9c8712327093cbc602cfb6b417f/builder/dockerfile/dispatchers.go#L495
+		}
+		d.image.Config.ArgsEscaped = argsEscaped //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
 	}
 	d.image.Config.Entrypoint = args
 	if !d.cmd.IsSet {
