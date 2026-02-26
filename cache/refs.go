@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/overlay"
@@ -1214,7 +1216,7 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 		res[tmpKey] = v
 	}
 	for i, sid := range session.AllSessionIDs(s) {
-		sidKey := "containerd.io/snapshot/remote/stargz.session." + fmt.Sprintf("%d", i) + "." + id
+		sidKey := estargz.TargetSessionLabel + "." + strconv.Itoa(i) + "." + id
 		fields = append(fields, "labels."+sidKey)
 		res[sidKey] = sid
 	}

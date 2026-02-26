@@ -1,12 +1,62 @@
 package estargz
 
 import (
-	"fmt"
 	"strings"
 
-	ctdlabels "github.com/containerd/containerd/v2/pkg/labels"
-	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/containerd/containerd/v2/pkg/labels"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+)
+
+const (
+	// TargetRefLabel is a label which contains image reference.
+	//
+	// It is a copy of [stargz-snapshotter/fs/source.targetRefLabel].
+	//
+	// [stargz-snapshotter/fs/source.targetRefLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L64-L65
+	TargetRefLabel = "containerd.io/snapshot/remote/stargz.reference"
+
+	// TargetDigestLabel is a label which contains layer digest.
+	//
+	// It is a copy of [stargz-snapshotter/fs/source.targetDigestLabel].
+	//
+	// [stargz-snapshotter/fs/source.targetDigestLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L67-L68
+	TargetDigestLabel = "containerd.io/snapshot/remote/stargz.digest"
+
+	// TargetImageLayersLabel is a label which contains layer digests contained in
+	// the target image.
+	//
+	// It is a copy of [stargz-snapshotter/fs/source.targetImageLayersLabel].
+	//
+	// [stargz-snapshotter/fs/source.targetImageLayersLabel]: https://github.com/containerd/stargz-snapshotter/blob/v0.16.3/fs/source/source.go#L70-L72
+	TargetImageLayersLabel = "containerd.io/snapshot/remote/stargz.layers"
+
+	// TargetSessionLabel is a label which contains session IDs usable for
+	// authenticating the target snapshot.
+	//
+	// It has no equivalent in github.com/containerd/stargz-snapshotter.
+	TargetSessionLabel = "containerd.io/snapshot/remote/stargz.session"
+)
+
+const (
+	// TOCJSONDigestAnnotation is an annotation for an image layer. This stores the
+	// digest of the TOC JSON.
+	// This annotation is valid only when it is specified in `.[]layers.annotations`
+	// of an image manifest.
+	//
+	// This is a copy of [estargz.TOCJSONDigestAnnotation]
+	//
+	// [estargz.TOCJSONDigestAnnotation]: https://pkg.go.dev/github.com/containerd/stargz-snapshotter/estargz@v0.16.3#TOCJSONDigestAnnotation
+	TOCJSONDigestAnnotation = "containerd.io/snapshot/stargz/toc.digest"
+
+	// StoreUncompressedSizeAnnotation is an additional annotation key for eStargz to enable lazy
+	// pulling on containers/storage. Stargz Store is required to expose the layer's uncompressed size
+	// to the runtime but current OCI image doesn't ship this information by default. So we store this
+	// to the special annotation.
+	//
+	// This is a copy of [estargz.StoreUncompressedSizeAnnotation]
+	//
+	// [estargz.StoreUncompressedSizeAnnotation]: https://pkg.go.dev/github.com/containerd/stargz-snapshotter/estargz@v0.16.3#StoreUncompressedSizeAnnotation
+	StoreUncompressedSizeAnnotation = "io.containers.estargz.uncompressed-size"
 )
 
 func SnapshotLabels(ref string, descs []ocispecs.Descriptor, targetIndex int) map[string]string {
@@ -14,25 +64,21 @@ func SnapshotLabels(ref string, descs []ocispecs.Descriptor, targetIndex int) ma
 		return nil
 	}
 	desc := descs[targetIndex]
-	labels := make(map[string]string)
-	for _, k := range []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation} {
-		labels[k] = desc.Annotations[k]
-	}
-	labels["containerd.io/snapshot/remote/stargz.reference"] = ref
-	labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
-	var (
-		layersKey = "containerd.io/snapshot/remote/stargz.layers"
-		layers    string
-	)
+
+	var layers string
 	for _, l := range descs[targetIndex:] {
-		ls := fmt.Sprintf("%s,", l.Digest.String())
 		// This avoids the label hits the size limitation.
 		// Skipping layers is allowed here and only affects performance.
-		if err := ctdlabels.Validate(layersKey, layers+ls); err != nil {
+		if err := labels.Validate(TargetImageLayersLabel, layers+l.Digest.String()); err != nil {
 			break
 		}
-		layers += ls
+		layers += l.Digest.String() + ","
 	}
-	labels[layersKey] = strings.TrimSuffix(layers, ",")
-	return labels
+	return map[string]string{
+		TOCJSONDigestAnnotation:         desc.Annotations[TOCJSONDigestAnnotation],
+		StoreUncompressedSizeAnnotation: desc.Annotations[StoreUncompressedSizeAnnotation],
+		TargetRefLabel:                  ref,
+		TargetDigestLabel:               desc.Digest.String(),
+		TargetImageLayersLabel:          strings.TrimSuffix(layers, ","),
+	}
 }
