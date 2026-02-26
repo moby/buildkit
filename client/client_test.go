@@ -1723,12 +1723,35 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+/*
+testSecretMounts verifies file-based secret mounts: content readability, optional/required
+behavior, custom permissions, and empty secrets. Skipped on Windows because BuildKit uses
+tmpfs for secret mounts, which Windows does not support. See testSecretEnv for a
+cross-platform alternative using environment-based secrets.
+*/
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	// Windows vs Linux secret implementation differences:
+	//
+	// Linux: Secrets are mounted as files using tmpfs at /run/secrets/ (RAM-based, encrypted)
+	//
+	// Windows: Secrets are stored in C:\ProgramData\Docker\internal\secrets (clear text on disk)
+	//          Symbolic links point to the desired target (default: C:\ProgramData\Docker\secrets)
+	//          Windows does NOT support tmpfs or non-directory file bind-mounts
+	//          UID/GID/mode options are NOT supported on Windows
+	//          Recommend BitLocker for at-rest encryption
+	//
+	// BuildKit Issue: The "invalid windows mount type: 'tmpfs'" error occurs because BuildKit
+	// currently tries to use tmpfs for all secret mounts. This needs to be fixed in BuildKit's
+	// secret mount implementation to use the Windows symlink approach instead.
+
+	// For now, this test is Linux-only until BuildKit properly implements Windows secret mounts
+	// without tmpfs. Use testSecretEnv for Windows-compatible environment-based secrets.
+	integration.SkipOnPlatform(t, "windows", "Windows does not support tmpfs for secret mounts")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
+	// Test 1: Basic secret mount with content verification (Linux only)
 	st := llb.Image("busybox:latest").
 		Run(llb.Shlex(`sh -c 'mount | grep mysecret | grep "type tmpfs" && [ "$(cat /run/secrets/mysecret)" = 'foo-secret' ]'`), llb.AddSecret("/run/secrets/mysecret"))
 
@@ -1742,7 +1765,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// test optional, mount should not exist when secret not present in SolveOpt
+	// Test 2: Optional secret - mount should not exist when secret not present in SolveOpt
 	st = llb.Image("busybox:latest").
 		Run(llb.Shlex(`test ! -f /run/secrets/mysecret2`), llb.AddSecret("/run/secrets/mysecret2", llb.SecretOptional))
 
@@ -1757,6 +1780,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
+	// Test 3: Required secret missing - should error
 	st = llb.Image("busybox:latest").
 		Run(llb.Shlex(`echo secret3`), llb.AddSecret("/run/secrets/mysecret3"))
 
@@ -1768,7 +1792,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.Error(t, err)
 
-	// test id,perm,uid
+	// Test 4: Secret with custom ID and file permissions
 	st = llb.Image("busybox:latest").
 		Run(llb.Shlex(`sh -c '[ "$(stat -c "%u %g %f" /run/secrets/mysecret4)" = "1 1 81ff" ]' `), llb.AddSecret("/run/secrets/mysecret4", llb.SecretID("mysecret"), llb.SecretFileOpt(1, 1, 0777)))
 
@@ -1782,7 +1806,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// test empty cert still creates secret file
+	// Test 5: Empty secret still creates secret file
 	st = llb.Image("busybox:latest").
 		Run(llb.Shlex(`test -f /run/secrets/mysecret5`), llb.AddSecret("/run/secrets/mysecret5", llb.SecretID("mysecret")))
 
@@ -1797,14 +1821,30 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+/*
+testSecretEnv verifies that secrets can be injected as environment variables during a build.
+It tests four scenarios: (1) a provided secret is accessible via env var, (2) an optional
+secret that is not provided results in an unset/empty env var, (3) a required secret that
+is not provided causes an error, and (4) multiple secrets with custom IDs are resolved correctly.
+Works on both Linux (busybox) and Windows (nanoserver).
+*/
 func testSecretEnv(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c '[ "$(echo ${MY_SECRET})" = 'foo-secret' ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	var st llb.ExecState
+
+	// Test 1: Verify secret value is accessible as environment variable
+	switch imgName {
+	case "nanoserver:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`cmd /C "if "%MY_SECRET%"=="foo-secret" (exit 0) else (exit 1)"`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	case "busybox:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`sh -c '[ "$(echo ${MY_SECRET})" = 'foo-secret' ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	}
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -1816,9 +1856,15 @@ func testSecretEnv(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// test optional
-	st = llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c '[ -z "${MY_SECRET}" ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true), llb.SecretOptional))
+	// Test 2: Optional secret not provided should be unset/empty
+	switch imgName {
+	case "nanoserver:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`cmd /C "if not defined MY_SECRET (exit 0) else (exit 1)"`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true), llb.SecretOptional))
+	case "busybox:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`sh -c '[ -z "${MY_SECRET}" ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true), llb.SecretOptional))
+	}
 
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -1831,8 +1877,15 @@ func testSecretEnv(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
-	st = llb.Image("busybox:latest").
-		Run(llb.Shlex(`echo foo`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	// Test 3: Required secret not provided should error
+	switch imgName {
+	case "nanoserver:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`cmd /C "echo foo"`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	case "busybox:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`echo foo`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+	}
 
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -1842,12 +1895,21 @@ func testSecretEnv(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.Error(t, err)
 
-	// test id
-	st = llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c '[ "$(echo ${MYPASSWORD}-${MYTOKEN})" = "pw-token" ]' `),
-			llb.AddSecret("MYPASSWORD", llb.SecretID("pass"), llb.SecretAsEnv(true)),
-			llb.AddSecret("MYTOKEN", llb.SecretAsEnv(true)),
-		)
+	// Test 4: Multiple secrets with custom IDs
+	switch imgName {
+	case "nanoserver:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`cmd /C "if "%MYPASSWORD%-%MYTOKEN%"=="pw-token" (exit 0) else (exit 1)"`),
+				llb.AddSecret("MYPASSWORD", llb.SecretID("pass"), llb.SecretAsEnv(true)),
+				llb.AddSecret("MYTOKEN", llb.SecretAsEnv(true)),
+			)
+	case "busybox:latest":
+		st = llb.Image(imgName).
+			Run(llb.Shlex(`sh -c '[ "$(echo ${MYPASSWORD}-${MYTOKEN})" = "pw-token" ]' `),
+				llb.AddSecret("MYPASSWORD", llb.SecretID("pass"), llb.SecretAsEnv(true)),
+				llb.AddSecret("MYTOKEN", llb.SecretAsEnv(true)),
+			)
+	}
 
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -5225,8 +5287,24 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("gzip"), item.Data)
 }
 
+/*
+testBuildExportZstd verifies OCI export with Zstd-compressed layers.
+It builds a simple layer, exports it as OCI with Zstd compression, and confirms
+the manifest uses the correct media type.
+*/
 func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	/*
+		Skipped on Windows for two reasons:
+		1. AddMount() fails because Windows snapshots only support a single mount per layer,
+		   so no additional mounts can be attached to a Run step. This could be worked around
+		   by rewriting the LLB to avoid extra mounts (e.g., writing files directly without
+		   mounting into the Run step).
+		2. The OCI exporter fails because windowsLcowDiff (the Windows-specific component
+		   responsible for computing layer differences) does not implement the Compare method
+		   required to generate compressed layer diffs for export. This cannot be worked
+		   around from the test side — it requires adding Compare support to windowsLcowDiff.
+	*/
+	integration.SkipOnPlatform(t, "windows", "Windows container support incomplete: AddMount() fails with 'number of mounts should always be 1 for Windows layers', OCI export fails with 'windowsLcowDiff does not implement Compare method'")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
