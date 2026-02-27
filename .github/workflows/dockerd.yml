@@ -67,7 +67,7 @@ jobs:
           wget -qO- "https://download.docker.com/linux/static/stable/x86_64/docker-${{ env.DOCKER_VERSION }}.tgz" | tar xvz --strip 1
       -
         name: Upload dockerd
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dockerd
           path: /tmp/moby/dockerd
