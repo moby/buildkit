@@ -675,7 +675,7 @@ func mkstat(fsys fs.FS, path, relpath string, fi os.FileInfo) (*fstypes.Stat, er
 	if !fi.IsDir() {
 		stat.Size = fi.Size()
 		if fi.Mode()&os.ModeSymlink != 0 {
-			link, err := fs.ReadLink(fsys, path)
+			link, err := readlink(fsys, path)
 			if err != nil {
 				return nil, errors.WithStack(err)
 			}
@@ -696,6 +696,14 @@ func mkstat(fsys fs.FS, path, relpath string, fi os.FileInfo) (*fstypes.Stat, er
 	stat.Mode &^= uint32(os.ModeSocket)
 
 	return stat, nil
+}
+
+func readlink(fsys fs.FS, path string) (string, error) {
+	path, err := filepath.Rel("/", path)
+	if err != nil {
+		return "", err
+	}
+	return fs.ReadLink(fsys, path)
 }
 
 type gatewayContainerMount struct {
