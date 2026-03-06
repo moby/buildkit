@@ -2,6 +2,7 @@ package dockerui
 
 import (
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -143,4 +144,32 @@ func filter(opt map[string]string, key string) map[string]string {
 		}
 	}
 	return m
+}
+
+// filterValues extracts values from opt map where keys start with the given prefix.
+// The values are returned as a slice, sorted by key to maintain stable ordering.
+func filterValues(opt map[string]string, prefix string) []string {
+	// First collect all matching values
+	m := filter(opt, prefix)
+	if len(m) == 0 {
+		return nil
+	}
+
+	// Sort keys numerically (automount:0, automount:1, etc.)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	// Keys are numeric strings, sort them
+	slices.SortFunc(keys, func(a, b string) int {
+		ai, _ := strconv.Atoi(a)
+		bi, _ := strconv.Atoi(b)
+		return ai - bi
+	})
+
+	values := make([]string, 0, len(m))
+	for _, k := range keys {
+		values = append(values, m[k])
+	}
+	return values
 }
