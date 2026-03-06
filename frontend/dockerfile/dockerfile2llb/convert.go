@@ -2137,7 +2137,15 @@ func filterPaths(paths map[string]struct{}) []llb.LocalOption {
 func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {
 	pe := &llb.ProxyEnv{}
 	isNil := true
-	for k, v := range args {
+
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		v := args[k]
 		if strings.EqualFold(k, "http_proxy") {
 			pe.HTTPProxy = v
 			isNil = false

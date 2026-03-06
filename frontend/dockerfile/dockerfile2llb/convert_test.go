@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
@@ -194,6 +195,29 @@ func TestToEnvList(t *testing.T) {
 	env = []string{"key1=val1"}
 	result = toEnvMap(args, env)
 	assert.Equal(t, map[string]string{"key1": "val1", "key2": "v1"}, result)
+}
+
+func TestProxyEnvFromBuildArgsDeterministicOrder(t *testing.T) {
+	pe := proxyEnvFromBuildArgs(map[string]string{
+		"ALL_PROXY":  "all-upper",
+		"all_proxy":  "all-lower",
+		"HTTP_PROXY": "http-upper",
+		"http_proxy": "http-lower",
+		"NO_PROXY":   "no-proxy",
+	})
+	require.NotNil(t, pe)
+	require.Equal(t, &llb.ProxyEnv{
+		HTTPProxy: "http-lower",
+		NoProxy:   "no-proxy",
+		AllProxy:  "all-lower",
+	}, pe)
+}
+
+func TestProxyEnvFromBuildArgsNilWhenNoProxyArgs(t *testing.T) {
+	pe := proxyEnvFromBuildArgs(map[string]string{
+		"FOO": "bar",
+	})
+	require.Nil(t, pe)
 }
 
 func TestDockerfileCircularDependencies(t *testing.T) {
