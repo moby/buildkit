@@ -129,6 +129,10 @@ type OCIConfig struct {
 	ProxySnapshotterPath string `toml:"proxySnapshotterPath"`
 	DefaultCgroupParent  string `toml:"defaultCgroupParent"`
 
+	// IsolateCgroups keeps all cgroups (including DefaultCgroupParent) under
+	// the cgroup hierarchy of the buildkitd process.
+	IsolateCgroups bool `toml:"isolateCgroups"`
+
 	// StargzSnapshotterConfig is configuration for stargz snapshotter.
 	// We use a generic map[string]interface{} in order to remove the dependency
 	// on stargz snapshotter's config pkg from our config.
