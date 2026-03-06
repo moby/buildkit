@@ -79,6 +79,8 @@ linters:
         - unusedwrite
     importas:
       alias:
+        - pkg: errors
+          alias: stderrors
         - pkg: github.com/containerd/errdefs
           alias: cerrdefs
         - pkg: github.com/opencontainers/image-spec/specs-go/v1
