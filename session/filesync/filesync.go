@@ -31,6 +31,10 @@ const (
 	keyExporterID = "buildkit-attachable-exporter-id"
 )
 
+const (
+	ExporterMetaLocalDirMode = "local-dir-mode"
+)
+
 type fsSyncProvider struct {
 	dirs   DirSource
 	p      progressCb
@@ -251,10 +255,29 @@ type FSSyncTarget interface {
 	target() *fsSyncTarget
 }
 
+type FSSyncDirMode string
+
+const (
+	FSSyncDirModeCopy   FSSyncDirMode = "copy"
+	FSSyncDirModeMirror FSSyncDirMode = "mirror"
+)
+
+func ParseFSSyncDirMode(v string) (FSSyncDirMode, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", string(FSSyncDirModeCopy):
+		return FSSyncDirModeCopy, nil
+	case string(FSSyncDirModeMirror):
+		return FSSyncDirModeMirror, nil
+	default:
+		return "", errors.Errorf("invalid local exporter mode %q", v)
+	}
+}
+
 type fsSyncTarget struct {
-	id     int
-	outdir string
-	f      FileOutputFunc
+	id         int
+	outdir     string
+	outdirMode FSSyncDirMode
+	f          FileOutputFunc
 }
 
 func (target *fsSyncTarget) target() *fsSyncTarget {
@@ -270,23 +293,40 @@ func WithFSSync(id int, f FileOutputFunc) FSSyncTarget {
 
 func WithFSSyncDir(id int, outdir string) FSSyncTarget {
 	return &fsSyncTarget{
-		id:     id,
-		outdir: outdir,
+		id:         id,
+		outdir:     outdir,
+		outdirMode: FSSyncDirModeCopy,
+	}
+}
+
+func WithFSSyncDirMode(id int, outdir string, mode FSSyncDirMode) FSSyncTarget {
+	if mode == "" {
+		mode = FSSyncDirModeCopy
+	}
+	return &fsSyncTarget{
+		id:         id,
+		outdir:     outdir,
+		outdirMode: mode,
 	}
 }
 
 func NewFSSyncTarget(targets ...FSSyncTarget) *SyncTarget {
 	st := &SyncTarget{
 		fs:      make(map[int]FileOutputFunc),
-		outdirs: make(map[int]string),
+		outdirs: make(map[int]syncTargetDir),
 	}
 	st.Add(targets...)
 	return st
 }
 
+type syncTargetDir struct {
+	dir  string
+	mode FSSyncDirMode
+}
+
 type SyncTarget struct {
 	fs      map[int]FileOutputFunc
-	outdirs map[int]string
+	outdirs map[int]syncTargetDir
 }
 
 var _ session.Attachable = &SyncTarget{}
@@ -298,7 +338,14 @@ func (sp *SyncTarget) Add(targets ...FSSyncTarget) {
 			sp.fs[t.id] = t.f
 		}
 		if t.outdir != "" {
-			sp.outdirs[t.id] = t.outdir
+			mode := t.outdirMode
+			if mode == "" {
+				mode = FSSyncDirModeCopy
+			}
+			sp.outdirs[t.id] = syncTargetDir{
+				dir:  t.outdir,
+				mode: mode,
+			}
 		}
 	}
 }
@@ -325,15 +372,22 @@ func (sp *SyncTarget) chooser(ctx context.Context) int {
 
 func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	id := sp.chooser(stream.Context())
+	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
 	if outdir, ok := sp.outdirs[id]; ok {
-		return syncTargetDiffCopy(stream, outdir)
+		mode := outdir.mode
+		if v := opts[keyExporterMetaPrefix+ExporterMetaLocalDirMode]; len(v) > 0 {
+			mode, err = ParseFSSyncDirMode(v[0])
+			if err != nil {
+				return err
+			}
+		}
+		return syncTargetDiffCopy(stream, outdir.dir, mode)
 	}
 	f, ok := sp.fs[id]
 	if !ok {
 		return errors.Errorf("exporter %d not found", id)
 	}
 
-	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
 	md := map[string]string{}
 	for k, v := range opts {
 		if after, ok0 := strings.CutPrefix(k, keyExporterMetaPrefix); ok0 {
@@ -356,7 +410,7 @@ func (sp *SyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	return writeTargetFile(stream, wc)
 }
 
-func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool)) error {
+func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, progress func(int, bool), exporterMD map[string]string) error {
 	method := session.MethodURL(FileSend_ServiceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
@@ -367,6 +421,13 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, id int, c session.Caller, p
 	opts, ok := metadata.FromOutgoingContext(ctx)
 	if !ok {
 		opts = make(map[string][]string)
+	}
+	for k, v := range exporterMD {
+		k := keyExporterMetaPrefix + k
+		if existingVal, ok := opts[k]; ok {
+			bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", k, existingVal, v)
+		}
+		opts[k] = []string{v}
 	}
 	if existingVal, ok := opts[keyExporterID]; ok {
 		bklog.G(ctx).Warnf("overwriting grpc metadata key %q from value %+v to %+v", keyExporterID, existingVal, id)
