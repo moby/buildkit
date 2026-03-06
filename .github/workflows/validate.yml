@@ -35,7 +35,7 @@ jobs:
       -
         name: Generate matrix
         id: generate
-        uses: docker/bake-action/subaction/matrix@v6
+        uses: docker/bake-action/subaction/matrix@v7
         with:
           target: validate
           fields: platforms
@@ -81,7 +81,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Validate
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@v7
         with:
           targets: ${{ matrix.target }}
           set: |

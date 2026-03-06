@@ -44,7 +44,7 @@ jobs:
       -
         name: Platforms matrix
         id: platforms
-        uses: docker/bake-action/subaction/matrix@v6
+        uses: docker/bake-action/subaction/matrix@v7
         with:
           target: release
           fields: platforms
@@ -155,7 +155,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Run
-        uses: docker/bake-action@v6
+        uses: docker/bake-action@v7
         with:
           targets: govulncheck
         env:
