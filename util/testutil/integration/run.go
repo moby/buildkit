@@ -20,7 +20,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/platforms"
 	"github.com/docker/cli/cli/config"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/appcontext"
@@ -314,6 +316,11 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 			}
 		}
 
+		desc, err = resolveDefaultPlatform(context.TODO(), provider, desc)
+		if err != nil {
+			return err
+		}
+
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
 		if err != nil {
 			return err
@@ -324,6 +331,26 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		t.Logf("copied %s to local mirror %s", from, host+"/"+to)
 	}
 	return nil
+}
+
+// resolveDefaultPlatform resolves a multi-platform index descriptor to a
+// single-platform manifest descriptor matching the current platform.
+// If the descriptor is not an index, it is returned as-is.
+func resolveDefaultPlatform(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) (ocispecs.Descriptor, error) {
+	if !images.IsIndexType(desc.MediaType) {
+		return desc, nil
+	}
+	children, err := images.Children(ctx, provider, desc)
+	if err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	matcher := platforms.Default()
+	for _, c := range children {
+		if c.Platform != nil && matcher.Match(*c.Platform) {
+			return c, nil
+		}
+	}
+	return ocispecs.Descriptor{}, errors.Errorf("no manifest matching platform %s in index %s", platforms.Format(platforms.DefaultSpec()), desc.Digest)
 }
 
 func OfficialImages(names ...string) map[string]string {
