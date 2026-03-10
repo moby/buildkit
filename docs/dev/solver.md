@@ -85,9 +85,10 @@ should never have the same digest.
 
 Options contain extra information that can be associated with the vertex but
 what doesn't change the definition(or equality check) of it. Normally this is
-either a hint to the solver, for example, to ignore cache when executing. It
-can also be used for associating messages with the vertex that can be helpful
-for tracing purposes.
+either a hint to the solver, for example, to ignore cache when executing, or
+runtime parameters like Linux resource limits (memory, CPU) that affect
+execution but not the cache key. It can also be used for associating messages
+with the vertex that can be helpful for tracing purposes.
 
 ## Operation interface
 
@@ -181,7 +182,14 @@ it removes all of its references from the loaded vertex. The resources are
 released if no more references remain.
 
 Loading a vertex also creates a progress writer associated with it and sets up
-the cache sources associated with the specific vertex.
+the cache sources associated with the specific vertex. If the vertex carries
+Linux resource limits (memory, CPU, cpuset) in its `VertexOptions`, these are
+merged into the shared state using a "most relaxed wins" policy: for each
+resource field, the least restrictive value across all jobs is kept. This allows
+concurrent builds that share the same operation but specify different resource
+limits to deduplicate safely. The merged resources are read at execution time
+via the `JobContext` interface, so late-arriving jobs with more relaxed limits
+are reflected even if the shared operation was already created.
 
 After vertexes have been loaded to the job, it is safe to request a result from
 an edge pointing to a previously loaded vertex. To do this `build(ctx, Edge)
