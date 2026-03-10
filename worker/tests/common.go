@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source/containerimage"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
@@ -95,8 +96,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 			Env:  []string{"PATH=/bin:/usr/bin:/sbin:/usr/sbin"},
 		},
 		Stdin:  pipeR,
-		Stdout: &nopCloser{stdout},
-		Stderr: &nopCloser{stderr},
+		Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+		Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 	}, started)
 	cancelTimeout()
 	t.Logf("Stdout: %s", stdout.String())
@@ -133,8 +134,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		Meta: executor.Meta{
 			Args: []string{"ps", "-o", "pid,comm"},
 		},
-		Stdout: &nopCloser{stdout},
-		Stderr: &nopCloser{stderr},
+		Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+		Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 	})
 	t.Logf("Stdout: %s", stdout.String())
 	t.Logf("Stderr: %s", stderr.String())
@@ -152,8 +153,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 			Args: []string{"sh", "-c", "cat > /tmp/msg"},
 		},
 		Stdin:  io.NopCloser(stdin),
-		Stdout: &nopCloser{stdout},
-		Stderr: &nopCloser{stderr},
+		Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+		Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 	})
 	require.NoError(t, err)
 	require.Empty(t, stdout.String())
@@ -166,8 +167,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		Meta: executor.Meta{
 			Args: []string{"cat", "/tmp/msg"},
 		},
-		Stdout: &nopCloser{stdout},
-		Stderr: &nopCloser{stderr},
+		Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+		Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 	})
 	t.Logf("Stdout: %s", stdout.String())
 	t.Logf("Stderr: %s", stderr.String())
@@ -331,14 +332,6 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 	pid1Cancel(errors.WithStack(context.Canceled))
 	<-pid1Done
 	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
-}
-
-type nopCloser struct {
-	io.Writer
-}
-
-func (n *nopCloser) Close() error {
-	return nil
 }
 
 func execMount(m cache.Mountable) executor.Mount {

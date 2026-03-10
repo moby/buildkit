@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/iohelper"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -488,7 +489,7 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 
 		pid4, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/tmp/test"},
-			Stdout: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
 		})
 		if err != nil {
 			return nil, err
@@ -836,7 +837,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		secretOutput := bytes.NewBuffer(nil)
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/run/secrets/mysecret"},
-			Stdout: &nopCloser{secretOutput},
+			Stdout: &iohelper.NopWriteCloser{Writer: secretOutput},
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -987,8 +988,8 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
-			Stdout: &nopCloser{output},
-			Stderr: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
+			Stderr: &iohelper.NopWriteCloser{Writer: output},
 			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
@@ -1069,8 +1070,8 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
-			Stdout: &nopCloser{output},
-			Stderr: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
+			Stderr: &iohelper.NopWriteCloser{Writer: output},
 			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
@@ -1201,8 +1202,8 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
-			Stdout: &nopCloser{output},
-			Stderr: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
+			Stderr: &iohelper.NopWriteCloser{Writer: output},
 			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
@@ -1296,8 +1297,8 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
-			Stdout: &nopCloser{output},
-			Stderr: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
+			Stderr: &iohelper.NopWriteCloser{Writer: output},
 			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
@@ -1439,7 +1440,7 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 				output := bytes.NewBuffer(nil)
 				pid1, err := ctr.Start(ctx, client.StartRequest{
 					Args:   []string{"/bin/sh", "-c", "echo -n $PATH"},
-					Stdout: &nopCloser{output},
+					Stdout: &iohelper.NopWriteCloser{Writer: output},
 				})
 				require.NoError(t, err)
 
@@ -1580,8 +1581,8 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 					Args:   []string{"sh"},
 					Tty:    true,
 					Stdin:  inputR,
-					Stdout: &nopCloser{pid1Output},
-					Stderr: &nopCloser{pid1Output},
+					Stdout: &iohelper.NopWriteCloser{Writer: pid1Output},
+					Stderr: &iohelper.NopWriteCloser{Writer: pid1Output},
 					Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 				})
 				require.NoError(t, err)
@@ -1594,7 +1595,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 						Env:          meta.Env,
 						User:         meta.User,
 						Cwd:          meta.Cwd,
-						Stdout:       &nopCloser{output},
+						Stdout:       &iohelper.NopWriteCloser{Writer: output},
 						SecurityMode: exec.Security,
 					})
 					require.NoError(t, err)
@@ -1693,7 +1694,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 		output := bytes.NewBuffer(nil)
 		proc, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/problem/found/data"},
-			Stdout: &nopCloser{output},
+			Stdout: &iohelper.NopWriteCloser{Writer: output},
 		})
 		require.NoError(t, err)
 
@@ -1843,7 +1844,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 				output := bytes.NewBuffer(nil)
 				proc, err := ctr.Start(ctx, client.StartRequest{
 					Args:   []string{"cat", tt.Path},
-					Stdout: &nopCloser{output},
+					Stdout: &iohelper.NopWriteCloser{Writer: output},
 				})
 				require.NoError(t, err)
 
@@ -1957,8 +1958,8 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 
 		pid, err := ctr.Start(ctx, client.StartRequest{
 			Args:         command,
-			Stdout:       &nopCloser{stdout},
-			Stderr:       &nopCloser{stderr},
+			Stdout:       &iohelper.NopWriteCloser{Writer: stdout},
+			Stderr:       &iohelper.NopWriteCloser{Writer: stderr},
 			SecurityMode: mode,
 		})
 		if err != nil {
@@ -2048,8 +2049,8 @@ func testClientGatewayContainerExtraHosts(t *testing.T, sb integration.Sandbox) 
 
 		pid, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"grep", "169.254.11.22\tsome.host", "/etc/hosts"},
-			Stdout: &nopCloser{stdout},
-			Stderr: &nopCloser{stderr},
+			Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+			Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 		})
 		if err != nil {
 			ctr.Release(ctx)
@@ -2147,8 +2148,8 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 
 		pid, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"/bin/sh", "-c", fmt.Sprintf("nc 127.0.0.1 %s | grep foo", port)},
-			Stdout: &nopCloser{stdout},
-			Stderr: &nopCloser{stderr},
+			Stdout: &iohelper.NopWriteCloser{Writer: stdout},
+			Stderr: &iohelper.NopWriteCloser{Writer: stderr},
 		})
 		if err != nil {
 			ctr.Release(ctx)
@@ -2363,12 +2364,4 @@ func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
-}
-
-type nopCloser struct {
-	io.Writer
-}
-
-func (n *nopCloser) Close() error {
-	return nil
 }

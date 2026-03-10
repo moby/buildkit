@@ -2660,14 +2660,6 @@ func (b *buf) close() {
 	<-b.closed
 }
 
-type bufferCloser struct {
-	*bytes.Buffer
-}
-
-func (b bufferCloser) Close() error {
-	return nil
-}
-
 func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor, error) {
 	if !compress {
 		return mapToBlobWithCompression(m, nil)
@@ -2681,7 +2673,7 @@ func mapToBlobWithCompression(m map[string]string, compress func(io.Writer) (io.
 	buf := bytes.NewBuffer(nil)
 	sha := digest.SHA256.Digester()
 
-	var dest io.WriteCloser = bufferCloser{buf}
+	var dest io.WriteCloser = &iohelper.NopWriteCloser{Writer: buf}
 	mediaType := ocispecs.MediaTypeImageLayer
 	if compress != nil {
 		var err error
@@ -2724,7 +2716,7 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 	buf := bytes.NewBuffer(nil)
 	sha := digest.SHA256.Digester()
 
-	var dest io.WriteCloser = bufferCloser{buf}
+	var dest io.WriteCloser = &iohelper.NopWriteCloser{Writer: buf}
 	if compress {
 		dest = gzip.NewWriter(buf)
 	}
