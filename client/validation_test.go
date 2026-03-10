@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	sppb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -55,7 +56,7 @@ func testValidateNullConfig(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: io.Discard}),
 			},
 		},
 	}, "", b, nil)
@@ -102,7 +103,7 @@ func testValidateInvalidConfig(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: io.Discard}),
 			},
 		},
 	}, "", b, nil)
@@ -141,7 +142,7 @@ func testValidatePlatformsEmpty(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: io.Discard}),
 			},
 		},
 	}, "", b, nil)
@@ -209,7 +210,7 @@ func testValidatePlatformsInvalid(t *testing.T, sb integration.Sandbox) {
 				Exports: []ExportEntry{
 					{
 						Type:   ExporterOCI,
-						Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+						Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: io.Discard}),
 					},
 				},
 			}, "", b, nil)

@@ -67,6 +67,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/testutil"
 	containerdutil "github.com/moby/buildkit/util/testutil/containerd"
@@ -99,12 +100,6 @@ func init() {
 		workers.InitContainerdWorker()
 	}
 }
-
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (nopWriteCloser) Close() error { return nil }
 
 var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCacheExportCacheKeyLoop,
@@ -2188,7 +2183,7 @@ func testFileOpCopyUIDCache(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: &buf}),
 			},
 		},
 	}, nil)
@@ -2214,7 +2209,7 @@ func testFileOpCopyUIDCache(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: &buf}),
 			},
 		},
 	}, nil)
@@ -2600,7 +2595,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterOCI,
 				Attrs:  attrs,
-				Output: fixedWriteCloser(nopWriteCloser{outW}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 			},
 		},
 	}, nil)
@@ -2723,7 +2718,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "foo", resp.Entries[1].Path)
 
 		exporterCalled = true
-		target.Add(filesync.WithFSSync(0, fixedWriteCloser(nopWriteCloser{outW})))
+		target.Add(filesync.WithFSSync(0, fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW})))
 		return []*exporter.ExporterRequest{
 			{
 				Type: ExporterOCI,
@@ -2838,7 +2833,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterOCI,
 				Attrs:  attrs,
-				Output: fixedWriteCloser(nopWriteCloser{outW}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 			},
 		},
 	}, "", frontend, nil)
@@ -4720,7 +4715,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 		exports = []ExportEntry{{
 			Type:   ExporterOCI,
 			Attrs:  map[string]string{},
-			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+			Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: io.Discard}),
 		}}
 	}
 
@@ -4847,7 +4842,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 				Type:  ExporterTar,
 				Attrs: map[string]string{},
 				Output: func(m map[string]string) (io.WriteCloser, error) {
-					return nopWriteCloser{io.Discard}, nil
+					return &iohelper.NopWriteCloser{Writer: io.Discard}, nil
 				},
 			},
 		},
@@ -4903,7 +4898,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: &buf}),
 			},
 		},
 	}, nil)

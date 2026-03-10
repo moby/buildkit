@@ -33,6 +33,7 @@ import (
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
@@ -1313,7 +1314,7 @@ ENV FOO=bar
 			export: func() client.ExportEntry {
 				return client.ExportEntry{
 					Type:   client.ExporterTar,
-					Output: fixedWriteCloser(&nopWriteCloser{buf}),
+					Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: buf}),
 				}
 			}(),
 		},
