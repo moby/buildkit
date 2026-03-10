@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/solver/llbsolver/linuxresources"
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -69,6 +70,19 @@ func WithValidateCaps() LoadOpt {
 func WithCacheSources(cms []solver.CacheManager) LoadOpt {
 	return func(_ *pb.Op, _ *pb.OpMetadata, opt *solver.VertexOptions) error {
 		opt.CacheSources = cms
+		return nil
+	}
+}
+
+func WithLinuxResourcesMetadata() LoadOpt {
+	return func(op *pb.Op, md *pb.OpMetadata, opt *solver.VertexOptions) error {
+		if _, ok := op.Op.(*pb.Op_Exec); !ok {
+			return nil
+		}
+		if md == nil || md.LinuxResources == nil {
+			return nil
+		}
+		opt.Metadata = &linuxresources.Metadata{LinuxResources: md.LinuxResources}
 		return nil
 	}
 }
