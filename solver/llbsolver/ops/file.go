@@ -167,7 +167,14 @@ func (f *fileOp) CacheMap(ctx context.Context, jobCtx solver.JobContext, index i
 		cm.Deps[idx].ComputeDigestFunc = opsutils.NewContentHashFunc(dedupeSelectors(m))
 	}
 	for idx := range cm.Deps {
-		cm.Deps[idx].PreprocessFunc = unlazyResultFunc
+		// Only set PreprocessFunc on deps that need content-based cache key computation.
+		// Destination inputs (marked invalid) don't have ComputeDigestFunc, so extracting
+		// them eagerly during the slow cache phase is wasted work — they get downloaded and
+		// decompressed just to advance the solver state machine, producing no cache key.
+		// On cache miss, Exec() handles extraction of any blob-only refs before use.
+		if cm.Deps[idx].ComputeDigestFunc != nil {
+			cm.Deps[idx].PreprocessFunc = unlazyResultFunc
+		}
 	}
 
 	return cm, true, nil
@@ -179,6 +186,14 @@ func (f *fileOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		workerRef, ok := inp.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
+		}
+		// Ensure blob-only refs are extracted before use. Refs whose PreprocessFunc
+		// was not set during CacheMap (e.g. destination inputs) may still be lazy
+		// at this point. Extract is a no-op if the snapshot already exists.
+		if workerRef.ImmutableRef != nil {
+			if err := workerRef.ImmutableRef.Extract(ctx, jobCtx.Session()); err != nil {
+				return nil, err
+			}
 		}
 		inpRefs = append(inpRefs, workerRef.ImmutableRef)
 	}

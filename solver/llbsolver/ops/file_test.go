@@ -554,6 +554,75 @@ func TestFileParallelActions(t *testing.T) {
 	require.Equal(t, int64(2), sem)
 }
 
+func TestFileOpCacheMapPreprocessFunc(t *testing.T) {
+	t.Parallel()
+
+	t.Run("copy sets PreprocessFunc only on source input", func(t *testing.T) {
+		t.Parallel()
+		// Copy action: input 0 is destination (marked invalid), input 1 is source (secondary).
+		// Only the source input should get ComputeDigestFunc and PreprocessFunc.
+		fo := &pb.FileOp{
+			Actions: []*pb.FileAction{
+				{
+					Input:          0,
+					SecondaryInput: 1,
+					Output:         0,
+					Action: &pb.FileAction_Copy{
+						Copy: &pb.FileActionCopy{
+							Src:  "/src",
+							Dest: "/dest",
+						},
+					},
+				},
+			},
+		}
+
+		f := &fileOp{op: fo, numInputs: 2}
+		cm, ok, err := f.CacheMap(t.Context(), testJobContext(t), 0)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Len(t, cm.Deps, 2)
+
+		// Dep 0 is the destination input — no content hash, no preprocess.
+		require.Nil(t, cm.Deps[0].ComputeDigestFunc)
+		require.Nil(t, cm.Deps[0].PreprocessFunc)
+
+		// Dep 1 is the source input — has content hash and preprocess.
+		require.NotNil(t, cm.Deps[1].ComputeDigestFunc)
+		require.NotNil(t, cm.Deps[1].PreprocessFunc)
+	})
+
+	t.Run("mkdir sets no PreprocessFunc on destination-only input", func(t *testing.T) {
+		t.Parallel()
+		// Mkdir only has a destination input (input 0). No source input exists,
+		// so no dep should get ComputeDigestFunc or PreprocessFunc.
+		fo := &pb.FileOp{
+			Actions: []*pb.FileAction{
+				{
+					Input:          0,
+					SecondaryInput: -1,
+					Output:         0,
+					Action: &pb.FileAction_Mkdir{
+						Mkdir: &pb.FileActionMkDir{
+							Path: "/foo",
+							Mode: 0700,
+						},
+					},
+				},
+			},
+		}
+
+		f := &fileOp{op: fo, numInputs: 1}
+		cm, ok, err := f.CacheMap(t.Context(), testJobContext(t), 0)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Len(t, cm.Deps, 1)
+
+		require.Nil(t, cm.Deps[0].ComputeDigestFunc)
+		require.Nil(t, cm.Deps[0].PreprocessFunc)
+	})
+}
+
 func newTestFileSolver() (*FileOpSolver, *testFileRefBackend) {
 	trb := &testFileRefBackend{refs: map[*testFileRef]struct{}{}, mounts: map[string]*testMount{}}
 	return NewFileOpSolver(nil, &testFileBackend{}, trb), trb
