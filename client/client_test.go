@@ -159,6 +159,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testShmSize,
 	testUlimit,
 	testCgroupParent,
+	testLinuxResources,
 	testNetworkMode,
 	testFrontendMetadataReturn,
 	testFrontendUseSolveResults,
@@ -1238,6 +1239,62 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "second.error"))
 	require.NoError(t, err)
 	require.Equal(t, "", strings.TrimSpace(string(dt)))
+}
+
+func testLinuxResources(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+		t.Skipf("test requires cgroup v2")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	img := llb.Image("alpine:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = img.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	// Test memory limit: set 64MiB and verify via cgroup
+	run(`sh -c "cat /sys/fs/cgroup/memory.max > mem_limited"`, llb.MemoryLimit(64*1024*1024))
+	run(`sh -c "cat /sys/fs/cgroup/memory.max > mem_default"`)
+
+	// Test CPU quota: set quota=50000 period=100000 (50% CPU) and verify
+	run(`sh -c "cat /sys/fs/cgroup/cpu.max > cpu_limited"`, llb.CPUQuota(50000), llb.CPUPeriod(100000))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "mem_limited"))
+	require.NoError(t, err)
+	require.Equal(t, "67108864", strings.TrimSpace(string(dt)))
+
+	dt2, err := os.ReadFile(filepath.Join(destDir, "mem_default"))
+	require.NoError(t, err)
+	require.Equal(t, "max", strings.TrimSpace(string(dt2)))
+
+	dt3, err := os.ReadFile(filepath.Join(destDir, "cpu_limited"))
+	require.NoError(t, err)
+	require.Equal(t, "50000 100000", strings.TrimSpace(string(dt3)))
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
