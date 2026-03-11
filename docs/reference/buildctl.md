@@ -253,3 +253,4 @@ For example:
 
 * `--import-cache type=registry,ref=example.com/foo/bar` - import into the cache from an OCI image.
 * `--import-cache type=local,src=path/to/dir` - import into the cache from a directory local to where `buildctl` is running.
+* `--import-cache type=local,src=path/to/dir,lazy=true` - import with lazy layer loading (layers are not eagerly extracted; useful for ephemeral/daemonless buildkitd).
