@@ -27,8 +27,18 @@ func init() {
 	allTests = append(allTests, secretsTests...)
 }
 
+/*
+testSecretFileParams verifies that a secret mounted with custom permissions (mode=741,
+uid=100, gid=102) is accessible with the correct ownership and mode, and that no stub file
+is left behind after the RUN step.
+
+Skipped on Windows because mode/uid/gid are POSIX permission concepts that have no direct equivalent in Windows' ACL model. BuildKit's
+secret mount implementation only applies these as POSIX permissions — there is no code path
+to translate them to Windows ACLs. Supporting this on Windows would require both a new
+mapping from POSIX permissions to Windows ACLs in BuildKit and new test verification logic.
+*/
 func testSecretFileParams(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "Secret permission parameters not implemented for Windows in BuildKit")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
