@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/provenance"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -589,4 +590,133 @@ func appendLayerChain(layers [][]ocispecs.Descriptor, descs []ocispecs.Descripto
 		}
 	}
 	return append(layers, descs)
+}
+
+func addProvenanceToResult(res *frontend.Result, br *provenanceBridge) (*Result, error) {
+	if res == nil {
+		return nil, nil
+	}
+	reqs, err := br.requests(res)
+	if err != nil {
+		return nil, err
+	}
+	out := &Result{
+		Result:     res,
+		Provenance: &provenance.Result{},
+	}
+
+	if res.Ref != nil {
+		cp, err := getProvenance(res.Ref, reqs.ref.bridge, "", reqs)
+		if err != nil {
+			return nil, err
+		}
+		out.Provenance.Ref = cp
+		if res.Metadata == nil {
+			res.Metadata = map[string][]byte{}
+		}
+	}
+
+	if len(res.Refs) != 0 {
+		out.Provenance.Refs = make(map[string]*provenance.Capture, len(res.Refs))
+	}
+	for k, ref := range res.Refs {
+		if ref == nil {
+			out.Provenance.Refs[k] = nil
+			continue
+		}
+		cp, err := getProvenance(ref, reqs.refs[k].bridge, k, reqs)
+		if err != nil {
+			return nil, err
+		}
+		out.Provenance.Refs[k] = cp
+		if res.Metadata == nil {
+			res.Metadata = map[string][]byte{}
+		}
+	}
+
+	if len(res.Attestations) != 0 {
+		out.Provenance.Attestations = make(map[string][]result.Attestation[*provenance.Capture], len(res.Attestations))
+	}
+	for k, as := range res.Attestations {
+		for i, a := range as {
+			a2, err := result.ConvertAttestation(&a, func(r solver.ResultProxy) (*provenance.Capture, error) {
+				return getProvenance(r, reqs.atts[k][i].bridge, k, reqs)
+			})
+			if err != nil {
+				return nil, err
+			}
+			out.Provenance.Attestations[k] = append(out.Provenance.Attestations[k], *a2)
+		}
+	}
+
+	return out, nil
+}
+
+func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance.Capture, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	p := ref.Provenance()
+	if p == nil {
+		return nil, nil
+	}
+
+	pr, ok := p.(*provenance.Capture)
+	if !ok {
+		return nil, errors.Errorf("invalid provenance type %T", p)
+	}
+
+	if br.req != nil {
+		if pr == nil {
+			return nil, errors.Errorf("missing provenance for %s", ref.ID())
+		}
+
+		pr.Frontend = br.req.Frontend
+		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
+		// TODO: should also save some output options like compression
+	}
+
+	return pr, nil
+}
+
+func getProvenance(ref solver.ResultProxy, br *provenanceBridge, id string, reqs *resultRequests) (*provenance.Capture, error) {
+	pr, err := getRefProvenance(ref, br)
+	if err != nil {
+		return nil, err
+	}
+	if pr == nil {
+		return nil, nil
+	}
+
+	visited := reqs.allRes()
+	visited[ref.ID()] = struct{}{}
+	// provenance for all the refs not directly in the result needs to be captured as well
+	if err := br.eachRef(func(r solver.ResultProxy) error {
+		if _, ok := visited[r.ID()]; ok {
+			return nil
+		}
+		visited[r.ID()] = struct{}{}
+		pr2, err := getRefProvenance(r, br)
+		if err != nil {
+			return err
+		}
+		return pr.Merge(pr2)
+	}); err != nil {
+		return nil, err
+	}
+
+	imgs := br.allImages()
+	if id != "" {
+		imgs = reqs.filterImagePlatforms(id, imgs)
+	}
+	for _, img := range imgs {
+		pr.AddImage(img)
+	}
+
+	if err := pr.OptimizeImageSources(); err != nil {
+		return nil, err
+	}
+	pr.Sort()
+
+	return pr, nil
 }
