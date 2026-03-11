@@ -45,9 +45,7 @@ import (
 )
 
 const (
-	keyEntitlements        = "llb.entitlements"
-	keySourcePolicy        = "llb.sourcepolicy"
-	keySourcePolicySession = "llb.sourcepolicysession"
+	keyEntitlements = "llb.entitlements"
 )
 
 type ExporterRequest struct {
@@ -705,23 +703,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func validateSourcePolicy(pol *spb.Policy) error {
-	for _, r := range pol.Rules {
-		if r == nil {
-			return errors.New("invalid nil rule in policy")
-		}
-		if r.Selector == nil {
-			return errors.New("invalid nil selector in policy")
-		}
-		for _, c := range r.Selector.Constraints {
-			if c == nil {
-				return errors.New("invalid nil constraint in policy")
-			}
-		}
-	}
-	return nil
-}
-
 func (s *Solver) leaseManager() (*leaseutil.Manager, error) {
 	w, err := defaultResolver(s.workerController)()
 	if err != nil {
@@ -842,44 +823,4 @@ func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
 		return nil, err
 	}
 	return ent, nil
-}
-
-func loadSourcePolicy(b solver.Builder) (*spb.Policy, error) {
-	var srcPol spb.Policy
-	err := b.EachValue(context.TODO(), keySourcePolicy, func(v any) error {
-		x, ok := v.(*spb.Policy)
-		if !ok {
-			return errors.Errorf("invalid source policy %T", v)
-		}
-		for _, f := range x.Rules {
-			if f == nil {
-				return errors.Errorf("invalid nil policy rule")
-			}
-			srcPol.Rules = append(srcPol.Rules, f.CloneVT())
-		}
-		srcPol.Version = x.Version
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &srcPol, nil
-}
-
-func loadSourcePolicySession(b solver.Builder) (string, error) {
-	var session string
-	err := b.EachValue(context.TODO(), keySourcePolicySession, func(v any) error {
-		x, ok := v.(string)
-		if !ok {
-			return errors.Errorf("invalid source policy session %T", v)
-		}
-		if x != "" {
-			session = x
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	return session, nil
 }
