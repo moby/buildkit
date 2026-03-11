@@ -1,4 +1,4 @@
-package llbsolver
+package history
 
 import (
 	"bufio"
@@ -51,7 +51,7 @@ const (
 	statusCanceled  = "canceled"
 )
 
-type HistoryQueueOpt struct {
+type QueueOpt struct {
 	DB             db.Transactor
 	LeaseManager   *leaseutil.Manager
 	ContentStore   *containerdsnapshot.Store
@@ -60,11 +60,11 @@ type HistoryQueueOpt struct {
 	GracefulStop   <-chan struct{}
 }
 
-type HistoryQueue struct {
+type Queue struct {
 	// mu protects active, refs and deleted maps
 	mu            sync.Mutex
 	initOnce      sync.Once
-	opt           HistoryQueueOpt
+	opt           QueueOpt
 	ps            *pubsub[*controlapi.BuildHistoryEvent]
 	active        map[string]*controlapi.BuildHistoryRecord
 	finalizers    map[string]*finalizer
@@ -89,14 +89,14 @@ type StatusImportResult struct {
 	NumWarnings       int
 }
 
-func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
+func NewQueue(opt QueueOpt) (*Queue, error) {
 	if opt.CleanConfig == nil {
 		opt.CleanConfig = &config.HistoryConfig{
 			MaxAge:     config.Duration{Duration: 48 * time.Hour},
 			MaxEntries: 50,
 		}
 	}
-	h := &HistoryQueue{
+	h := &Queue{
 		opt: opt,
 		ps: &pubsub[*controlapi.BuildHistoryEvent]{
 			m: map[*channel[*controlapi.BuildHistoryEvent]]struct{}{},
@@ -161,7 +161,7 @@ func NewHistoryQueue(opt HistoryQueueOpt) (*HistoryQueue, error) {
 	return h, nil
 }
 
-func (h *HistoryQueue) migrateV2() error {
+func (h *Queue) migrateV2() error {
 	ctx := context.Background()
 
 	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
@@ -228,7 +228,7 @@ func (h *HistoryQueue) migrateV2() error {
 	return nil
 }
 
-func (h *HistoryQueue) blobRefs(ctx context.Context, dgst digest.Digest, detectSkipLayer bool) ([]digest.Digest, error) {
+func (h *Queue) blobRefs(ctx context.Context, dgst digest.Digest, detectSkipLayer bool) ([]digest.Digest, error) {
 	info, err := h.opt.ContentStore.Info(ctx, dgst)
 	if err != nil {
 		return nil, err // allow missing blobs
@@ -266,7 +266,7 @@ func (h *HistoryQueue) blobRefs(ctx context.Context, dgst digest.Digest, detectS
 	return out, nil
 }
 
-func (h *HistoryQueue) migrateBlobV2(ctx context.Context, id string, detectSkipLayers bool) (bool, error) {
+func (h *Queue) migrateBlobV2(ctx context.Context, id string, detectSkipLayers bool) (bool, error) {
 	dgst, err := digest.Parse(id)
 	if err != nil {
 		return false, err
@@ -306,7 +306,7 @@ func (h *HistoryQueue) migrateBlobV2(ctx context.Context, id string, detectSkipL
 	return true, nil
 }
 
-func (h *HistoryQueue) gc() error {
+func (h *Queue) gc() error {
 	var records []*controlapi.BuildHistoryRecord
 
 	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
@@ -354,7 +354,7 @@ func (h *HistoryQueue) gc() error {
 	return nil
 }
 
-func (h *HistoryQueue) clearOrphans() error {
+func (h *Queue) clearOrphans() error {
 	ctx := context.Background()
 	var records []*controlapi.BuildHistoryRecord
 
@@ -395,7 +395,7 @@ func (h *HistoryQueue) clearOrphans() error {
 	return nil
 }
 
-func (h *HistoryQueue) delete(ref string) (bool, error) {
+func (h *Queue) delete(ref string) (bool, error) {
 	if _, ok := h.refs[ref]; ok {
 		h.deleted[ref] = struct{}{}
 		return false, nil
@@ -422,7 +422,7 @@ func (h *HistoryQueue) delete(ref string) (bool, error) {
 	return true, nil
 }
 
-func (h *HistoryQueue) init() error {
+func (h *Queue) init() error {
 	var err error
 	h.initOnce.Do(func() {
 		err = h.opt.DB.Update(func(tx *bolt.Tx) error {
@@ -433,11 +433,11 @@ func (h *HistoryQueue) init() error {
 	return err
 }
 
-func (h *HistoryQueue) leaseID(id string) string {
+func (h *Queue) leaseID(id string) string {
 	return "ref_" + id
 }
 
-func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *controlapi.Descriptor, detectSkipLayers bool) error {
+func (h *Queue) addResource(ctx context.Context, l leases.Lease, desc *controlapi.Descriptor, detectSkipLayers bool) error {
 	if desc == nil {
 		return nil
 	}
@@ -463,7 +463,7 @@ func (h *HistoryQueue) addResource(ctx context.Context, l leases.Lease, desc *co
 	})
 }
 
-func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *controlapi.BuildHistoryRecord) error) error {
+func (h *Queue) UpdateRef(ctx context.Context, ref string, upt func(r *controlapi.BuildHistoryRecord) error) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -505,7 +505,7 @@ func (h *HistoryQueue) UpdateRef(ctx context.Context, ref string, upt func(r *co
 	return nil
 }
 
-func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client.SolveStatus) error {
+func (h *Queue) Status(ctx context.Context, ref string, st chan<- *client.SolveStatus) error {
 	h.init()
 	var br controlapi.BuildHistoryRecord
 	if err := h.opt.DB.View(func(tx *bolt.Tx) error {
@@ -572,7 +572,7 @@ func (h *HistoryQueue) Status(ctx context.Context, ref string, st chan<- *client
 	return nil
 }
 
-func (h *HistoryQueue) update(ctx context.Context, rec *controlapi.BuildHistoryRecord) error {
+func (h *Queue) update(ctx context.Context, rec *controlapi.BuildHistoryRecord) error {
 	return h.opt.DB.Update(func(tx *bolt.Tx) (err error) {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
@@ -643,7 +643,7 @@ func (h *HistoryQueue) update(ctx context.Context, rec *controlapi.BuildHistoryR
 	})
 }
 
-func (h *HistoryQueue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
+func (h *Queue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	trigger := make(chan struct{})
@@ -673,7 +673,7 @@ func (h *HistoryQueue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
 	})
 }
 
-func (h *HistoryQueue) Finalize(ctx context.Context, ref string) error {
+func (h *Queue) Finalize(ctx context.Context, ref string) error {
 	h.mu.Lock()
 	f, ok := h.finalizers[ref]
 	h.mu.Unlock()
@@ -685,7 +685,7 @@ func (h *HistoryQueue) Finalize(ctx context.Context, ref string) error {
 	return nil
 }
 
-func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) error {
+func (h *Queue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) error {
 	h.init()
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -707,7 +707,7 @@ func (h *HistoryQueue) Update(ctx context.Context, e *controlapi.BuildHistoryEve
 	return nil
 }
 
-func (h *HistoryQueue) Delete(ctx context.Context, ref string) error {
+func (h *Queue) Delete(ctx context.Context, ref string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -721,7 +721,7 @@ func (h *HistoryQueue) Delete(ctx context.Context, ref string) error {
 	return nil
 }
 
-func (h *HistoryQueue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
+func (h *Queue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err error) {
 	l, err := h.hLeaseManager.Create(ctx, leases.WithRandomID(), leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
@@ -791,7 +791,7 @@ func (w *Writer) Commit(ctx context.Context) (*ocispecs.Descriptor, func(), erro
 		}, nil
 }
 
-func (h *HistoryQueue) ImportError(ctx context.Context, err error) (_ *spb.Status, _ *controlapi.Descriptor, _ func(), retErr error) {
+func (h *Queue) ImportError(ctx context.Context, err error) (_ *spb.Status, _ *controlapi.Descriptor, _ func(), retErr error) {
 	st, ok := grpcerrors.AsGRPCStatus(grpcerrors.ToGRPC(ctx, err))
 	if !ok {
 		st = status.New(codes.Unknown, err.Error())
@@ -833,7 +833,7 @@ func (h *HistoryQueue) ImportError(ctx context.Context, err error) (_ *spb.Statu
 	}, release, nil
 }
 
-func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *StatusImportResult, _ func(), err error) {
+func (h *Queue) ImportStatus(ctx context.Context, ch chan *client.SolveStatus) (_ *StatusImportResult, _ func(), err error) {
 	defer func() {
 		if ch == nil {
 			return
@@ -924,7 +924,7 @@ func (h *HistoryQueue) ImportStatus(ctx context.Context, ch chan *client.SolveSt
 	}, release, nil
 }
 
-func (h *HistoryQueue) Listen(ctx context.Context, req *controlapi.BuildHistoryRequest, f func(*controlapi.BuildHistoryEvent) error) error {
+func (h *Queue) Listen(ctx context.Context, req *controlapi.BuildHistoryRequest, f func(*controlapi.BuildHistoryEvent) error) error {
 	h.init()
 
 	h.mu.Lock()
