@@ -152,6 +152,32 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
+// SolvePostprocessor runs an additional solve through the frontend pipeline so
+// the converted result is tracked like a regular frontend solve before export.
+func (s *Solver) SolvePostprocessor(ctx context.Context, j *solver.Job, req frontend.SolveRequest) (*Result, error) {
+	br := s.bridge(j)
+
+	res, err := br.Solve(ctx, req, j.SessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+	res.EachRef(func(ref solver.ResultProxy) error {
+		eg.Go(func() error {
+			_, err := ref.Result(ctx2)
+			return err
+		})
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	return addProvenanceToResult(res, br)
+}
+
+
 func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {

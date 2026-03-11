@@ -16,6 +16,15 @@ const (
 	ExporterImageDescriptorKey   = "containerimage.descriptor"
 	ExporterImageBaseConfigKey   = "containerimage.base.config"
 	ExporterPlatformsKey         = "refs.platforms"
+
+	ExporterArtifactKey           = "containerimage.artifact"
+	ExporterArtifactTypeKey       = "containerimage.artifact.type"
+	ExporterArtifactConfigTypeKey = "containerimage.artifact.config.mediatype"
+	ExporterArtifactLayersKey     = "containerimage.artifact.layers"
+	ExporterPostprocessorsKey     = "containerimage.postprocessors"
+	ExporterOCILayoutKey          = "containerimage.oci-layout"
+
+	PostprocessInputKey = "input"
 )
 
 // KnownRefMetadataKeys are the subset of exporter keys that can be suffixed by
@@ -38,3 +47,8 @@ type InlineCacheEntry struct {
 	Data []byte
 }
 type InlineCache func(ctx context.Context) (*result.Result[*InlineCacheEntry], error)
+
+type PostprocessRequest struct {
+	Frontend    string            `json:"frontend"`
+	FrontendOpt map[string]string `json:"frontendOpt,omitempty"`
+}

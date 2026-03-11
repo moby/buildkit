@@ -233,6 +233,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
 
+	// If the result contains a pre-built OCI layout (from ArtifactProcessor),
+	// use the dedicated OCI layout export path instead of the normal image commit.
+	if _, ok := src.Metadata[exptypes.ExporterOCILayoutKey]; ok {
+		return e.exportOCILayout(ctx, src, buildInfo, opts.Annotations)
+	}
+
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, nil, nil, err
@@ -433,6 +439,182 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 		}
 	}
 	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
+}
+
+// exportOCILayout handles exporting a pre-built OCI layout that was assembled
+// by the ArtifactProcessor. It ingests the layout into the content store,
+// stores the image if configured, and optionally pushes it.
+func (e *imageExporterInstance) exportOCILayout(ctx context.Context, src *exporter.Source, buildInfo exporter.ExportBuildInfo, annotations AnnotationsGroup) (_ map[string]string, _ exporter.FinalizeFunc, descref exporter.DescriptorReference, err error) {
+	if e.unpack {
+		return nil, nil, nil, errors.New("unpack is not supported for OCI artifact layouts")
+	}
+	if e.opts.RewriteTimestamp {
+		return nil, nil, nil, errors.New("rewrite-timestamp is not supported for OCI artifact layouts")
+	}
+
+	// Resolve the single ref from the source
+	var ref cache.ImmutableRef
+	if src.Ref != nil {
+		ref = src.Ref
+	} else if len(src.Refs) == 1 {
+		for _, r := range src.Refs {
+			ref = r
+		}
+	}
+	if ref == nil {
+		return nil, nil, nil, errors.New("OCI layout export requires exactly one ref")
+	}
+
+	// Acquire a lease to protect content from GC during export
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer func() {
+		if descref == nil {
+			done(context.WithoutCancel(ctx))
+		}
+	}()
+
+	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+		e.opts.ImageName = string(n)
+	}
+
+	attests, err := ResolveArtifactAttestations(src, e.opts.ForceInlineAttestations)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	resolvedAnnotations, err := ResolveArtifactAnnotations(annotations, len(attests) > 0)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	desc, err := e.opt.ImageWriter.CommitOCILayout(ctx, ref, buildInfo.SessionID, resolvedAnnotations)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if len(attests) > 0 {
+		subjects, err := DefaultArtifactSubjects(e.opts.ImageName, desc.Digest)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		desc, err = e.opt.ImageWriter.CommitAttestationsForDescriptor(ctx, &e.opts, *desc, buildInfo.SessionID, attests, subjects, resolvedAnnotations)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	resp := make(map[string]string)
+
+	nameCanonical := e.nameCanonical
+	if e.danglingPrefix != "" && (!e.danglingEmptyOnly || e.opts.ImageName == "") {
+		danglingImageName := e.danglingPrefix + "@" + desc.Digest.String()
+		if e.opts.ImageName != "" {
+			e.opts.ImageName += "," + danglingImageName
+		} else {
+			e.opts.ImageName = danglingImageName
+			nameCanonical = false
+		}
+	}
+
+	// Collect names for finalize callback to push
+	var namesToPush []string
+
+	if e.opts.ImageName != "" {
+		targetNames := strings.SplitSeq(e.opts.ImageName, ",")
+		for targetName := range targetNames {
+			if e.opt.Images != nil && e.store {
+				tagDone := progress.OneOff(ctx, "naming to "+targetName)
+
+				// imageClientCtx is used for propagating the epoch to e.opt.Images.Update() and e.opt.Images.Create().
+				//
+				// Ideally, we should be able to propagate the epoch via images.Image.CreatedAt.
+				// However, due to a bug of containerd, we are temporarily stuck with this workaround.
+				// https://github.com/containerd/containerd/issues/8322
+				imageClientCtx := ctx
+				if e.opts.Epoch != nil {
+					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.opts.Epoch)
+				}
+				img := images.Image{
+					Target: *desc,
+					// CreatedAt in images.Images is ignored due to a bug of containerd.
+					// See the comment lines for imageClientCtx.
+				}
+
+				sfx := []string{""}
+				if nameCanonical && !strings.ContainsRune(targetName, '@') {
+					sfx = append(sfx, "@"+desc.Digest.String())
+				}
+				for _, sfx := range sfx {
+					img.Name = targetName + sfx
+					for { // handle possible race between Update and Create
+						if _, err := e.opt.Images.Update(imageClientCtx, img); err != nil {
+							if !errors.Is(err, cerrdefs.ErrNotFound) {
+								return nil, nil, nil, tagDone(err)
+							}
+
+							if _, err := e.opt.Images.Create(imageClientCtx, img); err != nil {
+								if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
+									return nil, nil, nil, tagDone(err)
+								}
+								continue
+							}
+						}
+						break
+					}
+				}
+				tagDone(nil)
+			}
+			if e.push {
+				namesToPush = append(namesToPush, targetName)
+			}
+		}
+		resp[exptypes.ExporterImageNameKey] = e.opts.ImageName
+	}
+
+	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
+	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
+		resp[exptypes.ExporterImageConfigDigestKey] = v
+		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
+	}
+
+	dtdesc, err := json.Marshal(desc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
+	// Transfer lease ownership to descref
+	descref = NewDescriptorReference(*desc, done)
+
+	if len(namesToPush) == 0 {
+		return resp, nil, descref, nil
+	}
+
+	// Create finalize callback for pushing
+	finalize := func(ctx context.Context) error {
+		for _, targetName := range namesToPush {
+			if err := e.pushOCILayout(ctx, buildInfo.SessionID, targetName, desc.Digest); err != nil {
+				var statusErr remoteserrors.ErrUnexpectedStatus
+				if errors.As(err, &statusErr) {
+					err = errutil.WithDetails(err)
+				}
+				return errors.Wrapf(err, "failed to push OCI layout to %v", targetName)
+			}
+		}
+		return nil
+	}
+
+	return resp, finalize, descref, nil
+}
+
+// pushOCILayout pushes an OCI artifact layout to a registry.
+// Unlike pushImage, it does not need to resolve remote providers from cache refs
+// because all blobs have already been ingested into the content store by CommitOCILayout.
+func (e *imageExporterInstance) pushOCILayout(ctx context.Context, sessionID string, targetName string, dgst digest.Digest) error {
+	cs := e.opt.ImageWriter.ContentStore()
+	return push.Push(ctx, e.opt.SessionManager, sessionID, cs, cs, dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, nil)
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {

@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"cmp"
+	"maps"
 	"slices"
 
 	distreference "github.com/distribution/reference"
@@ -17,6 +18,7 @@ type Result = result.Result[*Capture]
 type Capture struct {
 	Frontend            string
 	Args                map[string]string
+	Postprocess         []provenancetypes.Parameters
 	Sources             provenancetypes.Sources
 	Secrets             []provenancetypes.Secret
 	SSH                 []provenancetypes.SSH
@@ -49,6 +51,9 @@ func (c *Capture) Merge(c2 *Capture) error {
 	}
 	for _, s := range c2.SSH {
 		c.AddSSH(s)
+	}
+	for _, p := range c2.Postprocess {
+		c.AddPostprocess(p)
 	}
 	if c2.NetworkAccess {
 		c.NetworkAccess = true
@@ -197,11 +202,121 @@ func (c *Capture) AddSSH(s provenancetypes.SSH) {
 	c.SSH = append(c.SSH, s)
 }
 
+func (c *Capture) Parameters() provenancetypes.Parameters {
+	p := provenancetypes.Parameters{
+		Frontend: c.Frontend,
+		Args:     maps.Clone(c.Args),
+	}
+	for _, s := range c.Secrets {
+		s2 := s
+		p.Secrets = append(p.Secrets, &s2)
+	}
+	for _, s := range c.SSH {
+		s2 := s
+		p.SSH = append(p.SSH, &s2)
+	}
+	for _, s := range c.Sources.Local {
+		s2 := s
+		p.Locals = append(p.Locals, &s2)
+	}
+	return p
+}
+
+func (c *Capture) AddPostprocess(p provenancetypes.Parameters) {
+	if p.Frontend == "" {
+		return
+	}
+	for _, existing := range c.Postprocess {
+		if equalParameters(existing, p) {
+			return
+		}
+	}
+	c.Postprocess = append(c.Postprocess, cloneParameters(p))
+}
+
 func (c *Capture) AddSamples(dgst digest.Digest, samples *resourcestypes.Samples) {
 	if c.Samples == nil {
 		c.Samples = map[digest.Digest]*resourcestypes.Samples{}
 	}
 	c.Samples[dgst] = samples
+}
+
+func cloneParameters(p provenancetypes.Parameters) provenancetypes.Parameters {
+	out := provenancetypes.Parameters{
+		Frontend: p.Frontend,
+		Args:     maps.Clone(p.Args),
+	}
+	for _, s := range p.Secrets {
+		if s == nil {
+			out.Secrets = append(out.Secrets, nil)
+			continue
+		}
+		s2 := *s
+		out.Secrets = append(out.Secrets, &s2)
+	}
+	for _, s := range p.SSH {
+		if s == nil {
+			out.SSH = append(out.SSH, nil)
+			continue
+		}
+		s2 := *s
+		out.SSH = append(out.SSH, &s2)
+	}
+	for _, l := range p.Locals {
+		if l == nil {
+			out.Locals = append(out.Locals, nil)
+			continue
+		}
+		l2 := *l
+		out.Locals = append(out.Locals, &l2)
+	}
+	return out
+}
+
+func equalParameters(a, b provenancetypes.Parameters) bool {
+	if a.Frontend != b.Frontend || !maps.Equal(a.Args, b.Args) {
+		return false
+	}
+	if len(a.Secrets) != len(b.Secrets) || len(a.SSH) != len(b.SSH) || len(a.Locals) != len(b.Locals) {
+		return false
+	}
+	for i := range a.Secrets {
+		if !equalSecret(a.Secrets[i], b.Secrets[i]) {
+			return false
+		}
+	}
+	for i := range a.SSH {
+		if !equalSSH(a.SSH[i], b.SSH[i]) {
+			return false
+		}
+	}
+	for i := range a.Locals {
+		if !equalLocal(a.Locals[i], b.Locals[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalSecret(a, b *provenancetypes.Secret) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID && a.Optional == b.Optional
+}
+
+func equalSSH(a, b *provenancetypes.SSH) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID && a.Optional == b.Optional
+}
+
+func equalLocal(a, b *provenancetypes.LocalSource) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Name == b.Name
 }
 
 func parseRefName(s string) (distreference.Named, string, error) {
