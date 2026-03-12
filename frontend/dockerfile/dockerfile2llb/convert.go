@@ -190,16 +190,21 @@ func newRuleLinter(dt []byte, opt *ConvertOpt) (*linter.Linter, error) {
 	return linter.New(lintConfig), nil
 }
 
-func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
-	if len(dt) == 0 {
-		return nil, errors.Errorf("the Dockerfile cannot be empty")
-	}
+type dispatchContext struct {
+	opt               ConvertOpt
+	platformOpt       *platformOpt
+	globalArgs        *llb.EnvList
+	shlex             *shell.Lex
+	outline           outlineCapture
+	lint              *linter.Linter
+	metaResolver      llb.ImageMetaResolver
+	allDispatchStates *dispatchStates
+	proxyEnv          *llb.ProxyEnv
+	namedContext      func(string, dockerui.ContextOpt) (*dockerui.NamedContext, error)
+}
 
-	if opt.Client != nil && opt.MainContext != nil {
-		return nil, errors.Errorf("Client and MainContext cannot both be provided")
-	}
-
-	namedContext := func(name string, copt dockerui.ContextOpt) (*dockerui.NamedContext, error) {
+func namedContextFunc(opt ConvertOpt) func(string, dockerui.ContextOpt) (*dockerui.NamedContext, error) {
+	return func(name string, copt dockerui.ContextOpt) (*dockerui.NamedContext, error) {
 		if opt.Client == nil {
 			return nil, nil
 		}
@@ -210,6 +215,16 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			return opt.Client.NamedContext(name, copt)
 		}
 		return nil, nil
+	}
+}
+
+func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, error) {
+	if len(dt) == 0 {
+		return nil, errors.Errorf("the Dockerfile cannot be empty")
+	}
+
+	if opt.Client != nil && opt.MainContext != nil {
+		return nil, errors.Errorf("Client and MainContext cannot both be provided")
 	}
 
 	lint, err := newRuleLinter(dt, &opt)
@@ -239,8 +254,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			lint.Run(&linter.RuleNoEmptyContinuation, location, msg)
 		}
 	}
-
-	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
 
 	stages, argCmds, err := instructions.Parse(dockerfile.AST, lint)
 	if err != nil {
@@ -278,14 +291,55 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		metaResolver = imagemetaresolver.Default()
 	}
 
-	allDispatchStates := newDispatchStates()
+	dctx := &dispatchContext{
+		opt:               opt,
+		platformOpt:       platformOpt,
+		globalArgs:        globalArgs,
+		shlex:             shlex,
+		outline:           outline,
+		lint:              lint,
+		metaResolver:      metaResolver,
+		allDispatchStates: newDispatchStates(),
+		proxyEnv:          proxyEnvFromBuildArgs(opt.BuildArgs),
+		namedContext:      namedContextFunc(opt),
+	}
 
-	// set base state for every image
+	if err := dctx.buildDispatchStates(stages); err != nil {
+		return nil, err
+	}
+
+	target, err := dctx.resolveTarget()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dctx.buildStageDependencyGraph(); err != nil {
+		return nil, err
+	}
+
+	allReachable, err := dctx.resolveStages(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+
+	ctxPaths, buildContext, err := dctx.dispatchStages(ctx, allReachable, target)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dctx.finalizeResultImage(ctx, target, ctxPaths, buildContext); err != nil {
+		return nil, err
+	}
+
+	return target, nil
+}
+
+func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) error {
 	for i, st := range stages {
-		lint := lint.WithMergedConfigFromComments(st.Comments)
+		lint := dctx.lint.WithMergedConfigFromComments(st.Comments)
 
-		nameMatch, err := shlex.ProcessWordWithMatches(st.BaseName, globalArgs)
-		argKeys := unusedFromArgsCheckKeys(globalArgs, outline.allArgs)
+		nameMatch, err := dctx.shlex.ProcessWordWithMatches(st.BaseName, dctx.globalArgs)
+		argKeys := unusedFromArgsCheckKeys(dctx.globalArgs, dctx.outline.allArgs)
 		reportUnusedFromArgs(argKeys, nameMatch.Unmatched, st.Location, lint)
 		used := nameMatch.Matched
 		if used == nil {
@@ -293,10 +347,10 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if err != nil {
-			return nil, parser.WithLocation(err, st.Location)
+			return parser.WithLocation(err, st.Location)
 		}
 		if nameMatch.Result == "" {
-			return nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = nameMatch.Result
 
@@ -306,34 +360,34 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			ctxPaths:       make(map[string]struct{}),
 			paths:          make(map[string]struct{}),
 			stageName:      st.Name,
-			prefixPlatform: opt.MultiPlatformRequested,
-			outline:        outline.clone(),
-			epoch:          opt.Epoch,
+			prefixPlatform: dctx.opt.MultiPlatformRequested,
+			outline:        dctx.outline.clone(),
+			epoch:          dctx.opt.Epoch,
 		}
 
 		if v := st.Platform; v != "" {
-			platMatch, err := shlex.ProcessWordWithMatches(v, globalArgs)
-			argKeys := unusedFromArgsCheckKeys(globalArgs, outline.allArgs)
+			platMatch, err := dctx.shlex.ProcessWordWithMatches(v, dctx.globalArgs)
+			argKeys := unusedFromArgsCheckKeys(dctx.globalArgs, dctx.outline.allArgs)
 			reportUnusedFromArgs(argKeys, platMatch.Unmatched, st.Location, lint)
-			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, globalArgs, lint)
+			reportRedundantTargetPlatform(st.Platform, platMatch, st.Location, dctx.globalArgs, lint)
 			reportConstPlatformDisallowed(st.Name, platMatch, st.Location, lint)
 
 			if err != nil {
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
+				return parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", platMatch.Result), st.Location)
 			}
 
 			if platMatch.Result == "" {
 				err := errors.Errorf("empty platform value from expression %s", v)
 				err = parser.WithLocation(err, st.Location)
-				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
-				return nil, err
+				err = wrapSuggestAny(err, platMatch.Unmatched, dctx.globalArgs.Keys())
+				return err
 			}
 
 			p, err := platforms.Parse(platMatch.Result)
 			if err != nil {
 				err = parser.WithLocation(err, st.Location)
-				err = wrapSuggestAny(err, platMatch.Unmatched, globalArgs.Keys())
-				return nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				err = wrapSuggestAny(err, platMatch.Unmatched, dctx.globalArgs.Keys())
+				return parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 
 			for k := range platMatch.Matched {
@@ -344,17 +398,17 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		}
 
 		if st.Name != "" {
-			nc, err := namedContext(st.Name, dockerui.ContextOpt{
+			nc, err := dctx.namedContext(st.Name, dockerui.ContextOpt{
 				Platform:       ds.platform,
-				ResolveMode:    opt.ImageResolveMode.String(),
+				ResolveMode:    dctx.opt.ImageResolveMode.String(),
 				AsyncLocalOpts: ds.asyncLocalOpts,
 			})
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if nc != nil {
 				ds.namedContext = nc
-				allDispatchStates.addState(ds)
+				dctx.allDispatchStates.addState(ds)
 				ds.base = nil // reset base set by addState
 				continue
 			}
@@ -364,7 +418,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			ds.stageName = fmt.Sprintf("stage-%d", i)
 		}
 
-		allDispatchStates.addState(ds)
+		dctx.allDispatchStates.addState(ds)
 
 		for k := range used {
 			ds.outline.usedArgs[k] = struct{}{}
@@ -383,228 +437,59 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			}
 		}
 		ds.cmdTotal = total
-		if opt.Client != nil {
-			ds.ignoreCache = opt.Client.IsNoCache(st.Name)
+		if dctx.opt.Client != nil {
+			ds.ignoreCache = dctx.opt.Client.IsNoCache(st.Name)
 		}
 	}
+	return nil
+}
 
-	var target *dispatchState
-	if opt.Target == "" {
-		target = allDispatchStates.lastTarget()
-	} else {
-		var ok bool
-		target, ok = allDispatchStates.findStateByName(opt.Target)
-		if !ok {
-			return nil, suggest.WrapError(errors.Errorf("target stage %q could not be found", opt.Target), opt.Target, allDispatchStates.names(), true)
-		}
+func (dctx *dispatchContext) resolveTarget() (*dispatchState, error) {
+	if dctx.opt.Target == "" {
+		return dctx.allDispatchStates.lastTarget(), nil
 	}
+	target, ok := dctx.allDispatchStates.findStateByName(dctx.opt.Target)
+	if !ok {
+		return nil, suggest.WrapError(errors.Errorf("target stage %q could not be found", dctx.opt.Target), dctx.opt.Target, dctx.allDispatchStates.names(), true)
+	}
+	return target, nil
+}
 
-	// fill dependencies to stages so unreachable ones can avoid loading image configs
-	for _, d := range allDispatchStates.states {
+func (dctx *dispatchContext) buildStageDependencyGraph() error {
+	for _, d := range dctx.allDispatchStates.states {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, err := toCommand(cmd, allDispatchStates, shlex)
+			newCmd, err := toCommand(cmd, dctx.allDispatchStates, dctx.shlex)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			d.commands[i] = newCmd
 			for _, src := range newCmd.sources {
 				if src != nil {
 					d.deps[src] = cmd
 					if src.unregistered {
-						allDispatchStates.addState(src)
+						dctx.allDispatchStates.addState(src)
 					}
 				}
 			}
 		}
 	}
 
-	if err := validateCircularDependency(allDispatchStates.states); err != nil {
-		return nil, err
+	if err := validateCircularDependency(dctx.allDispatchStates.states); err != nil {
+		return err
 	}
 
-	if len(allDispatchStates.states) == 1 {
-		allDispatchStates.states[0].stageName = ""
+	if len(dctx.allDispatchStates.states) == 1 {
+		dctx.allDispatchStates.states[0].stageName = ""
 	}
+	return nil
+}
 
-	resolveReachableStages := func(ctx context.Context, all []*dispatchState, target *dispatchState) (map[*dispatchState]struct{}, error) {
-		allReachable := allReachableStages(target)
-		eg, ctx := errgroup.WithContext(ctx)
-		for i, d := range all {
-			_, reachable := allReachable[d]
-			if opt.AllStages {
-				reachable = true
-			}
-			// resolve image config for every stage
-			if d.base == nil && !d.dispatched && !d.resolved {
-				d.resolved = reachable // avoid re-resolving if called again after onbuild
-				if d.stage.BaseName == emptyImageName && d.namedContext == nil {
-					d.state = llb.Scratch()
-					d.image = emptyImage(platformOpt.targetPlatform)
-					d.platform = &platformOpt.targetPlatform
-					if d.unregistered {
-						d.dispatched = true
-					}
-					continue
-				}
-				func(i int, d *dispatchState) {
-					eg.Go(func() (err error) {
-						defer func() {
-							if err != nil {
-								err = parser.WithLocation(err, d.stage.Location)
-							}
-							if d.unregistered {
-								// implicit stages don't need further dispatch
-								d.dispatched = true
-							}
-						}()
-						origName := d.stage.BaseName
-						ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
-						if err != nil {
-							return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
-						}
-						platform := d.platform
-						if platform == nil {
-							platform = &platformOpt.targetPlatform
-						}
-						d.stage.BaseName = reference.TagNameOnly(ref).String()
-
-						var isScratch bool
-						if reachable {
-							// stage was named context
-							if d.namedContext != nil {
-								st, img, err := d.namedContext.Load(ctx)
-								if err != nil {
-									return err
-								}
-								d.dispatched = true
-								d.state = *st
-								if img != nil {
-									img.Created = nil
-									d.image = *img
-									if img.Architecture != "" && img.OS != "" {
-										d.platform = &ocispecs.Platform{
-											OS:           img.OS,
-											Architecture: img.Architecture,
-											Variant:      img.Variant,
-											OSVersion:    img.OSVersion,
-										}
-										if img.OSFeatures != nil {
-											d.platform.OSFeatures = slices.Clone(img.OSFeatures)
-										}
-									}
-								}
-								return nil
-							}
-
-							// check if base is named context
-							nc, err := namedContext(d.stage.BaseName, dockerui.ContextOpt{
-								ResolveMode:    opt.ImageResolveMode.String(),
-								Platform:       platform,
-								AsyncLocalOpts: d.asyncLocalOpts,
-							})
-							if err != nil {
-								return err
-							}
-							if nc != nil {
-								st, img, err := nc.Load(ctx)
-								if err != nil {
-									return err
-								}
-								if img == nil {
-									imgp := emptyImage(*platform)
-									img = &imgp
-								}
-								d.baseImg = cloneX(img) // immutable
-								img.Created = nil
-								d.image = *img
-								d.state = st.Platform(*platform)
-								d.platform = platform
-								return nil
-							}
-
-							prefix := "["
-							if opt.MultiPlatformRequested && platform != nil {
-								prefix += platforms.FormatAll(*platform) + " "
-							}
-							prefix += "internal]"
-							mutRef, dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, sourceresolver.Opt{
-								LogName: fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
-								ImageOpt: &sourceresolver.ResolveImageOpt{
-									Platform:    platform,
-									ResolveMode: opt.ImageResolveMode.String(),
-								},
-							})
-							if err != nil {
-								return suggest.WrapError(errors.Wrap(err, origName), origName, append(allDispatchStates.names(), commonImageNames()...), true)
-							}
-
-							if ref.String() != mutRef {
-								ref, err = reference.ParseNormalizedNamed(mutRef)
-								if err != nil {
-									return errors.Wrapf(err, "failed to parse ref %q", mutRef)
-								}
-							}
-							var img dockerspec.DockerOCIImage
-							if err := json.Unmarshal(dt, &img); err != nil {
-								return errors.Wrap(err, "failed to parse image config")
-							}
-							d.baseImg = cloneX(&img) // immutable
-							img.Created = nil
-							// if there is no explicit target platform, try to match based on image config
-							if d.platform == nil && platformOpt.implicitTarget {
-								p := autoDetectPlatform(img, *platform, platformOpt.buildPlatforms)
-								platform = &p
-							}
-							if dgst != "" {
-								ref, err = reference.WithDigest(ref, dgst)
-								if err != nil {
-									return err
-								}
-							}
-							d.stage.BaseName = ref.String()
-							if len(img.RootFS.DiffIDs) == 0 {
-								isScratch = true
-								// schema1 images can't return diffIDs so double check :(
-								for _, h := range img.History {
-									if !h.EmptyLayer {
-										isScratch = false
-										break
-									}
-								}
-							}
-							d.image = img
-						}
-						if isScratch {
-							d.state = llb.Scratch()
-						} else {
-							d.state = llb.Image(d.stage.BaseName,
-								dfCmd(d.stage.SourceCode),
-								llb.Platform(*platform),
-								opt.ImageResolveMode,
-								llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.MultiPlatformRequested, platform, emptyEnvs{})),
-								location(opt.SourceMap, d.stage.Location),
-							)
-							if reachable {
-								validateBaseImagePlatform(origName, *platform, d.image.Platform, d.stage.Location, lint)
-							}
-						}
-						d.platform = platform
-						return nil
-					})
-				}(i, d)
-			}
-		}
-
-		if err := eg.Wait(); err != nil {
-			return nil, err
-		}
-		return allReachable, nil
-	}
-
+func (dctx *dispatchContext) resolveStages(ctx context.Context, target *dispatchState) (map[*dispatchState]struct{}, error) {
 	var allReachable map[*dispatchState]struct{}
 	for {
-		allReachable, err = resolveReachableStages(ctx, allDispatchStates.states, target)
+		var err error
+		allReachable, err = dctx.resolveReachableStages(ctx, dctx.allDispatchStates.states, target)
 		if err != nil {
 			return nil, err
 		}
@@ -625,7 +510,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			}
 
 			if len(onbuilds) > 0 {
-				if b, err := initOnBuildTriggers(d, onbuilds, allDispatchStates, shlex); err != nil {
+				if b, err := initOnBuildTriggers(d, onbuilds, dctx.allDispatchStates, dctx.shlex); err != nil {
 					return nil, parser.SetLocation(err, d.stage.Location)
 				} else if b {
 					newDeps = true
@@ -633,31 +518,205 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 				d.image.Config.OnBuild = nil
 			}
 		}
-		// in case new dependencies were added, we need to re-resolve reachable stages
 		if !newDeps {
 			break
 		}
 	}
+	return allReachable, nil
+}
 
+func (dctx *dispatchContext) resolveReachableStages(ctx context.Context, all []*dispatchState, target *dispatchState) (map[*dispatchState]struct{}, error) {
+	allReachable := allReachableStages(target)
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, d := range all {
+		_, reachable := allReachable[d]
+		if dctx.opt.AllStages {
+			reachable = true
+		}
+		if d.base == nil && !d.dispatched && !d.resolved {
+			d.resolved = reachable // avoid re-resolving if called again after onbuild
+			if d.stage.BaseName == emptyImageName && d.namedContext == nil {
+				d.state = llb.Scratch()
+				d.image = emptyImage(dctx.platformOpt.targetPlatform)
+				d.platform = &dctx.platformOpt.targetPlatform
+				if d.unregistered {
+					d.dispatched = true
+				}
+				continue
+			}
+			eg.Go(func() error {
+				return dctx.resolveBaseImage(ctx, d, reachable)
+			})
+		}
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+	return allReachable, nil
+}
+
+func (dctx *dispatchContext) resolveBaseImage(ctx context.Context, d *dispatchState, reachable bool) (err error) {
+	defer func() {
+		if err != nil {
+			err = parser.WithLocation(err, d.stage.Location)
+		}
+		if d.unregistered {
+			d.dispatched = true
+		}
+	}()
+	origName := d.stage.BaseName
+	ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
+	}
+	platform := d.platform
+	if platform == nil {
+		platform = &dctx.platformOpt.targetPlatform
+	}
+	d.stage.BaseName = reference.TagNameOnly(ref).String()
+
+	var isScratch bool
+	if reachable {
+		if d.namedContext != nil {
+			st, img, err := d.namedContext.Load(ctx)
+			if err != nil {
+				return err
+			}
+			d.dispatched = true
+			d.state = *st
+			if img != nil {
+				img.Created = nil
+				d.image = *img
+				if img.Architecture != "" && img.OS != "" {
+					d.platform = &ocispecs.Platform{
+						OS:           img.OS,
+						Architecture: img.Architecture,
+						Variant:      img.Variant,
+						OSVersion:    img.OSVersion,
+					}
+					if img.OSFeatures != nil {
+						d.platform.OSFeatures = slices.Clone(img.OSFeatures)
+					}
+				}
+			}
+			return nil
+		}
+
+		nc, err := dctx.namedContext(d.stage.BaseName, dockerui.ContextOpt{
+			ResolveMode:    dctx.opt.ImageResolveMode.String(),
+			Platform:       platform,
+			AsyncLocalOpts: d.asyncLocalOpts,
+		})
+		if err != nil {
+			return err
+		}
+		if nc != nil {
+			st, img, err := nc.Load(ctx)
+			if err != nil {
+				return err
+			}
+			if img == nil {
+				imgp := emptyImage(*platform)
+				img = &imgp
+			}
+			d.baseImg = cloneX(img) // immutable
+			img.Created = nil
+			d.image = *img
+			d.state = st.Platform(*platform)
+			d.platform = platform
+			return nil
+		}
+
+		prefix := "["
+		if dctx.opt.MultiPlatformRequested && platform != nil {
+			prefix += platforms.FormatAll(*platform) + " "
+		}
+		prefix += "internal]"
+		mutRef, dgst, dt, err := dctx.metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, sourceresolver.Opt{
+			LogName: fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				Platform:    platform,
+				ResolveMode: dctx.opt.ImageResolveMode.String(),
+			},
+		})
+		if err != nil {
+			return suggest.WrapError(errors.Wrap(err, origName), origName, append(dctx.allDispatchStates.names(), commonImageNames()...), true)
+		}
+
+		if ref.String() != mutRef {
+			ref, err = reference.ParseNormalizedNamed(mutRef)
+			if err != nil {
+				return errors.Wrapf(err, "failed to parse ref %q", mutRef)
+			}
+		}
+		var img dockerspec.DockerOCIImage
+		if err := json.Unmarshal(dt, &img); err != nil {
+			return errors.Wrap(err, "failed to parse image config")
+		}
+		d.baseImg = cloneX(&img) // immutable
+		img.Created = nil
+		if d.platform == nil && dctx.platformOpt.implicitTarget {
+			p := autoDetectPlatform(img, *platform, dctx.platformOpt.buildPlatforms)
+			platform = &p
+		}
+		if dgst != "" {
+			ref, err = reference.WithDigest(ref, dgst)
+			if err != nil {
+				return err
+			}
+		}
+		d.stage.BaseName = ref.String()
+		if len(img.RootFS.DiffIDs) == 0 {
+			isScratch = true
+			// schema1 images can't return diffIDs so double check :(
+			for _, h := range img.History {
+				if !h.EmptyLayer {
+					isScratch = false
+					break
+				}
+			}
+		}
+		d.image = img
+	}
+	if isScratch {
+		d.state = llb.Scratch()
+	} else {
+		d.state = llb.Image(d.stage.BaseName,
+			dfCmd(d.stage.SourceCode),
+			llb.Platform(*platform),
+			dctx.opt.ImageResolveMode,
+			llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, dctx.opt.MultiPlatformRequested, platform, emptyEnvs{})),
+			location(dctx.opt.SourceMap, d.stage.Location),
+		)
+		if reachable {
+			validateBaseImagePlatform(origName, *platform, d.image.Platform, d.stage.Location, dctx.lint)
+		}
+	}
+	d.platform = platform
+	return nil
+}
+
+func (dctx *dispatchContext) dispatchStages(ctx context.Context, allReachable map[*dispatchState]struct{}, target *dispatchState) (map[string]struct{}, *mutableOutput, error) {
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
 
 	var dockerIgnoreMatcher *patternmatcher.PatternMatcher
-	if opt.Client != nil {
-		dockerIgnorePatterns, err := opt.Client.DockerIgnorePatterns(ctx)
+	if dctx.opt.Client != nil {
+		dockerIgnorePatterns, err := dctx.opt.Client.DockerIgnorePatterns(ctx)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if len(dockerIgnorePatterns) > 0 {
 			dockerIgnoreMatcher, err = patternmatcher.New(dockerIgnorePatterns)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 	}
 
-	for _, d := range allDispatchStates.states {
-		if !opt.AllStages {
+	for _, d := range dctx.allDispatchStates.states {
+		if !dctx.opt.AllStages {
 			if _, ok := allReachable[d]; !ok || d.dispatched {
 				continue
 			}
@@ -687,49 +746,49 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 			k, v := parseKeyValue(env)
 			d.state = d.state.AddEnv(k, v)
 		}
-		if opt.Hostname != "" {
-			d.state = d.state.Hostname(opt.Hostname)
+		if dctx.opt.Hostname != "" {
+			d.state = d.state.Hostname(dctx.opt.Hostname)
 		}
 		if d.image.Config.WorkingDir != "" {
-			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
-				return nil, parser.WithLocation(err, d.stage.Location)
+			if err := dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
+				return nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		if d.image.Config.User != "" {
-			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
-				return nil, parser.WithLocation(err, d.stage.Location)
+			if err := dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
+				return nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 
-		d.state = d.state.Network(opt.NetworkMode)
+		d.state = d.state.Network(dctx.opt.NetworkMode)
 
-		opt := dispatchOpt{
-			allDispatchStates:   allDispatchStates,
-			globalArgs:          globalArgs,
-			buildArgValues:      opt.BuildArgs,
-			shlex:               shlex,
+		dopt := dispatchOpt{
+			allDispatchStates:   dctx.allDispatchStates,
+			globalArgs:          dctx.globalArgs,
+			buildArgValues:      dctx.opt.BuildArgs,
+			shlex:               dctx.shlex,
 			buildContext:        llb.NewState(buildContext),
-			proxyEnv:            proxyEnv,
-			cacheIDNamespace:    opt.CacheIDNamespace,
-			buildPlatforms:      platformOpt.buildPlatforms,
-			targetPlatform:      platformOpt.targetPlatform,
-			extraHosts:          opt.ExtraHosts,
-			shmSize:             opt.ShmSize,
-			ulimit:              opt.Ulimits,
-			devices:             opt.Devices,
-			cgroupParent:        opt.CgroupParent,
-			llbCaps:             opt.LLBCaps,
-			sourceMap:           opt.SourceMap,
-			lint:                lint,
+			proxyEnv:            dctx.proxyEnv,
+			cacheIDNamespace:    dctx.opt.CacheIDNamespace,
+			buildPlatforms:      dctx.platformOpt.buildPlatforms,
+			targetPlatform:      dctx.platformOpt.targetPlatform,
+			extraHosts:          dctx.opt.ExtraHosts,
+			shmSize:             dctx.opt.ShmSize,
+			ulimit:              dctx.opt.Ulimits,
+			devices:             dctx.opt.Devices,
+			cgroupParent:        dctx.opt.CgroupParent,
+			llbCaps:             dctx.opt.LLBCaps,
+			sourceMap:           dctx.opt.SourceMap,
+			lint:                dctx.lint,
 			dockerIgnoreMatcher: dockerIgnoreMatcher,
 		}
 
 		for _, cmd := range d.commands {
-			if err := dispatch(d, cmd, opt); err != nil {
-				return nil, parser.WithLocation(err, cmd.Location())
+			if err := dispatch(d, cmd, dopt); err != nil {
+				return nil, nil, parser.WithLocation(err, cmd.Location())
 			}
 		}
-		d.opt = opt
+		d.opt = dopt
 
 		for p := range d.ctxPaths {
 			ctxPaths[p] = struct{}{}
@@ -760,56 +819,62 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	// the paths attribute is set correctly.
 	target.paths["/"] = struct{}{}
 
-	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
-		target.image.Config.Labels = make(map[string]string, len(opt.Labels))
+	return ctxPaths, buildContext, nil
+}
+
+func (dctx *dispatchContext) finalizeResultImage(ctx context.Context, target *dispatchState, ctxPaths map[string]struct{}, buildContext *mutableOutput) error {
+	if len(dctx.opt.Labels) != 0 && target.image.Config.Labels == nil {
+		target.image.Config.Labels = make(map[string]string, len(dctx.opt.Labels))
 	}
-	maps.Copy(target.image.Config.Labels, opt.Labels)
+	maps.Copy(target.image.Config.Labels, dctx.opt.Labels)
 
 	// If lint.Error() returns an error, it means that
 	// there were warnings, and that our linter has been
 	// configured to return an error on warnings,
 	// so we appropriately return that error here.
-	if err := lint.Error(); err != nil {
-		return nil, err
+	if err := dctx.lint.Error(); err != nil {
+		return err
 	}
 
 	opts := filterPaths(ctxPaths)
-	bctx := opt.MainContext
-	if opt.Client != nil {
-		bctx, err = opt.Client.MainContext(ctx, opts...)
+	bctx := dctx.opt.MainContext
+	if dctx.opt.Client != nil {
+		var err error
+		bctx, err = dctx.opt.Client.MainContext(ctx, opts...)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	} else if bctx == nil {
 		bctx = dockerui.DefaultMainContext(opts...)
 	}
+
 	buildContext.Output = bctx.Output()
 
 	defaults := []llb.ConstraintsOpt{
-		llb.Platform(platformOpt.targetPlatform),
+		llb.Platform(dctx.platformOpt.targetPlatform),
 	}
-	if opt.LLBCaps != nil {
-		defaults = append(defaults, llb.WithCaps(*opt.LLBCaps))
+	if dctx.opt.LLBCaps != nil {
+		defaults = append(defaults, llb.WithCaps(*dctx.opt.LLBCaps))
 	}
 	target.state = target.state.SetMarshalDefaults(defaults...)
 
-	if !platformOpt.implicitTarget {
-		sameOsArch := platformOpt.targetPlatform.OS == target.image.OS && platformOpt.targetPlatform.Architecture == target.image.Architecture
-		target.image.OS = platformOpt.targetPlatform.OS
-		target.image.Architecture = platformOpt.targetPlatform.Architecture
-		if platformOpt.targetPlatform.Variant != "" || !sameOsArch {
-			target.image.Variant = platformOpt.targetPlatform.Variant
+	if !dctx.platformOpt.implicitTarget {
+		sameOsArch := dctx.platformOpt.targetPlatform.OS == target.image.OS && dctx.platformOpt.targetPlatform.Architecture == target.image.Architecture
+		target.image.OS = dctx.platformOpt.targetPlatform.OS
+		target.image.Architecture = dctx.platformOpt.targetPlatform.Architecture
+		if dctx.platformOpt.targetPlatform.Variant != "" || !sameOsArch {
+			target.image.Variant = dctx.platformOpt.targetPlatform.Variant
 		}
-		if platformOpt.targetPlatform.OSVersion != "" || !sameOsArch {
-			target.image.OSVersion = platformOpt.targetPlatform.OSVersion
+		if dctx.platformOpt.targetPlatform.OSVersion != "" || !sameOsArch {
+			target.image.OSVersion = dctx.platformOpt.targetPlatform.OSVersion
 		}
-		if platformOpt.targetPlatform.OSFeatures != nil {
-			target.image.OSFeatures = slices.Clone(platformOpt.targetPlatform.OSFeatures)
+		if dctx.platformOpt.targetPlatform.OSFeatures != nil {
+			target.image.OSFeatures = slices.Clone(dctx.platformOpt.targetPlatform.OSFeatures)
 		}
 	}
 	target.image.Platform = platforms.Normalize(target.image.Platform)
 
-	return target, nil
+	return nil
 }
 
 func toCommand(ic instructions.Command, allDispatchStates *dispatchStates, shlex *shell.Lex) (command, error) {
