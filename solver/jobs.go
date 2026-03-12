@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
@@ -63,11 +66,12 @@ type state struct {
 	clientVertex client.Vertex
 	origDigest   digest.Digest // original LLB digest. TODO: probably better to use string ID so this isn't needed
 
-	mu    sync.Mutex
-	op    *sharedOp
-	edges map[Index]*edge
-	opts  SolverOpt
-	index *edgeIndex
+	mu             sync.Mutex
+	op             *sharedOp
+	edges          map[Index]*edge
+	opts           SolverOpt
+	index          *edgeIndex
+	linuxResources *pb.LinuxResources // merged resources from all jobs (most relaxed wins)
 
 	cache     map[string]CacheManager
 	mainCache CacheManager
@@ -87,6 +91,12 @@ func (s *state) Cleanup(fn func() error) error {
 
 func (s *state) ResolverCache() ResolverCache {
 	return s
+}
+
+func (s *state) LinuxResources() *pb.LinuxResources {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.linuxResources
 }
 
 func (s *state) Lock(key any) (values []any, release func(any) error, err error) {
@@ -593,6 +603,13 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 		}
 	}
 
+	// Merge linux resources from all jobs sharing this vertex.
+	// When the same step is referenced by multiple builds with different
+	// resource limits, the most relaxed (highest) limit for each field wins.
+	if lr := v.Options().LinuxResources; lr != nil {
+		st.linuxResources = mergeLinuxResourcesRelaxed(st.linuxResources, lr)
+	}
+
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
 			st.jobs[j] = struct{}{}
@@ -881,6 +898,10 @@ func (j *Job) Cleanup(fn func() error) error {
 
 func (j *Job) ResolverCache() ResolverCache {
 	return j.resolverCache
+}
+
+func (j *Job) LinuxResources() *pb.LinuxResources {
+	return nil
 }
 
 func (j *Job) SetValue(key string, v any) {
@@ -1278,6 +1299,95 @@ func (v *vertexWithCacheOptions) Digest() digest.Digest {
 
 func (v *vertexWithCacheOptions) Inputs() []Edge {
 	return v.inputs
+}
+
+// mergeLinuxResourcesRelaxed merges two LinuxResources by taking the most
+// relaxed (least restrictive) value for each field. This is used when multiple
+// jobs share the same vertex but specify different resource limits.
+func mergeLinuxResourcesRelaxed(a, b *pb.LinuxResources) *pb.LinuxResources {
+	if a == nil && b == nil {
+		return nil
+	}
+	// Clone to avoid pointer aliasing with the input vertex's options.
+	if a == nil {
+		return b.CloneVT()
+	}
+	if b == nil {
+		return a.CloneVT()
+	}
+	return &pb.LinuxResources{
+		Memory:     relaxedLimit(a.Memory, b.Memory),
+		MemorySwap: relaxedLimit(a.MemorySwap, b.MemorySwap),
+		CpuShares:  relaxedLimit(a.CpuShares, b.CpuShares),
+		CpuPeriod:  relaxedCPUPeriod(a.CpuPeriod, b.CpuPeriod, a.CpuQuota, b.CpuQuota),
+		CpuQuota:   relaxedLimit(a.CpuQuota, b.CpuQuota),
+		CpusetCpus: relaxedCpuset(a.CpusetCpus, b.CpusetCpus),
+		CpusetMems: relaxedCpuset(a.CpusetMems, b.CpusetMems),
+	}
+}
+
+// relaxedLimit returns the more relaxed of two resource limits.
+// 0 means unlimited (most relaxed). Between two positive values, higher wins.
+func relaxedLimit[T int64 | uint64](a, b T) T {
+	if a == 0 || b == 0 {
+		return 0
+	}
+	return max(a, b)
+}
+
+// relaxedCPUPeriod returns the CPU period corresponding to the more relaxed
+// CPU quota. Period is meaningless without quota, so we pick the period from
+// whichever side has the more relaxed quota. When both quotas are equal
+// (including both zero/unlimited), periodB is returned arbitrarily.
+func relaxedCPUPeriod(periodA, periodB uint64, quotaA, quotaB int64) uint64 {
+	relaxedQ := relaxedLimit(quotaA, quotaB)
+	if relaxedQ == quotaB {
+		return periodB
+	}
+	return periodA
+}
+
+// relaxedCpuset returns the more relaxed of two cpuset-style strings
+// (e.g., "0-3", "0,1,2"). It parses the cpuset notation, counts the
+// number of CPUs/nodes each covers, and returns the one covering more.
+// If counts are equal, b is returned arbitrarily.
+// Empty string means unset (most relaxed).
+func relaxedCpuset(a, b string) string {
+	if a == "" || b == "" {
+		return ""
+	}
+	if cpusetCount(b) >= cpusetCount(a) {
+		return b
+	}
+	return a
+}
+
+// cpusetCount returns the number of CPUs/nodes in a cpuset string.
+// The format is comma-separated values or ranges, e.g., "0-3,5,7-9".
+// Returns 0 on parse error.
+func cpusetCount(s string) int {
+	count := 0
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		lo, hi, found := strings.Cut(part, "-")
+		if !found {
+			if _, err := strconv.Atoi(part); err != nil {
+				continue
+			}
+			count++
+			continue
+		}
+		loN, err1 := strconv.Atoi(strings.TrimSpace(lo))
+		hiN, err2 := strconv.Atoi(strings.TrimSpace(hi))
+		if err1 != nil || err2 != nil || hiN < loN {
+			continue
+		}
+		count += hiN - loN + 1
+	}
+	return count
 }
 
 func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) func(err error, cached bool) {

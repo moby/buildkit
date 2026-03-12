@@ -160,6 +160,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testUlimit,
 	testCgroupParent,
 	testLinuxResources,
+	testLinuxResourcesMergeOnDedup,
 	testNetworkMode,
 	testFrontendMetadataReturn,
 	testFrontendUseSolveResults,
@@ -1295,6 +1296,75 @@ func testLinuxResources(t *testing.T, sb integration.Sandbox) {
 	dt3, err := os.ReadFile(filepath.Join(destDir, "cpu_limited"))
 	require.NoError(t, err)
 	require.Equal(t, "50000 100000", strings.TrimSpace(string(dt3)))
+}
+
+// testLinuxResourcesMergeOnDedup verifies that when two concurrent builds share
+// the same RUN step but specify different resource limits, the most relaxed
+// (least restrictive) limit is applied.
+func testLinuxResourcesMergeOnDedup(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+		t.Skipf("test requires cgroup v2")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Both builds share the exact same RUN command so the solver deduplicates
+	// them into one vertex. They differ only in memory limits (OpMetadata).
+	// Dedup is guaranteed because loadUnlocked (which merges resources) loads
+	// the full vertex graph in microseconds, while image resolution that must
+	// complete before the RUN vertex can execute takes orders of magnitude longer.
+	// Both goroutines will have loaded and merged before the RUN step starts.
+	sharedCmd := `sh -c "cat /sys/fs/cgroup/memory.max > /wd/mem_limit"`
+
+	// Build 1: 64 MiB memory limit
+	st1 := llb.Image("alpine:latest").
+		Run(llb.Shlex(sharedCmd), llb.MemoryLimit(64*1024*1024), llb.Dir("/wd")).
+		AddMount("/wd", llb.Scratch())
+	def1, err := st1.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	// Build 2: 128 MiB memory limit (more relaxed — should win)
+	st2 := llb.Image("alpine:latest").
+		Run(llb.Shlex(sharedCmd), llb.MemoryLimit(128*1024*1024), llb.Dir("/wd")).
+		AddMount("/wd", llb.Scratch())
+	def2, err := st2.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir1 := t.TempDir()
+	destDir2 := t.TempDir()
+
+	eg, egCtx := errgroup.WithContext(sb.Context())
+	eg.Go(func() error {
+		_, err := c.Solve(egCtx, def1, SolveOpt{
+			Exports: []ExportEntry{{Type: ExporterLocal, OutputDir: destDir1}},
+		}, nil)
+		return err
+	})
+	eg.Go(func() error {
+		_, err := c.Solve(egCtx, def2, SolveOpt{
+			Exports: []ExportEntry{{Type: ExporterLocal, OutputDir: destDir2}},
+		}, nil)
+		return err
+	})
+	err = eg.Wait()
+	require.NoError(t, err)
+
+	// Both builds share the deduplicated vertex, so both outputs come from
+	// the same container. The memory limit should be 128 MiB (most relaxed).
+	for _, dir := range []string{destDir1, destDir2} {
+		dt, err := os.ReadFile(filepath.Join(dir, "mem_limit"))
+		require.NoError(t, err)
+		memLimit := strings.TrimSpace(string(dt))
+		require.Equal(t, "134217728", memLimit,
+			"expected 128 MiB (most relaxed limit) but got %s in %s", memLimit, dir)
+	}
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {

@@ -311,3 +311,7 @@ func (j *jobCtx) Cleanup(f func() error) error {
 func (j *jobCtx) ResolverCache() solver.ResolverCache {
 	return nil
 }
+
+func (j *jobCtx) LinuxResources() *pb.LinuxResources {
+	return nil
+}
