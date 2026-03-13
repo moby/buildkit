@@ -255,7 +255,7 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 			// childless data types.
 			return nil, nil
 		default:
-			bklog.G(ctx).Warnf("encountered unknown type %v; children may not be fetched", desc.MediaType)
+			bklog.G(ctx).Debugf("encountered unknown type %v; children may not be fetched", desc.MediaType)
 		}
 
 		return descs, nil

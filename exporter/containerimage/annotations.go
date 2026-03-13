@@ -88,6 +88,27 @@ func (ag AnnotationsGroup) Platform(p *ocispecs.Platform) *Annotations {
 	return res
 }
 
+// ResolveArtifactAnnotations validates and resolves annotations for OCI
+// artifact exports. Artifact exports always produce a single manifest
+// descriptor, unless attestations are attached, in which case the top-level
+// descriptor becomes an index that wraps the artifact manifest and attestation
+// manifests.
+func ResolveArtifactAnnotations(ag AnnotationsGroup, hasIndex bool) (*Annotations, error) {
+	resolved := ag.Platform(nil)
+	if !hasIndex && (len(resolved.Index) > 0 || len(resolved.IndexDescriptor) > 0) {
+		return nil, errors.Errorf("index annotations are not supported for OCI artifact exports without attestations")
+	}
+	for platform, annotations := range ag {
+		if platform == "" {
+			continue
+		}
+		if len(annotations.Manifest) > 0 || len(annotations.ManifestDescriptor) > 0 {
+			return nil, errors.Errorf("platform-specific annotations are not supported for OCI artifact exports")
+		}
+	}
+	return resolved, nil
+}
+
 func (ag AnnotationsGroup) Merge(other AnnotationsGroup) AnnotationsGroup {
 	if other == nil {
 		return ag

@@ -188,6 +188,9 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 
 	internal := provenancetypes.ProvenanceInternalParametersSLSA1{}
 	internal.BuilderPlatform = platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+	if len(c.Postprocess) > 0 {
+		internal.Postprocess = cloneParametersSlice(c.Postprocess)
+	}
 
 	req := provenancetypes.Parameters{}
 	req.Frontend = c.Frontend
@@ -243,6 +246,17 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 	}
 
 	return pr, nil
+}
+
+func cloneParametersSlice(src []provenancetypes.Parameters) []provenancetypes.Parameters {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]provenancetypes.Parameters, 0, len(src))
+	for _, p := range src {
+		out = append(out, cloneParameters(p))
+	}
+	return out
 }
 
 func FilterArgs(m map[string]string) map[string]string {

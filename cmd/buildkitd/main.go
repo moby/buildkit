@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/frontend"
+	artifactfrontend "github.com/moby/buildkit/frontend/artifact"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
@@ -817,6 +818,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 	if cfg.Frontends.Dockerfile.Enabled == nil || *cfg.Frontends.Dockerfile.Enabled {
 		frontends["dockerfile.v0"] = forwarder.NewGatewayForwarder(wc.Infos(), dockerfile.Build)
 	}
+	frontends[artifactfrontend.Name] = forwarder.NewGatewayForwarder(wc.Infos(), artifactfrontend.Build)
 	if cfg.Frontends.Gateway.Enabled == nil || *cfg.Frontends.Gateway.Enabled {
 		gwfe, err := gateway.NewGatewayFrontend(wc.Infos(), cfg.Frontends.Gateway.AllowedRepositories)
 		if err != nil {
