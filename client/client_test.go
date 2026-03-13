@@ -237,6 +237,9 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
 	testExportLocalForcePlatformSplit,
+	testExportLocalModeCopyKeepsStaleDestinationFiles,
+	testExportLocalModeDeleteRemovesStaleDestinationFiles,
+	testExportLocalModeInvalid,
 	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
@@ -7526,6 +7529,114 @@ func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, expPlatform, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(dt))
+}
+
+func testExportLocalModeCopyKeepsStaleDestinationFiles(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(
+		llb.Mkfile("fresh.txt", 0600, []byte("fresh")),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	err = os.WriteFile(filepath.Join(destDir, "stale.txt"), []byte("stale"), 0600)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(destDir, "stale-dir"), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "stale-dir", "old.txt"), []byte("stale"), 0600)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "fresh.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "fresh", string(dt))
+
+	_, err = os.Stat(filepath.Join(destDir, "stale.txt"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(destDir, "stale-dir", "old.txt"))
+	require.NoError(t, err)
+}
+
+func testExportLocalModeDeleteRemovesStaleDestinationFiles(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(
+		llb.Mkfile("fresh.txt", 0600, []byte("fresh")),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	err = os.WriteFile(filepath.Join(destDir, "stale.txt"), []byte("stale"), 0600)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(destDir, "stale-dir"), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(destDir, "stale-dir", "old.txt"), []byte("stale"), 0600)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs: map[string]string{
+					"mode": "delete",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "fresh.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "fresh", string(dt))
+
+	_, err = os.Stat(filepath.Join(destDir, "stale.txt"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = os.Stat(filepath.Join(destDir, "stale-dir"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func testExportLocalModeInvalid(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(
+		llb.Mkfile("fresh.txt", 0600, []byte("fresh")),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs: map[string]string{
+					"mode": "backup",
+				},
+			},
+		},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, `invalid local exporter mode "backup"`)
 }
 
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
