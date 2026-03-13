@@ -57,6 +57,14 @@ func TestRepeatedFetchKeepGitDirSHA256(t *testing.T) {
 	testRepeatedFetch(t, true, "sha256")
 }
 
+func TestFetchAfterSubmoduleRemovalSHA1(t *testing.T) {
+	testFetchAfterSubmoduleRemoval(t, "sha1")
+}
+
+func TestFetchAfterSubmoduleRemovalSHA256(t *testing.T) {
+	testFetchAfterSubmoduleRemoval(t, "sha256")
+}
+
 func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
@@ -173,6 +181,66 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 	require.NoError(t, err)
 	require.Equal(t, key3, key4)
 	require.Equal(t, pin3, pin4)
+}
+
+func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature"}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(context.TODO())
+
+	runShell(t, repo.mainPath,
+		"git checkout feature",
+		"git submodule deinit -f sub",
+		"git rm sub",
+		"git commit -m removesub",
+	)
+
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key2, pin2, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NotEqual(t, key1, key2)
+	require.NotEqual(t, pin1, pin2)
+
+	ref2, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(context.TODO())
+
+	mount, err := ref2.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	dt, err := os.ReadFile(filepath.Join(dir, "ghi"))
+	require.NoError(t, err)
+	require.Equal(t, "baz\n", string(dt))
+
+	_, err = os.Lstat(filepath.Join(dir, "sub"))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestFetchBySHA1(t *testing.T) {
