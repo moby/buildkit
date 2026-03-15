@@ -1318,8 +1318,8 @@ func mergeLinuxResourcesRelaxed(a, b *pb.LinuxResources) *pb.LinuxResources {
 	}
 	return &pb.LinuxResources{
 		Memory:     relaxedLimit(a.Memory, b.Memory),
-		MemorySwap: relaxedLimit(a.MemorySwap, b.MemorySwap),
-		CpuShares:  relaxedLimit(a.CpuShares, b.CpuShares),
+		MemorySwap: relaxedMemorySwap(a.MemorySwap, b.MemorySwap),
+		CpuShares:  relaxedWeight(a.CpuShares, b.CpuShares),
 		CpuPeriod:  relaxedCPUPeriod(a.CpuPeriod, b.CpuPeriod, a.CpuQuota, b.CpuQuota),
 		CpuQuota:   relaxedLimit(a.CpuQuota, b.CpuQuota),
 		CpusetCpus: relaxedCpuset(a.CpusetCpus, b.CpusetCpus),
@@ -1336,12 +1336,51 @@ func relaxedLimit[T int64 | uint64](a, b T) T {
 	return max(a, b)
 }
 
+// relaxedMemorySwap returns the more relaxed of two memory-swap limits.
+// Per Docker semantics: 0 means "unset" (preserve the other value),
+// -1 means "unlimited swap" (most relaxed), and positive values are limits
+// where higher = more relaxed.
+func relaxedMemorySwap(a, b int64) int64 {
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	// -1 means unlimited swap, which is the most relaxed.
+	if a == -1 || b == -1 {
+		return -1
+	}
+	return max(a, b)
+}
+
+// relaxedWeight returns the more relaxed of two resource weights (like CPU shares).
+// Unlike limits, 0 means "unset" (use kernel default), not "unlimited".
+// Between two explicit values, higher weight = more resources = more relaxed.
+func relaxedWeight(a, b uint64) uint64 {
+	if a == 0 {
+		return b
+	}
+	if b == 0 {
+		return a
+	}
+	return max(a, b)
+}
+
 // relaxedCPUPeriod returns the CPU period corresponding to the more relaxed
 // CPU quota. Period is meaningless without quota, so we pick the period from
-// whichever side has the more relaxed quota. When both quotas are equal
-// (including both zero/unlimited), periodB is returned arbitrarily.
+// whichever side has the more relaxed quota. When both quotas are equal,
+// shorter period is more relaxed (same quota executes more frequently).
 func relaxedCPUPeriod(periodA, periodB uint64, quotaA, quotaB int64) uint64 {
 	relaxedQ := relaxedLimit(quotaA, quotaB)
+	if quotaA == quotaB {
+		// Equal quotas: shorter period = more CPU time = more relaxed.
+		if periodA == 0 || periodB == 0 {
+			// 0 means unset; preserve the set value.
+			return max(periodA, periodB)
+		}
+		return min(periodA, periodB)
+	}
 	if relaxedQ == quotaB {
 		return periodB
 	}

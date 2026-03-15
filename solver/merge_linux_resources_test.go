@@ -45,10 +45,50 @@ func TestMergeLinuxResourcesRelaxed(t *testing.T) {
 		require.Equal(t, int64(0), result.Memory)
 	})
 
+	t.Run("zero memory swap means unset, preserves non-zero", func(t *testing.T) {
+		a := &pb.LinuxResources{MemorySwap: 256 * 1024 * 1024}
+		b := &pb.LinuxResources{MemorySwap: 0}
+		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, int64(256*1024*1024), result.MemorySwap)
+
+		// Reverse order
+		result = mergeLinuxResourcesRelaxed(b, a)
+		require.Equal(t, int64(256*1024*1024), result.MemorySwap)
+	})
+
+	t.Run("memory swap -1 means unlimited and wins", func(t *testing.T) {
+		a := &pb.LinuxResources{MemorySwap: 256 * 1024 * 1024}
+		b := &pb.LinuxResources{MemorySwap: -1}
+		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, int64(-1), result.MemorySwap)
+
+		// Reverse order
+		result = mergeLinuxResourcesRelaxed(b, a)
+		require.Equal(t, int64(-1), result.MemorySwap)
+	})
+
+	t.Run("higher memory swap wins", func(t *testing.T) {
+		a := &pb.LinuxResources{MemorySwap: 128 * 1024 * 1024}
+		b := &pb.LinuxResources{MemorySwap: 256 * 1024 * 1024}
+		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, int64(256*1024*1024), result.MemorySwap)
+	})
+
 	t.Run("higher cpu shares wins", func(t *testing.T) {
 		a := &pb.LinuxResources{CpuShares: 256}
 		b := &pb.LinuxResources{CpuShares: 512}
 		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, uint64(512), result.CpuShares)
+	})
+
+	t.Run("zero cpu shares means unset, preserves non-zero", func(t *testing.T) {
+		a := &pb.LinuxResources{CpuShares: 512}
+		b := &pb.LinuxResources{CpuShares: 0}
+		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, uint64(512), result.CpuShares)
+
+		// Reverse order
+		result = mergeLinuxResourcesRelaxed(b, a)
 		require.Equal(t, uint64(512), result.CpuShares)
 	})
 
@@ -73,6 +113,14 @@ func TestMergeLinuxResourcesRelaxed(t *testing.T) {
 		result := mergeLinuxResourcesRelaxed(a, b)
 		require.Equal(t, int64(80000), result.CpuQuota)
 		require.Equal(t, uint64(200000), result.CpuPeriod)
+	})
+
+	t.Run("equal quotas picks shorter period (more relaxed)", func(t *testing.T) {
+		a := &pb.LinuxResources{CpuQuota: 50000, CpuPeriod: 100000}
+		b := &pb.LinuxResources{CpuQuota: 50000, CpuPeriod: 200000}
+		result := mergeLinuxResourcesRelaxed(a, b)
+		require.Equal(t, int64(50000), result.CpuQuota)
+		require.Equal(t, uint64(100000), result.CpuPeriod) // shorter period = more CPU
 	})
 
 	t.Run("empty cpuset string means unset and wins", func(t *testing.T) {
