@@ -60,6 +60,7 @@ const (
 	CapExecMetaUlimit                    apicaps.CapID = "exec.meta.ulimit"
 	CapExecMetaCDI                       apicaps.CapID = "exec.meta.cdi"
 	CapExecMetaRemoveMountStubsRecursive apicaps.CapID = "exec.meta.removemountstubs.recursive"
+	CapExecMetaLinuxResources            apicaps.CapID = "exec.meta.linux.resources"
 	CapExecMountBind                     apicaps.CapID = "exec.mount.bind"
 	CapExecMountBindReadWriteNoOutput    apicaps.CapID = "exec.mount.bind.readwrite-nooutput"
 	CapExecMountCache                    apicaps.CapID = "exec.mount.cache"
@@ -365,6 +366,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaCDI,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaLinuxResources,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

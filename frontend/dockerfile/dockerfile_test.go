@@ -152,6 +152,7 @@ var allTests = integration.TestFuncs(
 	testShmSize,
 	testUlimit,
 	testCgroupParent,
+	testLinuxResources,
 	testNamedImageContext,
 	testNamedImageContextPlatform,
 	testNamedImageContextTimestamps,
@@ -7514,6 +7515,57 @@ COPY --from=base /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "error"))
 	require.NoError(t, err)
 	require.Contains(t, strings.TrimSpace(string(dt)), `Resource temporarily unavailable`)
+}
+
+func testLinuxResources(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
+		t.Skipf("test requires cgroup v2")
+	}
+
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM alpine AS base
+RUN mkdir /out && cat /sys/fs/cgroup/memory.max > /out/memory
+FROM scratch
+COPY --from=base /out /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"memory": "67108864",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "memory"))
+	require.NoError(t, err)
+	require.Equal(t, "67108864", strings.TrimSpace(string(dt)))
 }
 
 func testStepNames(t *testing.T, sb integration.Sandbox) {

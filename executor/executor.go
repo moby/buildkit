@@ -24,6 +24,7 @@ type Meta struct {
 	Ulimit         []*pb.Ulimit
 	CDIDevices     []*pb.CDIDevice
 	CgroupParent   string
+	LinuxResources *pb.LinuxResources
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 	ValidExitCodes []int
