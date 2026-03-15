@@ -19,6 +19,7 @@ const (
 	attrDigest           = "digest"
 	attrSrc              = "src"
 	attrDest             = "dest"
+	attrLazy             = "lazy"
 	attrImageManifest    = "image-manifest"
 	attrOCIMediatypes    = "oci-mediatypes"
 	contentStoreIDPrefix = "local:"
@@ -63,7 +64,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		}
 
 		csID := contentStoreIDPrefix + store
-		cs, err := getContentStore(ctx, sm, g, csID)
+		cs, err := getContentStore(ctx, sm, g, csID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -83,8 +84,16 @@ func ResolveCacheImporterFunc(sm *session.Manager) remotecache.ResolveCacheImpor
 		if store == "" {
 			return nil, ocispecs.Descriptor{}, errors.New("local cache importer requires src")
 		}
+		lazy := false
+		if v, ok := attrs[attrLazy]; ok {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, ocispecs.Descriptor{}, errors.Wrapf(err, "failed to parse %s", attrLazy)
+			}
+			lazy = b
+		}
 		csID := contentStoreIDPrefix + store
-		cs, err := getContentStore(ctx, sm, g, csID)
+		cs, err := getContentStore(ctx, sm, g, csID, lazy)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
@@ -102,7 +111,7 @@ func ResolveCacheImporterFunc(sm *session.Manager) remotecache.ResolveCacheImpor
 	}
 }
 
-func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, storeID string) (content.Store, error) {
+func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, storeID string, lazy bool) (content.Store, error) {
 	// TODO: to ensure correct session is detected, new api for finding if storeID is supported is needed
 	sessionID := g.SessionIterator().NextSession()
 	if sessionID == "" {
@@ -116,7 +125,11 @@ func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, 
 	if err != nil {
 		return nil, err
 	}
-	return &unlazyProvider{sessioncontent.NewCallerStore(caller, storeID), g}, nil
+	cs := sessioncontent.NewCallerStore(caller, storeID)
+	if lazy {
+		return cs, nil
+	}
+	return &unlazyProvider{cs, g}, nil
 }
 
 type unlazyProvider struct {

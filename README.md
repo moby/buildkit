@@ -503,6 +503,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `src=<path>`: source directory for cache importer
 * `tag=<tag>`: specify custom tag of image to read from local index (default: `latest`)
 * `digest=sha256:<sha256digest>`: specify explicit digest of the manifest list to import
+* `lazy=<true|false>`: when `true`, imported cache layers are not eagerly extracted but loaded on demand (default: `false`). This is useful for ephemeral/daemonless `buildkitd` setups where each build uses its own daemon instance, avoiding unnecessary extraction overhead for cached builds.
 
 #### GitHub Actions cache (experimental)
 
