@@ -11,7 +11,7 @@ on:
 
 jobs:
   run:
-    uses: crazy-max/.github/.github/workflows/pr-assign-author.yml@1b673f36fad86812f538c1df9794904038a23cbf
+    uses: crazy-max/.github/.github/workflows/pr-assign-author.yml@71eec88cb5c2185e8209fab03eeb1f4c76129642
     permissions:
       contents: read
       pull-requests: write

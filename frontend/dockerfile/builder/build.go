@@ -3,7 +3,6 @@ package builder
 import (
 	"context"
 	"strings"
-	"sync"
 
 	"github.com/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
@@ -23,6 +22,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/bkmaps"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -128,7 +128,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 		}
 	}
 
-	scanTargets := sync.Map{}
+	scanTargets := bkmaps.SyncMap[string, *dockerfile2llb.SBOMTargets]{}
 
 	rb, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.Reference, *dockerspec.DockerOCIImage, *dockerspec.DockerOCIImage, error) {
 		opt := convertOpt
@@ -176,13 +176,9 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 
 	if scanner != nil {
 		if err := rb.EachPlatform(ctx, func(ctx context.Context, id string, p ocispecs.Platform) error {
-			v, ok := scanTargets.Load(id)
+			target, ok := scanTargets.Load(id)
 			if !ok {
 				return errors.Errorf("no scan targets for %s", id)
-			}
-			target, ok := v.(*dockerfile2llb.SBOMTargets)
-			if !ok {
-				return errors.Errorf("invalid scan targets for %T", v)
 			}
 
 			var opts []llb.ConstraintsOpt

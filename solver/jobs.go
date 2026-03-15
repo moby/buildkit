@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/bkmaps"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
@@ -349,7 +350,7 @@ type Job struct {
 	pr            *progress.MultiReader
 	pw            progress.Writer
 	span          trace.Span
-	values        sync.Map
+	values        bkmaps.SyncMap[string, any]
 	id            string
 	startedTime   time.Time
 	completedTime time.Time

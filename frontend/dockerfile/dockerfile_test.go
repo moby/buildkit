@@ -54,6 +54,7 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/iohelper"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -806,7 +807,7 @@ COPY foo foo
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: buf}),
 			},
 		},
 		LocalMounts: map[string]fsutil.FS{
@@ -854,7 +855,7 @@ FROM stage-$TARGETOS
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: buf}),
 			},
 		},
 		LocalMounts: map[string]fsutil.FS{
@@ -877,7 +878,7 @@ FROM stage-$TARGETOS
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: buf}),
 			},
 		},
 		FrontendAttrs: map[string]string{
@@ -3431,7 +3432,7 @@ ADD --chown=100:200 t.tar /out/
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: fixedWriteCloser(&nopWriteCloser{outBuf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outBuf}),
 			},
 		},
 		LocalMounts: map[string]fsutil.FS{
@@ -5562,7 +5563,7 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{outW}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 			},
 		},
 	}, nil)
@@ -8272,7 +8273,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{outW}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 			},
 		},
 	}, nil)
@@ -8422,7 +8423,7 @@ ENV foo=bar
 		},
 		Exports: []client.ExportEntry{{
 			Type:   client.ExporterOCI,
-			Output: fixedWriteCloser(nopWriteCloser{outW}),
+			Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 		}},
 	}, nil)
 	require.NoError(t, err)
@@ -8477,7 +8478,7 @@ FROM nonexistent AS base
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(nopWriteCloser{outW}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
 			},
 		},
 	}, nil)
@@ -9376,7 +9377,7 @@ EOF
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(&nopWriteCloser{buf}),
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: buf}),
 				Attrs: map[string]string{
 					"name": "org/repo:tag1,org/repo:tag2",
 				},
@@ -10711,12 +10712,6 @@ func getFrontend(t *testing.T, sb integration.Sandbox) frontend {
 	require.True(t, ok)
 	return fn
 }
-
-type nopWriteCloser struct {
-	io.Writer
-}
-
-func (nopWriteCloser) Close() error { return nil }
 
 type secModeSandbox struct{}
 
