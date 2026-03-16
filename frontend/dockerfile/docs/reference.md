@@ -627,6 +627,20 @@ The image can be any valid image.
   [`COPY --from=<name>`](#copy---from),
   and [`RUN --mount=type=bind,from=<name>`](#run---mounttypebind) instructions
   to refer to the image built in this stage.
+
+  Using a previous build stage as the base for a subsequent stage is a common
+  pattern for sharing a common base environment:
+
+  ```dockerfile
+  FROM ubuntu AS base
+  RUN apt-get update && apt-get install -y shared-tooling
+
+  FROM base AS dev
+  RUN apt-get install -y dev-tooling
+
+  FROM base AS prod
+  COPY --from=build /app /app
+  ```
 - The `tag` or `digest` values are optional. If you omit either of them, the
   builder assumes a `latest` tag by default. The builder returns an error if it
   can't find the `tag` value.
