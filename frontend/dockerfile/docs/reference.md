@@ -2087,8 +2087,8 @@ This allows arguments to be passed to the entry point, i.e., `docker run
 <image> -d` will pass the `-d` argument to the entry point. You can override
 the `ENTRYPOINT` instruction using the `docker run --entrypoint` flag.
 
-The shell form of `ENTRYPOINT` prevents any `CMD` command line arguments from
-being used. It also starts your `ENTRYPOINT` as a subcommand of `/bin/sh -c`,
+The shell form of `ENTRYPOINT` ignores any `CMD` or `docker run` command line
+arguments. It also starts your `ENTRYPOINT` as a subcommand of `/bin/sh -c`,
 which does not pass signals. This means that the executable will not be the
 container's `PID 1`, and will not receive Unix signals. In this case, your
 executable doesn't receive a `SIGTERM` from `docker stop <container>`.
