@@ -853,12 +853,13 @@ The supported mount types are:
 This mount type allows binding files or directories to the build container. A
 bind mount is read-only by default.
 
-| Option                             | Description                                                                                    |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `target`, `dst`, `destination`[^1] | Mount path.                                                                                    |
-| `source`                           | Source path in the `from`. Defaults to the root of the `from`.                                 |
-| `from`                             | Build stage, context, or image name for the root of the source. Defaults to the build context. |
-| `rw`,`readwrite`                   | Allow writes on the mount. Written data will be discarded.                                     |
+| Option                             | Description                                                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`, `dst`, `destination`[^1] | Mount path.                                                                                                                                   |
+| `source`                           | Source path in the `from`. Defaults to the root of the `from`.                                                                                |
+| `from`                             | Build stage, context, or image name for the root of the source. Defaults to the build context.                                                |
+| `rw`,`readwrite`                   | Allow writes on the mount. Written data will be discarded after the `RUN` instruction completes and will not be committed to the image layer. |
+
 
 ### RUN --mount=type=cache
 
