@@ -2863,6 +2863,11 @@ for instance `SIGKILL`, or an unsigned number that matches a position in the
 kernel's syscall table, for instance `9`. The default is `SIGTERM` if not
 defined.
 
+`STOPSIGNAL` applies to the signal sent by `docker stop` (and by the Docker
+daemon when stopping a container). It does not affect signals sent by keyboard
+shortcuts such as Ctrl+C, which sends `SIGINT` directly to the process
+regardless of the `STOPSIGNAL` setting.
+
 The image's default stopsignal can be overridden per container, using the
 `--stop-signal` flag on `docker run` and `docker create`.
 
