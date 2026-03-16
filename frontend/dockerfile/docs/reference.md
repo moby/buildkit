@@ -2098,8 +2098,14 @@ Only the last `ENTRYPOINT` instruction in the Dockerfile will have an effect.
 ### Exec form ENTRYPOINT example
 
 You can use the exec form of `ENTRYPOINT` to set fairly stable default commands
-and arguments and then use either form of `CMD` to set additional defaults that
-are more likely to be changed.
+and arguments and then use `CMD` to set additional defaults that are more
+likely to be changed.
+
+When combining exec form `ENTRYPOINT` with `CMD`, use the exec form of `CMD`
+as well. Using the shell form of `CMD` causes it to be wrapped in
+`/bin/sh -c`, which means the `ENTRYPOINT` receives a shell invocation as its
+argument rather than the bare command and parameters. See
+[Understand how CMD and ENTRYPOINT interact](#understand-how-cmd-and-entrypoint-interact).
 
 ```dockerfile
 FROM ubuntu
