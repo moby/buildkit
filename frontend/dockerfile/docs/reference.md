@@ -1150,6 +1150,13 @@ Labels included in base images (images in the `FROM` line) are inherited by
 your image. If a label already exists but with a different value, the
 most-recently-applied value overrides any previously-set value.
 
+In a multi-stage build, labels from intermediate stages are only present in
+the final image if the final stage is directly or indirectly based on them
+(via `FROM`). Labels from a stage that you only reference with
+`COPY --from` or `RUN --mount=from=` are not included in the output image.
+Labels from the base image specified in the final `FROM` instruction are
+always inherited.
+
 To view an image's labels, use the `docker image inspect` command. You can use
 the `--format` option to show just the labels;
 
