@@ -2010,6 +2010,26 @@ COPY --parents ./x/./y/*.txt /parents/
 # /parents/y/b.txt
 ```
 
+The `**` wildcard matches any number of path components, including none, and
+can be used to recursively match files across directory levels:
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM scratch
+
+COPY --parents ./src/**/*.txt /parents/
+
+# Build context:
+# ./src/a.txt
+# ./src/x/b.txt
+# ./src/x/y/c.txt
+#
+# Output:
+# /parents/src/a.txt
+# /parents/src/x/b.txt
+# /parents/src/x/y/c.txt
+```
+
 Note that, without the `--parents` flag specified, any filename collision will
 fail the Linux `cp` operation with an explicit error message
 (`cp: will not overwrite just-created './x/a.txt' with './y/a.txt'`), where the
