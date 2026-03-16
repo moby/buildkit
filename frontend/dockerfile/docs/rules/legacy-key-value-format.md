@@ -55,3 +55,18 @@ ENV DEPS="\
     make"
 ```
 
+> [!NOTE]
+> Be aware of leading whitespace when converting multi-line legacy syntax to
+> the modern `key=value` format. In the legacy format, leading whitespace on
+> continuation lines is included in the value. In the modern format with
+> quoted values, leading whitespace inside the quotes is also preserved. If
+> you don't want leading whitespace in the value, make sure to remove it when
+> rewriting to the new format:
+>
+> ```dockerfile
+> ENV DEPS="\
+> curl \
+> git \
+> make"
+> ```
+
