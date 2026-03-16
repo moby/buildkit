@@ -2925,6 +2925,8 @@ The options that can appear before `CMD` are:
 
 The health check will first run **interval** seconds after the container is
 started, and then again **interval** seconds after each previous check completes.
+During the **start period**, health checks run at **start interval** frequency
+instead.
 
 If a single run of the check takes longer than **timeout** seconds then the check
 is considered to have failed. The process performing the check is abruptly stopped
