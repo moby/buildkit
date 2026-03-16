@@ -373,10 +373,16 @@ whitespace, like `${foo}_bar`.
 The `${variable_name}` syntax also supports a few of the standard `bash`
 modifiers as specified below:
 
-- `${variable:-word}` indicates that if `variable` is set then the result
-  will be that value. If `variable` is not set then `word` will be the result.
-- `${variable:+word}` indicates that if `variable` is set then `word` will be
-  the result, otherwise the result is the empty string.
+- `${variable:-word}` indicates that if `variable` is set and non-empty then
+  the result will be that value. If `variable` is unset or empty then `word`
+  will be the result.
+- `${variable-word}` indicates that if `variable` is set (even if empty) then
+  the result will be that value. If `variable` is unset then `word` will be
+  the result.
+- `${variable:+word}` indicates that if `variable` is set and non-empty then
+  `word` will be the result, otherwise the result is the empty string.
+- `${variable+word}` indicates that if `variable` is set (even if empty) then
+  `word` will be the result, otherwise the result is the empty string.
 
 The following variable replacements are supported in a pre-release version of
 Dockerfile syntax, when using the `# syntax=docker/dockerfile-upstream:master` syntax
