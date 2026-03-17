@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -190,6 +191,28 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, img.Metadata().Target.Digest.String(), digest)
 	}
+}
+
+func testBuildPushProgress(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data")))
+	rdr, err := marshal(sb.Context(), st)
+	require.NoError(t, err)
+
+	imageName := registry + "/foo/bar:latest"
+	cmd := sb.Cmd("build", "--progress=plain", "--output", "type=image,name="+imageName+",push=true")
+	cmd.Stdin = rdr
+
+	dt, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(dt))
+	require.Contains(t, string(dt), "pushing layers")
+	require.Contains(t, string(dt), "pushing manifest for "+imageName+"@")
 }
 
 func marshal(ctx context.Context, st llb.State) (io.Reader, error) {

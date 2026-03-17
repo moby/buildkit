@@ -163,6 +163,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHostnameLookup,
 	testHostnameSpecifying,
 	testPushByDigest,
+	testPushProgressSameVertex,
 	testPullWithDigestCheck,
 	testBasicInlineCacheImportExport,
 	testExportBusyboxLocal,
@@ -1314,6 +1315,99 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
 	require.Greater(t, desc.Size, int64(0))
+}
+
+func testPushProgressSameVertex(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data")))
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	imageName := registry + "/foo/bar:latest"
+
+	var vertexes []*Vertex
+	var statuses []*VertexStatus
+	ch := make(chan *SolveStatus)
+	eg, ctx := errgroup.WithContext(sb.Context())
+	eg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return context.Cause(ctx)
+			case ss, ok := <-ch:
+				if !ok {
+					return nil
+				}
+				vertexes = append(vertexes, ss.Vertexes...)
+				statuses = append(statuses, ss.Statuses...)
+			}
+		}
+	})
+	eg.Go(func() error {
+		_, err := c.Solve(ctx, def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: "image",
+					Attrs: map[string]string{
+						"name": imageName,
+						"push": "true",
+					},
+				},
+			},
+		}, ch)
+		return err
+	})
+	require.NoError(t, eg.Wait())
+
+	exportVertexes := map[digest.Digest]struct{}{}
+	pushVertexes := map[digest.Digest]struct{}{}
+	pushManifestPrefix := "pushing manifest for " + imageName + "@"
+
+	for _, v := range vertexes {
+		if v.Name == "exporting to image" {
+			exportVertexes[v.Digest] = struct{}{}
+		}
+	}
+
+	for _, st := range statuses {
+		switch {
+		case st.ID == "pushing layers":
+			pushVertexes[st.Vertex] = struct{}{}
+		case strings.HasPrefix(st.ID, pushManifestPrefix):
+			pushVertexes[st.Vertex] = struct{}{}
+		}
+	}
+
+	require.Len(t, exportVertexes, 1, "expected exactly one export vertex in status stream")
+	require.NotEmpty(t, pushVertexes, "expected at least one push status in status stream")
+
+	var exportVertex digest.Digest
+	for v := range exportVertexes {
+		exportVertex = v
+	}
+	for v := range pushVertexes {
+		require.Equal(t, exportVertex, v, "push statuses should use the same vertex as exporting to image")
+	}
+
+	hasPushManifest := false
+	for _, st := range statuses {
+		if strings.HasPrefix(st.ID, pushManifestPrefix) {
+			hasPushManifest = true
+			require.Equal(t, exportVertex, st.Vertex, "pushing manifest should use the same vertex as exporting to image")
+		}
+	}
+	require.True(t, hasPushManifest, "expected pushing manifest status in status stream")
 }
 
 func testPullWithDigestCheck(t *testing.T, sb integration.Sandbox) {
