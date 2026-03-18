@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIdentifierDebugCommands(t *testing.T) {
+	for _, value := range []string{"", "false", "true"} {
+		t.Run(value, func(t *testing.T) {
+			attrs := map[string]string{}
+			if value != "" {
+				attrs[pb.AttrGitDebugCommands] = value
+			}
+			id, err := (&Source{}).Identifier("git", "example.com/repo.git", attrs, nil)
+			require.NoError(t, err)
+			require.Equal(t, value == "true", id.(*GitIdentifier).DebugCommands)
+		})
+	}
+}
+
 func TestNewGitIdentifier(t *testing.T) {
 	tests := []struct {
 		url      string

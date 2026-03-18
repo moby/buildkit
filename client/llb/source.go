@@ -477,6 +477,10 @@ func Git(url, fragment string, opts ...GitOption) State {
 		attrs[pb.AttrGitSkipSubmodules] = "true"
 		addCap(&gi.Constraints, pb.CapSourceGitSkipSubmodules)
 	}
+	if gi.DebugCommands {
+		attrs[pb.AttrGitDebugCommands] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitDebugCommands)
+	}
 
 	if gi.MTime != "" {
 		attrs[pb.AttrGitMTime] = gi.MTime
@@ -534,6 +538,7 @@ type GitInfo struct {
 	Ref                string
 	SubDir             string
 	SkipSubmodules     bool
+	DebugCommands      bool
 	MTime              string
 	Advice             bool
 	Bundle             string
@@ -586,6 +591,12 @@ func GitAdvice(enabled bool) GitOption {
 func KeepGitDir() GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.KeepGitDir = true
+	})
+}
+
+func GitDebugCommands() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.DebugCommands = true
 	})
 }
 

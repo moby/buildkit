@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,6 +67,14 @@ func TestFetchAfterSubmoduleRemovalSHA1(t *testing.T) {
 
 func TestFetchAfterSubmoduleRemovalSHA256(t *testing.T) {
 	testFetchAfterSubmoduleRemoval(t, "sha256")
+}
+
+func TestDebugCommandsSHA1(t *testing.T) {
+	testDebugCommands(t, "sha1")
+}
+
+func TestDebugCommandsSHA256(t *testing.T) {
+	testDebugCommands(t, "sha256")
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
@@ -244,6 +253,48 @@ func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
 
 	_, err = os.Lstat(filepath.Join(dir, "sub"))
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func testDebugCommands(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx, logs := captureProgressLogs(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, DebugCommands: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref.Release(t.Context())
+
+	_ = mountRef(ctx, t, ref)
+
+	require.Eventually(t, func() bool {
+		out := logs.String()
+		return strings.Contains(out, "+ git ") && strings.Contains(out, " fetch ") && strings.Contains(out, " checkout ")
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func mountRef(ctx context.Context, t *testing.T, ref cache.ImmutableRef) string {
+	t.Helper()
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, lm.Unmount())
+	})
+	return dir
 }
 
 func TestFetchBySHA1(t *testing.T) {
@@ -2745,10 +2796,7 @@ func TestResetSnapshotMtimes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, target, fi.ModTime().UTC())
 
-	// Symlink itself should have mtime set via lutimes
-	fi, err = os.Lstat(filepath.Join(dir, "link"))
-	require.NoError(t, err)
-	require.Equal(t, target, fi.ModTime().UTC())
+	assertSymlinkMtime(t, filepath.Join(dir, "link"), target)
 
 	// Verify symlink itself still exists and points correctly
 	linkTarget, err := os.Readlink(filepath.Join(dir, "link"))
@@ -2928,9 +2976,13 @@ func TestDetectBundleSHA256(t *testing.T) {
 			bundlePath := filepath.Join(t.TempDir(), "bundle.pack")
 			runShell(t, repo.mainPath, "git bundle create "+bundlePath+" refs/heads/master")
 
-			sha256, err := detectBundleSHA256(ctx, bundlePath, false)
+			traceCtx, logs := captureProgressLogs(ctx, t)
+			sha256, err := detectBundleSHA256(traceCtx, bundlePath, false, true)
 			require.NoError(t, err)
 			require.Equal(t, format == "sha256", sha256)
+			require.Eventually(t, func() bool {
+				return strings.Contains(logs.String(), " ls-remote -- ")
+			}, 5*time.Second, 50*time.Millisecond)
 
 			stagedRepoDir := filepath.Join(t.TempDir(), "repo.git")
 			require.NoError(t, os.MkdirAll(stagedRepoDir, 0700))
@@ -3061,4 +3113,46 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool, subdir s
 		require.NoError(t, err)
 		require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), ".git dir mtime should match commit time")
 	}
+}
+
+type progressLogBuffer struct {
+	mu sync.Mutex
+	sb strings.Builder
+}
+
+func (b *progressLogBuffer) Write(dt []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sb.Write(dt)
+}
+
+func (b *progressLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.sb.String()
+}
+
+func captureProgressLogs(ctx context.Context, t *testing.T) (context.Context, *progressLogBuffer) {
+	pr, ctx, cancel := progress.NewContext(ctx)
+	buf := &progressLogBuffer{}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel(errors.WithStack(context.Canceled))
+		<-done
+	})
+	go func() {
+		defer close(done)
+		for {
+			prog, err := pr.Read(ctx)
+			if err != nil {
+				return
+			}
+			for _, log := range prog {
+				if lsys, ok := log.Sys.(client.VertexLog); ok {
+					buf.Write(lsys.Data)
+				}
+			}
+		}
+	}()
+	return ctx, buf
 }

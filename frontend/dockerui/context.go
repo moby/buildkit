@@ -92,6 +92,9 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 		extraGitOpts = append(extraGitOpts, llb.GitMTimeCommit())
 	}
 	extraGitOpts = append(extraGitOpts, gitAdviceOpts(bc.GitAdvice)...)
+	if v, err := strconv.ParseBool(opts[keyGitDebugCommandsArg]); err == nil && v {
+		extraGitOpts = append(extraGitOpts, llb.GitDebugCommands())
+	}
 	if st, ok, err := DetectGitContext(opts[localNameContext], keepGit, extraGitOpts...); ok {
 		if err != nil {
 			return nil, err

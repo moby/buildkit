@@ -90,6 +90,17 @@ func TestGit(t *testing.T) {
 			},
 		},
 		{
+			name:       "debug commands",
+			st:         Git("github.com/foo/bar.git", "ref", GitDebugCommands()),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.debugcommands":    "true",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
 			name: "bundle",
 			st: Git(
 				"github.com/foo/bar.git", "",
