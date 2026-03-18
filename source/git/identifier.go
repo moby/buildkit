@@ -3,6 +3,7 @@ package git
 import (
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/v2/pkg/reference"
@@ -20,6 +21,7 @@ type GitIdentifier struct {
 	Remote           string
 	Ref              string
 	Checksum         string
+	FetchDepth       *int
 	Subdir           string
 	KeepGitDir       bool
 	AuthTokenSecret  string
@@ -72,6 +74,13 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	if u.Opts != nil {
 		repo.Ref = u.Opts.Ref
 		repo.Subdir = u.Opts.Subdir
+	}
+	if v := u.Query.Get("fetch-depth"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, errors.Errorf("invalid fetch-depth value: %q", v)
+		}
+		repo.FetchDepth = &n
 	}
 	return &repo, nil
 }

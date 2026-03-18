@@ -95,6 +95,15 @@ func TestNewGitIdentifier(t *testing.T) {
 			str: "git://github.com/user/repo.git#mybranch:mydir/mysubdir",
 		},
 		{
+			url: "https://github.com/user/repo.git?fetch-depth=0#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote:     "https://github.com/user/repo.git",
+				Ref:        "mybranch",
+				Subdir:     "mydir/mysubdir",
+				FetchDepth: new(0),
+			},
+		},
+		{
 			url: "git@github.com:user/repo.git",
 			expected: GitIdentifier{
 				Remote: "git@github.com:user/repo.git",

@@ -122,6 +122,12 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.MountSSHSock = v
 		case pb.AttrGitChecksum:
 			id.Checksum = v
+		case pb.AttrGitFetchDepth:
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				return nil, errors.Errorf("invalid fetch-depth value: %q", v)
+			}
+			id.FetchDepth = &n
 		case pb.AttrGitSkipSubmodules:
 			if v == "true" {
 				id.SkipSubmodules = true
@@ -300,6 +306,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 		key += ".git"
 		if ref != "" {
 			key += "#" + ref
+		}
+		if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
+			key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
 		}
 	}
 	if gs.src.Subdir != "" {
@@ -1042,7 +1051,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	if gitutil.IsCommitSHA(fetchRef) {
 		// skip fetch if commit already exists
 		if _, err := git.Run(ctx, "cat-file", "-e", "--", fetchRef+"^{commit}"); err == nil {
-			doFetch = false
+			doFetch = gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0
 		}
 	}
 
@@ -1069,16 +1078,32 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 			origin = fetchSource
 		}
 		args := []string{"fetch"}
-		// For fetch-by-commit, assume the server supports
-		// uploadpack.allowReachableSHA1InWant / allowAnySHA1InWant and
-		// fetch only the requested commit, without the tag/unshallow
-		// fallback used by the generic SHA-ref path.
-		if gs.src.FetchByCommit || !gitutil.IsCommitSHA(fetchRef) { // TODO: find a branch from ls-remote?
-			args = append(args, "--depth=1", "--no-tags")
-		} else {
+		if !gs.src.FetchByCommit && gitutil.IsCommitSHA(fetchRef) {
 			args = append(args, "--tags")
-			if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-				args = append(args, "--unshallow")
+			switch {
+			case gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0:
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+					args = append(args, "--unshallow")
+				}
+			case gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0:
+				args = append(args, "--depth="+strconv.Itoa(*gs.src.FetchDepth))
+			default:
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+					args = append(args, "--unshallow")
+				}
+			}
+		} else { // TODO: find a branch from ls-remote?
+			if gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
+				args = append(args, "--tags")
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+					args = append(args, "--unshallow")
+				}
+			} else {
+				fetchDepth := 1
+				if gs.src.FetchDepth != nil {
+					fetchDepth = *gs.src.FetchDepth
+				}
+				args = append(args, "--depth="+strconv.Itoa(fetchDepth), "--no-tags")
 			}
 		}
 		args = append(args, origin)
@@ -1124,8 +1149,17 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 			} else {
 				// try to fetch the commit directly
 				args := []string{"fetch", "--tags"}
-				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-					args = append(args, "--unshallow")
+				switch {
+				case gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0:
+					if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+						args = append(args, "--unshallow")
+					}
+				case gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0:
+					args = append(args, "--depth="+strconv.Itoa(*gs.src.FetchDepth))
+				default:
+					if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+						args = append(args, "--unshallow")
+					}
 				}
 				args = append(args, origin, gs.cacheCommit)
 				if _, err := git.Run(ctx, args...); err != nil {
@@ -1255,7 +1289,18 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "--", "origin", pullref)
+		fetchArgs := []string{"fetch", "-u"}
+		if gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
+			fetchArgs = append(fetchArgs, "--tags")
+		} else {
+			fetchDepth := 1
+			if gs.src.FetchDepth != nil {
+				fetchDepth = *gs.src.FetchDepth
+			}
+			fetchArgs = append(fetchArgs, "--depth="+strconv.Itoa(fetchDepth))
+		}
+		fetchArgs = append(fetchArgs, "--", "origin", pullref)
+		_, err = checkoutGit.Run(ctx, fetchArgs...)
 		if err != nil {
 			return nil, err
 		}

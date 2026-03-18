@@ -65,6 +65,9 @@ type GitRef struct {
 	// it against the remote ref. The commit is fetched directly and the ref name
 	// (if any) is applied locally.
 	FetchByCommit bool
+
+	// FetchDepth controls how much history to fetch.
+	FetchDepth *int
 }
 
 // ParseGitRef parses a git ref.
@@ -167,6 +170,12 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			gf.SubDir = v[0]
 		case "checksum", "commit":
 			gf.Checksum = v[0]
+		case "fetch-depth":
+			vv, err := strconv.Atoi(v[0])
+			if err != nil || vv < 0 {
+				return errors.Errorf("invalid fetch-depth value: %q", v[0])
+			}
+			gf.FetchDepth = &vv
 		case "keep-git-dir":
 			var vv bool
 			if len(v) == 0 {
