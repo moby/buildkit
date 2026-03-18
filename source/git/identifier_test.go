@@ -82,6 +82,14 @@ func TestNewGitIdentifier(t *testing.T) {
 			},
 		},
 		{
+			url: "https://github.com/user/repo.git?fetch-tags#mybranch",
+			expected: GitIdentifier{
+				Remote:    "https://github.com/user/repo.git",
+				Ref:       "mybranch",
+				FetchTags: true,
+			},
+		},
+		{
 			url: "git@github.com:user/repo.git",
 			expected: GitIdentifier{
 				Remote: "git@github.com:user/repo.git",

@@ -80,6 +80,17 @@ func TestGit(t *testing.T) {
 				"git.fullurl":          "https://github.com/foo/bar.git",
 			},
 		},
+		{
+			name:       "fetch tags",
+			st:         Git("github.com/foo/bar.git", "ref", GitFetchTags()),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fetchtags":        "true",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
 	}
 
 	for _, tc := range tcases {
