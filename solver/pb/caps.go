@@ -32,6 +32,7 @@ const (
 	CapSourceGitMountSSHSock    apicaps.CapID = "source.git.mountsshsock"
 	CapSourceGitSubdir          apicaps.CapID = "source.git.subdir"
 	CapSourceGitChecksum        apicaps.CapID = "source.git.checksum"
+	CapSourceGitFetchDepth      apicaps.CapID = "source.git.fetchdepth"
 	CapSourceGitSkipSubmodules  apicaps.CapID = "source.git.skipsubmodules"
 	CapSourceGitSignatureVerify apicaps.CapID = "source.git.signatureverify"
 
@@ -239,6 +240,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceGitChecksum,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceGitFetchDepth,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
