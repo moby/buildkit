@@ -128,6 +128,10 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 				return nil, errors.Errorf("invalid fetch-depth value: %q", v)
 			}
 			id.FetchDepth = &n
+		case pb.AttrGitFetchTags:
+			if v == "true" {
+				id.FetchTags = true
+			}
 		case pb.AttrGitSkipSubmodules:
 			if v == "true" {
 				id.SkipSubmodules = true
@@ -309,6 +313,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 		}
 		if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
 			key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
+		}
+		if gs.src.FetchTags && (gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0) {
+			key += "(fetch-tags=true)"
 		}
 	}
 	if gs.src.Subdir != "" {
@@ -1051,7 +1058,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	if gitutil.IsCommitSHA(fetchRef) {
 		// skip fetch if commit already exists
 		if _, err := git.Run(ctx, "cat-file", "-e", "--", fetchRef+"^{commit}"); err == nil {
-			doFetch = gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0
+			doFetch = gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0
 		}
 	}
 
@@ -1103,7 +1110,12 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 				if gs.src.FetchDepth != nil {
 					fetchDepth = *gs.src.FetchDepth
 				}
-				args = append(args, "--depth="+strconv.Itoa(fetchDepth), "--no-tags")
+				args = append(args, "--depth="+strconv.Itoa(fetchDepth))
+				if gs.src.FetchTags {
+					args = append(args, "--tags")
+				} else {
+					args = append(args, "--no-tags")
+				}
 			}
 		}
 		args = append(args, origin)
@@ -1298,6 +1310,9 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 				fetchDepth = *gs.src.FetchDepth
 			}
 			fetchArgs = append(fetchArgs, "--depth="+strconv.Itoa(fetchDepth))
+			if gs.src.FetchTags {
+				fetchArgs = append(fetchArgs, "--tags")
+			}
 		}
 		fetchArgs = append(fetchArgs, "--", "origin", pullref)
 		_, err = checkoutGit.Run(ctx, fetchArgs...)

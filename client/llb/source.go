@@ -476,6 +476,10 @@ func Git(url, fragment string, opts ...GitOption) State {
 		attrs[pb.AttrGitFetchDepth] = strconv.Itoa(*gi.FetchDepth)
 		addCap(&gi.Constraints, pb.CapSourceGitFetchDepth)
 	}
+	if gi.FetchTags {
+		attrs[pb.AttrGitFetchTags] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitFetchTags)
+	}
 
 	if gi.SkipSubmodules {
 		attrs[pb.AttrGitSkipSubmodules] = "true"
@@ -538,6 +542,7 @@ type GitInfo struct {
 	addAuthCap         bool
 	KnownSSHHosts      string
 	MountSSHSock       string
+	FetchTags          bool
 	FetchDepth         *int
 	Checksum           string
 	Ref                string
@@ -571,6 +576,12 @@ func GitFetchDepth(v int) GitOption {
 			return
 		}
 		gi.FetchDepth = &v
+	})
+}
+
+func GitFetchTags() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.FetchTags = true
 	})
 }
 

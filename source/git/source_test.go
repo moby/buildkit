@@ -85,6 +85,14 @@ func TestFetchDepthKeepGitDirSHA256(t *testing.T) {
 	testFetchDepthKeepGitDir(t, "sha256")
 }
 
+func TestFetchTagsKeepGitDirSHA1(t *testing.T) {
+	testFetchTagsKeepGitDir(t, "sha1")
+}
+
+func TestFetchTagsKeepGitDirSHA256(t *testing.T) {
+	testFetchTagsKeepGitDir(t, "sha256")
+}
+
 func TestFetchDepthPullRefKeepGitDirSHA1(t *testing.T) {
 	testFetchDepthPullRefKeepGitDir(t, "sha1")
 }
@@ -346,6 +354,54 @@ func testFetchDepthKeepGitDir(t *testing.T, format string) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+func testFetchTagsKeepGitDir(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(t.Context())
+
+	dir1 := mountRef(ctx, t, ref1)
+	requireGitRevParseFails(t, dir1, "refs/tags/lightweight-tag")
+	_, err = os.Lstat(filepath.Join(dir1, ".git", "shallow"))
+	require.NoError(t, err)
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, FetchTags: true}
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key2, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NotEqual(t, key1, key2)
+
+	ref2, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(t.Context())
+	require.NotEqual(t, ref1.ID(), ref2.ID())
+
+	dir2 := mountRef(ctx, t, ref2)
+	requireGitRevParse(t, dir2, "refs/tags/lightweight-tag")
+	requireGitDescribeFails(t, dir2, "--match", "lightweight-tag*")
+	_, err = os.Lstat(filepath.Join(dir2, ".git", "shallow"))
+	require.NoError(t, err)
+}
+
 func testFetchDepthPullRefKeepGitDir(t *testing.T, format string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
@@ -414,6 +470,27 @@ func requireGitDescribeFails(t *testing.T, dir string, extraArgs ...string) {
 
 	args := append([]string{"describe", "--tags", "--long"}, extraArgs...)
 	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, string(out))
+}
+
+func requireGitRevParse(t *testing.T, dir, ref string) {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", ref)
+	cmd.Dir = dir
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	require.NotEmpty(t, strings.TrimSpace(string(out)))
+}
+
+func requireGitRevParseFails(t *testing.T, dir, ref string) {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", ref)
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()

@@ -22,6 +22,7 @@ type GitIdentifier struct {
 	Ref              string
 	Checksum         string
 	FetchDepth       *int
+	FetchTags        bool
 	Subdir           string
 	KeepGitDir       bool
 	AuthTokenSecret  string
@@ -81,6 +82,16 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 			return nil, errors.Errorf("invalid fetch-depth value: %q", v)
 		}
 		repo.FetchDepth = &n
+	}
+	if vals, ok := u.Query["fetch-tags"]; ok {
+		repo.FetchTags = true
+		if len(vals) > 0 && vals[0] != "" {
+			v, err := strconv.ParseBool(vals[0])
+			if err != nil {
+				return nil, errors.Errorf("invalid fetch-tags value: %q", vals[0])
+			}
+			repo.FetchTags = v
+		}
 	}
 	return &repo, nil
 }
