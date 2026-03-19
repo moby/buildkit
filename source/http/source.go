@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -28,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
+	"github.com/moby/buildkit/source/util/pathutil"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/util/pgpsign"
@@ -963,30 +963,16 @@ func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group
 	return req, nil
 }
 
-func safeFileName(s string) string {
-	defaultName := "download"
-	name := filepath.Base(filepath.FromSlash(strings.TrimSpace(s)))
-	if name == "" || name == "." || name == ".." {
-		return defaultName
-	}
-	for _, r := range name {
-		if r == 0 || unicode.IsControl(r) {
-			return defaultName
-		}
-	}
-	return name
-}
-
 func getFileName(urlStr, manualFilename string, resp *http.Response) string {
 	if manualFilename != "" {
-		return safeFileName(manualFilename)
+		return pathutil.SafeFileName(manualFilename)
 	}
 	if resp != nil {
 		if contentDisposition := resp.Header.Get("Content-Disposition"); contentDisposition != "" {
 			if _, params, err := mime.ParseMediaType(contentDisposition); err == nil {
 				if params["filename"] != "" && !strings.HasSuffix(params["filename"], "/") {
 					if filename := filepath.Base(filepath.FromSlash(params["filename"])); filename != "" {
-						return safeFileName(filename)
+						return pathutil.SafeFileName(filename)
 					}
 				}
 			}
@@ -995,10 +981,10 @@ func getFileName(urlStr, manualFilename string, resp *http.Response) string {
 	u, err := url.Parse(urlStr)
 	if err == nil {
 		if base := path.Base(u.Path); base != "." && base != "/" {
-			return safeFileName(base)
+			return pathutil.SafeFileName(base)
 		}
 	}
-	return safeFileName("")
+	return pathutil.SafeFileName("")
 }
 
 func searchHTTPURLDigest(ctx context.Context, store cache.MetadataStore, dgst digest.Digest) ([]cacheRefMetadata, error) {
