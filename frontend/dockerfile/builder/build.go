@@ -51,13 +51,16 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	}
 
 	if _, ok := opts["cmdline"]; !ok {
-		if cmdline, ok := opts[keySyntaxArg]; ok {
-			p := strings.SplitN(strings.TrimSpace(cmdline), " ", 2)
-			res, err := forwardGateway(ctx, c, p[0], cmdline)
-			if err != nil && len(errdefs.Sources(err)) == 0 {
-				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
+		if v, ok := opts[keySyntaxArg]; ok {
+			// dockerfile.v0 is the built-in frontend selector, not a source ref to forward.
+			if cmdline := strings.TrimSpace(v); cmdline != "dockerfile.v0" {
+				ref, _, _ := strings.Cut(cmdline, " ")
+				res, err := forwardGateway(ctx, c, ref, cmdline)
+				if err != nil && len(errdefs.Sources(err)) == 0 {
+					return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
+				}
+				return res, err
 			}
-			return res, err
 		} else if ref, cmdline, loc, ok := parser.DetectSyntax(src.Data); ok {
 			res, err := forwardGateway(ctx, c, ref, cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
