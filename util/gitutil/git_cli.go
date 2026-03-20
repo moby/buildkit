@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/moby/buildkit/util/urlutil"
 	"github.com/pkg/errors"
 )
 
@@ -18,9 +20,10 @@ type GitCLI struct {
 	git  string
 	exec func(context.Context, *exec.Cmd) error
 
-	args    []string
-	dir     string
-	streams StreamFunc
+	args          []string
+	dir           string
+	streams       StreamFunc
+	debugCommands bool
 
 	workTree string
 	gitDir   string
@@ -80,6 +83,12 @@ func WithWorkTree(workTree string) Option {
 func WithGitDir(gitDir string) Option {
 	return func(b *GitCLI) {
 		b.gitDir = gitDir
+	}
+}
+
+func WithDebugCommands(debugCommands bool) Option {
+	return func(b *GitCLI) {
+		b.debugCommands = debugCommands
 	}
 }
 
@@ -169,21 +178,27 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 		cmd.Stdin = nil
 		cmd.Stdout = buf
 		cmd.Stderr = errbuf
+		var stdoutStream io.WriteCloser
+		var stderrStream io.WriteCloser
+		flush := func() {}
 		if cli.streams != nil {
-			stdout, stderr, flush := cli.streams(ctx)
-			if stdout != nil {
-				cmd.Stdout = io.MultiWriter(stdout, cmd.Stdout)
+			stdoutStream, stderrStream, flush = cli.streams(ctx)
+			if stdoutStream != nil {
+				cmd.Stdout = io.MultiWriter(stdoutStream, cmd.Stdout)
 			}
-			if stderr != nil {
-				cmd.Stderr = io.MultiWriter(stderr, cmd.Stderr)
+			if stderrStream != nil {
+				cmd.Stderr = io.MultiWriter(stderrStream, cmd.Stderr)
 			}
-			defer stdout.Close()
-			defer stderr.Close()
+			defer stdoutStream.Close()
+			defer stderrStream.Close()
 			defer func() {
 				if err != nil {
 					flush()
 				}
 			}()
+		}
+		if cli.debugCommands && stderrStream != nil {
+			_, _ = io.WriteString(stderrStream, "+ "+formatDebugCommand(cmd.Args)+"\n")
 		}
 
 		cmd.Env = []string{
@@ -241,6 +256,45 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 		}
 		return buf.Bytes(), nil
 	}
+}
+
+func formatDebugCommand(args []string) string {
+	redacted := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-c" && i+1 < len(args) {
+			cfg := args[i+1]
+			if key, _, ok := strings.Cut(cfg, "="); ok && strings.HasSuffix(strings.ToLower(key), ".extraheader") {
+				cfg = key + "=xxxxx"
+			} else if strings.Contains(cfg, "://") {
+				if redactedURL := urlutil.RedactCredentials(cfg); redactedURL != cfg {
+					cfg = redactedURL
+				}
+			}
+			redacted = append(redacted, arg, cfg)
+			i++
+			continue
+		}
+		if strings.Contains(arg, "://") {
+			if redactedURL := urlutil.RedactCredentials(arg); redactedURL != arg {
+				arg = redactedURL
+			}
+		}
+		redacted = append(redacted, arg)
+	}
+	quoted := make([]string, 0, len(redacted))
+	for _, arg := range redacted {
+		if arg == "" {
+			quoted = append(quoted, `""`)
+			continue
+		}
+		if strings.ContainsAny(arg, " \t\n\r\"'`$&|;<>()[]{}*?!#\\") {
+			quoted = append(quoted, strconv.Quote(arg))
+			continue
+		}
+		quoted = append(quoted, arg)
+	}
+	return strings.Join(quoted, " ")
 }
 
 func getGitSSHCommand(knownHosts string) string {

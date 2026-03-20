@@ -114,6 +114,10 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			if v == "true" {
 				id.SkipSubmodules = true
 			}
+		case pb.AttrGitDebugCommands:
+			if v == "true" {
+				id.DebugCommands = true
+			}
 		case pb.AttrGitSignatureVerifyPubKey:
 			if id.VerifySignature == nil {
 				id.VerifySignature = &GitSignatureVerifyOptions{}
@@ -141,7 +145,7 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 }
 
 // needs to be called with repo lock
-func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
+func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, debugCommands bool, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
@@ -206,6 +210,7 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 	git := gitCLI(
 		gitutil.WithGitDir(dir),
 		gitutil.WithArgs(authArgs...),
+		gitutil.WithDebugCommands(debugCommands),
 	)
 
 	if initializeRepo {
@@ -844,7 +849,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 	}
 	repo.releasers = append(repo.releasers, cleanup)
 
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.authArgs, gs.sha256, reset, g)
+	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.authArgs, gs.src.DebugCommands, gs.sha256, reset, g)
 	if err != nil {
 		return nil, err
 	}
@@ -1207,6 +1212,7 @@ func (gs *gitSourceHandler) emptyGitCli(ctx context.Context, g session.Group, op
 
 	opts = append([]gitutil.Option{
 		gitutil.WithArgs(gs.authArgs...),
+		gitutil.WithDebugCommands(gs.src.DebugCommands),
 		gitutil.WithSSHAuthSock(sock),
 		gitutil.WithSSHKnownHosts(knownHosts),
 	}, opts...)

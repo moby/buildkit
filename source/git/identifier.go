@@ -21,6 +21,7 @@ type GitIdentifier struct {
 	MountSSHSock     string
 	KnownSSHHosts    string
 	SkipSubmodules   bool
+	DebugCommands    bool
 
 	VerifySignature *GitSignatureVerifyOptions
 }

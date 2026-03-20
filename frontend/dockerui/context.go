@@ -73,7 +73,11 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	if v, err := strconv.ParseBool(opts[keyContextKeepGitDirArg]); err == nil {
 		keepGit = &v
 	}
-	if st, ok, err := DetectGitContext(opts[localNameContext], keepGit); ok {
+	var debugGitCommands *bool
+	if v, err := strconv.ParseBool(opts[keyDebugGitCommandsArg]); err == nil {
+		debugGitCommands = &v
+	}
+	if st, ok, err := DetectGitContext(opts[localNameContext], keepGit, debugGitCommands); ok {
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +147,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	return bctx, nil
 }
 
-func DetectGitContext(ref string, keepGit *bool) (*llb.State, bool, error) {
+func DetectGitContext(ref string, keepGit *bool, debugGitCommands *bool) (*llb.State, bool, error) {
 	g, isGit, err := dfgitutil.ParseGitRef(ref)
 	if err != nil {
 		return nil, isGit, err
@@ -157,6 +161,9 @@ func DetectGitContext(ref string, keepGit *bool) (*llb.State, bool, error) {
 	}
 	if keepGit != nil && *keepGit {
 		gitOpts = append(gitOpts, llb.KeepGitDir())
+	}
+	if debugGitCommands != nil && *debugGitCommands {
+		gitOpts = append(gitOpts, llb.GitDebugCommands())
 	}
 	if g.SubDir != "" {
 		gitOpts = append(gitOpts, llb.GitSubDir(g.SubDir))

@@ -51,6 +51,7 @@ const (
 	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
 	keyDockerfileLintArg    = "build-arg:BUILDKIT_DOCKERFILE_CHECK"
 	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
+	keyDebugGitCommandsArg  = "build-arg:BUILDKIT_DEBUG_GIT_COMMANDS"
 	keySourceDateEpoch      = "build-arg:SOURCE_DATE_EPOCH"
 )
 

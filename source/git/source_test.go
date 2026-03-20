@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,6 +56,14 @@ func TestRepeatedFetchSHA256(t *testing.T) {
 }
 func TestRepeatedFetchKeepGitDirSHA256(t *testing.T) {
 	testRepeatedFetch(t, true, "sha256")
+}
+
+func TestDebugCommandsSHA1(t *testing.T) {
+	testDebugCommands(t, "sha1")
+}
+
+func TestDebugCommandsSHA256(t *testing.T) {
+	testDebugCommands(t, "sha256")
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
@@ -173,6 +182,48 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 	require.NoError(t, err)
 	require.Equal(t, key3, key4)
 	require.Equal(t, pin3, pin4)
+}
+
+func testDebugCommands(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx, logs := captureProgressLogs(context.Background(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, DebugCommands: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref.Release(context.TODO())
+
+	_ = mountRef(ctx, t, ref)
+
+	require.Eventually(t, func() bool {
+		out := logs.String()
+		return strings.Contains(out, "+ git ") && strings.Contains(out, " fetch ") && strings.Contains(out, " checkout ")
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func mountRef(ctx context.Context, t *testing.T, ref cache.ImmutableRef) string {
+	t.Helper()
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, lm.Unmount())
+	})
+	return dir
 }
 
 func TestFetchBySHA1(t *testing.T) {
@@ -2364,4 +2415,46 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 		}
 	}()
 	return ctx
+}
+
+type progressLogBuffer struct {
+	mu sync.Mutex
+	sb strings.Builder
+}
+
+func (b *progressLogBuffer) Write(dt []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sb.Write(dt)
+}
+
+func (b *progressLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.sb.String()
+}
+
+func captureProgressLogs(ctx context.Context, t *testing.T) (context.Context, *progressLogBuffer) {
+	pr, ctx, cancel := progress.NewContext(ctx)
+	buf := &progressLogBuffer{}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel(errors.WithStack(context.Canceled))
+		<-done
+	})
+	go func() {
+		defer close(done)
+		for {
+			prog, err := pr.Read(context.Background())
+			if err != nil {
+				return
+			}
+			for _, log := range prog {
+				if lsys, ok := log.Sys.(client.VertexLog); ok {
+					buf.Write(lsys.Data)
+				}
+			}
+		}
+	}()
+	return ctx, buf
 }
