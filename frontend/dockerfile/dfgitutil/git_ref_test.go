@@ -193,6 +193,24 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
+			ref: "https://github.com/moby/buildkit.git?fetch-depth=0#v1.2.3",
+			expected: &GitRef{
+				Remote:     "https://github.com/moby/buildkit.git",
+				ShortName:  "buildkit",
+				Ref:        "v1.2.3",
+				FetchDepth: ptrInt(0),
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-tags#v1.2.3",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				Ref:       "v1.2.3",
+				FetchTags: ptrBool(true),
+			},
+		},
+		{
 			ref: "https://github.com/moby/buildkit.git?ref=v1.0.0#v1.2.3",
 			err: "ref conflicts",
 		},
@@ -218,6 +236,14 @@ func TestParseGitRef(t *testing.T) {
 			ref: "https://github.com/moby/buildkit.git?invalid=123",
 			err: "unexpected query \"invalid\"",
 		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-depth=-1",
+			err: "invalid fetch-depth value",
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-tags=wat",
+			err: "invalid fetch-tags value",
+		},
 	}
 	for i, tt := range cases {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
@@ -234,6 +260,14 @@ func TestParseGitRef(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ptrInt(v int) *int {
+	return &v
+}
+
+func ptrBool(v bool) *bool {
+	return &v
 }
 
 func TestFragmentFormat(t *testing.T) {

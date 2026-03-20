@@ -73,6 +73,23 @@ func TestNewGitIdentifier(t *testing.T) {
 			},
 		},
 		{
+			url: "https://github.com/user/repo.git?fetch-depth=0#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote:     "https://github.com/user/repo.git",
+				Ref:        "mybranch",
+				Subdir:     "mydir/mysubdir/",
+				FetchDepth: ptrInt(0),
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git?fetch-tags#mybranch",
+			expected: GitIdentifier{
+				Remote:    "https://github.com/user/repo.git",
+				Ref:       "mybranch",
+				FetchTags: true,
+			},
+		},
+		{
 			url: "git@github.com:user/repo.git",
 			expected: GitIdentifier{
 				Remote: "git@github.com:user/repo.git",
@@ -116,4 +133,8 @@ func TestNewGitIdentifier(t *testing.T) {
 			require.Equal(t, tt.expected, *gi)
 		})
 	}
+}
+
+func ptrInt(v int) *int {
+	return &v
 }
