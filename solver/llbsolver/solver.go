@@ -345,12 +345,16 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Image Export has already created layers in the content store,
 	// so cache exporters can see and reuse them.
 	eg, egCtx := errgroup.WithContext(ctx)
-	for _, finalize := range finalizers {
+	for i, finalize := range finalizers {
 		if finalize == nil {
 			continue
 		}
+		name := exp.Exporters[i].Name()
+		id := exporterVertexID(j.SessionID, i)
 		eg.Go(func() error {
-			return finalize(egCtx)
+			return inBuilderContext(egCtx, j, name, id, func(ctx context.Context, _ solver.JobContext) error {
+				return finalize(ctx)
+			})
 		})
 	}
 	var cacheExporterResponse map[string]string

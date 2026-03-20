@@ -152,6 +152,10 @@ func runInlineCacheExporter(ctx context.Context, e exporter.ExporterInstance, in
 	return res, done(err)
 }
 
+func exporterVertexID(sessionID string, exporterIndex int) string {
+	return fmt.Sprint(sessionID, "-export-", exporterIndex)
+}
+
 func (s *Solver) runExporters(ctx context.Context, ref string, exporters []exporter.ExporterInstance, inlineCacheExporter inlineCacheExporter, job *solver.Job, cached *result.Result[solver.CachedResult], inp *exporter.Source) (exporterResponse map[string]string, finalizers []exporter.FinalizeFunc, descrefs []exporter.DescriptorReference, err error) {
 	warnings, err := verifier.CheckInvalidPlatforms(ctx, inp)
 	if err != nil {
@@ -164,8 +168,8 @@ func (s *Solver) runExporters(ctx context.Context, ref string, exporters []expor
 	descs := make([]exporter.DescriptorReference, len(exporters))
 	var inlineCacheMu sync.Mutex
 	for i, exp := range exporters {
+		id := exporterVertexID(job.SessionID, i)
 		eg.Go(func() error {
-			id := fmt.Sprint(job.SessionID, "-export-", i)
 			return inBuilderContext(ctx, job, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
 				span, ctx := tracing.StartSpan(ctx, exp.Name())
 				defer span.End()
