@@ -781,6 +781,7 @@ func (dctx *dispatchContext) dispatchStages(ctx context.Context, allReachable ma
 			sourceMap:           dctx.opt.SourceMap,
 			lint:                dctx.lint,
 			dockerIgnoreMatcher: dockerIgnoreMatcher,
+			automounts:          opt.Automounts,
 		}
 
 		for _, cmd := range d.commands {
@@ -936,6 +937,7 @@ type dispatchOpt struct {
 	sourceMap           *llb.SourceMap
 	lint                *linter.Linter
 	dockerIgnoreMatcher *patternmatcher.PatternMatcher
+	automounts          []string
 }
 
 func getEnv(state llb.State) shell.EnvGetter {
@@ -1353,6 +1355,12 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if proxy != nil {
 		opt = append(opt, llb.WithProxy(*proxy))
 	}
+
+	automountOpts, err := dispatchAutomounts(d, dopt)
+	if err != nil {
+		return err
+	}
+	opt = append(opt, automountOpts...)
 
 	runMounts, err := dispatchRunMounts(d, c, sources, dopt)
 	if err != nil {
