@@ -111,12 +111,22 @@ func recvDiffCopy(ds grpc.ClientStream, dest string, cu CacheUpdater, progress p
 	}))
 }
 
-func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
+func syncTargetDiffCopy(ds grpc.ServerStream, dest string, mode FSSyncDirMode) error {
+	var merge bool
+	switch mode {
+	case "", FSSyncDirModeCopy:
+		merge = true
+	case FSSyncDirModeDelete:
+		merge = false
+	default:
+		return errors.Errorf("invalid local exporter mode %q", mode)
+	}
+
 	if err := os.MkdirAll(dest, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create synctarget dest dir %s", dest)
 	}
 	return errors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
-		Merge: true,
+		Merge: merge,
 		Filter: func() func(string, *fstypes.Stat) bool {
 			uid := os.Getuid()
 			gid := os.Getgid()

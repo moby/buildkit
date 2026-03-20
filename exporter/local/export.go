@@ -162,7 +162,9 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			progress := NewProgressHandler(ctx, lbl)
-			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
+			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress, map[string]string{
+				filesync.ExporterMetaLocalDirMode: string(e.opts.Mode),
+			}); err != nil {
 				return err
 			}
 			return nil
