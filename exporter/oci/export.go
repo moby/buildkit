@@ -149,6 +149,21 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
 
+	if _, ok := src.Metadata[exptypes.ExporterOCILayoutKey]; ok {
+		if e.opt.Variant == VariantDocker {
+			return nil, nil, nil, errors.New("docker exporter does not support OCI artifact layouts")
+		}
+		attests, err := containerimage.ResolveArtifactAttestations(src, e.opts.ForceInlineAttestations)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		resolvedAnnotations, err := containerimage.ResolveArtifactAnnotations(opts.Annotations, len(attests) > 0)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return e.exportOCILayout(ctx, src, buildInfo, resolvedAnnotations, attests)
+	}
+
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, nil, nil, err
@@ -288,6 +303,123 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 		err := contentutil.CopyChain(ctx, store, mprovider, *desc)
 		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	return resp, nil, nil, nil
+}
+
+func (e *imageExporterInstance) exportOCILayout(ctx context.Context, src *exporter.Source, buildInfo exporter.ExportBuildInfo, annotations *containerimage.Annotations, attestations []exporter.Attestation) (_ map[string]string, _ exporter.FinalizeFunc, _ exporter.DescriptorReference, err error) {
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer done(context.WithoutCancel(ctx))
+
+	var ref cache.ImmutableRef
+	if src.Ref != nil {
+		ref = src.Ref
+	} else if len(src.Refs) == 1 {
+		for _, r := range src.Refs {
+			ref = r
+		}
+	}
+	if ref == nil {
+		return nil, nil, nil, errors.New("OCI layout export requires exactly one ref")
+	}
+
+	desc, err := e.opt.ImageWriter.CommitOCILayout(ctx, ref, buildInfo.SessionID, annotations)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+		e.opts.ImageName = string(n)
+	}
+	if len(attestations) > 0 {
+		subjects, err := containerimage.DefaultArtifactSubjects(e.opts.ImageName, desc.Digest)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		desc, err = e.opt.ImageWriter.CommitAttestationsForDescriptor(ctx, &e.opts, *desc, buildInfo.SessionID, attestations, subjects, annotations)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	if desc.Annotations == nil {
+		desc.Annotations = map[string]string{}
+	}
+	if _, ok := desc.Annotations[ocispecs.AnnotationCreated]; !ok {
+		tm := time.Now()
+		if e.opts.Epoch != nil {
+			tm = *e.opts.Epoch
+		}
+		desc.Annotations[ocispecs.AnnotationCreated] = tm.UTC().Format(time.RFC3339)
+	}
+
+	resp := make(map[string]string)
+	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
+	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
+		resp[exptypes.ExporterImageConfigDigestKey] = v
+		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
+	}
+
+	dtdesc, err := json.Marshal(desc)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
+	names, err := normalizedNames(e.opts.ImageName)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if len(names) != 0 {
+		resp[exptypes.ExporterImageNameKey] = strings.Join(names, ",")
+	}
+
+	expOpts := []archiveexporter.ExportOpt{
+		archiveexporter.WithManifest(*desc, names...),
+		archiveexporter.WithAllPlatforms(),
+		archiveexporter.WithSkipDockerManifest(),
+	}
+
+	timeoutCtx, cancel := context.WithCancelCause(ctx)
+	timeoutCtx, _ = context.WithTimeoutCause(timeoutCtx, 5*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
+	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+
+	caller, err := e.opt.SessionManager.Get(timeoutCtx, buildInfo.SessionID, false)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	cs := e.opt.ImageWriter.ContentStore()
+	if e.tar {
+		w, err := filesync.CopyFileWriter(ctx, resp, e.id, caller)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		report := progress.OneOff(ctx, "sending tarball")
+		if err := archiveexporter.Export(ctx, cs, w, expOpts...); err != nil {
+			w.Close()
+			if grpcerrors.Code(err) == codes.AlreadyExists {
+				return resp, nil, nil, report(nil)
+			}
+			return nil, nil, nil, report(err)
+		}
+		err = w.Close()
+		if grpcerrors.Code(err) == codes.AlreadyExists {
+			return resp, nil, nil, report(nil)
+		}
+		if err != nil {
+			return nil, nil, nil, report(err)
+		}
+		report(nil)
+	} else {
+		store := sessioncontent.NewCallerStore(caller, "export")
+		if err := contentutil.CopyChain(ctx, store, cs, *desc); err != nil {
 			return nil, nil, nil, err
 		}
 	}

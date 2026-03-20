@@ -16,6 +16,12 @@ func TestMarsalBuildDefinitionSLSA1(t *testing.T) {
 },
 "internalParameters": {
 	"builderPlatform": "linux/amd64",
+		"postprocess": [{
+			"frontend": "artifact.v0",
+			"args": {
+				"type": "oci"
+			}
+		}],
 		"foo": "bar",
 		"abc": 123,
 		"def": {"one": 1}
@@ -28,6 +34,9 @@ func TestMarsalBuildDefinitionSLSA1(t *testing.T) {
 
 	require.Equal(t, "btype1", def.BuildType)
 	require.Equal(t, "linux/amd64", def.InternalParameters.BuilderPlatform)
+	require.Len(t, def.InternalParameters.Postprocess, 1)
+	require.Equal(t, "artifact.v0", def.InternalParameters.Postprocess[0].Frontend)
+	require.Equal(t, "oci", def.InternalParameters.Postprocess[0].Args["type"])
 	require.Equal(t, "bar", def.InternalParameters.ProvenanceCustomEnv["foo"])
 	require.InEpsilon(t, float64(123), def.InternalParameters.ProvenanceCustomEnv["abc"], 0.001)
 	require.Equal(t, map[string]any{"one": float64(1)}, def.InternalParameters.ProvenanceCustomEnv["def"])
@@ -48,6 +57,9 @@ func TestMarshalInvocation(t *testing.T) {
 	},
 	"environment": {
 		"platform": "linux/amd64",
+		"postprocess": [{
+			"frontend": "artifact.v0"
+		}],
 		"buildkit": "v0.10.3",
 		"custom": {
 			"foo": "bar"
@@ -63,6 +75,8 @@ func TestMarshalInvocation(t *testing.T) {
 	require.Equal(t, "git+https://github.com/example/repo.git", inv.ConfigSource.URI)
 	require.Equal(t, "dockerfile.v0", inv.Parameters.Frontend)
 	require.Equal(t, "linux/amd64", inv.Environment.Platform)
+	require.Len(t, inv.Environment.Postprocess, 1)
+	require.Equal(t, "artifact.v0", inv.Environment.Postprocess[0].Frontend)
 	require.Equal(t, "v0.10.3", inv.Environment.ProvenanceCustomEnv["buildkit"])
 	require.Equal(t, "bar", inv.Environment.ProvenanceCustomEnv["custom"].(map[string]any)["foo"])
 	require.Equal(t, []any{float64(1), float64(2), float64(3)}, inv.Environment.ProvenanceCustomEnv["bar"])

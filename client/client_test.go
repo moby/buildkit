@@ -209,6 +209,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testPullWithLayerLimit,
 	testExportAnnotations,
 	testExportAnnotationsMediaTypes,
+	testOCIArtifactPostprocessor,
 	testExportAttestationsOCIArtifact,
 	testExportAttestationsImageManifest,
 	testExportedImageLabels,
@@ -10106,6 +10107,411 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, images.MediaTypeDockerSchema2ManifestList, imgs.Index.MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
+}
+
+func testOCIArtifactPostprocessor(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const (
+		artifactType    = "application/vnd.buildkit.test.artifact.v1"
+		configMediaType = "application/vnd.buildkit.test.config.v1+json"
+		layerMediaType  = "application/vnd.buildkit.test.layer.v1"
+		artifactFile    = "artifact.txt"
+	)
+
+	artifactPayload := []byte("artifact payload")
+	expectedConfigDigest := digest.FromBytes([]byte("{}"))
+
+	artifactFrontend := func(configType, layerType string) gateway.BuildFunc {
+		return func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver")).File(
+				llb.Mkfile(artifactFile, 0600, artifactPayload),
+			)
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			layers, err := json.Marshal([]exptypes.ArtifactLayer{{
+				Path:      artifactFile,
+				MediaType: layerType,
+				Annotations: map[string]string{
+					ocispecs.AnnotationTitle: artifactFile,
+				},
+			}})
+			if err != nil {
+				return nil, err
+			}
+
+			res := gateway.NewResult()
+			res.SetRef(ref)
+			res.AddMeta(exptypes.ExporterArtifactKey, []byte("true"))
+			res.AddMeta(exptypes.ExporterArtifactTypeKey, []byte(artifactType))
+			res.AddMeta(exptypes.ExporterArtifactConfigTypeKey, []byte(configType))
+			res.AddMeta(exptypes.ExporterArtifactLayersKey, layers)
+			return res, nil
+		}
+	}
+
+	decodeDescriptor := func(t *testing.T, encoded string) ocispecs.Descriptor {
+		t.Helper()
+
+		dt, err := base64.StdEncoding.DecodeString(encoded)
+		require.NoError(t, err)
+
+		var desc ocispecs.Descriptor
+		require.NoError(t, json.Unmarshal(dt, &desc))
+		return desc
+	}
+
+	type provenanceStatement struct {
+		intoto.StatementHeader
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+
+	findArtifactDescriptors := func(t *testing.T, manifests []ocispecs.Descriptor) (ocispecs.Descriptor, ocispecs.Descriptor) {
+		t.Helper()
+
+		var artifactDesc, attestationDesc ocispecs.Descriptor
+		for _, desc := range manifests {
+			switch {
+			case desc.Platform == nil:
+				artifactDesc = desc
+			case platforms.Format(*desc.Platform) == "unknown/unknown":
+				attestationDesc = desc
+			}
+		}
+
+		require.NotEmpty(t, artifactDesc.Digest)
+		require.NotEmpty(t, attestationDesc.Digest)
+		return artifactDesc, attestationDesc
+	}
+
+	t.Run("local", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{{
+				Type:      ExporterLocal,
+				OutputDir: dir,
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(dir, artifactFile))
+		require.ErrorIs(t, err, os.ErrNotExist)
+
+		layoutData, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageLayoutFile))
+		require.NoError(t, err)
+		var layout ocispecs.ImageLayout
+		require.NoError(t, json.Unmarshal(layoutData, &layout))
+		require.Equal(t, ocispecs.ImageLayoutVersion, layout.Version)
+
+		indexData, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageIndexFile))
+		require.NoError(t, err)
+		var index ocispecs.Index
+		require.NoError(t, json.Unmarshal(indexData, &index))
+		require.Len(t, index.Manifests, 1)
+		require.Equal(t, artifactType, index.Manifests[0].ArtifactType)
+		require.Equal(t, ocispecs.MediaTypeImageManifest, index.Manifests[0].MediaType)
+
+		manifestData, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageBlobsDir, "sha256", index.Manifests[0].Digest.Encoded()))
+		require.NoError(t, err)
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(manifestData, &manifest))
+		require.Equal(t, artifactType, manifest.ArtifactType)
+		require.Equal(t, configMediaType, manifest.Config.MediaType)
+		require.Equal(t, expectedConfigDigest, manifest.Config.Digest)
+		require.Len(t, manifest.Layers, 1)
+		require.Equal(t, layerMediaType, manifest.Layers[0].MediaType)
+		require.Equal(t, artifactFile, manifest.Layers[0].Annotations[ocispecs.AnnotationTitle])
+
+		layerData, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageBlobsDir, "sha256", manifest.Layers[0].Digest.Encoded()))
+		require.NoError(t, err)
+		require.Equal(t, artifactPayload, layerData)
+	})
+
+	t.Run("local-provenance", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := c.Build(sb.Context(), SolveOpt{
+			FrontendAttrs: map[string]string{
+				"attest:provenance": "mode=max,version=v1",
+			},
+			Exports: []ExportEntry{{
+				Type:      ExporterLocal,
+				OutputDir: dir,
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		provDt, err := os.ReadFile(filepath.Join(dir, "provenance.json"))
+		require.NoError(t, err)
+
+		var stmt provenanceStatement
+		require.NoError(t, json.Unmarshal(provDt, &stmt))
+		require.Len(t, stmt.Predicate.BuildDefinition.InternalParameters.Postprocess, 1)
+		require.Equal(t, "artifact.v0", stmt.Predicate.BuildDefinition.InternalParameters.Postprocess[0].Frontend)
+		require.Equal(t, artifactType, stmt.Predicate.BuildDefinition.InternalParameters.Postprocess[0].Args[exptypes.ExporterArtifactTypeKey])
+	})
+
+	t.Run("oci", func(t *testing.T) {
+		workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+
+		dir := t.TempDir()
+		out := filepath.Join(dir, "artifact.tar")
+		outW, err := os.Create(out)
+		require.NoError(t, err)
+
+		resp, err := c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		desc := decodeDescriptor(t, resp.ExporterResponse[exptypes.ExporterImageDescriptorKey])
+		require.Equal(t, artifactType, desc.ArtifactType)
+		require.Equal(t, expectedConfigDigest.String(), resp.ExporterResponse[exptypes.ExporterImageConfigDigestKey])
+
+		dt, err := os.ReadFile(out)
+		require.NoError(t, err)
+
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		var index ocispecs.Index
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index))
+		require.Len(t, index.Manifests, 1)
+		require.Equal(t, artifactType, index.Manifests[0].ArtifactType)
+
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &manifest))
+		require.Equal(t, artifactType, manifest.ArtifactType)
+		require.Equal(t, configMediaType, manifest.Config.MediaType)
+		require.Equal(t, expectedConfigDigest, manifest.Config.Digest)
+	})
+
+	t.Run("oci-inline-provenance", func(t *testing.T) {
+		workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+
+		dir := t.TempDir()
+		out := filepath.Join(dir, "artifact-with-provenance.tar")
+		outW, err := os.Create(out)
+		require.NoError(t, err)
+
+		resp, err := c.Build(sb.Context(), SolveOpt{
+			FrontendAttrs: map[string]string{
+				"attest:provenance": "mode=max,inline-only=true,version=v1",
+			},
+			Exports: []ExportEntry{{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"annotation-index.ai":                "artifact index",
+					"annotation-index-descriptor.aid":    "artifact index descriptor",
+					"annotation-manifest.am":             "artifact manifest",
+					"annotation-manifest-descriptor.amd": "artifact manifest descriptor",
+				},
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		desc := decodeDescriptor(t, resp.ExporterResponse[exptypes.ExporterImageDescriptorKey])
+		require.Equal(t, ocispecs.MediaTypeImageIndex, desc.MediaType)
+		require.Equal(t, expectedConfigDigest.String(), resp.ExporterResponse[exptypes.ExporterImageConfigDigestKey])
+
+		dt, err := os.ReadFile(out)
+		require.NoError(t, err)
+
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+
+		var layout ocispecs.Index
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &layout))
+		require.Len(t, layout.Manifests, 1)
+		require.Equal(t, "artifact index descriptor", layout.Manifests[0].Annotations["aid"])
+
+		var index ocispecs.Index
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+layout.Manifests[0].Digest.Hex()].Data, &index))
+		require.Equal(t, "artifact index", index.Annotations["ai"])
+		require.Len(t, index.Manifests, 2)
+
+		artifactDesc, attestationDesc := findArtifactDescriptors(t, index.Manifests)
+		require.Equal(t, artifactType, artifactDesc.ArtifactType)
+		require.Equal(t, "artifact manifest descriptor", artifactDesc.Annotations["amd"])
+		require.Equal(t, "unknown/unknown", platforms.Format(*attestationDesc.Platform))
+
+		var artifactManifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+artifactDesc.Digest.Hex()].Data, &artifactManifest))
+		require.Equal(t, artifactType, artifactManifest.ArtifactType)
+		require.Equal(t, "artifact manifest", artifactManifest.Annotations["am"])
+
+		var attestationManifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+attestationDesc.Digest.Hex()].Data, &attestationManifest))
+		require.Equal(t, "application/vnd.docker.attestation.manifest.v1+json", attestationManifest.ArtifactType)
+		require.NotNil(t, attestationManifest.Subject)
+		require.Equal(t, artifactDesc.Digest, attestationManifest.Subject.Digest)
+		require.Len(t, attestationManifest.Layers, 1)
+
+		var stmt provenanceStatement
+		require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+attestationManifest.Layers[0].Digest.Hex()].Data, &stmt))
+		require.Len(t, stmt.Predicate.BuildDefinition.InternalParameters.Postprocess, 1)
+		require.Equal(t, "artifact.v0", stmt.Predicate.BuildDefinition.InternalParameters.Postprocess[0].Frontend)
+	})
+
+	t.Run("image", func(t *testing.T) {
+		workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+
+		registry, err := sb.NewRegistry()
+		if errors.Is(err, integration.ErrRequirements) {
+			t.Skip(err.Error())
+		}
+		require.NoError(t, err)
+
+		target := registry + "/buildkit/testartifactpostprocessor:latest"
+		resp, err := c.Build(sb.Context(), SolveOpt{
+			Exports: []ExportEntry{{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		desc := decodeDescriptor(t, resp.ExporterResponse[exptypes.ExporterImageDescriptorKey])
+		require.Equal(t, artifactType, desc.ArtifactType)
+		require.Equal(t, desc.Digest.String(), resp.ExporterResponse[exptypes.ExporterImageDigestKey])
+		require.Equal(t, expectedConfigDigest.String(), resp.ExporterResponse[exptypes.ExporterImageConfigDigestKey])
+
+		_, provider, err := contentutil.ProviderFromRef(target)
+		require.NoError(t, err)
+		manifestData, err := content.ReadBlob(sb.Context(), provider, desc)
+		require.NoError(t, err)
+
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(manifestData, &manifest))
+		require.Equal(t, artifactType, manifest.ArtifactType)
+		require.Equal(t, configMediaType, manifest.Config.MediaType)
+		require.Equal(t, expectedConfigDigest, manifest.Config.Digest)
+		require.Len(t, manifest.Layers, 1)
+		require.Equal(t, layerMediaType, manifest.Layers[0].MediaType)
+	})
+
+	t.Run("image-provenance", func(t *testing.T) {
+		workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+
+		registry, err := sb.NewRegistry()
+		if errors.Is(err, integration.ErrRequirements) {
+			t.Skip(err.Error())
+		}
+		require.NoError(t, err)
+
+		target := registry + "/buildkit/testartifactpostprocessor-provenance:latest"
+		resp, err := c.Build(sb.Context(), SolveOpt{
+			FrontendAttrs: map[string]string{
+				"attest:provenance": "mode=max,version=v1",
+			},
+			Exports: []ExportEntry{{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			}},
+		}, "", artifactFrontend(configMediaType, layerMediaType), nil)
+		require.NoError(t, err)
+
+		desc := decodeDescriptor(t, resp.ExporterResponse[exptypes.ExporterImageDescriptorKey])
+		require.Equal(t, ocispecs.MediaTypeImageIndex, desc.MediaType)
+		require.Equal(t, desc.Digest.String(), resp.ExporterResponse[exptypes.ExporterImageDigestKey])
+		require.Equal(t, expectedConfigDigest.String(), resp.ExporterResponse[exptypes.ExporterImageConfigDigestKey])
+
+		_, provider, err := contentutil.ProviderFromRef(target)
+		require.NoError(t, err)
+
+		indexData, err := content.ReadBlob(sb.Context(), provider, desc)
+		require.NoError(t, err)
+
+		var index ocispecs.Index
+		require.NoError(t, json.Unmarshal(indexData, &index))
+		require.Len(t, index.Manifests, 2)
+
+		artifactDesc, attestationDesc := findArtifactDescriptors(t, index.Manifests)
+		require.Equal(t, artifactType, artifactDesc.ArtifactType)
+		require.Equal(t, "unknown/unknown", platforms.Format(*attestationDesc.Platform))
+		require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, attestationDesc.Annotations[attestation.DockerAnnotationReferenceType])
+		require.Equal(t, artifactDesc.Digest.String(), attestationDesc.Annotations[attestation.DockerAnnotationReferenceDigest])
+
+		artifactManifestData, err := content.ReadBlob(sb.Context(), provider, artifactDesc)
+		require.NoError(t, err)
+		var artifactManifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(artifactManifestData, &artifactManifest))
+		require.Equal(t, artifactType, artifactManifest.ArtifactType)
+		require.Equal(t, configMediaType, artifactManifest.Config.MediaType)
+		require.Equal(t, expectedConfigDigest, artifactManifest.Config.Digest)
+
+		attestationManifestData, err := content.ReadBlob(sb.Context(), provider, attestationDesc)
+		require.NoError(t, err)
+		var attestationManifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(attestationManifestData, &attestationManifest))
+		require.Equal(t, "application/vnd.docker.attestation.manifest.v1+json", attestationManifest.ArtifactType)
+		require.NotNil(t, attestationManifest.Subject)
+		require.Equal(t, artifactDesc.Digest, attestationManifest.Subject.Digest)
+		require.Len(t, attestationManifest.Layers, 1)
+
+		stmtData, err := content.ReadBlob(sb.Context(), provider, attestationManifest.Layers[0])
+		require.NoError(t, err)
+		var stmt provenanceStatement
+		require.NoError(t, json.Unmarshal(stmtData, &stmt))
+		require.Len(t, stmt.Predicate.BuildDefinition.InternalParameters.Postprocess, 1)
+		require.Equal(t, "artifact.v0", stmt.Predicate.BuildDefinition.InternalParameters.Postprocess[0].Frontend)
+	})
+
+	t.Run("validation", func(t *testing.T) {
+		for _, tc := range []struct {
+			name          string
+			configType    string
+			layerType     string
+			errorContains string
+		}{
+			{
+				name:          "missing-config-media-type",
+				layerType:     layerMediaType,
+				errorContains: "config descriptor mediaType is required",
+			},
+			{
+				name:          "missing-layer-media-type",
+				configType:    configMediaType,
+				errorContains: "layer 0 descriptor mediaType is required",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				_, err := c.Build(sb.Context(), SolveOpt{
+					Exports: []ExportEntry{{
+						Type:      ExporterLocal,
+						OutputDir: dir,
+					}},
+				}, "", artifactFrontend(tc.configType, tc.layerType), nil)
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errorContains)
+			})
+		}
+	})
 }
 
 func testExportAttestationsOCIArtifact(t *testing.T, sb integration.Sandbox) {
