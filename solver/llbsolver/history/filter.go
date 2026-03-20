@@ -46,11 +46,15 @@ func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, l
 			return nil, errors.Errorf("invalid limit %d", limit)
 		}
 		slices.SortFunc(out, func(a, b *controlapi.BuildHistoryEvent) int {
-			if a.Record == nil || b.Record == nil {
+			aRec := a != nil && a.Record != nil
+			bRec := b != nil && b.Record != nil
+			switch {
+			case !aRec && !bRec:
 				return 0
-			}
-			if a.Record == nil {
+			case !aRec:
 				return 1
+			case !bRec:
+				return -1
 			}
 			return b.Record.CreatedAt.AsTime().Compare(a.Record.CreatedAt.AsTime())
 		})
