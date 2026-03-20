@@ -41,6 +41,13 @@ const (
 	keyShmSize          = "shm-size"
 	keyTargetPlatform   = "platform"
 	keyUlimit           = "ulimit"
+	keyMemory           = "memory"
+	keyMemorySwap       = "memswap"
+	keyCPUShares        = "cpushares"
+	keyCPUPeriod        = "cpuperiod"
+	keyCPUQuota         = "cpuquota"
+	keyCPUsetCPUs       = "cpusetcpus"
+	keyCPUsetMems       = "cpusetmems"
 	keyCacheFrom        = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports     = "cache-imports" // JSON representation of []CacheOptionsEntry
 
@@ -67,6 +74,7 @@ type Config struct {
 	ShmSize          int64
 	Target           string
 	Ulimits          []*pb.Ulimit
+	LinuxResources   *pb.LinuxResources
 	Devices          []*pb.CDIDevice
 	LinterConfig     *linter.Config
 
@@ -191,6 +199,12 @@ func (bc *Client) init() error {
 		return errors.Wrap(err, "failed to parse ulimit")
 	}
 	bc.Ulimits = ulimits
+
+	linuxRes, err := parseLinuxResources(opts)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse resource limits")
+	}
+	bc.LinuxResources = linuxRes
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
 	if err != nil {

@@ -55,7 +55,8 @@ type VertexOptions struct {
 	Description  map[string]string // text values with no special meaning for solver
 	ExportCache  *bool
 	// WorkerConstraint
-	ProgressGroup *pb.ProgressGroup
+	ProgressGroup  *pb.ProgressGroup
+	LinuxResources *pb.LinuxResources
 }
 
 // Result is an abstract return value for a solve
@@ -184,6 +185,10 @@ type JobContext interface {
 	// ResolverCache returns object for memorizing/synchronizing remote resolving decisions during the job.
 	// Steps from same build job will share the same resolver cache.
 	ResolverCache() ResolverCache
+	// LinuxResources returns the merged Linux resource limits for this vertex.
+	// When multiple jobs share the same vertex with different limits, the most
+	// relaxed (least restrictive) value for each field is used.
+	LinuxResources() *pb.LinuxResources
 }
 
 type ResolverCache interface {

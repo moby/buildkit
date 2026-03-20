@@ -97,6 +97,58 @@ func parseUlimits(v string) ([]*pb.Ulimit, error) {
 	return out, nil
 }
 
+func parseLinuxResources(opts map[string]string) (*pb.LinuxResources, error) {
+	var res pb.LinuxResources
+
+	if v, ok := opts[keyMemory]; ok && v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value: %s", keyMemory, v)
+		}
+		res.Memory = n
+	}
+	if v, ok := opts[keyMemorySwap]; ok && v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value: %s", keyMemorySwap, v)
+		}
+		res.MemorySwap = n
+	}
+	if v, ok := opts[keyCPUShares]; ok && v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value: %s", keyCPUShares, v)
+		}
+		res.CpuShares = n
+	}
+	if v, ok := opts[keyCPUPeriod]; ok && v != "" {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value: %s", keyCPUPeriod, v)
+		}
+		res.CpuPeriod = n
+	}
+	if v, ok := opts[keyCPUQuota]; ok && v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value: %s", keyCPUQuota, v)
+		}
+		res.CpuQuota = n
+	}
+	if v, ok := opts[keyCPUsetCPUs]; ok && v != "" {
+		res.CpusetCpus = v
+	}
+	if v, ok := opts[keyCPUsetMems]; ok && v != "" {
+		res.CpusetMems = v
+	}
+
+	if res.Memory == 0 && res.MemorySwap == 0 && res.CpuShares == 0 &&
+		res.CpuPeriod == 0 && res.CpuQuota == 0 && res.CpusetCpus == "" && res.CpusetMems == "" {
+		return nil, nil
+	}
+	return &res, nil
+}
+
 func parseNetMode(v string) (pb.NetMode, error) {
 	if v == "" {
 		return llb.NetModeSandbox, nil
