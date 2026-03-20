@@ -108,6 +108,7 @@ var allTests = integration.TestFuncs(
 	testCacheMountModeNoCache,
 	testDockerfileFromHTTP,
 	testBuiltinArgs,
+	testBuiltinSyntaxOverrideEmpty,
 	testPullScratch,
 	testSymlinkDestination,
 	testHTTPDockerfile,
@@ -6884,6 +6885,61 @@ COPY --from=build out /
 	require.NoError(t, err)
 	expectedStr = integration.UnixOrWindows("hpvalue2::::foocontents2::::bazcontent", "hpvalue2::%NO_PROXY%::foocontents2::%BAR%::bazcontent\r\n")
 	require.Equal(t, expectedStr, string(dt))
+}
+
+func testBuiltinSyntaxOverrideEmpty(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+# syntax=docker/dockerfile-upstream:master
+FROM busybox AS build
+RUN echo -n ok > /out
+FROM scratch
+COPY --from=build /out /out
+`,
+		`
+# syntax=docker/dockerfile-upstream:master
+FROM nanoserver:latest AS build
+USER ContainerAdministrator
+RUN echo ok>C:\out
+FROM nanoserver:latest
+USER ContainerAdministrator
+COPY --from=build /out /out
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_SYNTAX": "",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "ok", strings.TrimSpace(string(dt)))
 }
 
 func testTarContext(t *testing.T, sb integration.Sandbox) {

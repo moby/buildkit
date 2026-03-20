@@ -2723,7 +2723,7 @@ RUN echo "I'm building for $TARGETPLATFORM"
 | `BUILDKIT_INLINE_CACHE`[^2]      | Bool   | Inline cache metadata to image config or not.                                                                                                                                                                    |
 | `BUILDKIT_MULTI_PLATFORM`        | Bool   | Opt into deterministic output regardless of multi-platform output or not.                                                                                                                                        |
 | `BUILDKIT_SANDBOX_HOSTNAME`      | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                                     |
-| `BUILDKIT_SYNTAX`                | String | Set frontend image                                                                                                                                                                                               |
+| `BUILDKIT_SYNTAX`                | String | Set frontend image. Set to an empty value to ignore the Dockerfile `# syntax=` directive and use the built-in frontend instead.                                                                                 |
 | `SOURCE_DATE_EPOCH`              | Int    | Set the Unix timestamp for created image and layers. More info from [reproducible builds](https://reproducible-builds.org/docs/source-date-epoch/). Supported since Dockerfile 1.5, BuildKit 0.11                |
 
 #### Example: keep `.git` dir
