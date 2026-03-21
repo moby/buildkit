@@ -286,6 +286,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
+	opt.Epoch, err = resolveSourceDateEpoch(opt.Epoch, globalArgs)
+	if err != nil {
+		return nil, err
+	}
+
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
 		metaResolver = imagemetaresolver.Default()
@@ -332,6 +337,27 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	return target, nil
+}
+
+func resolveSourceDateEpoch(explicit *time.Time, globalArgs *llb.EnvList) (*time.Time, error) {
+	if explicit != nil {
+		return explicit, nil
+	}
+	if globalArgs == nil {
+		return nil, nil
+	}
+
+	v, ok := globalArgs.Get("SOURCE_DATE_EPOCH")
+	if !ok || v == "" {
+		return nil, nil
+	}
+
+	sde, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
+	}
+	tm := time.Unix(sde, 0).UTC()
+	return &tm, nil
 }
 
 func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) error {

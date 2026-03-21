@@ -229,6 +229,9 @@ var heredocTests = []integration.Test{}
 var reproTests = integration.TestFuncs(
 	testReproSourceDateEpoch,
 	testWorkdirSourceDateEpochReproducible,
+	testSourceDateEpochDockerfileDefault,
+	testSourceDateEpochDockerfileDefaultOverride,
+	testSourceDateEpochDockerfileDefaultInvalid,
 )
 
 var (
@@ -1024,6 +1027,28 @@ WORKDIR /mydir
 	require.NoError(t, err)
 
 	require.Equal(t, index1, index2)
+}
+
+func readOCIImageCreated(t *testing.T, dt []byte) time.Time {
+	t.Helper()
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	var img ocispecs.Image
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+	require.NoError(t, err)
+	require.NotNil(t, img.Created)
+
+	return *img.Created
 }
 
 func testCacheReleased(t *testing.T, sb integration.Sandbox) {
@@ -8867,7 +8892,7 @@ COPY Dockerfile .
 	outW, err := os.Create(out)
 	require.NoError(t, err)
 
-	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+	tm := time.Unix(1700000001, 0).UTC()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -8912,6 +8937,151 @@ COPY Dockerfile .
 	for _, h := range img.History {
 		require.Equal(t, tm.Unix(), h.Created.Unix())
 	}
+}
+
+func testSourceDateEpochDockerfileDefault(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+	dockerfile := []byte(fmt.Sprintf(`
+ARG SOURCE_DATE_EPOCH=%d
+FROM scratch
+COPY Dockerfile .
+`, tm.Unix()))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"source-date-epoch": "",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	require.Equal(t, tm.Unix(), readOCIImageCreated(t, dt).Unix())
+}
+
+func testSourceDateEpochDockerfileDefaultOverride(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	defaultTM := time.Unix(1700000001, 0).UTC()
+	overrideTM := time.Unix(1700000002, 0).UTC()
+	dockerfile := []byte(fmt.Sprintf(`
+ARG SOURCE_DATE_EPOCH=%d
+FROM scratch
+COPY Dockerfile .
+`, defaultTM.Unix()))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", overrideTM.Unix()),
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"source-date-epoch": "",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	require.Equal(t, overrideTM.Unix(), readOCIImageCreated(t, dt).Unix())
+}
+
+func testSourceDateEpochDockerfileDefaultInvalid(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=not-a-timestamp
+FROM scratch
+COPY Dockerfile .
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"source-date-epoch": "",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.ErrorContains(t, err, "invalid SOURCE_DATE_EPOCH: not-a-timestamp")
 }
 
 func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {

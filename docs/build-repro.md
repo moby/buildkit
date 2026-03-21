@@ -43,6 +43,14 @@ Any source type is supported, but how to pin a source depends on the type.
 The Dockerfile frontend supports consuming the `SOURCE_DATE_EPOCH` value as a special build arg, since BuildKit 0.11.
 Minimal support is also available on older BuildKit when using Dockerfile 1.5 frontend.
 
+When the caller does not pass `SOURCE_DATE_EPOCH`, the Dockerfile may define a
+default in the global scope:
+
+```dockerfile
+ARG SOURCE_DATE_EPOCH=1704067200
+FROM alpine
+```
+
 ```console
 buildctl build --frontend dockerfile.v0 --opt build-arg:SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) ...
 ```
