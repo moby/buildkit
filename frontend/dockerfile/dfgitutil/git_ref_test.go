@@ -215,6 +215,26 @@ func TestParseGitRef(t *testing.T) {
 			},
 		},
 		{
+			ref: "https://github.com/moby/buildkit.git?mtime=commit",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				MTime:     "commit",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?mtime=checkout",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+				MTime:     "checkout",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?mtime=invalid",
+			err: "invalid mtime value",
+		},
+		{
 			ref: "https://github.com/moby/buildkit.git?invalid=123",
 			err: "unexpected query \"invalid\"",
 		},

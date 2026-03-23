@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
@@ -134,6 +135,8 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 				id.VerifySignature = &GitSignatureVerifyOptions{}
 			}
 			id.VerifySignature.IgnoreSignedTag = v == "true"
+		case pb.AttrGitMTime:
+			id.MTime = v
 		}
 	}
 
@@ -263,6 +266,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 	}
 	if gs.src.SkipSubmodules {
 		key += "(skip-submodules)"
+	}
+	if gs.src.MTime != "" && gs.src.MTime != "checkout" {
+		key += "(mtime=" + gs.src.MTime + ")"
 	}
 	return key
 }
@@ -1113,6 +1119,16 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		}
 	}
 
+	if gs.src.MTime == "commit" {
+		commitTime, err := getCommitTime(ctx, git, ref)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get commit time for %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+		if err := resetSnapshotMtimes(checkoutDir, commitTime); err != nil {
+			return nil, errors.Wrapf(err, "failed to normalize mtimes for %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+	}
+
 	if idmap := mount.IdentityMapping(); idmap != nil {
 		uid, gid := idmap.RootPair()
 		err := filepath.WalkDir(gitDir, func(p string, _ os.DirEntry, _ error) error {
@@ -1139,6 +1155,50 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	}()
 
 	return snap, nil
+}
+
+// getCommitTime returns the committer timestamp of the resolved commit.
+// For annotated tags, it peels to the underlying commit.
+func getCommitTime(ctx context.Context, git *gitutil.GitCLI, ref string) (time.Time, error) {
+	// %ct = committer date, UNIX timestamp; ^{commit} peels tags
+	buf, err := git.Run(ctx, "log", "-1", "--format=%ct", ref+"^{commit}")
+	if err != nil {
+		return time.Time{}, err
+	}
+	ts, err := strconv.ParseInt(strings.TrimSpace(string(buf)), 10, 64)
+	if err != nil {
+		return time.Time{}, errors.Wrapf(err, "failed to parse commit timestamp %q", string(buf))
+	}
+	return time.Unix(ts, 0), nil
+}
+
+// resetSnapshotMtimes walks dir and sets the mtime of every file,
+// symlink, and directory to t. Directories are set bottom-up so that
+// a parent's mtime is not invalidated by a later child write.
+func resetSnapshotMtimes(dir string, t time.Time) error {
+	var dirs []string
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			dirs = append(dirs, p)
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return lchtimes(p, t)
+		}
+		return os.Chtimes(p, t, t)
+	})
+	if err != nil {
+		return err
+	}
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if err := os.Chtimes(dirs[i], t, t); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type wouldClobberExistingTagError struct {
