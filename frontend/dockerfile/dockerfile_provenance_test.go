@@ -172,7 +172,7 @@ RUN echo ok> /foo
 				require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 				var attest intoto.Statement
 				require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-				require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+				require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 
 				if slsaVersion == "" || slsaVersion == "v1" {
 					require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
@@ -512,7 +512,7 @@ COPY myapp.Dockerfile /
 			require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 			var attest intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 
 			_, isClient := f.(*clientFrontend)
 			_, isGateway := f.(*gatewayFrontend)
@@ -708,7 +708,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 		require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+		require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 		require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 		type stmtT struct {
 			Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
@@ -889,7 +889,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	type stmtT struct {
 		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
@@ -921,7 +921,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	stmt = stmtT{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
@@ -1142,7 +1142,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
 	type stmtT struct {
 		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
