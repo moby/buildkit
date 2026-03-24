@@ -111,7 +111,7 @@ the following SBOM:
 
 ```json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://spdx.dev/Document",
   "subject": [
     {
