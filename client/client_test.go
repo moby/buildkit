@@ -240,6 +240,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalForcePlatformSplit,
 	testExportLocalModeCopyKeepsStaleDestinationFiles,
 	testExportLocalModeDeleteRemovesStaleDestinationFiles,
+	testExportLocalModeCopyMultiPlatformKeepsAllPlatforms,
+	testExportLocalModeDeleteMultiPlatformKeepsAllPlatforms,
 	testExportLocalModeInvalid,
 	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
@@ -7704,6 +7706,132 @@ func testExportLocalModeDeleteRemovesStaleDestinationFiles(t *testing.T, sb inte
 	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = os.Stat(filepath.Join(destDir, "stale-dir"))
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func testExportLocalModeCopyMultiPlatformKeepsAllPlatforms(t *testing.T, sb integration.Sandbox) {
+	testExportLocalModeMultiPlatformKeepsAllPlatforms(t, sb, false)
+}
+
+func testExportLocalModeDeleteMultiPlatformKeepsAllPlatforms(t *testing.T, sb integration.Sandbox) {
+	testExportLocalModeMultiPlatformKeepsAllPlatforms(t, sb, true)
+}
+
+func testExportLocalModeMultiPlatformKeepsAllPlatforms(t *testing.T, sb integration.Sandbox, deleteMode bool) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const filesPerPlatform = 20
+	platformsToTest := []string{"linux/amd64", "linux/arm64", "linux/arm/v7", "linux/s390x"}
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{
+			Platforms: make([]exptypes.Platform, len(platformsToTest)),
+		}
+		for i, platform := range platformsToTest {
+			st := llb.Scratch()
+			for j := range filesPerPlatform {
+				st = st.File(
+					llb.Mkfile(fmt.Sprintf("file-%03d.txt", j), 0600, fmt.Appendf(nil, "%s-%d", platform, j)),
+				)
+			}
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			r, err := c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+
+			_, err = ref.ToState()
+			if err != nil {
+				return nil, err
+			}
+			res.AddRef(platform, ref)
+
+			expPlatforms.Platforms[i] = exptypes.Platform{
+				ID:       platform,
+				Platform: platforms.MustParse(platform),
+			}
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	destDir := t.TempDir()
+
+	// Pre-populate dest with directories matching the platform-split naming
+	// convention. This is critical for exposing the race in delete mode:
+	// each platform's fsutil.Receive does a dest-walk at the start and, with
+	// Merge=false (mode=delete), flags everything not in its own stream for
+	// deletion — including other platforms' pre-existing directories. Without
+	// pre-population the dest starts empty and the concurrent dest-walks all
+	// see nothing to delete, hiding the cross-platform deletion race.
+	err = os.WriteFile(filepath.Join(destDir, "stale.txt"), []byte("stale"), 0600)
+	require.NoError(t, err)
+	for _, platform := range platformsToTest {
+		platDir := filepath.Join(destDir, strings.ReplaceAll(platform, "/", "_"))
+		err = os.MkdirAll(platDir, 0755)
+		require.NoError(t, err)
+		for j := range filesPerPlatform {
+			err = os.WriteFile(filepath.Join(platDir, fmt.Sprintf("old-%03d.txt", j)), []byte("old"), 0600)
+			require.NoError(t, err)
+		}
+	}
+
+	attrs := map[string]string{}
+	if deleteMode {
+		attrs["mode"] = "delete"
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs:     attrs,
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	if deleteMode {
+		// Stale top-level file must be gone.
+		_, err = os.Stat(filepath.Join(destDir, "stale.txt"))
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+
+	// Every platform's build output must survive (no cross-platform deletion).
+	for _, platform := range platformsToTest {
+		platformDir := filepath.Join(destDir, strings.ReplaceAll(platform, "/", "_"))
+		for j := range filesPerPlatform {
+			dt, err := os.ReadFile(filepath.Join(platformDir, fmt.Sprintf("file-%03d.txt", j)))
+			require.NoError(t, err, "missing build output file-%03d.txt for %s", j, platform)
+			require.Equal(t, fmt.Sprintf("%s-%d", platform, j), string(dt))
+		}
+		if deleteMode {
+			// Pre-existing files within each platform dir must be cleaned up.
+			_, err = os.Stat(filepath.Join(platformDir, "old-000.txt"))
+			require.ErrorIs(t, err, os.ErrNotExist, "stale file not removed for %s", platform)
+		}
+	}
 }
 
 func testExportLocalModeInvalid(t *testing.T, sb integration.Sandbox) {
