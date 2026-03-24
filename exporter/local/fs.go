@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
+	intotojson "github.com/moby/buildkit/exporter/attestation/intoto"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -148,7 +148,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		return nil, nil, err
 	}
 	if len(attestations) > 0 {
-		subjects := []intoto.Subject{}
+		subjects := []intotojson.Subject{}
 		err = outputFS.Walk(ctx, "", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -165,7 +165,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 			if _, err := io.Copy(d.Hash(), f); err != nil {
 				return err
 			}
-			subjects = append(subjects, intoto.Subject{
+			subjects = append(subjects, intotojson.Subject{
 				Name:   path,
 				Digest: result.ToDigestMap(d.Digest()),
 			})
