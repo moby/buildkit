@@ -344,7 +344,7 @@ func testSourceMetaPolicySessionResolveAttestations(t *testing.T, sb integration
 
 				var stmt intoto.Statement
 				require.NoError(t, json.Unmarshal(blob.Data, &stmt))
-				require.Equal(t, "https://in-toto.io/Statement/v0.1", stmt.Type)
+				require.Equal(t, intoto.StatementInTotoV1, stmt.Type)
 				require.Equal(t, layerPredicateType, stmt.PredicateType)
 				require.NotEmpty(t, stmt.Subject)
 				require.Equal(t, imageManifestDigest.Hex(), stmt.Subject[0].Digest["sha256"])
