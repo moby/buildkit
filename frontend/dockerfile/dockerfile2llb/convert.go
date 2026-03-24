@@ -208,6 +208,7 @@ type dispatchContext struct {
 	opt               ConvertOpt
 	platformOpt       *platformOpt
 	globalArgs        *llb.EnvList
+	epoch             *time.Time
 	shlex             *shell.Lex
 	outline           outlineCapture
 	lint              *linter.Linter
@@ -300,9 +301,19 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
-	opt.Epoch, err = resolveSourceDateEpoch(opt.Epoch, globalArgs)
-	if err != nil {
-		return nil, err
+	var resolvedEpoch *time.Time
+	if sourceDateEpoch, ok := getBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH"); ok {
+		resolvedEpoch, err = resolveSourceDateEpochValue(ctx, sourceDateEpoch, opt.Client)
+		if err != nil {
+			return nil, err
+		}
+		if sourceDateEpoch == "context" {
+			var resolvedValue string
+			if resolvedEpoch != nil {
+				resolvedValue = strconv.FormatInt(resolvedEpoch.Unix(), 10)
+			}
+			globalArgs = setBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH", resolvedValue)
+		}
 	}
 
 	metaResolver := opt.MetaResolver
@@ -314,6 +325,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		opt:               opt,
 		platformOpt:       platformOpt,
 		globalArgs:        globalArgs,
+		epoch:             resolvedEpoch,
 		shlex:             shlex,
 		outline:           outline,
 		lint:              lint,
@@ -353,17 +365,15 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	return target, nil
 }
 
-func resolveSourceDateEpoch(explicit *time.Time, globalArgs *llb.EnvList) (*time.Time, error) {
-	if explicit != nil {
-		return explicit, nil
-	}
-	if globalArgs == nil {
+func resolveSourceDateEpochValue(ctx context.Context, v string, client *dockerui.Client) (*time.Time, error) {
+	if v == "" {
 		return nil, nil
 	}
-
-	v, ok := globalArgs.Get("SOURCE_DATE_EPOCH")
-	if !ok || v == "" {
-		return nil, nil
+	if v == "context" {
+		if client == nil {
+			return nil, nil
+		}
+		return client.ResolveMainContextSourceDateEpoch(ctx)
 	}
 
 	sde, err := strconv.ParseInt(v, 10, 64)
@@ -372,6 +382,41 @@ func resolveSourceDateEpoch(explicit *time.Time, globalArgs *llb.EnvList) (*time
 	}
 	tm := time.Unix(sde, 0).UTC()
 	return &tm, nil
+}
+
+func getBuildArgValue(buildArgs map[string]string, globalArgs *llb.EnvList, key string) (string, bool) {
+	if v, ok := buildArgs[key]; ok {
+		return v, true
+	}
+	if globalArgs == nil {
+		return "", false
+	}
+	v, ok := globalArgs.Get(key)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
+}
+
+func setBuildArgValue(buildArgs map[string]string, globalArgs *llb.EnvList, key, value string) *llb.EnvList {
+	if _, ok := buildArgs[key]; ok {
+		if value == "" {
+			delete(buildArgs, key)
+		} else {
+			buildArgs[key] = value
+		}
+	}
+	if globalArgs != nil {
+		if _, ok := globalArgs.Get(key); ok {
+			if value == "" {
+				updated := globalArgs.Delete(key)
+				globalArgs = &updated
+			} else {
+				globalArgs = globalArgs.AddOrReplace(key, value)
+			}
+		}
+	}
+	return globalArgs
 }
 
 func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) error {
@@ -402,7 +447,7 @@ func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) er
 			stageName:      st.Name,
 			prefixPlatform: dctx.opt.MultiPlatformRequested,
 			outline:        dctx.outline.clone(),
-			epoch:          dctx.opt.Epoch,
+			epoch:          dctx.epoch,
 		}
 
 		if v := st.Platform; v != "" {

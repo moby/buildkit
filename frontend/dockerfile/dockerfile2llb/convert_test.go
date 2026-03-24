@@ -276,3 +276,19 @@ func TestDispatchHealthcheckHistory(t *testing.T) {
 	want := `HEALTHCHECK {Test:[bin -c exit 0] Interval:1s Timeout:10s StartPeriod:3s StartInterval:100ms Retries:5}`
 	require.Equal(t, want, d.image.History[0].CreatedBy)
 }
+
+func TestResolveSourceDateEpochValue(t *testing.T) {
+	t.Parallel()
+
+	tm, err := resolveSourceDateEpochValue(context.Background(), "1700000501", nil)
+	require.NoError(t, err)
+	require.NotNil(t, tm)
+	assert.Equal(t, time.Unix(1700000501, 0).UTC(), *tm)
+
+	tm, err = resolveSourceDateEpochValue(context.Background(), "context", nil)
+	require.NoError(t, err)
+	assert.Nil(t, tm)
+
+	_, err = resolveSourceDateEpochValue(context.Background(), "not-a-timestamp", nil)
+	require.ErrorContains(t, err, "invalid SOURCE_DATE_EPOCH")
+}

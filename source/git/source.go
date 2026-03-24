@@ -287,12 +287,12 @@ func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *se
 		return nil, err
 	}
 
+	gsh.cacheCommit = md.Checksum
+	gsh.sha256 = len(md.Checksum) == 64
+
 	if !opt.ReturnObject && id.VerifySignature == nil {
 		return md, nil
 	}
-
-	gsh.cacheCommit = md.Checksum
-	gsh.sha256 = len(md.Checksum) == 64
 
 	if err := gsh.addGitObjectsToMetadata(ctx, jobCtx, md); err != nil {
 		return nil, err

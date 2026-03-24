@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
@@ -51,14 +50,12 @@ const (
 	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
 	keyDockerfileLintArg    = "build-arg:BUILDKIT_DOCKERFILE_CHECK"
 	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
-	keySourceDateEpoch      = "build-arg:SOURCE_DATE_EPOCH"
 )
 
 type Config struct {
 	BuildArgs        map[string]string
 	CacheIDNamespace string
 	CgroupParent     string
-	Epoch            *time.Time
 	ExtraHosts       []llb.HostIP
 	Hostname         string
 	ImageResolveMode llb.ResolveMode
@@ -250,12 +247,6 @@ func (bc *Client) init() error {
 		}
 	}
 	bc.CacheImports = cacheImports
-
-	epoch, err := parseSourceDateEpoch(opts[keySourceDateEpoch])
-	if err != nil {
-		return err
-	}
-	bc.Epoch = epoch
 
 	attests, err := attestations.Parse(opts)
 	if err != nil {
