@@ -69,36 +69,50 @@ type ConvertOpt struct {
 type SBOMTargets struct {
 	Core   llb.State
 	Extras map[string]llb.State
-
-	IgnoreCache bool
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (st *llb.State, img, baseImg *dockerspec.DockerOCIImage, sbom *SBOMTargets, err error) {
+type Result struct {
+	State     llb.State
+	Image     *dockerspec.DockerOCIImage
+	BaseImage *dockerspec.DockerOCIImage
+	SBOM      *SBOMTargets
+	Epoch     *time.Time
+
+	IsIgnoreCache bool
+}
+
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*Result, error) {
 	ds, err := toDispatchState(ctx, dt, opt)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
 
-	sbom = &SBOMTargets{
-		Core:   ds.state,
-		Extras: map[string]llb.State{},
+	res := &Result{
+		State:     ds.state,
+		Image:     &ds.image,
+		BaseImage: ds.baseImg,
+		SBOM: &SBOMTargets{
+			Core:   ds.state,
+			Extras: map[string]llb.State{},
+		},
+		Epoch: ds.epoch,
 	}
 	if ds.scanContext {
-		sbom.Extras["context"] = ds.opt.buildContext
+		res.SBOM.Extras["context"] = ds.opt.buildContext
 	}
 	if ds.ignoreCache {
-		sbom.IgnoreCache = true
+		res.IsIgnoreCache = true
 	}
 	for dsi := range allReachableStages(ds) {
 		if ds != dsi && dsi.scanStage {
-			sbom.Extras[dsi.stageName] = dsi.state
+			res.SBOM.Extras[dsi.stageName] = dsi.state
 			if dsi.ignoreCache {
-				sbom.IgnoreCache = true
+				res.IsIgnoreCache = true
 			}
 		}
 	}
 
-	return &ds.state, &ds.image, ds.baseImg, sbom, nil
+	return res, nil
 }
 
 func Dockerfile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline.Outline, error) {
@@ -286,6 +300,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		return nil, err
 	}
 
+	opt.Epoch, err = resolveSourceDateEpoch(opt.Epoch, globalArgs)
+	if err != nil {
+		return nil, err
+	}
+
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
 		metaResolver = imagemetaresolver.Default()
@@ -332,6 +351,27 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	return target, nil
+}
+
+func resolveSourceDateEpoch(explicit *time.Time, globalArgs *llb.EnvList) (*time.Time, error) {
+	if explicit != nil {
+		return explicit, nil
+	}
+	if globalArgs == nil {
+		return nil, nil
+	}
+
+	v, ok := globalArgs.Get("SOURCE_DATE_EPOCH")
+	if !ok || v == "" {
+		return nil, nil
+	}
+
+	sde, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
+	}
+	tm := time.Unix(sde, 0).UTC()
+	return &tm, nil
 }
 
 func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) error {

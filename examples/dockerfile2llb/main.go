@@ -42,7 +42,7 @@ func xmain() error {
 
 	caps := pb.Caps.CapSet(pb.Caps.All())
 
-	state, img, baseImg, _, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
+	res, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
 		MetaResolver: imagemetaresolver.Default(),
 		LLBCaps:      &caps,
 		Config: dockerui.Config{
@@ -53,7 +53,7 @@ func xmain() error {
 		return err
 	}
 
-	dt, err := state.Marshal(context.TODO())
+	dt, err := res.State.Marshal(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -61,12 +61,12 @@ func xmain() error {
 		return err
 	}
 	if opt.partialImageConfigFile != "" {
-		if err := writeJSON(opt.partialImageConfigFile, img); err != nil {
+		if err := writeJSON(opt.partialImageConfigFile, res.Image); err != nil {
 			return err
 		}
 	}
 	if opt.baseImageConfigFile != "" {
-		if err := writeJSON(opt.baseImageConfigFile, baseImg); err != nil {
+		if err := writeJSON(opt.baseImageConfigFile, res.BaseImage); err != nil {
 			return err
 		}
 	}
