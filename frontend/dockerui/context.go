@@ -161,6 +161,12 @@ func DetectGitContext(ref string, keepGit *bool) (*llb.State, bool, error) {
 	if g.SubDir != "" {
 		gitOpts = append(gitOpts, llb.GitSubDir(g.SubDir))
 	}
+	if g.FetchDepth != nil {
+		gitOpts = append(gitOpts, llb.GitFetchDepth(*g.FetchDepth))
+	}
+	if g.FetchTags != nil && *g.FetchTags {
+		gitOpts = append(gitOpts, llb.GitFetchTags())
+	}
 	if g.Checksum != "" {
 		gitOpts = append(gitOpts, llb.GitChecksum(g.Checksum))
 	}

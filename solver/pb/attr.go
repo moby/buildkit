@@ -7,6 +7,8 @@ const AttrAuthTokenSecret = "git.authtokensecret"
 const AttrKnownSSHHosts = "git.knownsshhosts"
 const AttrMountSSHSock = "git.mountsshsock"
 const AttrGitChecksum = "git.checksum"
+const AttrGitFetchDepth = "git.fetchdepth"
+const AttrGitFetchTags = "git.fetchtags"
 const AttrGitSkipSubmodules = "git.skipsubmodules"
 
 const AttrGitSignatureVerifyPubKey = "git.sig.pubkey"

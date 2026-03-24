@@ -56,6 +56,12 @@ type GitRef struct {
 
 	// Submodules is true for URL that controls whether to fetch git submodules.
 	Submodules *bool
+
+	// FetchDepth controls how much history to fetch.
+	FetchDepth *int
+
+	// FetchTags controls whether to fetch tag refs for shallow clones.
+	FetchTags *bool
 }
 
 // ParseGitRef parses a git ref.
@@ -131,7 +137,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 		case 0, 1:
 			if len(v) == 0 || v[0] == "" {
 				switch k {
-				case "submodules", "keep-git-dir":
+				case "fetch-tags", "submodules", "keep-git-dir":
 					v = nil
 				default:
 					return errors.Errorf("query %q has no value", k)
@@ -158,6 +164,24 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			gf.SubDir = v[0]
 		case "checksum", "commit":
 			gf.Checksum = v[0]
+		case "fetch-depth":
+			vv, err := strconv.Atoi(v[0])
+			if err != nil || vv < 0 {
+				return errors.Errorf("invalid fetch-depth value: %q", v[0])
+			}
+			gf.FetchDepth = &vv
+		case "fetch-tags":
+			var vv bool
+			if len(v) == 0 {
+				vv = true
+			} else {
+				var err error
+				vv, err = strconv.ParseBool(v[0])
+				if err != nil {
+					return errors.Errorf("invalid fetch-tags value: %q", v[0])
+				}
+			}
+			gf.FetchTags = &vv
 		case "keep-git-dir":
 			var vv bool
 			if len(v) == 0 {

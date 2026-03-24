@@ -164,6 +164,12 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.SubDir != "" {
 				gitOptions = append(gitOptions, llb.GitSubDir(gitRef.SubDir))
 			}
+			if gitRef.FetchDepth != nil {
+				gitOptions = append(gitOptions, llb.GitFetchDepth(*gitRef.FetchDepth))
+			}
+			if gitRef.FetchTags != nil && *gitRef.FetchTags {
+				gitOptions = append(gitOptions, llb.GitFetchTags())
+			}
 			if gitRef.Submodules != nil && !*gitRef.Submodules {
 				gitOptions = append(gitOptions, llb.GitSkipSubmodules())
 			}
