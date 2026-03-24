@@ -283,8 +283,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				// However, due to a bug of containerd, we are temporarily stuck with this workaround.
 				// https://github.com/containerd/containerd/issues/8322
 				imageClientCtx := ctx
-				if e.opts.Epoch != nil {
-					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.opts.Epoch)
+				if e.opts.Epoch != nil && e.opts.Epoch.Value != nil {
+					imageClientCtx = epoch.WithSourceDateEpoch(imageClientCtx, e.opts.Epoch.Value)
 				}
 				img := images.Image{
 					Target: *desc,

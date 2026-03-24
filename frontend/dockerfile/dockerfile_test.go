@@ -231,6 +231,7 @@ var reproTests = integration.TestFuncs(
 	testWorkdirSourceDateEpochReproducible,
 	testSourceDateEpochDockerfileDefault,
 	testSourceDateEpochDockerfileDefaultOverride,
+	testSourceDateEpochDockerfileDefaultReset,
 	testSourceDateEpochDockerfileDefaultInvalid,
 )
 
@@ -1029,7 +1030,7 @@ WORKDIR /mydir
 	require.Equal(t, index1, index2)
 }
 
-func readOCIImageCreated(t *testing.T, dt []byte) time.Time {
+func readOCIManifest(t *testing.T, dt []byte) ocispecs.Manifest {
 	t.Helper()
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -1043,12 +1044,7 @@ func readOCIImageCreated(t *testing.T, dt []byte) time.Time {
 	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[0].Digest.Hex()].Data, &mfst)
 	require.NoError(t, err)
 
-	var img ocispecs.Image
-	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
-	require.NoError(t, err)
-	require.NotNil(t, img.Created)
-
-	return *img.Created
+	return mfst
 }
 
 func testCacheReleased(t *testing.T, sb integration.Sandbox) {
@@ -8945,11 +8941,11 @@ func testSourceDateEpochDockerfileDefault(t *testing.T, sb integration.Sandbox) 
 	f := getFrontend(t, sb)
 
 	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 ARG SOURCE_DATE_EPOCH=%d
 FROM scratch
 COPY Dockerfile .
-`, tm.Unix()))
+`, tm.Unix())
 
 	dir := integration.Tmpdir(
 		t,
@@ -8974,7 +8970,7 @@ COPY Dockerfile .
 			{
 				Type: client.ExporterOCI,
 				Attrs: map[string]string{
-					"source-date-epoch": "",
+					"rewrite-timestamp": "true",
 				},
 				Output: fixedWriteCloser(outW),
 			},
@@ -8985,7 +8981,9 @@ COPY Dockerfile .
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	require.Equal(t, tm.Unix(), readOCIImageCreated(t, dt).Unix())
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	require.Equal(t, fmt.Sprintf("%d", tm.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochDockerfileDefaultOverride(t *testing.T, sb integration.Sandbox) {
@@ -8995,11 +8993,11 @@ func testSourceDateEpochDockerfileDefaultOverride(t *testing.T, sb integration.S
 
 	defaultTM := time.Unix(1700000001, 0).UTC()
 	overrideTM := time.Unix(1700000002, 0).UTC()
-	dockerfile := []byte(fmt.Sprintf(`
+	dockerfile := fmt.Appendf(nil, `
 ARG SOURCE_DATE_EPOCH=%d
 FROM scratch
 COPY Dockerfile .
-`, defaultTM.Unix()))
+`, defaultTM.Unix())
 
 	dir := integration.Tmpdir(
 		t,
@@ -9027,7 +9025,7 @@ COPY Dockerfile .
 			{
 				Type: client.ExporterOCI,
 				Attrs: map[string]string{
-					"source-date-epoch": "",
+					"rewrite-timestamp": "true",
 				},
 				Output: fixedWriteCloser(outW),
 			},
@@ -9038,7 +9036,61 @@ COPY Dockerfile .
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
-	require.Equal(t, overrideTM.Unix(), readOCIImageCreated(t, dt).Unix())
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	require.Equal(t, fmt.Sprintf("%d", overrideTM.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+}
+
+func testSourceDateEpochDockerfileDefaultReset(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
+	dockerfile := fmt.Appendf(nil, `
+ARG SOURCE_DATE_EPOCH=%d
+FROM scratch
+COPY Dockerfile .
+`, tm.Unix())
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"source-date-epoch": "",
+					"rewrite-timestamp": "true",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	require.Empty(t, mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochDockerfileDefaultInvalid(t *testing.T, sb integration.Sandbox) {
