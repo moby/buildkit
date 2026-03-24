@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/containerd/continuity/fs"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/exporter"
+	intotojson "github.com/moby/buildkit/exporter/attestation/intoto"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -56,9 +56,9 @@ func ReadAll(ctx context.Context, s session.Group, att exporter.Attestation) ([]
 
 // MakeInTotoStatements iterates over all provided result attestations and
 // generates intoto attestation statements.
-func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []exporter.Attestation, defaultSubjects []intoto.Subject) ([]intoto.Statement, error) {
+func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []exporter.Attestation, defaultSubjects []intotojson.Subject) ([]*intotojson.Statement, error) {
 	eg, ctx := errgroup.WithContext(ctx)
-	statements := make([]intoto.Statement, len(attestations))
+	statements := make([]*intotojson.Statement, len(attestations))
 
 	for i, att := range attestations {
 		eg.Go(func() error {
@@ -73,7 +73,7 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 				if err != nil {
 					return err
 				}
-				statements[i] = *stmt
+				statements[i] = stmt
 			case gatewaypb.AttestationKind_Bundle:
 				return errors.New("bundle attestation kind must be un-bundled first")
 			}
@@ -86,13 +86,13 @@ func MakeInTotoStatements(ctx context.Context, s session.Group, attestations []e
 	return statements, nil
 }
 
-func makeInTotoStatement(content []byte, attestation exporter.Attestation, defaultSubjects []intoto.Subject) (*intoto.Statement, error) {
+func makeInTotoStatement(content []byte, attestation exporter.Attestation, defaultSubjects []intotojson.Subject) (*intotojson.Statement, error) {
 	if len(attestation.InToto.Subjects) == 0 {
 		attestation.InToto.Subjects = []result.InTotoSubject{{
 			Kind: gatewaypb.InTotoSubjectKind_Self,
 		}}
 	}
-	subjects := []intoto.Subject{}
+	var subjects []intotojson.Subject
 	for _, subject := range attestation.InToto.Subjects {
 		subjectName := "_"
 		if subject.Name != "" {
@@ -109,14 +109,14 @@ func makeInTotoStatement(content []byte, attestation exporter.Attestation, defau
 				}
 
 				for _, name := range subjectNames {
-					subjects = append(subjects, intoto.Subject{
+					subjects = append(subjects, intotojson.Subject{
 						Name:   name,
 						Digest: defaultSubject.Digest,
 					})
 				}
 			}
 		case gatewaypb.InTotoSubjectKind_Raw:
-			subjects = append(subjects, intoto.Subject{
+			subjects = append(subjects, intotojson.Subject{
 				Name:   subjectName,
 				Digest: result.ToDigestMap(subject.Digest...),
 			})
@@ -124,14 +124,10 @@ func makeInTotoStatement(content []byte, attestation exporter.Attestation, defau
 			return nil, errors.Errorf("unknown attestation subject type %T", subject)
 		}
 	}
-
-	stmt := intoto.Statement{
-		StatementHeader: intoto.StatementHeader{
-			Type:          intoto.StatementInTotoV01,
-			PredicateType: attestation.InToto.PredicateType,
-			Subject:       subjects,
-		},
-		Predicate: json.RawMessage(content),
+	stmt := intotojson.Statement{
+		Subject:       subjects,
+		PredicateType: attestation.InToto.PredicateType,
+		Predicate:     json.RawMessage(content),
 	}
 	return &stmt, nil
 }
