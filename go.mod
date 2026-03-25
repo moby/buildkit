@@ -27,15 +27,15 @@ require (
 	github.com/containerd/go-cni v1.1.13
 	github.com/containerd/go-runc v1.1.0
 	github.com/containerd/log v0.1.0
-	github.com/containerd/nydus-snapshotter v0.15.11
-	github.com/containerd/platforms v1.0.0-rc.2
+	github.com/containerd/nydus-snapshotter v0.15.13
+	github.com/containerd/platforms v1.0.0-rc.3
 	github.com/containerd/stargz-snapshotter v0.18.2
 	github.com/containerd/stargz-snapshotter/estargz v0.18.2
 	github.com/containerd/typeurl/v2 v2.2.3
 	github.com/containernetworking/plugins v1.9.0
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v29.2.1+incompatible
+	github.com/docker/cli v29.3.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.13.0
 	github.com/golang/protobuf v1.5.4
