@@ -136,6 +136,9 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.VerifySignature.IgnoreSignedTag = v == "true"
 		}
 	}
+	if err := validateGitRef(id.Ref); err != nil {
+		return nil, err
+	}
 
 	return id, nil
 }
@@ -548,10 +551,9 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 			return nil, err
 		}
 	}
-
 	// TODO: should we assume that remote tag is immutable? add a timer?
 
-	buf, err := tmpGit.Run(ctx, "ls-remote", gs.src.Remote, ref, ref+"^{}")
+	buf, err := tmpGit.Run(ctx, "ls-remote", "--", gs.src.Remote, ref, ref+"^{}")
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
@@ -862,11 +864,10 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		}
 		gs.src.Ref = ref
 	}
-
 	doFetch := true
 	if gitutil.IsCommitSHA(ref) {
 		// skip fetch if commit already exists
-		if _, err := git.Run(ctx, "cat-file", "-e", ref+"^{commit}"); err == nil {
+		if _, err := git.Run(ctx, "cat-file", "-e", "--", ref+"^{commit}"); err == nil {
 			doFetch = false
 		}
 	}
@@ -880,15 +881,21 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 	}
 
 	if doFetch {
+		gitDirRoot, err := os.OpenRoot(gitDir)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open git dir root")
+		}
+		defer gitDirRoot.Close()
+
 		// make sure no old lock files have leaked
-		os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
+		gitDirRoot.RemoveAll("shallow.lock")
 
 		args := []string{"fetch"}
 		if !gitutil.IsCommitSHA(ref) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
 		} else {
 			args = append(args, "--tags")
-			if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+			if _, err := gitDirRoot.Lstat("shallow"); err == nil {
 				args = append(args, "--unshallow")
 			}
 		}
@@ -896,7 +903,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		if gitutil.IsCommitSHA(ref) {
 			args = append(args, ref)
 		} else {
-			args = append(args, "--force", ref+":"+targetRef)
+			args = append(args, "--force", "--", ref+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
 			err := errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -935,7 +942,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 			} else {
 				// try to fetch the commit directly
 				args := []string{"fetch", "--tags"}
-				if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
 					args = append(args, "--unshallow")
 				}
 				args = append(args, "origin", gs.cacheCommit)
@@ -993,7 +1000,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		}
 	}()
 
-	subdir := path.Clean(gs.src.Subdir)
+	subdir := path.Join("/", gs.src.Subdir)
 	if subdir == "/" {
 		subdir = "."
 	}
@@ -1043,7 +1050,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "origin", pullref)
+		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "--", "origin", pullref)
 		if err != nil {
 			return nil, err
 		}
@@ -1086,7 +1093,19 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	}
 
 	if subdir != "." {
-		d, err := os.Open(filepath.Join(cd, subdir))
+		subdir = filepath.FromSlash(subdir)
+		subdir = rootRelativePath(subdir)
+		cdRoot, err := os.OpenRoot(cd)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to open checkout dir root")
+		}
+		defer cdRoot.Close()
+
+		if err := validateDirsOnly(cdRoot, subdir); err != nil {
+			return nil, errors.Wrapf(err, "invalid subdir %v", subdir)
+		}
+
+		d, err := cdRoot.Open(subdir)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
 		}
@@ -1167,6 +1186,13 @@ func isUnableToUpdateLocalRef(err error) bool {
 	}
 	return strings.Contains(msg, "(unable to update local ref)") ||
 		strings.Contains(msg, "refname conflict")
+}
+
+func validateGitRef(ref string) error {
+	if strings.HasPrefix(ref, "-") {
+		return errors.Errorf("invalid git ref %q", ref)
+	}
+	return nil
 }
 
 func (gs *gitSourceHandler) emptyGitCli(ctx context.Context, g session.Group, opts ...gitutil.Option) (*gitutil.GitCLI, func() error, error) {
@@ -1289,4 +1315,31 @@ func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 		}),
 	}, opts...)
 	return gitutil.NewGitCLI(opts...)
+}
+
+// validateDirsOnly checks that the given subpath in the repository
+// only contains directories without any symlinks or files.
+func validateDirsOnly(r *os.Root, subpath string) error {
+	rel := rootRelativePath(subpath)
+	if rel == "" || rel == "." {
+		return nil
+	}
+
+	p := ""
+	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
+		p = filepath.Join(p, part)
+
+		fi, err := r.Lstat(p)
+		if err != nil {
+			return errors.Wrapf(err, "failed to lstat %q", p)
+		}
+		if !fi.IsDir() {
+			return errors.Errorf("git subpath %q contains non-directory %q", subpath, p)
+		}
+	}
+	return nil
+}
+
+func rootRelativePath(path string) string {
+	return strings.TrimPrefix(filepath.Clean(path), string(filepath.Separator))
 }

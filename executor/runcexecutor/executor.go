@@ -153,6 +153,13 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 }
 
 func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (rec resourcestypes.Recorder, err error) {
+	if id == "" {
+		id = identity.NewID()
+	}
+	if err := executor.ValidContainerID(id); err != nil {
+		return nil, err
+	}
+
 	startedOnce := sync.Once{}
 	done := make(chan error, 1)
 	w.mu.Lock()
@@ -191,15 +198,23 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 	}()
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns, meta.NetMode)
+	stateDirRoot, err := os.OpenRoot(w.root)
 	if err != nil {
 		return nil, err
 	}
+	defer stateDirRoot.Close()
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap, meta.Hostname)
+	resolvConfName, err := oci.GetResolvConf(ctx, stateDirRoot, w.idmap, w.dns, meta.NetMode)
 	if err != nil {
 		return nil, err
 	}
+	resolvConf := filepath.Join(w.root, resolvConfName)
+
+	hostsName, clean, err := oci.GetHostsFile(ctx, stateDirRoot, meta.ExtraHosts, w.idmap, meta.Hostname)
+	if err != nil {
+		return nil, err
+	}
+	hostsFile := filepath.Join(w.root, hostsName)
 	if clean != nil {
 		defer clean()
 	}
@@ -217,9 +232,6 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		defer release()
 	}
 
-	if id == "" {
-		id = identity.NewID()
-	}
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0o711); err != nil {
