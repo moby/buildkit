@@ -25,13 +25,21 @@ func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, l
 		return nil, err
 	}
 
-	out := make([]*controlapi.BuildHistoryEvent, 0, len(in))
+	events := make([]*controlapi.BuildHistoryEvent, 0, len(in))
+	for _, ev := range in {
+		if ev == nil {
+			continue
+		}
+		events = append(events, ev)
+	}
+
+	out := make([]*controlapi.BuildHistoryEvent, 0, len(events))
 
 	if len(f) == 0 {
-		out = in
+		out = events
 	} else {
 	loop0:
-		for _, ev := range in {
+		for _, ev := range events {
 			for _, fn := range f {
 				if fn(ev) {
 					out = append(out, ev)
@@ -46,8 +54,8 @@ func filterHistoryEvents(in []*controlapi.BuildHistoryEvent, filters []string, l
 			return nil, errors.Errorf("invalid limit %d", limit)
 		}
 		slices.SortFunc(out, func(a, b *controlapi.BuildHistoryEvent) int {
-			aRec := a != nil && a.Record != nil
-			bRec := b != nil && b.Record != nil
+			aRec := a.Record != nil
+			bRec := b.Record != nil
 			switch {
 			case !aRec && !bRec:
 				return 0

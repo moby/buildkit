@@ -13457,8 +13457,8 @@ func testListenBuildHistoryExcludesSoftDeletedRecords(t *testing.T, sb integrati
 	// Start a streaming listener on one specific ref. This increments the
 	// internal reference count, which causes Delete to soft-delete instead
 	// of removing the record from the database.
-	listenerCtx, listenerCancel := context.WithCancel(sb.Context())
-	defer listenerCancel()
+	listenerCtx, listenerCancel := context.WithCancelCause(sb.Context())
+	defer listenerCancel(nil)
 
 	cl, err := c.ControlClient().ListenBuildHistory(listenerCtx, &controlapi.BuildHistoryRequest{
 		Ref: refToDelete,
@@ -13502,7 +13502,7 @@ func testListenBuildHistoryExcludesSoftDeletedRecords(t *testing.T, sb integrati
 	assert.True(t, gotRefs[buildRefs[2]], "ref %s should appear in history list", buildRefs[2])
 
 	// Clean up the streaming listener.
-	listenerCancel()
+	listenerCancel(nil)
 	// Drain the stream so gRPC can clean up.
 	for {
 		if _, err := cl.Recv(); err != nil {
