@@ -199,6 +199,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testZstdLocalCacheExport,
 	testCacheExportIgnoreError,
 	testCacheExportCacheDeletedContent,
+	testLocalCacheExportReset,
 	testZstdRegistryCacheImportExport,
 	testZstdLocalCacheImportExport,
 	testUncompressedLocalCacheImportExport,
@@ -515,6 +516,93 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, cc2.Records[i].Digest, r.Digest)
 		require.Equal(t, cc2.Records[i].Inputs, r.Inputs)
 	}
+}
+
+func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir := integration.Tmpdir(t)
+	cacheDir := filepath.Join(tmpdir.Name, "cache")
+
+	// Build 1: export cache for a simple build
+	st1 := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo build1 > /out"`)).Root()
+	def1, err := llb.Scratch().File(llb.Copy(st1, "/out", "/out")).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def1, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": cacheDir,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Verify blobs were written
+	blobDir := filepath.Join(cacheDir, "blobs", "sha256")
+	entries1, err := os.ReadDir(blobDir)
+	require.NoError(t, err)
+	require.Greater(t, len(entries1), 0)
+
+	// Build 2: different build, export with reset=true
+	st2 := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo build2-different > /out2"`)).Root()
+	def2, err := llb.Scratch().File(llb.Copy(st2, "/out2", "/out2")).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def2, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest":  cacheDir,
+					"reset": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Read the manifest to determine which blobs should be referenced
+	dt, err := os.ReadFile(filepath.Join(cacheDir, "index.json"))
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+	require.Len(t, index.Manifests, 1)
+
+	dt, err = os.ReadFile(filepath.Join(blobDir, index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+
+	// Build the set of expected blobs: manifest + config + all layers
+	expectedBlobs := map[string]struct{}{
+		index.Manifests[0].Digest.Hex(): {},
+		mfst.Config.Digest.Hex():        {},
+	}
+	for _, l := range mfst.Layers {
+		expectedBlobs[l.Digest.Hex()] = struct{}{}
+	}
+
+	// Verify only referenced blobs remain
+	entries2, err := os.ReadDir(blobDir)
+	require.NoError(t, err)
+
+	actualBlobs := map[string]struct{}{}
+	for _, e := range entries2 {
+		actualBlobs[e.Name()] = struct{}{}
+	}
+	require.Equal(t, expectedBlobs, actualBlobs, "after reset, only blobs referenced by the current manifest should remain")
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {

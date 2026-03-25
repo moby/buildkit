@@ -497,6 +497,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
+* `reset=<true|false>`: remove any blobs in the cache directory that are not referenced by the current manifests in `index.json` (default: `false`). This is useful for keeping the local cache directory from growing indefinitely.
 
 `--import-cache` options:
 * `type=local`
