@@ -238,6 +238,11 @@ var reproTests = integration.TestFuncs(
 	testSourceDateEpochContextHTTPLastModified,
 	testSourceDateEpochContextHTTPArchive,
 	testSourceDateEpochContextLocalUnset,
+	testSourceDateEpochStageHTTPArchive,
+	testSourceDateEpochStageOverride,
+	testSourceDateEpochStageInvalid,
+	testSourceDateEpochNamedContextHTTPLastModified,
+	testSourceDateEpochNamedContextHTTPArchive,
 )
 
 var (
@@ -9460,6 +9465,310 @@ func testSourceDateEpochContextLocalUnset(t *testing.T, sb integration.Sandbox) 
 	mfst := readOCIManifest(t, dt)
 	require.Len(t, mfst.Layers, 1)
 	require.Empty(t, mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+}
+
+func testSourceDateEpochStageHTTPArchive(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	archiveMaxTime := time.Unix(1700000402, 0).UTC()
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/src.tar": {
+			Etag: identity.NewID(),
+			Content: makeTarContext(t,
+				tarContextFile{name: "foo", data: []byte("bar"), modTime: archiveMaxTime},
+			),
+		},
+	})
+	defer server.Close()
+
+	dockerfile := fmt.Appendf(nil, `
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+ADD %s/src.tar /
+FROM busybox
+ARG SOURCE_DATE_EPOCH
+RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
+`, server.URL)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"rewrite-timestamp": "true",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	mfst := readOCIManifest(t, dt)
+	require.NotEmpty(t, mfst.Layers)
+	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
+
+	layerMap := readOCILayerMap(t, dt, mfst.Layers[len(mfst.Layers)-1])
+	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), string(layerMap["epoch"].Data))
+	require.Equal(t, archiveMaxTime.Unix(), readOCIImageCreated(t, dt).Unix())
+}
+
+func testSourceDateEpochStageOverride(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	defaultTime := time.Unix(1700000501, 0).UTC()
+	overrideTime := time.Unix(1700000502, 0).UTC()
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/src.tar": {
+			Etag: identity.NewID(),
+			Content: makeTarContext(t,
+				tarContextFile{name: "foo", data: []byte("bar"), modTime: defaultTime},
+			),
+		},
+	})
+	defer server.Close()
+
+	dockerfile := fmt.Appendf(nil, `
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+ADD %s/src.tar /
+FROM scratch
+COPY Dockerfile .
+`, server.URL)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:SOURCE_DATE_EPOCH": fmt.Sprintf("%d", overrideTime.Unix()),
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"rewrite-timestamp": "true",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	require.Equal(t, fmt.Sprintf("%d", overrideTime.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+}
+
+func testSourceDateEpochStageInvalid(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+COPY Dockerfile /Dockerfile
+FROM scratch
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage does not meet source-only requirements")
+}
+
+func testSourceDateEpochNamedContextHTTPLastModified(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	lastModified := time.Unix(1700000601, 0).UTC()
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/src.tar": {
+			Etag:         identity.NewID(),
+			LastModified: &lastModified,
+			Content: makeTarContext(t,
+				tarContextFile{name: "foo", data: []byte("bar"), modTime: lastModified.Add(time.Hour)},
+			),
+		},
+	})
+	defer server.Close()
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch
+COPY Dockerfile .
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:mysource": server.URL + "/src.tar",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"rewrite-timestamp": "true",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	require.Equal(t, fmt.Sprintf("%d", lastModified.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	require.Equal(t, lastModified.Unix(), readOCIImageCreated(t, dt).Unix())
+}
+
+func testSourceDateEpochNamedContextHTTPArchive(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	archiveMaxTime := time.Unix(1700000602, 0).UTC()
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/src.tar": {
+			Etag: identity.NewID(),
+			Content: makeTarContext(t,
+				tarContextFile{name: "foo", data: []byte("bar"), modTime: archiveMaxTime},
+			),
+		},
+	})
+	defer server.Close()
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM busybox
+ARG SOURCE_DATE_EPOCH
+RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:mysource": server.URL + "/src.tar",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterOCI,
+				Attrs: map[string]string{
+					"rewrite-timestamp": "true",
+				},
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	mfst := readOCIManifest(t, dt)
+	require.NotEmpty(t, mfst.Layers)
+	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
+
+	layerMap := readOCILayerMap(t, dt, mfst.Layers[len(mfst.Layers)-1])
+	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), string(layerMap["epoch"].Data))
+	require.Equal(t, archiveMaxTime.Unix(), readOCIImageCreated(t, dt).Unix())
 }
 
 func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {

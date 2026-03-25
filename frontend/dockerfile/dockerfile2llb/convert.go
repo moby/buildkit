@@ -303,17 +303,11 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 
 	var resolvedEpoch *time.Time
 	if sourceDateEpoch, ok := getBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH"); ok {
-		resolvedEpoch, err = resolveSourceDateEpochValue(ctx, sourceDateEpoch, opt.Client)
+		resolvedEpoch, err = resolveSourceDateEpochValue(ctx, sourceDateEpoch, opt, stages, globalArgs, shlex)
 		if err != nil {
 			return nil, err
 		}
-		if sourceDateEpoch == "context" {
-			var resolvedValue string
-			if resolvedEpoch != nil {
-				resolvedValue = strconv.FormatInt(resolvedEpoch.Unix(), 10)
-			}
-			globalArgs = setBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH", resolvedValue)
-		}
+		globalArgs = setBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH", formatSourceDateEpochValue(resolvedEpoch))
 	}
 
 	metaResolver := opt.MetaResolver
@@ -363,25 +357,6 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 	}
 
 	return target, nil
-}
-
-func resolveSourceDateEpochValue(ctx context.Context, v string, client *dockerui.Client) (*time.Time, error) {
-	if v == "" {
-		return nil, nil
-	}
-	if v == "context" {
-		if client == nil {
-			return nil, nil
-		}
-		return client.ResolveMainContextSourceDateEpoch(ctx)
-	}
-
-	sde, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH: %s", v)
-	}
-	tm := time.Unix(sde, 0).UTC()
-	return &tm, nil
 }
 
 func getBuildArgValue(buildArgs map[string]string, globalArgs *llb.EnvList, key string) (string, bool) {

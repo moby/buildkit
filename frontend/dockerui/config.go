@@ -144,6 +144,10 @@ func (bc *Client) BuildOpts() client.BuildOpts {
 	return bc.bopts
 }
 
+func (bc *Client) GatewayClient() client.Client {
+	return bc.client
+}
+
 func (bc *Client) init() error {
 	opts := bc.bopts.Opts
 

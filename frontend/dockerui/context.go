@@ -106,7 +106,6 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to derive http source op")
 		}
-
 		def, err := st.Marshal(ctx, bc.marshalOpts()...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
