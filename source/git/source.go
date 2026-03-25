@@ -881,15 +881,21 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 	}
 
 	if doFetch {
+		gitDirRoot, err := os.OpenRoot(gitDir)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open git dir root")
+		}
+		defer gitDirRoot.Close()
+
 		// make sure no old lock files have leaked
-		os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
+		gitDirRoot.RemoveAll("shallow.lock")
 
 		args := []string{"fetch"}
 		if !gitutil.IsCommitSHA(ref) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
 		} else {
 			args = append(args, "--tags")
-			if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+			if _, err := gitDirRoot.Lstat("shallow"); err == nil {
 				args = append(args, "--unshallow")
 			}
 		}
@@ -936,7 +942,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 			} else {
 				// try to fetch the commit directly
 				args := []string{"fetch", "--tags"}
-				if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
 					args = append(args, "--unshallow")
 				}
 				args = append(args, "origin", gs.cacheCommit)
@@ -1088,11 +1094,18 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 
 	if subdir != "." {
 		subdir = filepath.FromSlash(subdir)
-		if err := validateDirsOnly(cd, subdir); err != nil {
+		subdir = rootRelativePath(subdir)
+		cdRoot, err := os.OpenRoot(cd)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to open checkout dir root")
+		}
+		defer cdRoot.Close()
+
+		if err := validateDirsOnly(cdRoot, subdir); err != nil {
 			return nil, errors.Wrapf(err, "invalid subdir %v", subdir)
 		}
 
-		d, err := os.Open(filepath.Join(cd, subdir))
+		d, err := cdRoot.Open(subdir)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
 		}
@@ -1306,18 +1319,11 @@ func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 
 // validateDirsOnly checks that the given subpath in the repository
 // only contains directories without any symlinks or files.
-func validateDirsOnly(root string, subpath string) error {
-	rel := filepath.Clean(subpath)
-	rel = strings.TrimPrefix(rel, string(filepath.Separator))
+func validateDirsOnly(r *os.Root, subpath string) error {
+	rel := rootRelativePath(subpath)
 	if rel == "" || rel == "." {
 		return nil
 	}
-
-	r, err := os.OpenRoot(root)
-	if err != nil {
-		return errors.Wrapf(err, "failed to open root %q", root)
-	}
-	defer r.Close()
 
 	p := ""
 	for part := range strings.SplitSeq(rel, string(filepath.Separator)) {
@@ -1332,4 +1338,8 @@ func validateDirsOnly(root string, subpath string) error {
 		}
 	}
 	return nil
+}
+
+func rootRelativePath(path string) string {
+	return strings.TrimPrefix(filepath.Clean(path), string(filepath.Separator))
 }
