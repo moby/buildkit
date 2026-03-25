@@ -2433,3 +2433,137 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 	}()
 	return ctx
 }
+
+func TestResetSnapshotMtimes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	// Create a tree:
+	//   dir/
+	//   dir/file.txt
+	//   dir/subdir/
+	//   dir/subdir/nested.txt
+	//   dir/link -> file.txt  (symlink)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hello"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "subdir", "nested.txt"), []byte("world"), 0644))
+	require.NoError(t, os.Symlink("file.txt", filepath.Join(dir, "link")))
+
+	target := time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, resetSnapshotMtimes(dir, target))
+
+	// Regular files should have mtime set
+	fi, err := os.Lstat(filepath.Join(dir, "file.txt"))
+	require.NoError(t, err)
+	require.Equal(t, target, fi.ModTime().UTC())
+
+	fi, err = os.Lstat(filepath.Join(dir, "subdir", "nested.txt"))
+	require.NoError(t, err)
+	require.Equal(t, target, fi.ModTime().UTC())
+
+	// Directories should have mtime set
+	fi, err = os.Lstat(dir)
+	require.NoError(t, err)
+	require.Equal(t, target, fi.ModTime().UTC())
+
+	fi, err = os.Lstat(filepath.Join(dir, "subdir"))
+	require.NoError(t, err)
+	require.Equal(t, target, fi.ModTime().UTC())
+
+	// Symlink itself should have mtime set via lutimes
+	fi, err = os.Lstat(filepath.Join(dir, "link"))
+	require.NoError(t, err)
+	require.Equal(t, target, fi.ModTime().UTC())
+
+	// Verify symlink itself still exists and points correctly
+	linkTarget, err := os.Readlink(filepath.Join(dir, "link"))
+	require.NoError(t, err)
+	require.Equal(t, "file.txt", linkTarget)
+}
+
+func TestCommitTimeMtimesSHA1(t *testing.T) {
+	testCommitTimeMtimes(t, "sha1", false)
+}
+
+func TestCommitTimeMtimesKeepGitDirSHA1(t *testing.T) {
+	testCommitTimeMtimes(t, "sha1", true)
+}
+
+func TestCommitTimeMtimesSHA256(t *testing.T) {
+	testCommitTimeMtimes(t, "sha256", false)
+}
+
+func TestCommitTimeMtimesKeepGitDirSHA256(t *testing.T) {
+	testCommitTimeMtimes(t, "sha256", true)
+}
+
+func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	// Get the commit timestamp of the master branch
+	cmd := exec.CommandContext(ctx, "git", "log", "-1", "--format=%ct", "master^{commit}")
+	cmd.Dir = repo.mainPath
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	ts, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	require.NoError(t, err)
+	expectedTime := time.Unix(ts, 0)
+
+	// Snapshot without MTime=commit
+	idDefault := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+	gDefault, err := gs.Resolve(ctx, idDefault, nil, nil)
+	require.NoError(t, err)
+	keyDefault, _, _, _, err := gDefault.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	// Snapshot with MTime=commit
+	idCommit := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, MTime: "commit"}
+	gCommit, err := gs.Resolve(ctx, idCommit, nil, nil)
+	require.NoError(t, err)
+	keyCommit, _, _, _, err := gCommit.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	// Cache keys must differ
+	require.NotEqual(t, keyDefault, keyCommit)
+	require.Contains(t, keyCommit, "(mtime=commit)")
+
+	refCommit, err := gCommit.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer refCommit.Release(context.TODO())
+
+	mount, err := refCommit.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	// Verify file mtimes match the commit timestamp
+	fi, err := os.Lstat(filepath.Join(dir, "abc"))
+	require.NoError(t, err)
+	require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "file mtime should match commit time")
+
+	fi, err = os.Lstat(filepath.Join(dir, "def"))
+	require.NoError(t, err)
+	require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "file mtime should match commit time")
+
+	// Verify directory mtime
+	fi, err = os.Lstat(dir)
+	require.NoError(t, err)
+	require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "dir mtime should match commit time")
+
+	if keepGitDir {
+		// .git directory should also have normalized mtime
+		fi, err = os.Lstat(filepath.Join(dir, ".git"))
+		require.NoError(t, err)
+		require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), ".git dir mtime should match commit time")
+	}
+}
