@@ -4,8 +4,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] does not checkout, safe to use pull_request_target
 
 jobs:
   labeler:
@@ -16,6 +19,6 @@ jobs:
     steps:
       -
         name: Run
-        uses: actions/labeler@v6
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
         with:
           sync-labels: true
