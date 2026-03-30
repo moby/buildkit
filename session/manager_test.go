@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/session/testutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,7 @@ func waitForActiveCaller(t *testing.T, sm *Manager, id string, timeout time.Dura
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 		c, err := sm.Get(ctx, id, true)
 		cancel()
 		if err == nil && c != nil {
@@ -41,7 +42,7 @@ func waitForActiveCaller(t *testing.T, sm *Manager, id string, timeout time.Dura
 func waitForActiveCallerErr(sm *Manager, id string, timeout time.Duration) (Caller, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 		c, err := sm.Get(ctx, id, true)
 		cancel()
 		if err == nil && c != nil {
@@ -53,7 +54,7 @@ func waitForActiveCallerErr(sm *Manager, id string, timeout time.Duration) (Call
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return nil, fmt.Errorf("session %s did not become active in time", id)
+	return nil, errors.Errorf("session %s did not become active in time", id)
 }
 
 type bufferedConn struct {
@@ -169,17 +170,18 @@ func httpUpgradeTestDialer(sm *Manager) Dialer {
 			_ = clientConn.Close()
 			return nil, err
 		}
+		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusSwitchingProtocols {
 			_ = serverConn.Close()
 			_ = clientConn.Close()
-			return nil, fmt.Errorf("unexpected upgrade status: %d", resp.StatusCode)
+			return nil, errors.Errorf("unexpected upgrade status: %d", resp.StatusCode)
 		}
 
 		return &bufferedConn{Conn: clientConn, reader: reader}, nil
 	}
 }
 
-func startSessionForTest(t *testing.T, parent context.Context, sm *Manager, id, sharedKey string) (*Session, func()) {
+func startSessionForTest(parent context.Context, t *testing.T, sm *Manager, id, sharedKey string) (*Session, func()) {
 	t.Helper()
 
 	s, err := NewSession(parent, sharedKey)
@@ -225,7 +227,7 @@ func TestManagerGetPrefixLookupOnActiveSession(t *testing.T) {
 	require.NoError(t, err)
 
 	sessionID := "prefix-target"
-	_, cleanup := startSessionForTest(t, t.Context(), sm, sessionID, "prefix-shared-key")
+	_, cleanup := startSessionForTest(t.Context(), t, sm, sessionID, "prefix-shared-key")
 	defer cleanup()
 
 	c, err := sm.Get(t.Context(), "vertex:"+sessionID, false)
@@ -238,7 +240,7 @@ func TestManagerGetContextCancelWhileWaiting(t *testing.T) {
 	sm, err := NewManager()
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 50*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 
 	c, err := sm.Get(ctx, "missing-cancel", false)
@@ -298,14 +300,15 @@ func TestManagerGetContextCancelCleansPendingWaiters(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(waiters)
 
-	for i := 0; i < waiters; i++ {
-		i := i
+	for i := range waiters {
 		go func() {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(t.Context(), 25*time.Millisecond)
+			ctx, cancel := context.WithTimeoutCause(t.Context(), 25*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 			defer cancel()
 			_, err := sm.Get(ctx, fmt.Sprintf("missing-pending-%d", i), false)
-			require.Error(t, err)
+			if err == nil {
+				t.Errorf("expected timeout error for missing pending waiter %d", i)
+			}
 		}()
 	}
 
@@ -328,10 +331,10 @@ func TestManagerGetHighConcurrencyInactiveThenCreate(t *testing.T) {
 	var startWG sync.WaitGroup
 	startWG.Add(waiters)
 
-	for i := 0; i < waiters; i++ {
+	for range waiters {
 		go func() {
 			startWG.Done()
-			ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
+			ctx, cancel := context.WithTimeoutCause(t.Context(), 4*time.Second, errors.WithStack(context.DeadlineExceeded))
 			defer cancel()
 			c, err := sm.Get(ctx, sessionID, false)
 			if err != nil {
@@ -339,7 +342,7 @@ func TestManagerGetHighConcurrencyInactiveThenCreate(t *testing.T) {
 				return
 			}
 			if c == nil {
-				errCh <- fmt.Errorf("received nil caller")
+				errCh <- errors.Errorf("received nil caller")
 				return
 			}
 			errCh <- nil
@@ -349,10 +352,10 @@ func TestManagerGetHighConcurrencyInactiveThenCreate(t *testing.T) {
 	startWG.Wait()
 	time.Sleep(75 * time.Millisecond)
 
-	_, cleanup := startSessionForTest(t, t.Context(), sm, sessionID, "inactive-shared")
+	_, cleanup := startSessionForTest(t.Context(), t, sm, sessionID, "inactive-shared")
 	defer cleanup()
 
-	for i := 0; i < waiters; i++ {
+	for range waiters {
 		require.NoError(t, <-errCh)
 	}
 }
@@ -362,17 +365,16 @@ func TestManagerGetHighConcurrencyAlreadyActive(t *testing.T) {
 	require.NoError(t, err)
 
 	sessionID := "already-active"
-	_, cleanup := startSessionForTest(t, t.Context(), sm, sessionID, "active-shared")
+	_, cleanup := startSessionForTest(t.Context(), t, sm, sessionID, "active-shared")
 	defer cleanup()
 
 	const (
 		rounds  = 8
 		callers = 250
 	)
-	for round := 0; round < rounds; round++ {
+	for range rounds {
 		errCh := make(chan error, callers)
-		for i := 0; i < callers; i++ {
-			i := i
+		for i := range callers {
 			go func() {
 				noWait := i%2 == 0
 				lookupID := sessionID
@@ -380,7 +382,7 @@ func TestManagerGetHighConcurrencyAlreadyActive(t *testing.T) {
 					lookupID = "vertex:" + sessionID
 				}
 
-				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+				ctx, cancel := context.WithTimeoutCause(t.Context(), 3*time.Second, errors.WithStack(context.DeadlineExceeded))
 				defer cancel()
 				c, err := sm.Get(ctx, lookupID, noWait)
 				if err != nil {
@@ -388,18 +390,18 @@ func TestManagerGetHighConcurrencyAlreadyActive(t *testing.T) {
 					return
 				}
 				if c == nil {
-					errCh <- fmt.Errorf("nil caller from Get(noWait=%v)", noWait)
+					errCh <- errors.Errorf("nil caller from Get(noWait=%v)", noWait)
 					return
 				}
 				if c.SharedKey() != "active-shared" {
-					errCh <- fmt.Errorf("unexpected shared key %q", c.SharedKey())
+					errCh <- errors.Errorf("unexpected shared key %q", c.SharedKey())
 					return
 				}
 				errCh <- nil
 			}()
 		}
 
-		for i := 0; i < callers; i++ {
+		for range callers {
 			require.NoError(t, <-errCh)
 		}
 	}
@@ -415,17 +417,17 @@ func TestManagerGetBroadcastCancelStorm(t *testing.T) {
 	cancels := make([]context.CancelCauseFunc, 0, waiters)
 	errCh := make(chan error, waiters)
 
-	for i := 0; i < waiters; i++ {
+	for range waiters {
 		ctx, cancel := context.WithCancelCause(t.Context())
 		cancels = append(cancels, cancel)
 		go func(ctx context.Context) {
 			c, err := sm.Get(ctx, sessionID, false)
 			if err == nil {
-				errCh <- fmt.Errorf("expected error for canceled waiter")
+				errCh <- errors.Errorf("expected error for canceled waiter")
 				return
 			}
 			if c != nil {
-				errCh <- fmt.Errorf("expected nil caller for canceled waiter")
+				errCh <- errors.Errorf("expected nil caller for canceled waiter")
 				return
 			}
 			errCh <- nil
@@ -437,7 +439,7 @@ func TestManagerGetBroadcastCancelStorm(t *testing.T) {
 		cancel(context.Canceled)
 	}
 
-	for i := 0; i < waiters; i++ {
+	for range waiters {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -456,16 +458,16 @@ func TestManagerGetBroadcastNoMissedWakeups(t *testing.T) {
 		waiters = 120
 	)
 
-	for round := 0; round < rounds; round++ {
+	for round := range rounds {
 		sessionID := fmt.Sprintf("broadcast-round-%d", round)
 		errCh := make(chan error, waiters)
 		var startWG sync.WaitGroup
 		startWG.Add(waiters)
 
-		for i := 0; i < waiters; i++ {
+		for range waiters {
 			go func() {
 				startWG.Done()
-				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+				ctx, cancel := context.WithTimeoutCause(t.Context(), 3*time.Second, errors.WithStack(context.DeadlineExceeded))
 				defer cancel()
 				c, err := sm.Get(ctx, sessionID, false)
 				if err != nil {
@@ -473,7 +475,7 @@ func TestManagerGetBroadcastNoMissedWakeups(t *testing.T) {
 					return
 				}
 				if c == nil {
-					errCh <- fmt.Errorf("nil caller during broadcast round %d", round)
+					errCh <- errors.Errorf("nil caller during broadcast round %d", round)
 					return
 				}
 				errCh <- nil
@@ -483,8 +485,8 @@ func TestManagerGetBroadcastNoMissedWakeups(t *testing.T) {
 		startWG.Wait()
 		time.Sleep(50 * time.Millisecond)
 
-		_, cleanup := startSessionForTest(t, t.Context(), sm, sessionID, fmt.Sprintf("round-%d", round))
-		for i := 0; i < waiters; i++ {
+		_, cleanup := startSessionForTest(t.Context(), t, sm, sessionID, fmt.Sprintf("round-%d", round))
+		for range waiters {
 			require.NoError(t, <-errCh)
 		}
 		cleanup()
@@ -539,18 +541,14 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 
 	dialer := Dialer(testutil.TestStream(testutil.Handler(sm.HandleConn)))
 	deadline := time.Now().Add(5 * time.Second)
-	workers := runtime.GOMAXPROCS(0) * 4
-	if workers < 8 {
-		workers = 8
-	}
+	workers := max(runtime.GOMAXPROCS(0)*4, 8)
 
 	errCh := make(chan error, workers*16)
 	var seq atomic.Int64
 	var wg sync.WaitGroup
 	wg.Add(workers)
 
-	for worker := 0; worker < workers; worker++ {
-		worker := worker
+	for worker := range workers {
 		go func() {
 			defer wg.Done()
 			localCounter := int64(0)
@@ -560,16 +558,16 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 				id := fmt.Sprintf("churn-%d-%d", worker, localCounter)
 				sharedKey := "key-" + id
 
-				needCtx, needCancel := context.WithTimeout(t.Context(), 2*time.Second)
+				needCtx, needCancel := context.WithTimeoutCause(t.Context(), 2*time.Second, errors.WithStack(context.DeadlineExceeded))
 				needDone := make(chan error, 1)
 				go func() {
 					c, err := sm.Get(needCtx, id, false)
 					if err != nil {
-						needDone <- fmt.Errorf("need Get failed for %s: %w", id, err)
+						needDone <- errors.Errorf("need Get failed for %s: %v", id, err)
 						return
 					}
 					if c == nil {
-						needDone <- fmt.Errorf("need Get returned nil caller for %s", id)
+						needDone <- errors.Errorf("need Get returned nil caller for %s", id)
 						return
 					}
 					needDone <- nil
@@ -622,17 +620,17 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 					case <-time.After(2 * time.Second):
 					}
 					needCancel()
-					errCh <- fmt.Errorf("timed out waiting for need Get on %s", id)
+					errCh <- errors.Errorf("timed out waiting for need Get on %s", id)
 					return
 				}
 				needCancel()
 
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					lookupID := id
 					if i%2 == 1 {
 						lookupID = "vertex:" + id
 					}
-					getCtx, getCancel := context.WithTimeout(t.Context(), 2*time.Second)
+					getCtx, getCancel := context.WithTimeoutCause(t.Context(), 2*time.Second, errors.WithStack(context.DeadlineExceeded))
 					c, err := sm.Get(getCtx, lookupID, i%2 == 0)
 					getCancel()
 					if err != nil {
@@ -642,7 +640,7 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 						case <-runDone:
 						case <-time.After(2 * time.Second):
 						}
-						errCh <- fmt.Errorf("active Get failed for %s: %w", id, err)
+						errCh <- errors.Errorf("active Get failed for %s: %v", id, err)
 						return
 					}
 					if c == nil {
@@ -652,7 +650,7 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 						case <-runDone:
 						case <-time.After(2 * time.Second):
 						}
-						errCh <- fmt.Errorf("active Get returned nil caller for %s", id)
+						errCh <- errors.Errorf("active Get returned nil caller for %s", id)
 						return
 					}
 				}
@@ -674,7 +672,7 @@ func TestManagerParallelCreateGetNeedFiveSecondChurn(t *testing.T) {
 						return
 					}
 				case <-time.After(2 * time.Second):
-					errCh <- fmt.Errorf("session run did not exit in time for %s", id)
+					errCh <- errors.Errorf("session run did not exit in time for %s", id)
 					return
 				}
 
@@ -699,18 +697,14 @@ func TestManagerGetParallelPairsWakeupsHTTPAndRawFiveSeconds(t *testing.T) {
 	httpDialer := httpUpgradeTestDialer(sm)
 
 	deadline := time.Now().Add(5 * time.Second)
-	pairs := runtime.GOMAXPROCS(0) * 3
-	if pairs < 12 {
-		pairs = 12
-	}
+	pairs := max(runtime.GOMAXPROCS(0)*3, 12)
 
 	errCh := make(chan error, pairs*32)
 	var loops atomic.Int64
 	var wg sync.WaitGroup
 	wg.Add(pairs)
 
-	for pairID := 0; pairID < pairs; pairID++ {
-		pairID := pairID
+	for pairID := range pairs {
 		go func() {
 			defer wg.Done()
 			localIter := 0
@@ -721,20 +715,20 @@ func TestManagerGetParallelPairsWakeupsHTTPAndRawFiveSeconds(t *testing.T) {
 
 				waiterStarted := make(chan struct{})
 				waiterErrCh := make(chan error, 1)
-				waiterCtx, waiterCancel := context.WithTimeout(t.Context(), 2*time.Second)
+				waiterCtx, waiterCancel := context.WithTimeoutCause(t.Context(), 2*time.Second, errors.WithStack(context.DeadlineExceeded))
 				go func() {
 					close(waiterStarted)
 					c, err := sm.Get(waiterCtx, sessionID, false)
 					if err != nil {
-						waiterErrCh <- fmt.Errorf("blocking Get failed for %s: %w", sessionID, err)
+						waiterErrCh <- errors.Errorf("blocking Get failed for %s: %v", sessionID, err)
 						return
 					}
 					if c == nil {
-						waiterErrCh <- fmt.Errorf("blocking Get returned nil for %s", sessionID)
+						waiterErrCh <- errors.Errorf("blocking Get returned nil for %s", sessionID)
 						return
 					}
 					if c.SharedKey() != sharedKey {
-						waiterErrCh <- fmt.Errorf("blocking Get shared key mismatch for %s: %q", sessionID, c.SharedKey())
+						waiterErrCh <- errors.Errorf("blocking Get shared key mismatch for %s: %q", sessionID, c.SharedKey())
 						return
 					}
 					waiterErrCh <- nil
@@ -793,7 +787,7 @@ func TestManagerGetParallelPairsWakeupsHTTPAndRawFiveSeconds(t *testing.T) {
 							return
 						}
 					case <-time.After(2 * time.Second):
-						creatorErrCh <- fmt.Errorf("session run did not exit for %s", sessionID)
+						creatorErrCh <- errors.Errorf("session run did not exit for %s", sessionID)
 						return
 					}
 
@@ -804,7 +798,7 @@ func TestManagerGetParallelPairsWakeupsHTTPAndRawFiveSeconds(t *testing.T) {
 				select {
 				case waiterErr = <-waiterErrCh:
 				case <-time.After(2 * time.Second):
-					waiterErr = fmt.Errorf("timeout waiting for blocking Get for %s", sessionID)
+					waiterErr = errors.Errorf("timeout waiting for blocking Get for %s", sessionID)
 				}
 				waiterCancel()
 
@@ -813,7 +807,7 @@ func TestManagerGetParallelPairsWakeupsHTTPAndRawFiveSeconds(t *testing.T) {
 				select {
 				case creatorErr = <-creatorErrCh:
 				case <-time.After(3 * time.Second):
-					creatorErr = fmt.Errorf("timeout waiting for creator cleanup for %s", sessionID)
+					creatorErr = errors.Errorf("timeout waiting for creator cleanup for %s", sessionID)
 				}
 
 				if waiterErr != nil {
@@ -909,7 +903,7 @@ func TestManagerHandleHTTPRequestDoesNotBlockUnrelatedGet(t *testing.T) {
 		writeStarted: make(chan struct{}),
 		releaseWrite: make(chan struct{}),
 	}
-	reqCtx, reqCancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+	reqCtx, reqCancel := context.WithTimeoutCause(t.Context(), 250*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 	defer reqCancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "http://session.local/upgrade", nil)
 	require.NoError(t, err)
@@ -929,7 +923,7 @@ func TestManagerHandleHTTPRequestDoesNotBlockUnrelatedGet(t *testing.T) {
 		t.Fatal("timed out waiting for HandleHTTPRequest response write")
 	}
 
-	getCtx, getCancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	getCtx, getCancel := context.WithTimeoutCause(t.Context(), 100*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 	defer getCancel()
 	getDone := make(chan struct{})
 	var c Caller
@@ -974,7 +968,7 @@ func TestManagerGetDoesNotBlockOnMutexPastDeadline(t *testing.T) {
 	held := <-sm.state
 	defer func() { sm.state <- held }()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 100*time.Millisecond, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 
 	done := make(chan struct{})

@@ -323,7 +323,7 @@ func (sm *Manager) Get(ctx context.Context, id string, noWait bool) (Caller, err
 		if noWait {
 			return nil, nil
 		}
-		if ctx.Err() != nil {
+		if context.Cause(ctx) != nil {
 			return nil, errors.Wrapf(context.Cause(ctx), "cannot get session %q; context already terminated", id)
 		}
 	}

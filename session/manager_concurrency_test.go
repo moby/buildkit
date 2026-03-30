@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 func TestManagerGetThunderingHerd(t *testing.T) {
@@ -15,14 +17,14 @@ func TestManagerGetThunderingHerd(t *testing.T) {
 	}
 
 	// Create a dummy session to hit the "success" path of Get
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(context.Canceled)
 	if err := sm.withState(t.Context(), func(state *sessionState) error {
 		state.active["test-session"] = &client{
 			Session: Session{
 				id:        "test-session",
 				ctx:       ctx,
-				cancelCtx: func(err error) { cancel() },
+				cancelCtx: func(err error) { cancel(context.Canceled) },
 				done:      make(chan struct{}),
 			},
 		}
@@ -35,15 +37,15 @@ func TestManagerGetThunderingHerd(t *testing.T) {
 	var ops int64
 
 	start := time.Now()
-	
+
 	// 100 goroutines waiting for a non-existent session
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 2*time.Second)
+			waitCtx, waitCancel := context.WithTimeoutCause(context.Background(), 2*time.Second, errors.WithStack(context.DeadlineExceeded))
 			defer waitCancel()
-			
+
 			// This will block in Wait() until timeout
 			_, err := sm.Get(waitCtx, "non-existent", false)
 			if err != nil {
@@ -54,20 +56,18 @@ func TestManagerGetThunderingHerd(t *testing.T) {
 	}
 
 	// 100 goroutines hammering Get for the existing session
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			for time.Since(start) < 2*time.Second {
 				_, _ = sm.Get(context.Background(), "test-session", false)
 				atomic.AddInt64(&ops, 1)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
 	t.Logf("Completed %d Get operations in 2 seconds", ops)
-	
+
 	if ops < 10000 {
 		t.Errorf("Performance is abnormally low: only %d ops in 2 seconds", ops)
 	}
