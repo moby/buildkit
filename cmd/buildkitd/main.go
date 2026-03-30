@@ -313,7 +313,7 @@ func main() {
 			// Keepalive configuration to detect and close dead client connections
 			// that disconnect during registry auth callbacks, preventing daemon deadlock
 			grpc.KeepaliveParams(keepalive.ServerParameters{
-				Time:    2 * time.Minute, // Ping client if idle for 2m
+				Time:    2 * time.Minute,  // Ping client if idle for 2m
 				Timeout: 20 * time.Second, // Wait 20s for ping ack before closing
 			}),
 			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{

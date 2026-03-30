@@ -32,10 +32,10 @@ type authHandlerNS struct {
 
 	fetchers      *fetcherNS
 	fetcherLookup flightcontrol.Group[*authFetcher]
-	hosts      map[string][]docker.RegistryHost
-	muHosts    sync.Mutex
-	sm         *session.Manager
-	g          flightcontrol.Group[[]docker.RegistryHost]
+	hosts         map[string][]docker.RegistryHost
+	muHosts       sync.Mutex
+	sm            *session.Manager
+	g             flightcontrol.Group[[]docker.RegistryHost]
 }
 
 type fetcherState struct {
@@ -130,7 +130,7 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 	// Add timeout to prevent deadlock if client disconnects during auth callbacks.
 	// This ensures the lock is released within 30s even if the client is unresponsive.
 	// Locking is now scoped to short map operations and does not cover session/network calls.
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeoutCause(ctx, 30*time.Second, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 
 	// skip if there is no auth handler
@@ -141,7 +141,7 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 
 	authHeader, err := ah.authorize(ctx, a.sm, a.session)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "authorizing registry request for host %q", req.URL.Host)
 	}
 
 	req.Header.Set("Authorization", authHeader)
@@ -244,7 +244,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 	// Add timeout to prevent deadlock if client disconnects during auth callbacks.
 	// This ensures the lock is released within 30s even if the client is unresponsive.
 	// Locking is now scoped to short map operations and does not cover session/network calls.
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeoutCause(ctx, 30*time.Second, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 
 	last := responses[len(responses)-1]
@@ -285,18 +285,18 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 			var username, secret string
 			sessionID, pubKey, err := sessionauth.GetTokenAuthority(ctx, host, a.sm, a.session)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "getting token authority for host %q", host)
 			}
 			if pubKey == nil {
 				sessionID, username, secret, err = a.getCredentials(ctx, host)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "getting credentials for host %q", host)
 				}
 			}
 
 			common, err := auth.GenerateTokenOptions(ctx, host, username, secret, c)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "generating token options for host %q", host)
 			}
 			common.Scopes = parseScopes(append(common.Scopes, oldScopes...)).normalize()
 
@@ -308,7 +308,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 		case auth.BasicAuth:
 			sessionID, username, secret, err := a.getCredentials(ctx, host)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "getting basic auth credentials for host %q", host)
 			}
 
 			if username != "" && secret != "" {

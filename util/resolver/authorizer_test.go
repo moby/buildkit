@@ -122,7 +122,7 @@ func TestAuthorizeDoesNotGloballyBlockOnSlowAuthFetch(t *testing.T) {
 	fastReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://"+fastHost+"/v2/library/alpine/manifests/latest", nil)
 	require.NoError(t, err)
 
-	blockedCtx, blockedCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	blockedCtx, blockedCancel := context.WithTimeoutCause(t.Context(), 10*time.Second, context.DeadlineExceeded)
 	defer blockedCancel()
 	blockedDone := make(chan error, 1)
 	go func() {

@@ -72,7 +72,7 @@ func (p *Pool) gc() {
 		})
 
 		isExpiredSession := func(sessionID string) bool {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeoutCause(context.Background(), 30*time.Second, errors.WithStack(context.DeadlineExceeded))
 			defer cancel()
 			c, err := ns.sm.Get(ctx, sessionID, true)
 			return c == nil || err != nil
@@ -209,7 +209,7 @@ type Resolver struct {
 func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 	return func(domain string) ([]docker.RegistryHost, error) {
 		// Use timeout for registry host resolution to prevent indefinite blocking on DNS/network issues
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 30*time.Second, errors.WithStack(context.DeadlineExceeded))
 		defer cancel()
 		v, err := r.handler.g.Do(ctx, domain, func(ctx context.Context) ([]docker.RegistryHost, error) {
 			// long lock not needed because flightcontrol.Do
@@ -228,8 +228,11 @@ func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 			r.handler.muHosts.Unlock()
 			return res, nil
 		})
-		if err != nil || v == nil {
-			return nil, err
+		if err != nil {
+			return nil, errors.Wrapf(err, "resolving registry hosts for %q", host)
+		}
+		if v == nil {
+			return nil, nil
 		}
 		if len(v) == 0 {
 			return nil, nil
