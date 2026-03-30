@@ -197,4 +197,4 @@ jobs:
       -
         name: Dump context
         if: failure()
-        uses: crazy-max/ghaction-dump-context@v2
+        uses: crazy-max/ghaction-dump-context@v3

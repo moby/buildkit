@@ -195,7 +195,7 @@ jobs:
       -
         name: Dump context
         if: failure()
-        uses: crazy-max/ghaction-dump-context@v2
+        uses: crazy-max/ghaction-dump-context@v3
 
   test-freebsd-amd64:
     runs-on: ubuntu-22.04
