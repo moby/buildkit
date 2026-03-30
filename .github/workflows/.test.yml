@@ -183,7 +183,7 @@ jobs:
       -
         name: Generate annotations
         if: always()
-        uses: crazy-max/.github/.github/actions/gotest-annotations@bbd31df64ee0f097a02f12495f541f9236f18c46 # v1.2.0
+        uses: crazy-max/.github/.github/actions/gotest-annotations@bb328ea508cd6a89d0865555ddbeb148e5724aed # v1.3.0
         with:
           directory: ./bin/testreports
       -
