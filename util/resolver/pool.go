@@ -45,31 +45,58 @@ func (p *Pool) gc() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	type staleCandidate struct {
+		key       string
+		sessionID string
+		fetcher   *authFetcher
+	}
+
 	for k, ns := range p.m {
-		ns.muHandlers.Lock()
-		for key, h := range ns.fetchers {
-			if time.Since(h.lastUsed) < 10*time.Minute {
-				continue
+		candidates := make([]staleCandidate, 0)
+		ns.fetchers.withLock(func(state *fetcherState) {
+			for key, h := range state.fetchers {
+				if time.Since(h.lastUsed) < 10*time.Minute {
+					continue
+				}
+				parts := strings.SplitN(key, "/", 2)
+				if len(parts) != 2 {
+					delete(state.fetchers, key)
+					continue
+				}
+				candidates = append(candidates, staleCandidate{
+					key:       key,
+					sessionID: parts[1],
+					fetcher:   h,
+				})
 			}
-			parts := strings.SplitN(key, "/", 2)
-			if len(parts) != 2 {
-				delete(ns.fetchers, key)
-				continue
-			}
-			isExpiredSession := func() bool {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				c, err := ns.sm.Get(ctx, parts[1], true)
-				return c == nil || err != nil
-			}
-			if isExpiredSession() {
-				delete(ns.fetchers, key)
-			}
+		})
+
+		isExpiredSession := func(sessionID string) bool {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			c, err := ns.sm.Get(ctx, sessionID, true)
+			return c == nil || err != nil
 		}
-		if len(ns.fetchers) == 0 {
+
+		for _, candidate := range candidates {
+			if !isExpiredSession(candidate.sessionID) {
+				continue
+			}
+			ns.fetchers.withLock(func(state *fetcherState) {
+				current, ok := state.fetchers[candidate.key]
+				if ok && current == candidate.fetcher {
+					delete(state.fetchers, candidate.key)
+				}
+			})
+		}
+
+		empty := false
+		ns.fetchers.withLock(func(state *fetcherState) {
+			empty = len(state.fetchers) == 0
+		})
+		if empty {
 			delete(p.m, k)
 		}
-		ns.muHandlers.Unlock()
 	}
 
 	time.AfterFunc(5*time.Minute, p.gc)
