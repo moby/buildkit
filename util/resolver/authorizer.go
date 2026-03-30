@@ -78,7 +78,7 @@ func (a *authHandlerNS) get(ctx context.Context, host string, sm *session.Manage
 					return h
 				}
 			} else {
-				sessionID, username, password, err := sessionauth.CredentialsFunc(sm, g)(host)
+				sessionID, username, password, err := sessionauth.CredentialsFunc(sm, g)(ctx, host)
 				if err == nil {
 					if username == h.common.Username && password == h.common.Secret {
 						a.fetchers[host+"/"+sessionID] = h
@@ -125,6 +125,12 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 	a.handlerNS.muHandlers.Lock()
 	defer a.handlerNS.muHandlers.Unlock()
 
+	// Add timeout to prevent deadlock if client disconnects during auth callbacks.
+	// This ensures the lock is released within 30s even if the client is unresponsive.
+	// Timeout is set AFTER acquiring the lock so waiting for the lock doesn't consume the budget.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// skip if there is no auth handler
 	ah := a.handlerNS.get(ctx, req.URL.Host, a.sm, a.session)
 	if ah == nil {
@@ -140,8 +146,8 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 	return nil
 }
 
-func (a *dockerAuthorizer) getCredentials(host string) (sessionID, username, secret string, err error) {
-	return sessionauth.CredentialsFunc(a.sm, a.session)(host)
+func (a *dockerAuthorizer) getCredentials(ctx context.Context, host string) (sessionID, username, secret string, err error) {
+	return sessionauth.CredentialsFunc(a.sm, a.session)(ctx, host)
 }
 
 func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.Response) error {
@@ -149,6 +155,12 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 
 	handlerNS.muHandlers.Lock()
 	defer handlerNS.muHandlers.Unlock()
+
+	// Add timeout to prevent deadlock if client disconnects during auth callbacks.
+	// This ensures the lock is released within 30s even if the client is unresponsive.
+	// Timeout is set AFTER acquiring the lock so waiting for the lock doesn't consume the budget.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	last := responses[len(responses)-1]
 	host := last.Request.URL.Host
@@ -189,7 +201,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 				return err
 			}
 			if pubKey == nil {
-				sessionID, username, secret, err = a.getCredentials(host)
+				sessionID, username, secret, err = a.getCredentials(ctx, host)
 				if err != nil {
 					return err
 				}
@@ -205,7 +217,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 
 			return nil
 		case auth.BasicAuth:
-			sessionID, username, secret, err := a.getCredentials(host)
+			sessionID, username, secret, err := a.getCredentials(ctx, host)
 			if err != nil {
 				return err
 			}

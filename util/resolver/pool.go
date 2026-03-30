@@ -56,8 +56,13 @@ func (p *Pool) gc() {
 				delete(ns.fetchers, key)
 				continue
 			}
-			c, err := ns.sm.Get(context.TODO(), parts[1], true)
-			if c == nil || err != nil {
+			isExpiredSession := func() bool {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				c, err := ns.sm.Get(ctx, parts[1], true)
+				return c == nil || err != nil
+			}
+			if isExpiredSession() {
 				delete(ns.fetchers, key)
 			}
 		}
@@ -176,7 +181,10 @@ type Resolver struct {
 // HostsFunc implements registry configuration of this Resolver
 func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 	return func(domain string) ([]docker.RegistryHost, error) {
-		v, err := r.handler.g.Do(context.TODO(), domain, func(ctx context.Context) ([]docker.RegistryHost, error) {
+		// Use timeout for registry host resolution to prevent indefinite blocking on DNS/network issues
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		v, err := r.handler.g.Do(ctx, domain, func(ctx context.Context) ([]docker.RegistryHost, error) {
 			// long lock not needed because flightcontrol.Do
 			r.handler.muHosts.Lock()
 			v, ok := r.handler.hosts[domain]

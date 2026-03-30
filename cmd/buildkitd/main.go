@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
@@ -77,6 +78,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
@@ -308,6 +310,16 @@ func main() {
 			grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
 			grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
 			grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
+			// Keepalive configuration to detect and close dead client connections
+			// that disconnect during registry auth callbacks, preventing daemon deadlock
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				Time:    2 * time.Minute, // Ping client if idle for 2m
+				Timeout: 20 * time.Second, // Wait 20s for ping ack before closing
+			}),
+			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+				MinTime:             5 * time.Second, // Allow pings no more frequently than every 5s
+				PermitWithoutStream: true,            // Allow pings even when no streams are active
+			}),
 		}
 		server := grpc.NewServer(opts...)
 
