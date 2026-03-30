@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -25,20 +25,157 @@ type client struct {
 	supported map[string]struct{}
 }
 
+type sessionState struct {
+	active   map[string]*client
+	pending  map[string]*pendingWaiters
+	reserved map[string]struct{}
+}
+
+type pendingWaiters struct {
+	ch      chan struct{}
+	waiters int
+}
+
+func newSessionState() *sessionState {
+	return &sessionState{
+		active:   make(map[string]*client),
+		pending:  make(map[string]*pendingWaiters),
+		reserved: make(map[string]struct{}),
+	}
+}
+
+func (s *sessionState) getActive(id string) *client {
+	c, ok := s.active[id]
+	if !ok {
+		return nil
+	}
+	if c.closed() {
+		delete(s.active, id)
+		return nil
+	}
+	return c
+}
+
+func (s *sessionState) reserve(id string) error {
+	if c := s.getActive(id); c != nil {
+		return errors.Errorf("session %s already exists", id)
+	}
+	if _, ok := s.reserved[id]; ok {
+		return errors.Errorf("session %s already exists", id)
+	}
+	s.reserved[id] = struct{}{}
+	return nil
+}
+
+func (s *sessionState) activate(id string, c *client) {
+	s.active[id] = c
+	delete(s.reserved, id)
+	s.notifyPending(id)
+}
+
+func (s *sessionState) remove(id string) {
+	delete(s.active, id)
+	delete(s.reserved, id)
+}
+
+func (s *sessionState) pendingWait(id string) chan struct{} {
+	pw, ok := s.pending[id]
+	if !ok {
+		pw = &pendingWaiters{ch: make(chan struct{})}
+		s.pending[id] = pw
+	}
+	pw.waiters++
+	return pw.ch
+}
+
+func (s *sessionState) releasePendingWait(id string, ch chan struct{}) {
+	pw, ok := s.pending[id]
+	if !ok || pw.ch != ch {
+		return
+	}
+	pw.waiters--
+	if pw.waiters <= 0 {
+		delete(s.pending, id)
+	}
+}
+
+func (s *sessionState) notifyPending(id string) {
+	pw, ok := s.pending[id]
+	if !ok {
+		return
+	}
+	delete(s.pending, id)
+	close(pw.ch)
+}
+
 // Manager is a controller for accessing currently active sessions
 type Manager struct {
-	sessions        map[string]*client
-	mu              sync.Mutex
-	updateCondition *sync.Cond
+	state chan *sessionState
+}
+
+type sessionCallbacks struct {
+	setup   func(ctx context.Context, state *sessionState) error
+	session func(ctx context.Context) error
+	cleanup func(state *sessionState)
 }
 
 // NewManager returns a new Manager
 func NewManager() (*Manager, error) {
 	sm := &Manager{
-		sessions: make(map[string]*client),
+		state: make(chan *sessionState, 1),
 	}
-	sm.updateCondition = sync.NewCond(&sm.mu)
+	sm.state <- newSessionState()
 	return sm, nil
+}
+
+func (sm *Manager) withState(ctx context.Context, fn func(state *sessionState) error) error {
+	var state *sessionState
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case state = <-sm.state:
+	}
+	defer func() {
+		sm.state <- state
+	}()
+	return fn(state)
+}
+
+func (sm *Manager) tryWithState(fn func(state *sessionState) error) (bool, error) {
+	select {
+	case state := <-sm.state:
+		defer func() {
+			sm.state <- state
+		}()
+		return true, fn(state)
+	default:
+		return false, nil
+	}
+}
+
+func (sm *Manager) runSession(ctx context.Context, cb sessionCallbacks) (retErr error) {
+	if cb.setup != nil {
+		if err := sm.withState(ctx, func(state *sessionState) error {
+			return cb.setup(ctx, state)
+		}); err != nil {
+			return errors.Wrapf(err, "setting up session")
+		}
+	}
+	if cb.cleanup != nil {
+		defer func() {
+			err := sm.withState(context.Background(), func(state *sessionState) error {
+				cb.cleanup(state)
+				return nil
+			})
+			if retErr == nil && err != nil {
+				retErr = err
+			}
+		}()
+	}
+	if cb.session == nil {
+		return nil
+	}
+	return cb.session(ctx)
 }
 
 // HandleHTTPRequest handles an incoming HTTP request
@@ -52,52 +189,70 @@ func (sm *Manager) HandleHTTPRequest(ctx context.Context, w http.ResponseWriter,
 
 	proto := r.Header.Get("Upgrade")
 
-	sm.mu.Lock()
-	if _, ok := sm.sessions[id]; ok {
-		sm.mu.Unlock()
-		return errors.Errorf("session %s already exists", id)
-	}
-
 	if proto == "" {
-		sm.mu.Unlock()
 		return errors.New("no upgrade proto in request")
 	}
 
 	if proto != "h2c" {
-		sm.mu.Unlock()
 		return errors.Errorf("protocol %s not supported", proto)
 	}
 
-	conn, _, err := hijacker.Hijack()
-	if err != nil {
-		sm.mu.Unlock()
-		return errors.Wrap(err, "failed to hijack connection")
-	}
+	var conn net.Conn
+	return sm.runSession(ctx, sessionCallbacks{
+		setup: func(_ context.Context, state *sessionState) error {
+			return state.reserve(id)
+		},
+		session: func(ctx context.Context) error {
+			var err error
+			conn, _, err = hijacker.Hijack()
+			if err != nil {
+				return errors.Wrap(err, "failed to hijack connection")
+			}
 
-	resp := &http.Response{
-		StatusCode: http.StatusSwitchingProtocols,
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     http.Header{},
-	}
-	resp.Header.Set("Connection", "Upgrade")
-	resp.Header.Set("Upgrade", proto)
+			resp := &http.Response{
+				StatusCode: http.StatusSwitchingProtocols,
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header:     http.Header{},
+			}
+			resp.Header.Set("Connection", "Upgrade")
+			resp.Header.Set("Upgrade", proto)
 
-	// set raw mode
-	conn.Write([]byte{})
-	resp.Write(conn)
-
-	return sm.handleConn(ctx, conn, r.Header)
+			// set raw mode
+			if _, err := conn.Write([]byte{}); err != nil {
+				_ = conn.Close()
+				return errors.Wrap(err, "failed to switch connection to raw mode")
+			}
+			if err := resp.Write(conn); err != nil {
+				_ = conn.Close()
+				return errors.Wrap(err, "failed to write upgrade response")
+			}
+			return sm.serveConnSession(ctx, conn, r.Header)
+		},
+		cleanup: func(state *sessionState) {
+			state.remove(id)
+		},
+	})
 }
 
 // HandleConn handles an incoming raw connection
 func (sm *Manager) HandleConn(ctx context.Context, conn net.Conn, opts map[string][]string) error {
-	sm.mu.Lock()
-	return sm.handleConn(ctx, conn, opts)
+	opts = canonicalHeaders(opts)
+	id := http.Header(opts).Get(headerSessionID)
+	return sm.runSession(ctx, sessionCallbacks{
+		setup: func(_ context.Context, state *sessionState) error {
+			return state.reserve(id)
+		},
+		session: func(ctx context.Context) error {
+			return sm.serveConnSession(ctx, conn, opts)
+		},
+		cleanup: func(state *sessionState) {
+			state.remove(id)
+		},
+	})
 }
 
-// caller needs to take lock, this function will release it
-func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[string][]string) error {
+func (sm *Manager) serveConnSession(ctx context.Context, conn net.Conn, opts map[string][]string) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
@@ -109,8 +264,7 @@ func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[strin
 
 	ctx, cc, err := grpcClientConn(ctx, conn)
 	if err != nil {
-		sm.mu.Unlock()
-		return err
+		return errors.Wrapf(err, "creating gRPC client connection for session %q", id)
 	}
 
 	c := &client{
@@ -128,20 +282,17 @@ func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[strin
 	for _, m := range opts[headerSessionMethod] {
 		c.supported[strings.ToLower(m)] = struct{}{}
 	}
-	sm.sessions[id] = c
-	sm.updateCondition.Broadcast()
-	sm.mu.Unlock()
+	defer conn.Close()
+	defer close(c.done)
 
-	defer func() {
-		sm.mu.Lock()
-		delete(sm.sessions, id)
-		sm.mu.Unlock()
-	}()
+	if err := sm.withState(ctx, func(state *sessionState) error {
+		state.activate(id, c)
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "activating session %q", id)
+	}
 
 	<-c.ctx.Done()
-	conn.Close()
-	close(c.done)
-
 	return nil
 }
 
@@ -153,41 +304,59 @@ func (sm *Manager) Get(ctx context.Context, id string, noWait bool) (Caller, err
 		id = p[1]
 	}
 
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
+	start := time.Now()
 
-	go func() {
-		<-ctx.Done()
-		sm.mu.Lock()
-		sm.updateCondition.Broadcast()
-		sm.mu.Unlock()
-	}()
-
+	// Fast path: do a single non-blocking state check. This allows immediate
+	// success for active/noWait lookups even when ctx is already canceled.
 	var c *client
+	ok, err := sm.tryWithState(func(state *sessionState) error {
+		c = state.getActive(id)
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrapf(context.Cause(ctx), "looking up active session for %q", id)
+	}
+	if ok {
+		if c != nil {
+			return c, nil
+		}
+		if noWait {
+			return nil, nil
+		}
+		if ctx.Err() != nil {
+			return nil, errors.Wrapf(context.Cause(ctx), "cannot get session %q; context already terminated", id)
+		}
+	}
 
-	sm.mu.Lock()
 	for {
+		var waitCh chan struct{}
+		err := sm.withState(ctx, func(state *sessionState) error {
+			c = state.getActive(id)
+			if c != nil || noWait {
+				return nil
+			}
+			waitCh = state.pendingWait(id)
+			return nil
+		})
+		if err != nil {
+			return nil, errors.Wrapf(context.Cause(ctx), "looking up active session for %q", id)
+		}
+		if c != nil {
+			return c, nil
+		}
+		if noWait {
+			return nil, nil
+		}
 		select {
 		case <-ctx.Done():
-			sm.mu.Unlock()
-			return nil, errors.Wrapf(context.Cause(ctx), "no active session for %s", id)
-		default:
+			_ = sm.withState(context.Background(), func(state *sessionState) error {
+				state.releasePendingWait(id, waitCh)
+				return nil
+			})
+			return nil, errors.Wrapf(context.Cause(ctx), "session %q did not start (waited for %s)", id, time.Since(start).Truncate(time.Millisecond))
+		case <-waitCh:
 		}
-		var ok bool
-		c, ok = sm.sessions[id]
-		if (!ok || c.closed()) && !noWait {
-			sm.updateCondition.Wait()
-			continue
-		}
-		sm.mu.Unlock()
-		break
 	}
-
-	if c == nil {
-		return nil, nil
-	}
-
-	return c, nil
 }
 
 func (c *client) Context() context.Context {
