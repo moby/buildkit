@@ -35,7 +35,7 @@ func TestIsContainerNotRunning(t *testing.T) {
 		"kill: no such process",
 	}
 	for _, msg := range positive {
-		require.True(t, isContainerNotRunning(fmt.Errorf("%s", msg)), "expected match for %q", msg)
+		require.True(t, isContainerNotRunning(errors.Errorf("%s", msg)), "expected match for %q", msg)
 	}
 
 	negative := []string{
@@ -45,7 +45,7 @@ func TestIsContainerNotRunning(t *testing.T) {
 		"some other runc error",
 	}
 	for _, msg := range negative {
-		require.False(t, isContainerNotRunning(fmt.Errorf("%s", msg)), "unexpected match for %q", msg)
+		require.False(t, isContainerNotRunning(errors.Errorf("%s", msg)), "unexpected match for %q", msg)
 	}
 }
 
@@ -62,7 +62,7 @@ if [ "$1" = "kill" ]; then
 fi
 exit 0
 `, killErr)
-	err := os.WriteFile(path, []byte(script), 0700)
+	err := os.WriteFile(path, []byte(script), 0644)
 	require.NoError(t, err)
 	return &runc.Runc{Command: path}
 }
@@ -84,8 +84,8 @@ func TestZombieRuncDeadlock(t *testing.T) {
 
 	// Setup the executor and a cancellable parent context.
 	w := &runcExecutor{runc: mockRunc}
-	parentCtx, cancelParent := context.WithCancel(context.Background())
-	defer cancelParent()
+	parentCtx, cancelParent := context.WithCancelCause(t.Context())
+	defer cancelParent(nil)
 
 	// This mock `call` function simulates a hanging `runc run` process.
 	// It spawns a real subprocess and waits for it, exactly like the real code.
@@ -121,7 +121,7 @@ func TestZombieRuncDeadlock(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	bklog.G(parentCtx).Debug("test: canceling parent context to trigger cleanup")
-	cancelParent()
+	cancelParent(nil)
 
 	select {
 	case err := <-done:
