@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"io"
+	"io/fs"
 	"os"
 	"strings"
 	"sync"
@@ -50,6 +52,10 @@ func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 	return i, nil
 }
 
+func (e *localExporter) Config() *exporter.Config {
+	return exporter.NewConfig()
+}
+
 type localExporterInstance struct {
 	*localExporter
 	id    int
@@ -72,10 +78,6 @@ func (e *localExporterInstance) Type() string {
 
 func (e *localExporterInstance) Attrs() map[string]string {
 	return e.attrs
-}
-
-func (e *localExporter) Config() *exporter.Config {
-	return exporter.NewConfig()
 }
 
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
@@ -114,6 +116,23 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	visitedPath := map[string]string{}
 	var visitedMu sync.Mutex
+
+	if e.opts.Mode == filesync.FSSyncDirModeDelete {
+		// Delete mode must export one complete final tree; otherwise multi-platform
+		// outputs can delete sibling platform directories.
+		outputFS, cleanup, err := e.buildDeleteModeFS(ctx, inp, buildInfo, p, isMap, now)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		progress := NewProgressHandler(ctx, "copying files")
+		if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
+			return nil, nil, nil, err
+		}
+		return nil, nil, nil, nil
+	}
 
 	export := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, opt CreateFSOpts) func() error {
 		return func() error {
@@ -195,6 +214,143 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, nil, err
 	}
 	return nil, nil, nil, nil
+}
+
+func (e *localExporterInstance) buildDeleteModeFS(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo, p exptypes.Platforms, isMap bool, now time.Time) (_ fsutil.FS, cleanup func() error, err error) {
+	root, err := os.MkdirTemp("", "buildkit-local-export-")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cleanup = func() error {
+		return os.RemoveAll(root)
+	}
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+
+	visitedPath := map[string]string{}
+
+	addExport := func(k string, ref cache.ImmutableRef, attestations []exporter.Attestation, opt CreateFSOpts) error {
+		outputFS, outputCleanup, err := CreateFS(ctx, buildInfo.SessionID, k, ref, attestations, now, isMap, opt)
+		if err != nil {
+			return err
+		}
+		if outputCleanup != nil {
+			defer outputCleanup()
+		}
+
+		if e.opts.UsePlatformSplit(isMap) {
+			st := &fstypes.Stat{
+				Mode: uint32(os.ModeDir | 0755),
+				Path: strings.ReplaceAll(k, "/", "_"),
+			}
+			if opt.Epoch != nil && opt.Epoch.Value != nil {
+				st.ModTime = opt.Epoch.Value.UnixNano()
+			}
+			outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: st}})
+			if err != nil {
+				return err
+			}
+		} else {
+			err = fsWalk(ctx, outputFS, "", func(p string, entry os.DirEntry, err error) error {
+				if entry.IsDir() {
+					return nil
+				}
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				if vp, ok := visitedPath[p]; ok {
+					return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
+				}
+				visitedPath[p] = k
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		if err := writeFS(ctx, outputFS, root); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if len(p.Platforms) > 0 {
+		for _, p := range p.Platforms {
+			r, ok := inp.FindRef(p.ID)
+			if !ok {
+				return nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+			}
+			opt := e.opts
+			if e.opts.Epoch == nil {
+				tm, err := epoch.ParseSource(inp, &p)
+				if err != nil {
+					return nil, nil, err
+				}
+				opt.Epoch = &epoch.Epoch{Value: tm}
+			}
+			if err := addExport(p.ID, r, inp.Attestations[p.ID], opt); err != nil {
+				return nil, nil, err
+			}
+		}
+	} else {
+		if err := addExport("", inp.Ref, nil, e.opts); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	outputFS, err := fsutil.NewFS(root)
+	if err != nil {
+		return nil, nil, err
+	}
+	return outputFS, cleanup, nil
+}
+
+func writeFS(ctx context.Context, src fsutil.FS, dest string) error {
+	if err := os.MkdirAll(dest, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create export staging dir %s", dest)
+	}
+
+	dw, err := fsutil.NewDiskWriter(ctx, dest, fsutil.DiskWriterOpt{
+		AsyncDataCb: func(ctx context.Context, p string, wc io.WriteCloser) (retErr error) {
+			defer func() {
+				if err := wc.Close(); retErr == nil {
+					retErr = err
+				}
+			}()
+
+			r, err := src.Open(p)
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			_, err = io.Copy(wc, r)
+			return err
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := src.Walk(ctx, "", func(p string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return dw.HandleChange(fsutil.ChangeKindAdd, p, info, nil)
+	}); err != nil {
+		return err
+	}
+
+	return dw.Wait(ctx)
 }
 
 func NewProgressHandler(ctx context.Context, id string) func(int, bool) {

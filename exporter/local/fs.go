@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/exporter/attestation"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/staticfs"
@@ -33,12 +34,14 @@ const (
 	// keyPlatformSplit is an exporter option which can be used to split result
 	// in subfolders when multiple platform references are exported.
 	keyPlatformSplit = "platform-split"
+	keyMode          = "mode"
 )
 
 type CreateFSOpts struct {
 	Epoch             *epoch.Epoch
 	AttestationPrefix string
 	PlatformSplit     *bool
+	Mode              filesync.FSSyncDirMode
 }
 
 func (c *CreateFSOpts) UsePlatformSplit(isMap bool) bool {
@@ -50,6 +53,7 @@ func (c *CreateFSOpts) UsePlatformSplit(isMap bool) bool {
 
 func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
+	c.Mode = filesync.FSSyncDirModeCopy
 
 	var err error
 	c.Epoch, opt, err = epoch.ParseExporterAttrs(opt)
@@ -67,6 +71,12 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 				return nil, errors.Wrapf(err, "non-bool value for %s: %s", keyPlatformSplit, v)
 			}
 			c.PlatformSplit = &b
+		case keyMode:
+			mode, err := filesync.ParseFSSyncDirMode(v)
+			if err != nil {
+				return nil, err
+			}
+			c.Mode = mode
 		default:
 			rest[k] = v
 		}

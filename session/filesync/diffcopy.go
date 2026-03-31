@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
-
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
