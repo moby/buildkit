@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -34,36 +35,38 @@ import (
 )
 
 const (
-	attrBucket            = "bucket"
-	attrRegion            = "region"
-	attrPrefix            = "prefix"
-	attrManifestsPrefix   = "manifests_prefix"
-	attrBlobsPrefix       = "blobs_prefix"
-	attrName              = "name"
-	attrTouchRefresh      = "touch_refresh"
-	attrEndpointURL       = "endpoint_url"
-	attrAccessKeyID       = "access_key_id"
-	attrSecretAccessKey   = "secret_access_key"
-	attrSessionToken      = "session_token"
-	attrUsePathStyle      = "use_path_style"
-	attrUploadParallelism = "upload_parallelism"
-	maxCopyObjectSize     = 5 * 1024 * 1024 * 1024
+	attrBucket                = "bucket"
+	attrRegion                = "region"
+	attrPrefix                = "prefix"
+	attrManifestsPrefix       = "manifests_prefix"
+	attrBlobsPrefix           = "blobs_prefix"
+	attrName                  = "name"
+	attrTouchRefresh          = "touch_refresh"
+	attrEndpointURL           = "endpoint_url"
+	attrAccessKeyID           = "access_key_id"
+	attrSecretAccessKey       = "secret_access_key"
+	attrSessionToken          = "session_token"
+	attrUsePathStyle          = "use_path_style"
+	attrUploadParallelism     = "upload_parallelism"
+	attrDisableAcceptEncoding = "disable_accept_encoding"
+	maxCopyObjectSize         = 5 * 1024 * 1024 * 1024
 )
 
 type Config struct {
-	Bucket            string
-	Region            string
-	Prefix            string
-	ManifestsPrefix   string
-	BlobsPrefix       string
-	Names             []string
-	TouchRefresh      time.Duration
-	EndpointURL       string
-	AccessKeyID       string
-	SecretAccessKey   string
-	SessionToken      string
-	UsePathStyle      bool
-	UploadParallelism int
+	Bucket                string
+	Region                string
+	Prefix                string
+	ManifestsPrefix       string
+	BlobsPrefix           string
+	Names                 []string
+	TouchRefresh          time.Duration
+	EndpointURL           string
+	AccessKeyID           string
+	SecretAccessKey       string
+	SessionToken          string
+	UsePathStyle          bool
+	UploadParallelism     int
+	DisableAcceptEncoding bool
 }
 
 func getConfig(attrs map[string]string) (Config, error) {
@@ -141,20 +144,30 @@ func getConfig(attrs map[string]string) (Config, error) {
 		uploadParallelism = uploadParallelismInt
 	}
 
+	disableAcceptEncoding := false
+	disableAcceptEncodingStr, ok := attrs[attrDisableAcceptEncoding]
+	if ok {
+		disableAcceptEncodingUser, err := strconv.ParseBool(disableAcceptEncodingStr)
+		if err == nil {
+			disableAcceptEncoding = disableAcceptEncodingUser
+		}
+	}
+
 	return Config{
-		Bucket:            bucket,
-		Region:            region,
-		Prefix:            prefix,
-		ManifestsPrefix:   manifestsPrefix,
-		BlobsPrefix:       blobsPrefix,
-		Names:             names,
-		TouchRefresh:      touchRefresh,
-		EndpointURL:       endpointURL,
-		AccessKeyID:       accessKeyID,
-		SecretAccessKey:   secretAccessKey,
-		SessionToken:      sessionToken,
-		UsePathStyle:      usePathStyle,
-		UploadParallelism: uploadParallelism,
+		Bucket:                bucket,
+		Region:                region,
+		Prefix:                prefix,
+		ManifestsPrefix:       manifestsPrefix,
+		BlobsPrefix:           blobsPrefix,
+		Names:                 names,
+		TouchRefresh:          touchRefresh,
+		EndpointURL:           endpointURL,
+		AccessKeyID:           accessKeyID,
+		SecretAccessKey:       secretAccessKey,
+		SessionToken:          sessionToken,
+		UsePathStyle:          usePathStyle,
+		UploadParallelism:     uploadParallelism,
+		DisableAcceptEncoding: disableAcceptEncoding,
 	}, nil
 }
 
@@ -418,6 +431,17 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 		if config.EndpointURL != "" {
 			options.UsePathStyle = config.UsePathStyle
 			options.BaseEndpoint = aws.String(config.EndpointURL)
+		}
+		if config.DisableAcceptEncoding {
+			// GCS's GFE appends "gzip(gfe)" to the Accept-Encoding header after the
+			// AWS SDK has signed it as "identity", causing SignatureDoesNotMatch (403).
+			// Removing the DisableAcceptEncodingGzip middleware prevents the header
+			// from being added to the request and included in the signature at all.
+			// See: https://github.com/moby/buildkit/issues/3749
+			options.APIOptions = append(options.APIOptions, func(stack *middleware.Stack) error {
+				stack.Finalize.Remove("DisableAcceptEncodingGzip")
+				return nil
+			})
 		}
 	})
 
