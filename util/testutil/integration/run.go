@@ -406,6 +406,9 @@ func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string 
 	var once sync.Once
 	var mirror string
 	return func() string {
+		if len(images) == 0 {
+			return ""
+		}
 		once.Do(func() {
 			m, err := RunMirror()
 			require.NoError(t, err)
