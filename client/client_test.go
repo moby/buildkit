@@ -7609,7 +7609,7 @@ func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
 
 	require.Len(t, fis, 1, "expected one files in the output directory")
 
-	expPlatform := strings.ReplaceAll(platforms.FormatAll(platforms.DefaultSpec()), "/", "_")
+	expPlatform := strings.ReplaceAll(platforms.FormatAll(platforms.Normalize(platforms.DefaultSpec())), "/", "_")
 	_, err = os.Stat(filepath.Join(destDir, expPlatform+"/"))
 	require.NoError(t, err)
 
@@ -7832,13 +7832,24 @@ func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
 	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
 	busybox := llb.Image(imgName)
 
+	imgAlpine := integration.UnixOrWindows("alpine:latest", "nanoserver:plus")
+	alpineImage := llb.Image(imgAlpine)
+
+	// On Windows ARM64, nanoserver:plus and nanoserver:latest map to the same
+	// image, so we create a marker file to distinguish the mounted image.
+	mountSource := alpineImage
+	if runtime.GOOS == "windows" {
+		mountSource = alpineImage.Run(
+			llb.Shlex(`cmd /C echo 1> C:/marker`),
+		).Root()
+	}
+
 	cmdStr := integration.UnixOrWindows(
 		`sh -e -c "[[ -f /m1/sbin/apk ]]"`,
-		`cmd /C if exist C:\\m1\\Windows\\System32\\whoami.exe (exit 0) else (exit 1)`,
+		`cmd /C if exist C:/m1/marker (exit 0) else (exit 1)`,
 	)
 	out := busybox.Run(llb.Shlex(cmdStr))
-	imgAlpine := integration.UnixOrWindows("alpine:latest", "nanoserver:plus")
-	out.AddMount("/m1", llb.Image(imgAlpine), llb.Readonly)
+	out.AddMount("/m1", mountSource, llb.Readonly)
 
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -7848,7 +7859,7 @@ func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
 
 	cmdStr = integration.UnixOrWindows(
 		`sh -e -c "[[ ! -f /m1/sbin/apk ]]"`,
-		`cmd /C if exist C:\\m1\\Windows\\System32\\whoami.exe (exit 1)`,
+		`cmd /C if exist C:/m1/marker (exit 1) else (exit 0)`,
 	)
 	out = busybox.Run(llb.Shlex(cmdStr))
 	out.AddMount("/m1", llb.Image(imgName), llb.Readonly)
