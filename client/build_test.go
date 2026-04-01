@@ -5,19 +5,26 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	sessionauth "github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -33,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )
 
@@ -61,6 +69,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExtraHosts,
 		testClientGatewayContainerSignal,
 		testWarnings,
+		testClientGatewayCanceledCredentialsCallbackReturns,
 		testClientGatewayNilResult,
 		testClientGatewayEmptyImageExec,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
@@ -2283,6 +2292,121 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testClientGatewayCanceledCredentialsCallbackReturns(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	username := "buildkit-user"
+	password := "buildkit-pass"
+	repo := "buildkit/auth-session-" + identity.NewID()
+	backendRef := registry + "/" + repo + ":latest"
+
+	st := llb.Scratch().File(llb.Mkfile("hello", 0o644, []byte("world")))
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": backendRef,
+				"push": "true",
+			},
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	target, err := url.Parse("http://" + registry)
+	require.NoError(t, err)
+
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	director := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		director(req)
+		req.Host = target.Host
+	}
+
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, secret, ok := r.BasicAuth()
+		if !ok || user != username || secret != password {
+			w.Header().Set("WWW-Authenticate", `Basic realm="buildkit-test"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(proxyServer.Close)
+
+	ref := strings.TrimPrefix(proxyServer.URL, "http://") + "/" + repo + ":latest"
+	host := strings.SplitN(ref, "/", 2)[0]
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+
+	provider := &blockingAuthProvider{
+		t:           t,
+		host:        host,
+		username:    username,
+		password:    password,
+		started:     started,
+		startedOnce: &startedOnce,
+		release:     release,
+	}
+
+	_, err = c.Build(ctx, SolveOpt{
+		Session: []session.Attachable{provider},
+	}, "buildkit_test", func(ctx context.Context, gw client.Client) (*client.Result, error) {
+		reqCtx, cancel := context.WithCancelCause(ctx)
+		defer cancel(context.Canceled)
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, _, _, err := gw.ResolveImageConfig(reqCtx, ref, sourceresolver.Opt{})
+			errCh <- err
+		}()
+
+		select {
+		case <-started:
+		case <-time.After(15 * time.Second):
+			return nil, errors.New("timed out waiting for registry credential callback")
+		}
+
+		cancel(context.Canceled)
+
+		select {
+		case err := <-errCh:
+			require.Error(t, err)
+			return client.NewResult(), nil
+		case <-time.After(3 * time.Second):
+			close(release)
+		}
+
+		select {
+		case err := <-errCh:
+			require.Error(t, err)
+		case <-time.After(15 * time.Second):
+			return nil, errors.New("timed out draining canceled image config resolution")
+		}
+
+		return nil, errors.New("canceled image config resolution stayed blocked until the credentials callback was released")
+	}, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
 func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
 	requiresLinux(t)
@@ -2364,4 +2488,37 @@ func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+type blockingAuthProvider struct {
+	sessionauth.UnimplementedAuthServer
+
+	t           *testing.T
+	host        string
+	username    string
+	password    string
+	started     chan struct{}
+	startedOnce *sync.Once
+	release     chan struct{}
+}
+
+func (p *blockingAuthProvider) Register(server *grpc.Server) {
+	sessionauth.RegisterAuthServer(server, p)
+}
+
+func (p *blockingAuthProvider) Credentials(ctx context.Context, req *sessionauth.CredentialsRequest) (*sessionauth.CredentialsResponse, error) {
+	require.Equal(p.t, p.host, req.Host)
+	p.startedOnce.Do(func() {
+		close(p.started)
+	})
+
+	select {
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	case <-p.release:
+		return &sessionauth.CredentialsResponse{
+			Username: p.username,
+			Secret:   p.password,
+		}, nil
+	}
 }
