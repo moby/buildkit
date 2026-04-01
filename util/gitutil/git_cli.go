@@ -191,9 +191,10 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_SSH_COMMAND=" + getGitSSHCommand(cli.sshKnownHosts),
 			//	"GIT_TRACE=1",
-			"GIT_CONFIG_NOSYSTEM=1", // Disable reading from system gitconfig.
-			"HOME=/dev/null",        // Disable reading from user gitconfig.
-			"LC_ALL=C",              // Ensure consistent output.
+			"HOME=" + os.DevNull,              // Disable reading from user gitconfig.
+			"GIT_CONFIG_NOSYSTEM=1",           // Disable reading from system gitconfig.
+			"GIT_CONFIG_GLOBAL=" + os.DevNull, // Disable reading from global gitconfig.
+			"LC_ALL=C",                        // Ensure consistent output.
 		}
 		for _, ev := range proxyEnvVars {
 			if v, ok := os.LookupEnv(ev); ok {
@@ -244,7 +245,7 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 }
 
 func getGitSSHCommand(knownHosts string) string {
-	gitSSHCommand := "ssh -F /dev/null"
+	gitSSHCommand := "ssh -F " + os.DevNull
 	if knownHosts != "" {
 		gitSSHCommand += " -o UserKnownHostsFile=" + knownHosts
 	} else {
