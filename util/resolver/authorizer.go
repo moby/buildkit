@@ -54,9 +54,7 @@ func (a *authHandlerNS) get(ctx context.Context, host string, sm *session.Manage
 				if id == "" {
 					break
 				}
-				h, ok := a.fetchers[host+"/"+id]
-				if ok {
-					h.lastUsed = time.Now()
+				if h := a.getExisting(host, id); h != nil {
 					return h
 				}
 			}
@@ -64,27 +62,17 @@ func (a *authHandlerNS) get(ctx context.Context, host string, sm *session.Manage
 	}
 
 	// link existing fetcher
-	for k, h := range a.fetchers {
-		parts := strings.SplitN(k, "/", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if parts[0] == host {
-			if h.authority != nil {
-				sessionID, ok, err := sessionauth.VerifyTokenAuthority(ctx, host, h.authority, sm, g)
-				if err == nil && ok {
-					a.fetchers[host+"/"+sessionID] = h
-					h.lastUsed = time.Now()
-					return h
-				}
-			} else {
-				sessionID, username, password, err := sessionauth.CredentialsFunc(ctx, sm, g)(host)
-				if err == nil {
-					if username == h.common.Username && password == h.common.Secret {
-						a.fetchers[host+"/"+sessionID] = h
-						h.lastUsed = time.Now()
-						return h
-					}
+	for _, h := range a.getCandidates(host) {
+		if h.authority != nil {
+			sessionID, ok, err := sessionauth.VerifyTokenAuthority(ctx, host, h.authority, sm, g)
+			if err == nil && ok {
+				return a.set(host, sessionID, h)
+			}
+		} else {
+			sessionID, username, password, err := sessionauth.CredentialsFunc(ctx, sm, g)(host)
+			if err == nil {
+				if username == h.common.Username && password == h.common.Secret {
+					return a.set(host, sessionID, h)
 				}
 			}
 		}
@@ -93,11 +81,56 @@ func (a *authHandlerNS) get(ctx context.Context, host string, sm *session.Manage
 	return nil
 }
 
-func (a *authHandlerNS) set(host, session string, f *authFetcher) {
-	a.fetchers[host+"/"+session] = f
+func (a *authHandlerNS) getExisting(host, session string) *authFetcher {
+	a.muHandlers.Lock()
+	defer a.muHandlers.Unlock()
+
+	h := a.fetchers[host+"/"+session]
+	if h != nil {
+		h.lastUsed = time.Now()
+	}
+	return h
+}
+
+func (a *authHandlerNS) getCandidates(host string) []*authFetcher {
+	a.muHandlers.Lock()
+	defer a.muHandlers.Unlock()
+
+	seen := map[*authFetcher]struct{}{}
+	out := make([]*authFetcher, 0, len(a.fetchers))
+	for key, h := range a.fetchers {
+		parts := strings.SplitN(key, "/", 2)
+		if len(parts) != 2 || parts[0] != host {
+			continue
+		}
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	return out
+}
+
+func (a *authHandlerNS) set(host, session string, f *authFetcher) *authFetcher {
+	a.muHandlers.Lock()
+	defer a.muHandlers.Unlock()
+
+	key := host + "/" + session
+	if existing := a.fetchers[key]; existing != nil {
+		existing.lastUsed = time.Now()
+		return existing
+	}
+
+	f.lastUsed = time.Now()
+	a.fetchers[key] = f
+	return f
 }
 
 func (a *authHandlerNS) delete(f *authFetcher) {
+	a.muHandlers.Lock()
+	defer a.muHandlers.Unlock()
+
 	maps.DeleteFunc(a.fetchers, func(_ string, v *authFetcher) bool {
 		return v == f
 	})
@@ -122,9 +155,6 @@ func newDockerAuthorizer(client *http.Client, handlerNS *authHandlerNS, sm *sess
 
 // Authorize handles auth request.
 func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) error {
-	a.handlerNS.muHandlers.Lock()
-	defer a.handlerNS.muHandlers.Unlock()
-
 	// skip if there is no auth handler
 	ah := a.handlerNS.get(ctx, req.URL.Host, a.sm, a.session)
 	if ah == nil {
@@ -146,9 +176,6 @@ func (a *dockerAuthorizer) getCredentials(ctx context.Context, host string) (ses
 
 func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.Response) error {
 	handlerNS := a.handlerNS
-
-	handlerNS.muHandlers.Lock()
-	defer handlerNS.muHandlers.Unlock()
 
 	last := responses[len(responses)-1]
 	host := last.Request.URL.Host
