@@ -2979,8 +2979,8 @@ COPY foo /foo2
 COPY foo /
 RUN echo bar> foo3
 RUN IF EXIST foo (exit 0) ELSE (exit 1)
-RUN fc /b foo foo2 && (exit 0) || (exit 1)
-RUN fc /b foo foo3 && (exit 0) || (exit 1)
+RUN findstr /M "bar" foo2 >nul && (exit 0) || (exit 1)
+RUN findstr /M "bar" foo3 >nul && (exit 0) || (exit 1)
 `,
 	))
 
