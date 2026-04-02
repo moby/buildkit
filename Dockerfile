@@ -488,7 +488,7 @@ VOLUME /var/lib/buildkit
 
 # rootless builds a rootless variant of buildkitd image
 FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 fuse-overlayfs git openssh openssl pigz shadow-uidmap xz
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh openssl pigz shadow-uidmap xz make
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
