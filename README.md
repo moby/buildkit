@@ -562,6 +562,7 @@ S3 configuration:
 * `manifests_prefix`: global prefix to store / read manifests on s3 (default: `manifests/`)
 * `endpoint_url`: specify a specific S3 endpoint (default: empty)
 * `use_path_style`: if set to `true`, put the bucket name in the URL instead of in the hostname (default: `false`)
+* `disable_accept_encoding`: if set to `true`, removes the `DisableAcceptEncodingGzip` middleware from the AWS SDK request pipeline (default: `false`). Useful with S3-compatible backends like GCS, where the proxy can mutate the `Accept-Encoding` header after request signing, causing `SignatureDoesNotMatch` (403) errors. See [#3749](https://github.com/moby/buildkit/issues/3749).
 
 AWS Authentication:
 
