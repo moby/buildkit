@@ -40,7 +40,7 @@ func (s *Solver) getSessionExporters(ctx context.Context, sessionID string, id i
 	}
 
 	client := sessionexporter.NewExporterClient(caller.Conn())
-
+	ctx = caller.Context(ctx)
 	var ids []string
 	if err := inp.EachRef(func(ref cache.ImmutableRef) error {
 		ids = append(ids, ref.ID())
