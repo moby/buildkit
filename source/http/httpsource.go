@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode"
 
+	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -289,7 +290,11 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	if hs.src.Perm != 0 {
 		perm = hs.src.Perm
 	}
-	fp := filepath.Join(dir, getFileName(hs.src.URL, hs.src.Filename, resp))
+	name := getFileName(hs.src.URL, hs.src.Filename, resp)
+	fp, err := securejoin.SecureJoin(dir, name)
+	if err != nil {
+		return nil, "", err
+	}
 
 	f, err := os.OpenFile(fp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(perm))
 	if err != nil {
