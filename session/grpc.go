@@ -32,9 +32,9 @@ type healthCheckConfig struct {
 
 var defaultHealthCheckConfig = healthCheckConfig{
 	interval:              5 * time.Second,
-	defaultTimeout:        30 * time.Second,
+	defaultTimeout:        15 * time.Second,
 	failureThreshold:      2,
-	successResetThreshold: 5,
+	successResetThreshold: 1,
 }
 
 const headerSessionHealthCustomTimeout = "X-Buildkit-Session-Health-Custom-Timeout"
