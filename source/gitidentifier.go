@@ -7,6 +7,7 @@ import (
 
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/sshutil"
+	"github.com/pkg/errors"
 )
 
 type GitIdentifier struct {
@@ -50,7 +51,19 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	if sd := path.Clean(repo.Subdir); sd == "/" || sd == "." {
 		repo.Subdir = ""
 	}
+	if err := validateGitRef(repo.Ref); err != nil {
+		return nil, err
+	}
 	return &repo, nil
+}
+
+// validateGitRef rejects refs that start with '-', which could be
+// interpreted as option flags by git commands.
+func validateGitRef(ref string) error {
+	if strings.HasPrefix(ref, "-") {
+		return errors.Errorf("invalid git ref %q", ref)
+	}
+	return nil
 }
 
 func (i *GitIdentifier) ID() string {

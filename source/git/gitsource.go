@@ -345,7 +345,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	// TODO: should we assume that remote tag is immutable? add a timer?
 
-	buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "ls-remote", "origin", ref)
+	buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "ls-remote", "--", "origin", ref)
 	if err != nil {
 		return "", "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
@@ -427,7 +427,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	doFetch := true
 	if isCommitSHA(ref) {
 		// skip fetch if commit already exists
-		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, nil, "cat-file", "-e", ref+"^{commit}"); err == nil {
+		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, nil, "cat-file", "-e", "--", ref+"^{commit}"); err == nil {
 			doFetch = false
 		}
 	}
@@ -446,7 +446,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		args = append(args, "origin")
 		if !isCommitSHA(ref) {
-			args = append(args, "--force", ref+":tags/"+ref)
+			args = append(args, "--force", "--", ref+":tags/"+ref)
 			// local refs are needed so they would be advertised on next fetches. Force is used
 			// in case the ref is a branch and it now points to a different commit sha
 			// TODO: is there a better way to do this?
@@ -526,7 +526,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, gs.auth, "fetch", "-u", "--depth=1", "origin", pullref)
+		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, gs.auth, "fetch", "-u", "--depth=1", "--", "origin", pullref)
 		if err != nil {
 			return nil, err
 		}
