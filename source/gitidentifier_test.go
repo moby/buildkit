@@ -48,14 +48,14 @@ func TestNewGitIdentifier(t *testing.T) {
 			expected: GitIdentifier{
 				Remote: "git://github.com/user/repo.git",
 				Ref:    "mybranch",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
 			},
 		},
 		{
 			url: "git://github.com/user/repo.git#:mydir/mysubdir/",
 			expected: GitIdentifier{
 				Remote: "git://github.com/user/repo.git",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
 			},
 		},
 		{
@@ -69,7 +69,7 @@ func TestNewGitIdentifier(t *testing.T) {
 			expected: GitIdentifier{
 				Remote: "https://github.com/user/repo.git",
 				Ref:    "mybranch",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
 			},
 		},
 		{
@@ -83,7 +83,7 @@ func TestNewGitIdentifier(t *testing.T) {
 			expected: GitIdentifier{
 				Remote: "git@github.com:user/repo.git",
 				Ref:    "mybranch",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
 			},
 		},
 		{
@@ -97,7 +97,7 @@ func TestNewGitIdentifier(t *testing.T) {
 			expected: GitIdentifier{
 				Remote: "ssh://github.com/user/repo.git",
 				Ref:    "mybranch",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
 			},
 		},
 		{
@@ -105,7 +105,70 @@ func TestNewGitIdentifier(t *testing.T) {
 			expected: GitIdentifier{
 				Remote: "ssh://foo%40barcorp.com@github.com/user/repo.git",
 				Ref:    "mybranch",
-				Subdir: "mydir/mysubdir/",
+				Subdir: "mydir/mysubdir",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git#main:../../escape",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+				Ref:    "main",
+				Subdir: "escape",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git#main:dir/../../escape",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+				Ref:    "main",
+				Subdir: "escape",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git#main:/absolute/path",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+				Ref:    "main",
+				Subdir: "absolute/path",
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git#main:../",
+			expected: GitIdentifier{
+				Remote: "https://github.com/user/repo.git",
+				Ref:    "main",
+			},
+		},
+		{
+			url: "ssh://github.com/user/repo.git#main:../../escape",
+			expected: GitIdentifier{
+				Remote: "ssh://github.com/user/repo.git",
+				Ref:    "main",
+				Subdir: "escape",
+			},
+		},
+		{
+			url: "ssh://github.com/user/repo.git#main:/absolute/path",
+			expected: GitIdentifier{
+				Remote: "ssh://github.com/user/repo.git",
+				Ref:    "main",
+				Subdir: "absolute/path",
+			},
+		},
+		{
+			url: "git@github.com:user/repo.git#main:../../escape",
+			expected: GitIdentifier{
+				Remote: "git@github.com:user/repo.git",
+				Ref:    "main",
+				Subdir: "escape",
+			},
+		},
+		{
+			url: "git@github.com:user/repo.git#main:/absolute/path",
+			expected: GitIdentifier{
+				Remote: "git@github.com:user/repo.git",
+				Ref:    "main",
+				Subdir: "absolute/path",
 			},
 		},
 	}
