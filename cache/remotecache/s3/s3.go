@@ -49,6 +49,8 @@ const (
 	attrUsePathStyle          = "use_path_style"
 	attrUploadParallelism     = "upload_parallelism"
 	attrDisableAcceptEncoding = "disable_accept_encoding"
+	attrRetryMode             = "retry_mode"
+	attrRetryMaxAttempts      = "retry_max_attempts"
 	maxCopyObjectSize         = 5 * 1024 * 1024 * 1024
 )
 
@@ -67,6 +69,8 @@ type Config struct {
 	UsePathStyle          bool
 	UploadParallelism     int
 	DisableAcceptEncoding bool
+	RetryMode             aws.RetryMode
+	RetryMaxAttempts      int
 }
 
 func getConfig(attrs map[string]string) (Config, error) {
@@ -153,6 +157,29 @@ func getConfig(attrs map[string]string) (Config, error) {
 		}
 	}
 
+	var retryMode aws.RetryMode
+	retryModeStr, ok := attrs[attrRetryMode]
+	if ok {
+		switch retryModeStr {
+		case "standard":
+			retryMode = aws.RetryModeStandard
+		case "adaptive":
+			retryMode = aws.RetryModeAdaptive
+		default:
+			return Config{}, errors.Errorf("retry_mode must be \"standard\" or \"adaptive\"")
+		}
+	}
+
+	var retryMaxAttempts int
+	retryMaxAttemptsStr, ok := attrs[attrRetryMaxAttempts]
+	if ok {
+		var err error
+		retryMaxAttempts, err = strconv.Atoi(retryMaxAttemptsStr)
+		if err != nil || retryMaxAttempts < 1 {
+			return Config{}, errors.Errorf("retry_max_attempts must be a positive integer")
+		}
+	}
+
 	return Config{
 		Bucket:                bucket,
 		Region:                region,
@@ -168,6 +195,8 @@ func getConfig(attrs map[string]string) (Config, error) {
 		UsePathStyle:          usePathStyle,
 		UploadParallelism:     uploadParallelism,
 		DisableAcceptEncoding: disableAcceptEncoding,
+		RetryMode:             retryMode,
+		RetryMaxAttempts:      retryMaxAttempts,
 	}, nil
 }
 
@@ -431,6 +460,12 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 		if config.EndpointURL != "" {
 			options.UsePathStyle = config.UsePathStyle
 			options.BaseEndpoint = aws.String(config.EndpointURL)
+		}
+		if config.RetryMode != "" {
+			options.RetryMode = config.RetryMode
+		}
+		if config.RetryMaxAttempts > 0 {
+			options.RetryMaxAttempts = config.RetryMaxAttempts
 		}
 		if config.DisableAcceptEncoding {
 			// GCS's GFE appends "gzip(gfe)" to the Accept-Encoding header after the
