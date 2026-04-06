@@ -712,11 +712,12 @@ func TestValidateDirsOnly(t *testing.T) {
 		tt := tt
 		t.Run(tt.subpath, func(t *testing.T) {
 			t.Parallel()
-			err := validateDirsOnly(root, tt.subpath)
+			f, err := openSubdirSafe(root, tt.subpath)
 			if tt.wantErr {
 				require.Error(t, err, "subpath %q should be rejected", tt.subpath)
 			} else {
 				require.NoError(t, err, "subpath %q should be accepted", tt.subpath)
+				f.Close()
 			}
 		})
 	}

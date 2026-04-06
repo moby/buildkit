@@ -560,10 +560,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		if subdir != "." {
 			subdir = filepath.FromSlash(subdir)
-			if err := validateDirsOnly(cd, subdir); err != nil {
-				return nil, errors.Wrapf(err, "invalid subdir %v", subdir)
-			}
-			d, err := os.Open(filepath.Join(cd, subdir))
+			d, err := openSubdirSafe(cd, subdir)
 			if err != nil {
 				return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
 			}
@@ -572,7 +569,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 					d.Close()
 				}
 			}()
-			names, err := d.Readdirnames(0)
+			names, err := readdirnames(d)
 			if err != nil {
 				return nil, err
 			}
@@ -767,24 +764,3 @@ func (md cacheRefMetadata) setGitRemote(key string) error {
 	return md.SetString(keyGitRemote, key, gitRemoteIndex+key)
 }
 
-// validateDirsOnly checks that each path component of subpath within root is a
-// real directory (not a symlink or file), preventing traversal and symlink escapes.
-func validateDirsOnly(root string, subpath string) error {
-	rel := filepath.Clean(subpath)
-	rel = strings.TrimPrefix(rel, string(filepath.Separator))
-	if rel == "" || rel == "." {
-		return nil
-	}
-	p := ""
-	for _, part := range strings.Split(rel, string(filepath.Separator)) {
-		p = filepath.Join(p, part)
-		fi, err := os.Lstat(filepath.Join(root, p))
-		if err != nil {
-			return errors.Wrapf(err, "failed to lstat %q", p)
-		}
-		if !fi.IsDir() {
-			return errors.Errorf("git subpath %q contains non-directory %q", subpath, p)
-		}
-	}
-	return nil
-}
