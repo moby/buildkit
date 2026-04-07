@@ -1,13 +1,15 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG NODE_VERSION=19
+ARG NODE_VERSION=24
+ARG DOCTOC_VERSION=2.3.0
 
 FROM node:${NODE_VERSION}-alpine AS base
 RUN apk add --no-cache git
 WORKDIR /src
 
 FROM base AS doctoc
-RUN npm install -g doctoc
+ARG DOCTOC_VERSION
+RUN npm install -g doctoc@${DOCTOC_VERSION}
 RUN --mount=type=bind,source=README.md,target=README.md,rw <<EOT
   set -e
   doctoc README.md
