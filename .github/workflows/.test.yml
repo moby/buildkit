@@ -91,7 +91,7 @@ jobs:
             });
       -
         name: Build
-        uses: docker/bake-action@v3
+        uses: docker/bake-action@v5
         with:
           targets: integration-tests-base
           set: |
