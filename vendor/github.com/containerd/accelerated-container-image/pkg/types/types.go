@@ -26,7 +26,6 @@ type OverlayBDBSConfig struct {
 	RecordTracePath   string                   `json:"recordTracePath,omitempty"`
 }
 
-// OverlayBDBSConfigLower
 type OverlayBDBSConfigLower struct {
 	GzipIndex    string `json:"gzipIndex,omitempty"`
 	File         string `json:"file,omitempty"`
@@ -42,4 +41,5 @@ type OverlayBDBSConfigUpper struct {
 	Data      string `json:"data,omitempty"`
 	Target    string `json:"target,omitempty"`
 	GzipIndex string `json:"gzipIndex,omitempty"`
+	Vsize     int    `json:"vsize,omitempty"`
 }
