@@ -25,7 +25,7 @@ RUN --mount=type=bind,target=.,rw \
   diff=$(git status --porcelain -- 'README.md')
   if [ -n "$diff" ]; then
     echo >&2 'ERROR: The result of "doctoc" differs. Please update with "make doctoc"'
-    echo "$diff"
+    git diff -- README.md
     exit 1
   fi
 EOT
