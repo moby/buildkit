@@ -3,12 +3,15 @@ package dockerfile2llb
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/appcontext"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -253,4 +256,23 @@ RUN echo bar
 	t.Logf("baseImg=%+v", res.BaseImage)
 	assert.Equal(t, []digest.Digest{"sha256:2e112031b4b923a873c8b3d685d48037e4d5ccd967b658743d93a6e56c3064b9"}, res.BaseImage.RootFS.DiffIDs)
 	assert.Equal(t, "2024-01-17 21:49:12 +0000 UTC", res.BaseImage.Created.String())
+}
+
+func TestDispatchHealthcheckHistory(t *testing.T) {
+	hc := &instructions.HealthCheckCommand{
+		Health: &dockerspec.HealthcheckConfig{
+			Test:          []string{"bin", "-c", "exit 0"},
+			Interval:      1 * time.Second,
+			Timeout:       10 * time.Second,
+			StartPeriod:   3 * time.Second,
+			StartInterval: 100 * time.Millisecond,
+			Retries:       5,
+		},
+	}
+
+	d := &dispatchState{}
+	err := dispatchHealthcheck(d, hc, &linter.Linter{})
+	require.NoError(t, err)
+	want := `HEALTHCHECK {Test:[bin -c exit 0] Interval:1s Timeout:10s StartPeriod:3s StartInterval:100ms Retries:5}`
+	require.Equal(t, want, d.image.History[0].CreatedBy)
 }
