@@ -108,6 +108,7 @@ var allTests = integration.TestFuncs(
 	testCacheMountModeNoCache,
 	testDockerfileFromHTTP,
 	testBuiltinArgs,
+	testGatewayBuiltinSyntaxSourceDockerfileV0,
 	testPullScratch,
 	testSymlinkDestination,
 	testHTTPDockerfile,
@@ -6905,6 +6906,65 @@ COPY --from=build out /
 	require.NoError(t, err)
 	expectedStr = integration.UnixOrWindows("hpvalue2::::foocontents2::::bazcontent", "hpvalue2::%NO_PROXY%::foocontents2::%BAR%::bazcontent\r\n")
 	require.Equal(t, expectedStr, string(dt))
+}
+
+func testGatewayBuiltinSyntaxSourceDockerfileV0(t *testing.T, sb integration.Sandbox) {
+	if _, ok := getFrontend(t, sb).(*builtinFrontend); !ok {
+		t.Skip()
+	}
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+# syntax=docker/dockerfile-upstream:master
+FROM busybox AS build
+RUN echo -n ok > /out
+FROM scratch
+COPY --from=build /out /out
+`,
+		`
+# syntax=docker/dockerfile-upstream:master
+FROM nanoserver:latest AS build
+USER ContainerAdministrator
+RUN echo ok>C:\out
+FROM nanoserver:latest
+USER ContainerAdministrator
+COPY --from=build /out /out
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = c.Solve(sb.Context(), nil, client.SolveOpt{
+		Frontend: "gateway.v0",
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"source":  "dockerfile.v0",
+			"cmdline": "dockerfile.v0",
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "ok", strings.TrimSpace(string(dt)))
 }
 
 func testTarContext(t *testing.T, sb integration.Sandbox) {
