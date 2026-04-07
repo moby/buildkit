@@ -100,9 +100,12 @@ const (
 
 	// RootfsQuotaLabel sets container rootfs diskquota
 	RootfsQuotaLabel = "containerd.io/snapshot/disk_quota"
+
+	// ActiveLayerDir is the label to mark active layer directory, default is snapshots/$snid/
+	ActiveLayerDir = "containerd.io/snapshot/overlay.active.path"
 )
 
-// used in filterAnnotationsForSave (https://github.com/moby/buildkit/blob/v0.11/cache/refs.go#L882)
+// OverlayBDAnnotations is used in filterAnnotationsForSave (https://github.com/moby/buildkit/blob/v0.11/cache/refs.go#L882)
 var OverlayBDAnnotations = []string{
 	LocalOverlayBDPath,
 	OverlayBDBlobDigest,
