@@ -27,17 +27,11 @@ func init() {
 	allTests = append(allTests, secretsTests...)
 }
 
-/*
-testSecretFileParams verifies that a secret mounted with custom permissions (mode=741,
-uid=100, gid=102) is accessible with the correct ownership and mode, and that no stub file
-is left behind after the RUN step.
-
-Skipped on Windows because mode/uid/gid are POSIX permission concepts that have no direct equivalent in Windows' ACL model. BuildKit's
-secret mount implementation only applies these as POSIX permissions — there is no code path
-to translate them to Windows ACLs. Supporting this on Windows would require both a new
-mapping from POSIX permissions to Windows ACLs in BuildKit and new test verification logic.
-*/
+// testSecretFileParams verifies that a secret mounted with custom permissions
+// (mode, uid, gid) has the correct ownership and mode, and that no stub file
+// is left behind after the RUN step.
 func testSecretFileParams(t *testing.T, sb integration.Sandbox) {
+	// mode/uid/gid are POSIX-only; BuildKit has no code path to map them to Windows ACLs.
 	integration.SkipOnPlatform(t, "windows", "Secret permission parameters not implemented for Windows in BuildKit")
 	f := getFrontend(t, sb)
 
@@ -68,14 +62,19 @@ RUN [ ! -f /mysecret ] # check no stub left behind
 	require.NoError(t, err)
 }
 
+// testSecretRequiredWithoutValue verifies that a build fails when a required
+// secret is referenced in the Dockerfile but no value is supplied by the client.
 func testSecretRequiredWithoutValue(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
-FROM busybox
-RUN --mount=type=secret,required,id=mysecret foo
-`)
+	dockerfile := []byte(integration.UnixOrWindows(
+		`FROM busybox 
+		RUN --mount=type=secret,required,id=mysecret foo`,
+
+		`FROM nanoserver
+		USER ContainerAdministrator
+		RUN --mount=type=secret,required,id=mysecret foo`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -96,15 +95,27 @@ RUN --mount=type=secret,required,id=mysecret foo
 	require.Contains(t, err.Error(), "secret mysecret: not found")
 }
 
+// testSecretAsEnviron verifies that a secret injected via env= is accessible
+// as an environment variable, is not left behind as a file mount, and is not
+// leaked in the vertex display name.
 func testSecretAsEnviron(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	// Forward slashes in Windows paths because the Dockerfile parser
+	// consumes backslashes as escapes.
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 ENV SECRET_ENV=foo
 RUN --mount=type=secret,id=mysecret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && [ ! -f /run/secrets/mysecret ] || false
-`)
+`,
+		`
+FROM nanoserver
+USER ContainerAdministrator
+ENV SECRET_ENV=foo
+RUN --mount=type=secret,id=mysecret,env=SECRET_ENV if %SECRET_ENV% NEQ pw (exit 1) & if exist C:/run/secrets/mysecret (exit 1)
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -119,12 +130,17 @@ RUN --mount=type=secret,id=mysecret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && 
 	status := make(chan *client.SolveStatus)
 	hasStatus := false
 
+	// Match the secret-path substring in the vertex name (differs per platform).
+	vertexSearch := integration.UnixOrWindows("/run/secrets/mysecret", "C:/run/secrets/mysecret")
+	// Linux: $SECRET_ENV scrubbed to "****".  Windows: %VAR% not expanded by lexer, stays literal.
+	maskedExpect := integration.UnixOrWindows(`[ "****" == "pw" ] && `, `%SECRET_ENV% NEQ pw`)
+
 	go func() {
 		for st := range status {
 			for _, v := range st.Vertexes {
-				if strings.Contains(v.Name, "/run/secrets/mysecret") {
+				if strings.Contains(v.Name, vertexSearch) {
 					hasStatus = true
-					assert.Contains(t, v.Name, `[ "****" == "pw" ] && `)
+					assert.Contains(t, v.Name, maskedExpect)
 				}
 			}
 		}
@@ -151,8 +167,11 @@ RUN --mount=type=secret,id=mysecret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && 
 	require.True(t, hasStatus)
 }
 
+// testSecretAsEnvironWithFileMount verifies that a secret with both env= and
+// target= is accessible as an environment variable and as a file.
 func testSecretAsEnvironWithFileMount(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	// target= triggers a tmpfs-backed file mount; Windows only accepts "windows-layer" mounts.
+	integration.SkipOnPlatform(t, "windows", "secret file mounts use tmpfs which is unsupported on Windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
