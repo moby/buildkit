@@ -4,7 +4,7 @@ ARG GO_VERSION="1.20"
 ARG PROTOC_VERSION="3.11.4"
 
 # protoc is dynamically linked to glibc so can't use alpine base
-FROM golang:${GO_VERSION}-buster AS base
+FROM golang:${GO_VERSION}-bullseye AS base
 RUN apt-get update && apt-get --no-install-recommends install -y git unzip
 ARG PROTOC_VERSION
 ARG TARGETOS
