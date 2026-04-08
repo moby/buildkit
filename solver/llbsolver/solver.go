@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"maps"
 	"os"
 	"strings"
 	"time"
@@ -153,6 +154,20 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
+	hasNamedDockerfileContext := false
+	for k := range req.FrontendOpt {
+		if k == "context:dockerfile.v0" || strings.HasPrefix(k, "context:dockerfile.v0::") {
+			hasNamedDockerfileContext = true
+			break
+		}
+	}
+	if req.Frontend == "gateway.v0" && req.FrontendOpt[frontend.KeySource] == "dockerfile.v0" && !hasNamedDockerfileContext {
+		frontendOpt := maps.Clone(req.FrontendOpt)
+		delete(frontendOpt, frontend.KeySource)
+		req.Frontend = "dockerfile.v0"
+		req.FrontendOpt = frontendOpt
+	}
+
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err

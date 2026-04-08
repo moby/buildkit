@@ -49,6 +49,7 @@ var provenanceTests = integration.TestFuncs(
 	testGitProvenanceAttestationSHA256,
 	testMultiPlatformProvenance,
 	testClientFrontendProvenance,
+	testGatewayBuiltinSyntaxSourceProvenance,
 	testClientLLBProvenance,
 	testSecretSSHProvenance,
 	testOCILayoutProvenance,
@@ -937,6 +938,115 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
 	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/alpine")
+}
+
+func testGatewayBuiltinSyntaxSourceProvenance(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+
+	if _, ok := getFrontend(t, sb).(*builtinFrontend); !ok {
+		t.Skip("not a builtin frontend matrix entry")
+	}
+
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/gatewaybuiltin:provenance"
+
+	dockerfile := []byte(integration.UnixOrWindows(`
+# syntax=docker/dockerfile-upstream:master
+FROM busybox:latest AS base
+COPY <<EOF /out/foo
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`,
+		`
+# syntax=docker/dockerfile-upstream:master
+FROM nanoserver:latest AS base
+USER ContainerAdministrator
+RUN mkdir C:\out && echo ok>C:\out\foo
+
+FROM nanoserver:latest
+USER ContainerAdministrator
+COPY --from=base C:\out C:\Files
+`,
+	))
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	_, err = c.Solve(ctx, nil, client.SolveOpt{
+		Frontend: "gateway.v0",
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"source":            "dockerfile.v0",
+			"cmdline":           "dockerfile.v0",
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(ctx, provider, desc)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(imgs.Images))
+
+	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
+
+	img := imgs.Find(expPlatform)
+	require.NotNil(t, img)
+
+	att := imgs.FindAttestation(expPlatform)
+	require.NotNil(t, att)
+	require.Equal(t, string(img.Desc.Digest), att.Desc.Annotations["vnd.docker.reference.digest"])
+	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
+
+	var attest intoto.Statement
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType)
+
+	type stmtT struct {
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+	pred := stmt.Predicate
+
+	require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
+	require.NotContains(t, pred.BuildDefinition.ExternalParameters.Request.Args, "source")
+	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+
+	expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
+	expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec()))))
+	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+	require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
+	require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
 }
 
 func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
