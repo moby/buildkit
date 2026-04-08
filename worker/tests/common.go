@@ -107,10 +107,11 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	require.Empty(t, stderr.String())
 
 	// first start pid1 in the background
+	execID := identity.NewID()
 	eg := errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		_, err := w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
+		_, err := w.WorkerOpt.Executor.Run(ctx, execID, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"sleep", "10"},
 				Cwd:  "/",
@@ -130,7 +131,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	stderr.Reset()
 
 	// verify pid1 is the sleep command via Exec
-	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, execID, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"ps", "-o", "pid,comm"},
 		},
@@ -148,7 +149,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	stdin := bytes.NewReader([]byte("hello"))
 	stdout.Reset()
 	stderr.Reset()
-	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, execID, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"sh", "-c", "cat > /tmp/msg"},
 		},
@@ -163,7 +164,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	// verify contents of /tmp/msg
 	stdout.Reset()
 	stderr.Reset()
-	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, execID, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"cat", "/tmp/msg"},
 		},
