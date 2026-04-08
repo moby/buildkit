@@ -13,17 +13,6 @@ import (
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// End of support notice: Beginning November 21, 2025, Amazon S3 will stop
-// returning DisplayName . Update your applications to use canonical IDs (unique
-// identifier for Amazon Web Services accounts), Amazon Web Services account ID (12
-// digit identifier) or IAM ARNs (full resource naming) as a direct replacement of
-// DisplayName .
-//
-// This change affects the following Amazon Web Services Regions: US East (N.
-// Virginia) Region, US West (N. California) Region, US West (Oregon) Region, Asia
-// Pacific (Singapore) Region, Asia Pacific (Sydney) Region, Asia Pacific (Tokyo)
-// Region, Europe (Ireland) Region, and South America (São Paulo) Region.
-//
 // This operation is not supported for directory buckets.
 //
 // Returns a list of all buckets owned by the authenticated sender of the request.
@@ -161,7 +150,7 @@ func (c *Client) addOperationListBucketsMiddlewares(stack *middleware.Stack, opt
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -186,9 +175,6 @@ func (c *Client) addOperationListBucketsMiddlewares(stack *middleware.Stack, opt
 		return err
 	}
 	if err = addPutBucketContextMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
 		return err
 	}
 	if err = addUserAgentRetryMode(stack, options); err != nil {
@@ -236,40 +222,7 @@ func (c *Client) addOperationListBucketsMiddlewares(stack *middleware.Stack, opt
 	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addInterceptExecution(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptTransmit(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

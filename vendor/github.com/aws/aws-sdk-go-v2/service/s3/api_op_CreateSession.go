@@ -234,11 +234,15 @@ type CreateSessionInput struct {
 	ServerSideEncryption types.ServerSideEncryption
 
 	// Specifies the mode of the session that will be created, either ReadWrite or
-	// ReadOnly . By default, a ReadWrite session is created. A ReadWrite session is
-	// capable of executing all the Zonal endpoint API operations on a directory
-	// bucket. A ReadOnly session is constrained to execute the following Zonal
-	// endpoint API operations: GetObject , HeadObject , ListObjectsV2 ,
-	// GetObjectAttributes , ListParts , and ListMultipartUploads .
+	// ReadOnly . If no session mode is specified, the default behavior attempts to
+	// create a session with the maximum allowable privilege. It will first attempt to
+	// create a ReadWrite session, and if that is not allowed by permissions, it will
+	// attempt to create a ReadOnly session. If neither session type is allowed, the
+	// request will return an Access Denied error. A ReadWrite session is capable of
+	// executing all the Zonal endpoint API operations on a directory bucket. A
+	// ReadOnly session is constrained to execute the following Zonal endpoint API
+	// operations: GetObject , HeadObject , ListObjectsV2 , GetObjectAttributes ,
+	// ListParts , and ListMultipartUploads .
 	SessionMode types.SessionMode
 
 	noSmithyDocumentSerde
@@ -320,7 +324,7 @@ func (c *Client) addOperationCreateSessionMiddlewares(stack *middleware.Stack, o
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -345,9 +349,6 @@ func (c *Client) addOperationCreateSessionMiddlewares(stack *middleware.Stack, o
 		return err
 	}
 	if err = addPutBucketContextMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
 		return err
 	}
 	if err = addUserAgentRetryMode(stack, options); err != nil {
@@ -398,40 +399,7 @@ func (c *Client) addOperationCreateSessionMiddlewares(stack *middleware.Stack, o
 	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addInterceptExecution(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptTransmit(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil

@@ -11,111 +11,98 @@ import (
 	s3cust "github.com/aws/aws-sdk-go-v2/service/s3/internal/customizations"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go/middleware"
-	"github.com/aws/smithy-go/ptr"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
-// This operation is not supported for directory buckets.
+// Sets the attribute-based access control (ABAC) property of the general purpose
+// bucket. You must have s3:PutBucketABAC permission to perform this action. When
+// you enable ABAC, you can use tags for access control on your buckets.
+// Additionally, when ABAC is enabled, you must use the [TagResource]and [UntagResource] actions to manage
+// tags on your buckets. You can nolonger use the [PutBucketTagging]and [DeleteBucketTagging] actions to tag your bucket.
+// For more information, see [Enabling ABAC in general purpose buckets].
 //
-// Creates or modifies OwnershipControls for an Amazon S3 bucket. To use this
-// operation, you must have the s3:PutBucketOwnershipControls permission. For more
-// information about Amazon S3 permissions, see [Specifying permissions in a policy].
-//
-// For information about Amazon S3 Object Ownership, see [Using object ownership].
-//
-// The following operations are related to PutBucketOwnershipControls :
-//
-// # GetBucketOwnershipControls
-//
-// # DeleteBucketOwnershipControls
-//
-// You must URL encode any signed header values that contain spaces. For example,
-// if your header value is my file.txt , containing two spaces after my , you must
-// URL encode this value to my%20%20file.txt .
-//
-// [Specifying permissions in a policy]: https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-with-s3-actions.html
-// [Using object ownership]: https://docs.aws.amazon.com/AmazonS3/latest/user-guide/about-object-ownership.html
-func (c *Client) PutBucketOwnershipControls(ctx context.Context, params *PutBucketOwnershipControlsInput, optFns ...func(*Options)) (*PutBucketOwnershipControlsOutput, error) {
+// [PutBucketTagging]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketTagging.html
+// [DeleteBucketTagging]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketTagging.html
+// [TagResource]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_TagResource.html
+// [UntagResource]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_control_UntagResource.html
+// [Enabling ABAC in general purpose buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html
+func (c *Client) PutBucketAbac(ctx context.Context, params *PutBucketAbacInput, optFns ...func(*Options)) (*PutBucketAbacOutput, error) {
 	if params == nil {
-		params = &PutBucketOwnershipControlsInput{}
+		params = &PutBucketAbacInput{}
 	}
 
-	result, metadata, err := c.invokeOperation(ctx, "PutBucketOwnershipControls", params, optFns, c.addOperationPutBucketOwnershipControlsMiddlewares)
+	result, metadata, err := c.invokeOperation(ctx, "PutBucketAbac", params, optFns, c.addOperationPutBucketAbacMiddlewares)
 	if err != nil {
 		return nil, err
 	}
 
-	out := result.(*PutBucketOwnershipControlsOutput)
+	out := result.(*PutBucketAbacOutput)
 	out.ResultMetadata = metadata
 	return out, nil
 }
 
-type PutBucketOwnershipControlsInput struct {
+type PutBucketAbacInput struct {
 
-	// The name of the Amazon S3 bucket whose OwnershipControls you want to set.
+	// The ABAC status of the general purpose bucket. When ABAC is enabled for the
+	// general purpose bucket, you can use tags to manage access to the general purpose
+	// buckets as well as for cost tracking purposes. When ABAC is disabled for the
+	// general purpose buckets, you can only use tags for cost tracking purposes. For
+	// more information, see [Using tags with S3 general purpose buckets].
+	//
+	// [Using tags with S3 general purpose buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html
+	//
+	// This member is required.
+	AbacStatus *types.AbacStatus
+
+	// The name of the general purpose bucket.
 	//
 	// This member is required.
 	Bucket *string
 
-	// The OwnershipControls (BucketOwnerEnforced, BucketOwnerPreferred, or
-	// ObjectWriter) that you want to apply to this Amazon S3 bucket.
-	//
-	// This member is required.
-	OwnershipControls *types.OwnershipControls
-
-	//  Indicates the algorithm used to create the checksum for the object when you
-	// use the SDK. This header will not provide any additional functionality if you
-	// don't use the SDK. When you send this header, there must be a corresponding
-	// x-amz-checksum-algorithm header sent. Otherwise, Amazon S3 fails the request
-	// with the HTTP status code 400 Bad Request . For more information, see [Checking object integrity] in the
-	// Amazon S3 User Guide.
-	//
-	// If you provide an individual checksum, Amazon S3 ignores any provided
-	// ChecksumAlgorithm parameter.
+	// Indicates the algorithm that you want Amazon S3 to use to create the checksum.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumAlgorithm types.ChecksumAlgorithm
 
-	// The MD5 hash of the OwnershipControls request body.
+	// The MD5 hash of the PutBucketAbac request body.
 	//
 	// For requests made using the Amazon Web Services Command Line Interface (CLI) or
 	// Amazon Web Services SDKs, this field is calculated automatically.
 	ContentMD5 *string
 
-	// The account ID of the expected bucket owner. If the account ID that you provide
-	// does not match the actual owner of the bucket, the request fails with the HTTP
-	// status code 403 Forbidden (access denied).
+	// The Amazon Web Services account ID of the general purpose bucket's owner.
 	ExpectedBucketOwner *string
 
 	noSmithyDocumentSerde
 }
 
-func (in *PutBucketOwnershipControlsInput) bindEndpointParams(p *EndpointParameters) {
+func (in *PutBucketAbacInput) bindEndpointParams(p *EndpointParameters) {
 
 	p.Bucket = in.Bucket
-	p.UseS3ExpressControlEndpoint = ptr.Bool(true)
+
 }
 
-type PutBucketOwnershipControlsOutput struct {
+type PutBucketAbacOutput struct {
 	// Metadata pertaining to the operation's result.
 	ResultMetadata middleware.Metadata
 
 	noSmithyDocumentSerde
 }
 
-func (c *Client) addOperationPutBucketOwnershipControlsMiddlewares(stack *middleware.Stack, options Options) (err error) {
+func (c *Client) addOperationPutBucketAbacMiddlewares(stack *middleware.Stack, options Options) (err error) {
 	if err := stack.Serialize.Add(&setOperationInputMiddleware{}, middleware.After); err != nil {
 		return err
 	}
-	err = stack.Serialize.Add(&awsRestxml_serializeOpPutBucketOwnershipControls{}, middleware.After)
+	err = stack.Serialize.Add(&awsRestxml_serializeOpPutBucketAbac{}, middleware.After)
 	if err != nil {
 		return err
 	}
-	err = stack.Deserialize.Add(&awsRestxml_deserializeOpPutBucketOwnershipControls{}, middleware.After)
+	err = stack.Deserialize.Add(&awsRestxml_deserializeOpPutBucketAbac{}, middleware.After)
 	if err != nil {
 		return err
 	}
-	if err := addProtocolFinalizerMiddlewares(stack, options, "PutBucketOwnershipControls"); err != nil {
+	if err := addProtocolFinalizerMiddlewares(stack, options, "PutBucketAbac"); err != nil {
 		return fmt.Errorf("add protocol finalizers: %v", err)
 	}
 
@@ -176,10 +163,10 @@ func (c *Client) addOperationPutBucketOwnershipControlsMiddlewares(stack *middle
 	if err = addCredentialSource(stack, options); err != nil {
 		return err
 	}
-	if err = addOpPutBucketOwnershipControlsValidationMiddleware(stack); err != nil {
+	if err = addOpPutBucketAbacValidationMiddleware(stack); err != nil {
 		return err
 	}
-	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opPutBucketOwnershipControls(options.Region), middleware.Before); err != nil {
+	if err = stack.Initialize.Add(newServiceMetadataMiddleware_opPutBucketAbac(options.Region), middleware.Before); err != nil {
 		return err
 	}
 	if err = addMetadataRetrieverMiddleware(stack); err != nil {
@@ -188,10 +175,10 @@ func (c *Client) addOperationPutBucketOwnershipControlsMiddlewares(stack *middle
 	if err = addRecursionDetection(stack); err != nil {
 		return err
 	}
-	if err = addPutBucketOwnershipControlsInputChecksumMiddlewares(stack, options); err != nil {
+	if err = addPutBucketAbacInputChecksumMiddlewares(stack, options); err != nil {
 		return err
 	}
-	if err = addPutBucketOwnershipControlsUpdateEndpoint(stack, options); err != nil {
+	if err = addPutBucketAbacUpdateEndpoint(stack, options); err != nil {
 		return err
 	}
 	if err = addResponseErrorMiddleware(stack); err != nil {
@@ -212,9 +199,6 @@ func (c *Client) addOperationPutBucketOwnershipControlsMiddlewares(stack *middle
 	if err = addSerializeImmutableHostnameBucketMiddleware(stack, options); err != nil {
 		return err
 	}
-	if err = s3cust.AddExpressDefaultChecksumMiddleware(stack); err != nil {
-		return err
-	}
 	if err = addInterceptBeforeRetryLoop(stack, options); err != nil {
 		return err
 	}
@@ -227,35 +211,35 @@ func (c *Client) addOperationPutBucketOwnershipControlsMiddlewares(stack *middle
 	return nil
 }
 
-func (v *PutBucketOwnershipControlsInput) bucket() (string, bool) {
+func (v *PutBucketAbacInput) bucket() (string, bool) {
 	if v.Bucket == nil {
 		return "", false
 	}
 	return *v.Bucket, true
 }
 
-func newServiceMetadataMiddleware_opPutBucketOwnershipControls(region string) *awsmiddleware.RegisterServiceMetadata {
+func newServiceMetadataMiddleware_opPutBucketAbac(region string) *awsmiddleware.RegisterServiceMetadata {
 	return &awsmiddleware.RegisterServiceMetadata{
 		Region:        region,
 		ServiceID:     ServiceID,
-		OperationName: "PutBucketOwnershipControls",
+		OperationName: "PutBucketAbac",
 	}
 }
 
-// getPutBucketOwnershipControlsRequestAlgorithmMember gets the request checksum
-// algorithm value provided as input.
-func getPutBucketOwnershipControlsRequestAlgorithmMember(input interface{}) (string, bool) {
-	in := input.(*PutBucketOwnershipControlsInput)
+// getPutBucketAbacRequestAlgorithmMember gets the request checksum algorithm
+// value provided as input.
+func getPutBucketAbacRequestAlgorithmMember(input interface{}) (string, bool) {
+	in := input.(*PutBucketAbacInput)
 	if len(in.ChecksumAlgorithm) == 0 {
 		return "", false
 	}
 	return string(in.ChecksumAlgorithm), true
 }
 
-func addPutBucketOwnershipControlsInputChecksumMiddlewares(stack *middleware.Stack, options Options) error {
+func addPutBucketAbacInputChecksumMiddlewares(stack *middleware.Stack, options Options) error {
 	return addInputChecksumMiddleware(stack, internalChecksum.InputMiddlewareOptions{
-		GetAlgorithm:                     getPutBucketOwnershipControlsRequestAlgorithmMember,
-		RequireChecksum:                  true,
+		GetAlgorithm:                     getPutBucketAbacRequestAlgorithmMember,
+		RequireChecksum:                  false,
 		RequestChecksumCalculation:       options.RequestChecksumCalculation,
 		EnableTrailingChecksum:           false,
 		EnableComputeSHA256PayloadHash:   true,
@@ -263,20 +247,20 @@ func addPutBucketOwnershipControlsInputChecksumMiddlewares(stack *middleware.Sta
 	})
 }
 
-// getPutBucketOwnershipControlsBucketMember returns a pointer to string denoting
-// a provided bucket member valueand a boolean indicating if the input has a
-// modeled bucket name,
-func getPutBucketOwnershipControlsBucketMember(input interface{}) (*string, bool) {
-	in := input.(*PutBucketOwnershipControlsInput)
+// getPutBucketAbacBucketMember returns a pointer to string denoting a provided
+// bucket member valueand a boolean indicating if the input has a modeled bucket
+// name,
+func getPutBucketAbacBucketMember(input interface{}) (*string, bool) {
+	in := input.(*PutBucketAbacInput)
 	if in.Bucket == nil {
 		return nil, false
 	}
 	return in.Bucket, true
 }
-func addPutBucketOwnershipControlsUpdateEndpoint(stack *middleware.Stack, options Options) error {
+func addPutBucketAbacUpdateEndpoint(stack *middleware.Stack, options Options) error {
 	return s3cust.UpdateEndpoint(stack, s3cust.UpdateEndpointOptions{
 		Accessor: s3cust.UpdateEndpointParameterAccessor{
-			GetBucketFromInput: getPutBucketOwnershipControlsBucketMember,
+			GetBucketFromInput: getPutBucketAbacBucketMember,
 		},
 		UsePathStyle:                   options.UsePathStyle,
 		UseAccelerate:                  options.UseAccelerate,

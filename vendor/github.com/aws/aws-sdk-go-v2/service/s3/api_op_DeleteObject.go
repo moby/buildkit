@@ -77,17 +77,22 @@ import (
 //   - s3:DeleteObjectVersion - To delete a specific version of an object from a
 //     versioning-enabled bucket, you must have the s3:DeleteObjectVersion permission.
 //
-//   - Directory bucket permissions - To grant access to this API operation on a
-//     directory bucket, we recommend that you use the [CreateSession]CreateSession API operation
-//     for session-based authorization. Specifically, you grant the
-//     s3express:CreateSession permission to the directory bucket in a bucket policy
-//     or an IAM identity-based policy. Then, you make the CreateSession API call on
-//     the bucket to obtain a session token. With the session token in your request
-//     header, you can make API requests to this operation. After the session token
-//     expires, you make another CreateSession API call to generate a new session
-//     token for use. Amazon Web Services CLI or SDKs create session and refresh the
-//     session token automatically to avoid service interruptions when a session
-//     expires. For more information about authorization, see [CreateSession]CreateSession .
+// If the s3:DeleteObject or s3:DeleteObjectVersion permissions are explicitly
+//
+//	denied in your bucket policy, attempts to delete any unversioned objects result
+//	in a 403 Access Denied error.
+//
+//	- Directory bucket permissions - To grant access to this API operation on a
+//	directory bucket, we recommend that you use the [CreateSession]CreateSession API operation
+//	for session-based authorization. Specifically, you grant the
+//	s3express:CreateSession permission to the directory bucket in a bucket policy
+//	or an IAM identity-based policy. Then, you make the CreateSession API call on
+//	the bucket to obtain a session token. With the session token in your request
+//	header, you can make API requests to this operation. After the session token
+//	expires, you make another CreateSession API call to generate a new session
+//	token for use. Amazon Web Services CLI or SDKs create session and refresh the
+//	session token automatically to avoid service interruptions when a session
+//	expires. For more information about authorization, see [CreateSession]CreateSession .
 //
 // HTTP Host header syntax  Directory buckets - The HTTP Host header syntax is
 // Bucket-name.s3express-zone-id.region-code.amazonaws.com .
@@ -109,10 +114,11 @@ import (
 // [Deleting objects from versioning-suspended buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeletingObjectsfromVersioningSuspendedBuckets.html
 // [PutObject]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
 // [PutBucketLifecycle]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLifecycle.html
-// [CreateSession]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateSession.html
 // [Deleting object versions from a versioning-enabled bucket]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/DeletingObjectVersions.html
 // [Regional and Zonal endpoints for directory buckets in Availability Zones]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/endpoint-directory-buckets-AZ.html
 // [Using MFA Delete]: https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingMFADelete.html
+//
+// [CreateSession]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateSession.html
 func (c *Client) DeleteObject(ctx context.Context, params *DeleteObjectInput, optFns ...func(*Options)) (*DeleteObjectOutput, error) {
 	if params == nil {
 		params = &DeleteObjectInput{}
@@ -228,9 +234,8 @@ type DeleteObjectInput struct {
 	// Confirms that the requester knows that they will be charged for the request.
 	// Bucket owners need not specify this parameter in their requests. If either the
 	// source or destination S3 bucket has Requester Pays enabled, the requester will
-	// pay for corresponding charges to copy the object. For information about
-	// downloading objects from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets]in the Amazon S3 User
-	// Guide.
+	// pay for the corresponding charges. For information about downloading objects
+	// from Requester Pays buckets, see [Downloading Objects in Requester Pays Buckets]in the Amazon S3 User Guide.
 	//
 	// This functionality is not supported for directory buckets.
 	//
@@ -320,7 +325,7 @@ func (c *Client) addOperationDeleteObjectMiddlewares(stack *middleware.Stack, op
 	if err = addComputePayloadSHA256(stack); err != nil {
 		return err
 	}
-	if err = addRetry(stack, options); err != nil {
+	if err = addRetry(stack, options, c); err != nil {
 		return err
 	}
 	if err = addRawResponseToMetadata(stack); err != nil {
@@ -345,9 +350,6 @@ func (c *Client) addOperationDeleteObjectMiddlewares(stack *middleware.Stack, op
 		return err
 	}
 	if err = addPutBucketContextMiddleware(stack); err != nil {
-		return err
-	}
-	if err = addTimeOffsetBuild(stack, c); err != nil {
 		return err
 	}
 	if err = addUserAgentRetryMode(stack, options); err != nil {
@@ -398,40 +400,7 @@ func (c *Client) addOperationDeleteObjectMiddlewares(stack *middleware.Stack, op
 	if err = addInterceptAttempt(stack, options); err != nil {
 		return err
 	}
-	if err = addInterceptExecution(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSerialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterSigning(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptTransmit(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptBeforeDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addInterceptAfterDeserialization(stack, options); err != nil {
-		return err
-	}
-	if err = addSpanInitializeStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanInitializeEnd(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestStart(stack); err != nil {
-		return err
-	}
-	if err = addSpanBuildRequestEnd(stack); err != nil {
+	if err = addInterceptors(stack, options); err != nil {
 		return err
 	}
 	return nil
