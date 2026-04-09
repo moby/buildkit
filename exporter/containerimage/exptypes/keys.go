@@ -85,4 +85,17 @@ var (
 	// Rewrite timestamps in layers to match SOURCE_DATE_EPOCH
 	// Value: bool <true|false>
 	OptKeyRewriteTimestamp ImageExporterOptKey = "rewrite-timestamp"
+
+	// Eagerly compress (and optionally push) layer blobs during the build,
+	// rather than waiting for all vertices to complete first.
+	// Requires a single image exporter with push enabled.
+	// Value: string <compress|push>
+	//   compress — compress layers as vertices complete; push everything at finalize
+	//   push    — compress AND push layer blobs as vertices complete; only push manifest at finalize
+	OptKeyEagerExport ImageExporterOptKey = "eager-export"
+)
+
+const (
+	OptValEagerExportCompress = "compress"
+	OptValEagerExportPush     = "push"
 )

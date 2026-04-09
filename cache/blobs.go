@@ -42,7 +42,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
 // be returned. Caller must hold a lease when calling this function.
 // If forceCompression is specified but the blob of compressionType doesn't exist, this function creates it.
-func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group) error {
+func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, skipParents bool, comp compression.Config, s session.Group) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
@@ -68,29 +68,30 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 	// refs rather than every single layer present among their ancestors.
 	filter := sr.layerSet()
 
-	return computeBlobChain(ctx, sr, createIfNeeded, comp, s, filter)
+	return computeBlobChain(ctx, sr, createIfNeeded, skipParents, comp, s, filter)
 }
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, comp compression.Config, s session.Group, filter map[string]struct{}) error {
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, skipParents bool, comp compression.Config, s session.Group, filter map[string]struct{}) error {
 	eg, ctx := errgroup.WithContext(ctx)
-	switch sr.kind() {
-	case Merge:
-		for _, parent := range sr.mergeParents {
+	if !skipParents {
+		switch sr.kind() {
+		case Merge:
+			for _, parent := range sr.mergeParents {
+				eg.Go(func() error {
+					return computeBlobChain(ctx, parent, createIfNeeded, false, comp, s, filter)
+				})
+			}
+		case Diff:
+			if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
+				eg.Go(func() error {
+					return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, false, comp, s, filter)
+				})
+			}
+		case Layer:
 			eg.Go(func() error {
-				return computeBlobChain(ctx, parent, createIfNeeded, comp, s, filter)
+				return computeBlobChain(ctx, sr.layerParent, createIfNeeded, false, comp, s, filter)
 			})
 		}
-	case Diff:
-		if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
-			// This diff is just re-using the upper blob, compute that
-			eg.Go(func() error {
-				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, comp, s, filter)
-			})
-		}
-	case Layer:
-		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, comp, s, filter)
-		})
 	}
 
 	if _, ok := filter[sr.ID()]; ok {

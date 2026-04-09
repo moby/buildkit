@@ -55,10 +55,21 @@ const (
 	keySourcePolicy = "llb.sourcepolicy"
 )
 
+// EagerExportMode controls whether layer compression and/or pushing
+// happens concurrently with the build, rather than after all vertices complete.
+type EagerExportMode int
+
+const (
+	EagerExportNone     EagerExportMode = iota
+	EagerExportCompress // compress layers as vertices complete
+	EagerExportPush     // compress AND push layer blobs as vertices complete
+)
+
 type ExporterRequest struct {
 	Exporters             []exporter.ExporterInstance
 	CacheExporters        []RemoteCacheExporter
 	EnableSessionExporter bool
+	EagerExport           EagerExportMode
 }
 
 type RemoteCacheExporter struct {
@@ -515,6 +526,29 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
+	// Create lease early so it covers both the build phase (eager compression
+	// creates content blobs) and the export/finalize phase (push to registry).
+	lm, err := s.leaseManager()
+	if err != nil {
+		return nil, err
+	}
+	ctx, done, err := leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, err
+	}
+	releasers = append(releasers, func() {
+		done(context.WithoutCancel(ctx))
+	})
+
+	// Set up eager export pipeline before the build starts so the vertex
+	// completion callback can kick off compression/push during the build.
+	var eager *eagerPipeline
+	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
+		comp := exp.Exporters[0].Config().Compression()
+		eager = newEagerPipeline(ctx, exp.EagerExport, comp, sessionID, s.sm)
+		j.SetOnVertexComplete(eager.onVertexComplete)
+	}
+
 	br := s.bridge(j)
 	var fwd gateway.LLBBridgeForwarder
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
@@ -586,6 +620,14 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
+	// Wait for all eager compression/push jobs to finish before running
+	// exporters. The manifest needs final blob digests from every layer.
+	if eager != nil {
+		if err := eager.wait(); err != nil {
+			return nil, errors.Wrap(err, "eager export pipeline failed")
+		}
+	}
+
 	resProv, err = addProvenanceToResult(res, br)
 	if err != nil {
 		return nil, err
@@ -617,22 +659,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	// Functions that create new objects in containerd (eg. content blobs) need to have a lease to ensure
-	// that the object is not garbage collected immediately. This is protected by the indivual components,
-	// but because creating a lease is not cheap and requires a disk write, we create a single lease here
-	// early and let all the exporters, cache export and provenance creation use the same one.
-	lm, err := s.leaseManager()
-	if err != nil {
-		return nil, err
-	}
-	ctx, done, err := leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
-	if err != nil {
-		return nil, err
-	}
-	releasers = append(releasers, func() {
-		done(context.WithoutCancel(ctx))
-	})
-
+	// Lease already created earlier in the function (unconditionally or
+	// conditionally for eager export) — see createLease / leaseutil.WithLease above.
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
 	if exp.EnableSessionExporter {

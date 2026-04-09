@@ -170,6 +170,13 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.nameCanonical = b
+		case exptypes.OptKeyEagerExport:
+			switch v {
+			case exptypes.OptValEagerExportCompress, exptypes.OptValEagerExportPush:
+				i.eagerExport = v
+			default:
+				return nil, errors.Errorf("invalid value %q for %s, must be \"compress\" or \"push\"", v, k)
+			}
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -195,6 +202,7 @@ type imageExporterInstance struct {
 	nameCanonical        bool
 	danglingPrefix       string
 	danglingEmptyOnly    bool
+	eagerExport          string // "", "compress", or "push"
 	meta                 map[string][]byte
 }
 
@@ -226,6 +234,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	maps.Copy(src.Metadata, e.meta)
 
 	opts := e.opts
+	opts.EagerExport = e.eagerExport
 	as, _, err := ParseAnnotations(src.Metadata)
 	if err != nil {
 		return nil, nil, err
