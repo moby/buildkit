@@ -6,7 +6,7 @@ ARG CONTAINERD_VERSION=v2.2.2
 ARG CONTAINERD_ALT_VERSION_21=v2.1.6
 ARG CONTAINERD_ALT_VERSION_17=v1.7.30
 ARG REGISTRY_VERSION=v2.8.3
-ARG ROOTLESSKIT_VERSION=v2.3.6
+ARG ROOTLESSKIT_VERSION=v3.0.0
 ARG CNI_VERSION=v1.9.1
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.18.2
 ARG NERDCTL_VERSION=v2.2.1
@@ -433,7 +433,7 @@ COPY --link --from=binaries / /
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl slirp4netns iproute2 gpg gpg-agent \
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl iproute2 gpg gpg-agent \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -460,6 +460,7 @@ RUN --mount=target=/tmp/gen_ssh_test_env.sh,source=hack/fixtures/gen_ssh_test_en
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=docker-engine / /usr/bin/
+RUN rm -f /usr/bin/vpnkit
 COPY --link --from=gotestsum /out /usr/bin/
 COPY --link --from=minio /usr/bin/minio /usr/bin/
 COPY --link --from=minio-mc /usr/bin/mc /usr/bin/

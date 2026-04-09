@@ -120,7 +120,7 @@ jobs:
           - containerd-snapshotter-stargz
           - oci
           - oci-rootless
-          - oci-rootless-slirp4netns-detachnetns
+          - oci-rootless-gvisor-tap-vsock-detachnetns
           - oci-snapshotter-stargz
         pkg: ${{ fromJson(needs.prepare.outputs.pkgs) }}
         kind: ${{ fromJson(needs.prepare.outputs.kinds) }}
