@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containerd/continuity"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
@@ -417,9 +418,12 @@ type cdiSpecFile struct {
 }
 
 func writeCDISpecFile(t *testing.T, sb integration.Sandbox, c *Client, csf ...cdiSpecFile) {
+	t.Helper()
+
+	specDir := sb.CDISpecDir()
 	kinds := make(map[string]struct{})
 	for _, f := range csf {
-		require.NoError(t, os.WriteFile(filepath.Join(sb.CDISpecDir(), f.Name), f.Data, 0600))
+		require.NoError(t, continuity.AtomicWriteFile(filepath.Join(specDir, f.Name), f.Data, 0600))
 		kinds[f.DeviceKind] = struct{}{}
 	}
 
