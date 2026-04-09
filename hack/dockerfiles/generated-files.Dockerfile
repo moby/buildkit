@@ -27,7 +27,7 @@ ARG PROTOC_GOOGLEAPIS_VERSION
 RUN <<EOT
   set -e
   wget -q https://github.com/googleapis/googleapis/archive/${PROTOC_GOOGLEAPIS_VERSION}.zip -O googleapis.zip
-  unzip googleapis.zip '*.proto' -d /opt
+  unzip googleapis.zip '*/google/rpc/*.proto' -d /opt
   mkdir -p /opt/googleapis
   mv /opt/googleapis-${PROTOC_GOOGLEAPIS_VERSION} /opt/googleapis/include
 EOT
