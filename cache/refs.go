@@ -1039,7 +1039,6 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 	}
 
 	if sr.cm.Snapshotter.Name() == "stargz" {
-		bklog.G(ctx).Infof("Extract: preparing remote snapshots for ref %s", sr.ID())
 		if err := sr.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
 			if rerr = sr.prepareRemoteSnapshotsStargzMode(ctx, s); rerr != nil {
 				return
@@ -1050,14 +1049,10 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 		return rerr
 	} else if sr.cm.Snapshotter.Name() == "overlaybd" {
-		bklog.G(ctx).Infof("Extract: preparing remote snapshots for overlaybd mode for ref %s", sr.ID())
 		if rerr = sr.prepareRemoteSnapshotsOverlaybdMode(ctx); rerr == nil {
 			return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
 		}
 	}
-
-	bklog.G(ctx).Infof("Extract: parallelExtractEnabled=%v, BUILDKIT_PARALLEL_EXTRACT=%q, snapshotter=%s",
-		parallelExtractEnabled(), os.Getenv("BUILDKIT_PARALLEL_EXTRACT"), sr.cm.Snapshotter.Name())
 
 	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
 		chain := sr.layerChain()
@@ -1073,7 +1068,6 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 		return nil
 	}
-	bklog.G(ctx).Infof("Extract: unlazy for ref %s", sr.ID())
 
 	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
 }
@@ -1486,33 +1480,9 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 	))
 	defer sp.End()
 
-	// Discover the snapshotter's on-disk root so temp dirs are on the same
-	// filesystem, avoiding EXDEV from os.Rename in Phase 2.
-	discoverKey := fmt.Sprintf("discover-%s", identity.NewID())
-	if err := sr.cm.Snapshotter.Prepare(ctx, discoverKey, ""); err != nil {
-		return errors.Wrap(err, "parallel extract: failed to discover snapshotter root")
-	}
-	discoverMountable, err := sr.cm.Snapshotter.Mounts(ctx, discoverKey)
-	if err != nil {
-		sr.cm.Snapshotter.Remove(ctx, discoverKey)
-		return errors.Wrap(err, "parallel extract: failed to get mounts for root discovery")
-	}
-	discoverMounts, discoverUnmount, err := discoverMountable.Mount()
-	if err != nil {
-		sr.cm.Snapshotter.Remove(ctx, discoverKey)
-		return errors.Wrap(err, "parallel extract: failed to mount for root discovery")
-	}
-	snapshotsDir := filepath.Dir(filepath.Dir(extractFSPath(discoverMounts)))
-	discoverUnmount()
-	sr.cm.Snapshotter.Remove(ctx, discoverKey)
-
-	if snapshotsDir == "" || snapshotsDir == "." {
-		return errors.New("parallel extract: could not determine snapshotter root")
-	}
-	bklog.G(ctx).Infof("parallel extract: using snapshotter root %s for temp dirs", snapshotsDir)
-
 	// Phase 1: parallel download + decompress into temp dirs.
-	// Each layer is independently decompressed into its own temp directory.
+	// Temp dirs are created under cm.root to ensure they're on the same
+	// filesystem as the snapshotter, avoiding EXDEV from os.Rename in Phase 2.
 	type extractResult struct {
 		tmpDir string
 		desc   ocispecs.Descriptor
@@ -1535,7 +1505,7 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 				return err
 			}
 
-			tmpDir, err := os.MkdirTemp(snapshotsDir, "buildkit-parallel-extract-")
+			tmpDir, err := os.MkdirTemp(sr.cm.root, "buildkit-parallel-extract-")
 			if err != nil {
 				return err
 			}
