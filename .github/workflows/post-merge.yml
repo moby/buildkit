@@ -60,21 +60,19 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Generate image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=v0.22-base
-            type=sha,prefix=v0.22-base-
+      - name: Generate tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+          echo "tag=v0.22.0-${SHORT_SHA}-${TIMESTAMP}" >> $GITHUB_OUTPUT
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          target: buildkit
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=build-image
           cache-to: type=gha,scope=build-image,mode=max
