@@ -1500,7 +1500,7 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, ref := range needsExtract {
 		ref := ref
-		eg.Go(func() error {
+		eg.Go(func() (rerr error) {
 			dhs := ref.descHandlers
 			desc, err := ref.ociDesc(egctx, dhs, true)
 			if err != nil {
@@ -1510,6 +1510,17 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 
 			if err := (lazyRefProvider{ref: ref, desc: desc, dh: dh, session: s}).Unlazy(egctx); err != nil {
 				return err
+			}
+
+			pg := ref.progress
+			if pg == nil && dh != nil {
+				pg = dh.Progress
+			}
+			if pg != nil {
+				_, stopProgress := pg.Start(egctx)
+				defer stopProgress(rerr)
+				statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
+				defer statusDone()
 			}
 
 			tmpDir, err := os.MkdirTemp(parentTmpDir, ref.ID()+"-")
