@@ -1034,10 +1034,12 @@ func (sr *immutableRef) ensureLocalContentBlob(ctx context.Context, s session.Gr
 
 func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr error) {
 	if (sr.kind() == Layer || sr.kind() == BaseLayer) && !sr.getBlobOnly() {
+		bklog.G(ctx).Infof("Extract: skipping extract for ref %s", sr.ID())
 		return nil
 	}
 
 	if sr.cm.Snapshotter.Name() == "stargz" {
+		bklog.G(ctx).Infof("Extract: preparing remote snapshots for ref %s", sr.ID())
 		if err := sr.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
 			if rerr = sr.prepareRemoteSnapshotsStargzMode(ctx, s); rerr != nil {
 				return
@@ -1048,12 +1050,16 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 		return rerr
 	} else if sr.cm.Snapshotter.Name() == "overlaybd" {
+		bklog.G(ctx).Infof("Extract: preparing remote snapshots for overlaybd mode for ref %s", sr.ID())
 		if rerr = sr.prepareRemoteSnapshotsOverlaybdMode(ctx); rerr == nil {
 			return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
 		}
 	}
 
-	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlay" {
+	bklog.G(ctx).Infof("Extract: parallelExtractEnabled=%v, BUILDKIT_PARALLEL_EXTRACT=%q, snapshotter=%s",
+		parallelExtractEnabled(), os.Getenv("BUILDKIT_PARALLEL_EXTRACT"), sr.cm.Snapshotter.Name())
+
+	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
 		chain := sr.layerChain()
 		var needsExtract []*immutableRef
 		for _, ref := range chain {
@@ -1062,10 +1068,12 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 			}
 		}
 		if len(needsExtract) > 0 {
+			bklog.G(ctx).Infof("parallel extract: extracting %d/%d layers in parallel", len(needsExtract), len(chain))
 			return sr.parallelExtractLayers(ctx, chain, needsExtract, s)
 		}
 		return nil
 	}
+	bklog.G(ctx).Infof("Extract: unlazy for ref %s", sr.ID())
 
 	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
 }
