@@ -1486,6 +1486,31 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 	))
 	defer sp.End()
 
+	// Discover the snapshotter's on-disk root so temp dirs are on the same
+	// filesystem, avoiding EXDEV from os.Rename in Phase 2.
+	discoverKey := fmt.Sprintf("discover-%s", identity.NewID())
+	if err := sr.cm.Snapshotter.Prepare(ctx, discoverKey, ""); err != nil {
+		return errors.Wrap(err, "parallel extract: failed to discover snapshotter root")
+	}
+	discoverMountable, err := sr.cm.Snapshotter.Mounts(ctx, discoverKey)
+	if err != nil {
+		sr.cm.Snapshotter.Remove(ctx, discoverKey)
+		return errors.Wrap(err, "parallel extract: failed to get mounts for root discovery")
+	}
+	discoverMounts, discoverUnmount, err := discoverMountable.Mount()
+	if err != nil {
+		sr.cm.Snapshotter.Remove(ctx, discoverKey)
+		return errors.Wrap(err, "parallel extract: failed to mount for root discovery")
+	}
+	snapshotsDir := filepath.Dir(filepath.Dir(extractFSPath(discoverMounts)))
+	discoverUnmount()
+	sr.cm.Snapshotter.Remove(ctx, discoverKey)
+
+	if snapshotsDir == "" || snapshotsDir == "." {
+		return errors.New("parallel extract: could not determine snapshotter root")
+	}
+	bklog.G(ctx).Infof("parallel extract: using snapshotter root %s for temp dirs", snapshotsDir)
+
 	// Phase 1: parallel download + decompress into temp dirs.
 	// Each layer is independently decompressed into its own temp directory.
 	type extractResult struct {
@@ -1510,7 +1535,7 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 				return err
 			}
 
-			tmpDir, err := os.MkdirTemp("", "buildkit-parallel-extract-")
+			tmpDir, err := os.MkdirTemp(snapshotsDir, "buildkit-parallel-extract-")
 			if err != nil {
 				return err
 			}
