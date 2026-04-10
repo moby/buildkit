@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,29 @@ import (
 )
 
 var additionalAnnotations = append(append(compression.EStargzAnnotations, obdlabel.OverlayBDAnnotations...), labels.LabelUncompressed)
+
+func parallelExtractEnabled() bool {
+	v, _ := strconv.ParseBool(os.Getenv("BUILDKIT_PARALLEL_EXTRACT"))
+	return v
+}
+
+// extractFSPath extracts the writable fs directory path from snapshot mounts.
+// For overlay, this is the upperdir. For bind mounts (base layer), it's the Source.
+func extractFSPath(mounts []mount.Mount) string {
+	if len(mounts) == 0 {
+		return ""
+	}
+	m := mounts[0]
+	if m.Type == "bind" {
+		return m.Source
+	}
+	for _, opt := range m.Options {
+		if strings.HasPrefix(opt, "upperdir=") {
+			return strings.TrimPrefix(opt, "upperdir=")
+		}
+	}
+	return ""
+}
 
 // Ref is a reference to cacheable objects.
 type Ref interface {
@@ -1029,6 +1053,20 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 	}
 
+	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlay" {
+		chain := sr.layerChain()
+		var needsExtract []*immutableRef
+		for _, ref := range chain {
+			if ref.getBlobOnly() {
+				needsExtract = append(needsExtract, ref)
+			}
+		}
+		if len(needsExtract) > 0 {
+			return sr.parallelExtractLayers(ctx, chain, needsExtract, s)
+		}
+		return nil
+	}
+
 	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
 }
 
@@ -1410,6 +1448,159 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	sr.queueSize(sizeUnknown)
 	if err := sr.commitMetadata(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// parallelExtractLayers extracts multiple layers in parallel by decompressing
+// into temp directories first, then doing the sequential Prepare→Commit chain
+// with pre-populated content. This avoids the sequential Apply bottleneck where
+// each layer must wait for its parent to be fully extracted before starting.
+//
+// Only used for the overlay snapshotter when BUILDKIT_PARALLEL_EXTRACT=1.
+func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immutableRef, needsExtract []*immutableRef, s session.Group) (rerr error) {
+	if sr.cm.Applier == nil {
+		return errors.New("parallel extract requires an applier")
+	}
+
+	if _, ok := leases.FromContext(ctx); !ok {
+		leaseCtx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
+		if err != nil {
+			return err
+		}
+		defer done(leaseCtx)
+		ctx = leaseCtx
+	}
+
+	sp, ctx := tracing.StartSpan(ctx, "parallel-extract", trace.WithAttributes(
+		attribute.Int("layers.total", len(chain)),
+		attribute.Int("layers.extract", len(needsExtract)),
+	))
+	defer sp.End()
+
+	// Phase 1: parallel download + decompress into temp dirs.
+	// Each layer is independently decompressed into its own temp directory.
+	type extractResult struct {
+		tmpDir string
+		desc   ocispecs.Descriptor
+	}
+	extractResults := make(map[string]*extractResult, len(needsExtract))
+	var mu sync.Mutex
+
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, ref := range needsExtract {
+		ref := ref
+		eg.Go(func() error {
+			dhs := ref.descHandlers
+			desc, err := ref.ociDesc(egctx, dhs, true)
+			if err != nil {
+				return err
+			}
+			dh := dhs[desc.Digest]
+
+			if err := (lazyRefProvider{ref: ref, desc: desc, dh: dh, session: s}).Unlazy(egctx); err != nil {
+				return err
+			}
+
+			tmpDir, err := os.MkdirTemp("", "buildkit-parallel-extract-")
+			if err != nil {
+				return err
+			}
+			fsDir := filepath.Join(tmpDir, "fs")
+			if err := os.Mkdir(fsDir, 0755); err != nil {
+				os.RemoveAll(tmpDir)
+				return err
+			}
+
+			mounts := []mount.Mount{{
+				Source:  fsDir,
+				Type:    "bind",
+				Options: []string{"rw", "rbind"},
+			}}
+			if _, err := ref.cm.Applier.Apply(egctx, desc, mounts); err != nil {
+				os.RemoveAll(tmpDir)
+				return err
+			}
+
+			mu.Lock()
+			extractResults[ref.ID()] = &extractResult{tmpDir: tmpDir, desc: desc}
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		for _, r := range extractResults {
+			os.RemoveAll(r.tmpDir)
+		}
+		return err
+	}
+
+	// Phase 2: sequential Prepare → swap content → Commit.
+	// Walk the full chain in order. Layers already extracted are skipped
+	// (just advance parentID). Layers that were parallel-extracted get their
+	// temp dir content swapped into the snapshotter path.
+	parentID := ""
+	for _, ref := range chain {
+		if !ref.getBlobOnly() {
+			parentID = ref.getSnapshotID()
+			continue
+		}
+
+		result := extractResults[ref.ID()]
+		if result == nil {
+			return errors.Errorf("parallel extract: missing result for layer %s", ref.ID())
+		}
+
+		key := fmt.Sprintf("extract-%s %s", identity.NewID(), ref.getChainID())
+		if err := ref.cm.Snapshotter.Prepare(ctx, key, parentID); err != nil {
+			os.RemoveAll(result.tmpDir)
+			return err
+		}
+
+		mountable, err := ref.cm.Snapshotter.Mounts(ctx, key)
+		if err != nil {
+			os.RemoveAll(result.tmpDir)
+			return err
+		}
+		mounts, unmount, err := mountable.Mount()
+		if err != nil {
+			os.RemoveAll(result.tmpDir)
+			return err
+		}
+
+		fsPath := extractFSPath(mounts)
+		if err := unmount(); err != nil {
+			os.RemoveAll(result.tmpDir)
+			return err
+		}
+
+		if fsPath == "" {
+			os.RemoveAll(result.tmpDir)
+			return errors.Errorf("parallel extract: could not determine fs path from mounts for layer %s", ref.ID())
+		}
+
+		if err := os.RemoveAll(fsPath); err != nil {
+			os.RemoveAll(result.tmpDir)
+			return errors.Wrapf(err, "parallel extract: failed to remove empty fs dir")
+		}
+		if err := os.Rename(filepath.Join(result.tmpDir, "fs"), fsPath); err != nil {
+			os.RemoveAll(result.tmpDir)
+			return errors.Wrapf(err, "parallel extract: failed to rename extracted content into snapshot path")
+		}
+		os.RemoveAll(result.tmpDir)
+
+		if err := ref.cm.Snapshotter.Commit(ctx, ref.getSnapshotID(), key); err != nil {
+			if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
+				return err
+			}
+		}
+		ref.queueBlobOnly(false)
+		ref.queueSize(sizeUnknown)
+		if err := ref.commitMetadata(); err != nil {
+			return err
+		}
+		parentID = ref.getSnapshotID()
 	}
 	return nil
 }
