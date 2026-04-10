@@ -1481,8 +1481,15 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 	defer sp.End()
 
 	// Phase 1: parallel download + decompress into temp dirs.
-	// Temp dirs are created under cm.root to ensure they're on the same
-	// filesystem as the snapshotter, avoiding EXDEV from os.Rename in Phase 2.
+	// A parent temp dir is created under cm.root to ensure it's on the same
+	// filesystem as the snapshotter (avoiding EXDEV from os.Rename in Phase 2)
+	// and to simplify cleanup.
+	parentTmpDir, err := os.MkdirTemp(sr.cm.root, "buildkit-parallel-extract-")
+	if err != nil {
+		return errors.Wrap(err, "parallel extract: failed to create temp dir")
+	}
+	defer os.RemoveAll(parentTmpDir)
+
 	type extractResult struct {
 		tmpDir string
 		desc   ocispecs.Descriptor
@@ -1505,13 +1512,12 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 				return err
 			}
 
-			tmpDir, err := os.MkdirTemp(sr.cm.root, "buildkit-parallel-extract-")
+			tmpDir, err := os.MkdirTemp(parentTmpDir, ref.ID()+"-")
 			if err != nil {
 				return err
 			}
 			fsDir := filepath.Join(tmpDir, "fs")
 			if err := os.Mkdir(fsDir, 0755); err != nil {
-				os.RemoveAll(tmpDir)
 				return err
 			}
 
@@ -1521,7 +1527,6 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 				Options: []string{"rw", "rbind"},
 			}}
 			if _, err := ref.cm.Applier.Apply(egctx, desc, mounts); err != nil {
-				os.RemoveAll(tmpDir)
 				return err
 			}
 
@@ -1533,9 +1538,6 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 	}
 
 	if err := eg.Wait(); err != nil {
-		for _, r := range extractResults {
-			os.RemoveAll(r.tmpDir)
-		}
 		return err
 	}
 
@@ -1557,41 +1559,33 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 
 		key := fmt.Sprintf("extract-%s %s", identity.NewID(), ref.getChainID())
 		if err := ref.cm.Snapshotter.Prepare(ctx, key, parentID); err != nil {
-			os.RemoveAll(result.tmpDir)
 			return err
 		}
 
 		mountable, err := ref.cm.Snapshotter.Mounts(ctx, key)
 		if err != nil {
-			os.RemoveAll(result.tmpDir)
 			return err
 		}
 		mounts, unmount, err := mountable.Mount()
 		if err != nil {
-			os.RemoveAll(result.tmpDir)
 			return err
 		}
 
 		fsPath := extractFSPath(mounts)
 		if err := unmount(); err != nil {
-			os.RemoveAll(result.tmpDir)
 			return err
 		}
 
 		if fsPath == "" {
-			os.RemoveAll(result.tmpDir)
 			return errors.Errorf("parallel extract: could not determine fs path from mounts for layer %s", ref.ID())
 		}
 
 		if err := os.RemoveAll(fsPath); err != nil {
-			os.RemoveAll(result.tmpDir)
 			return errors.Wrapf(err, "parallel extract: failed to remove empty fs dir")
 		}
 		if err := os.Rename(filepath.Join(result.tmpDir, "fs"), fsPath); err != nil {
-			os.RemoveAll(result.tmpDir)
 			return errors.Wrapf(err, "parallel extract: failed to rename extracted content into snapshot path")
 		}
-		os.RemoveAll(result.tmpDir)
 
 		if err := ref.cm.Snapshotter.Commit(ctx, ref.getSnapshotID(), key); err != nil {
 			if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
