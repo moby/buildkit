@@ -201,7 +201,7 @@ FROM scratch AS release
 COPY --link --from=releaser /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS buildkit-export-alpine
-RUN apk add --no-cache fuse3 git openssh pigz xz iptables ip6tables \
+RUN apk add --no-cache fuse3 git openssh pigz isa-l xz iptables ip6tables \
   && ln -s fusermount3 /usr/bin/fusermount
 COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
@@ -213,6 +213,7 @@ RUN apt-get update \
     git \
     openssh-client \
     pigz \
+    isal \
     xz-utils \
     iptables \
     ca-certificates \
@@ -458,7 +459,7 @@ VOLUME /var/lib/buildkit
 
 # rootless builds a rootless variant of buildkitd image
 FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz shadow-uidmap xz
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz isa-l shadow-uidmap xz
 RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
