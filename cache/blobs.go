@@ -82,6 +82,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 		}
 	case Diff:
 		if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
+			// This diff is just re-using the upper blob, compute that
 			eg.Go(func() error {
 				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, comp, s, filter)
 			})
