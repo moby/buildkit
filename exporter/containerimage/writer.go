@@ -362,15 +362,10 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 
 	// When eager export is active, blobs have already been compressed during
 	// the build. Use createIfNeeded=false to read existing blobs without
-	// re-compressing, and SkipParents=true to avoid walking the parent chain
-	// (each layer was compressed independently by the eager pipeline).
-	// If eager compression somehow missed a layer, this will return
-	// ErrNoBlobs — that is intentional; the build should fail rather than
-	// silently fall back.
+	// re-compressing. If eager compression somehow missed a layer, this will
+	// return ErrNoBlobs — that is intentional; the build should fail rather
+	// than silently fall back.
 	createIfNeeded := eagerExport == ""
-	if eagerExport != "" {
-		refCfg.SkipParents = true
-	}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := progress.OneOff(ctx, "exporting layers")

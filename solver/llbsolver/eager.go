@@ -81,7 +81,6 @@ func newEagerPipeline(ctx context.Context, mode EagerExportMode, comp compressio
 		mode: mode,
 		refCfg: cacheconfig.RefConfig{
 			Compression: comp,
-			SkipParents: true,
 		},
 		sessionID: sessionID,
 		pushCfg:   pushCfg,
@@ -144,9 +143,10 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 	}
 }
 
-// processRef compresses a single ref's blob and optionally pushes it.
-// SkipParents is set in the refCfg, so only this ref's own layer is
-// compressed — parent layers get their own callbacks and worker items.
+// processRef compresses a single ref's blob (and its parent chain) and
+// optionally pushes it. Parent compression is deduplicated by flightcontrol
+// inside computeBlobChain, so overlapping parent chains across workers are
+// only compressed once.
 func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 	ctx := ep.ctx
 	s := session.NewGroup(ep.sessionID)
