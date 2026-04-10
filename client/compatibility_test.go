@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -45,8 +46,8 @@ import (
 const compatibilityUpdateEnv = "BUILDKIT_UPDATE_COMPAT_GOLDENS"
 const compatibilityExpectedVersionEnv = "BUILDKIT_TEST_EXPECTED_COMPATIBILITY_VERSION"
 const compatibilityEpoch = "1445412480"
-const compatibilityPlatformString = "linux/arm64"
-const compatibilityBusyboxMirrorRef = "busybox_arm64:latest"
+const compatibilityPlatformString = "linux/amd64"
+const compatibilityBusyboxMirrorRef = "busybox_amd64:latest"
 const compatibilityBusyboxImageRef = "docker.io/library/" + compatibilityBusyboxMirrorRef
 
 //go:embed testdata/compatibility
@@ -60,6 +61,7 @@ type compatibilityLayerExpectation struct {
 type compatibilityCase struct {
 	Name             string
 	Attrs            map[string]string
+	AttestProvenance bool
 	TouchExecOutputs bool
 }
 
@@ -138,12 +140,20 @@ var compatibilityCases = []compatibilityCase{
 			"rewrite-timestamp": "true",
 		},
 	},
+	{
+		Name: "provenance-attestation",
+		Attrs: map[string]string{
+			"source-date-epoch": compatibilityEpoch,
+			"rewrite-timestamp": "true",
+		},
+		AttestProvenance: true,
+	},
 }
 
 func TestCompatibilityIntegration(t *testing.T) {
 	integration.SkipOnPlatform(t, "windows")
 	mirrors := integration.WithMirroredImages(map[string]string{
-		"library/" + compatibilityBusyboxMirrorRef: "docker.io/arm64v8/busybox:latest@sha256:1fa89c01cd0473cedbd1a470abb8c139eeb80920edf1bc55de87851bfb63ea11",
+		"library/" + compatibilityBusyboxMirrorRef: "docker.io/amd64/busybox:latest@sha256:023917ec6a886d0e8e15f28fb543515a5fcd8d938edb091e8147db4efed388ee",
 	})
 	integration.Run(t, integration.TestFuncs(
 		testImageExporterCompatibilityVersion,
@@ -175,7 +185,7 @@ func testImageExporterCompatibilityVersion(t *testing.T, sb integration.Sandbox)
 		for _, tc := range compatibilityCases {
 			t.Run(fmt.Sprintf("image/%s/%s", tc.Name, compatibilityRunName(version, expectedSet)), func(t *testing.T) {
 				def := createCompatibilityDefinition(t, sb, baseRef, platform, tc)
-				actual, err := exportCompatibilityImageCase(ctx, t, c, def, registry, tc, version, expectedSet, baseConfig)
+				actual, err := exportCompatibilityImageCase(ctx, t, c, def, registry, tc, version, expectedSet, platform, baseConfig)
 				assertCompatibilityCaseResult(t, ExporterImage, tc, version, expectedSet, actual, err)
 			})
 		}
@@ -205,7 +215,7 @@ func testOCIExporterCompatibilityVersion(t *testing.T, sb integration.Sandbox) {
 		for _, tc := range compatibilityCases {
 			t.Run(fmt.Sprintf("oci/%s/%s", tc.Name, compatibilityRunName(version, expectedSet)), func(t *testing.T) {
 				def := createCompatibilityDefinition(t, sb, baseRef, platform, tc)
-				actual, err := exportCompatibilityOCICase(ctx, t, c, def, tc, version, expectedSet, baseConfig)
+				actual, err := exportCompatibilityOCICase(ctx, t, c, def, tc, version, expectedSet, platform, baseConfig)
 				assertCompatibilityCaseResult(t, ExporterOCI, tc, version, expectedSet, actual, err)
 			})
 		}
@@ -251,7 +261,7 @@ func testImageExporterCompatibilityVersionProvenance(t *testing.T, sb integratio
 	attrs["push"] = "true"
 	attrs[exptypes.ExporterImageConfigKey] = string(baseConfig)
 
-	_, err = c.Solve(ctx, def, SolveOpt{
+	err = solveCompatibilityWithPlatform(ctx, c, def, SolveOpt{
 		CompatibilityVersion: compat.CompatibilityVersion013,
 		FrontendAttrs: map[string]string{
 			"attest:provenance": "mode=max,version=v1",
@@ -260,7 +270,7 @@ func testImageExporterCompatibilityVersionProvenance(t *testing.T, sb integratio
 			Type:  ExporterImage,
 			Attrs: attrs,
 		}},
-	}, nil)
+	}, platform)
 	require.NoError(t, err)
 
 	pr, err := readImageCompatibilityProvenance(ctx, target)
@@ -316,7 +326,12 @@ func createCompatibilityBaseImage(ctx context.Context, t *testing.T, c *Client, 
 			return nil, err
 		}
 		base = base.File(
-			llb.Mkdir("/base", 0o755, llb.WithParents(true)).
+			// Precreate runtime mountpoints so the exec diff is based on the
+			// generated files, not on the rootless vs non-rootless /sys stub
+			// difference in the runtime snapshot.
+			llb.Mkdir("/proc", 0o755, llb.WithParents(true)).
+				Mkdir("/sys", 0o755, llb.WithParents(true)).
+				Mkdir("/base", 0o755, llb.WithParents(true)).
 				Mkfile("/base/base.txt", 0o644, []byte("compatibility base\n")),
 		)
 
@@ -404,50 +419,36 @@ func createCompatibilityDefinition(t *testing.T, sb integration.Sandbox, baseRef
 	)
 
 	execScript := `sh -eux -c '
-mkdir -p /foo/bar/generated/deeper
-echo exec-fixture > /foo/bar/generated/exec.txt
-echo nested-exec > /foo/bar/generated/deeper/nested.txt
+mkdir -p /generated/deeper
+echo exec-fixture > /generated/exec.txt
+echo nested-exec > /generated/deeper/nested.txt
 `
 	if tc.TouchExecOutputs {
-		execScript += `touch -t 201903040506.07 /foo/bar/generated /foo/bar/generated/deeper
-touch -t 201903040506.07 /foo/bar/generated/exec.txt /foo/bar/generated/deeper/nested.txt
+		execScript += `touch -t 201903040506.07 /generated /generated/deeper
+touch -t 201903040506.07 /generated/exec.txt /generated/deeper/nested.txt
 `
 	}
 	execScript += `'`
 
-	run := st.Run(
-		llb.Shlex(execScript),
-		llb.AddMount("/foo/bar", llb.Scratch()),
-	)
+	run := st.Run(llb.Shlex(execScript))
 
 	def, err := run.Root().Marshal(sb.Context())
 	require.NoError(t, err)
 	return def
 }
 
-func exportCompatibilityImageCase(ctx context.Context, t *testing.T, c *Client, def *llb.Definition, registry string, tc compatibilityCase, version int, expectedSet bool, baseConfig []byte) (compatibilityActual, error) {
+func exportCompatibilityImageCase(ctx context.Context, t *testing.T, c *Client, def *llb.Definition, registry string, tc compatibilityCase, version int, expectedSet bool, platform ocispecs.Platform, baseConfig []byte) (compatibilityActual, error) {
 	t.Helper()
 
 	target := fmt.Sprintf("%s/buildkit/compatibility-%s:%s", registry, sanitizeCompatibilityName(tc.Name), compatibilityRunName(version, expectedSet))
 	attrs := cloneStringMap(tc.Attrs)
 	attrs["name"] = target
 	attrs["push"] = "true"
-	attrs[exptypes.ExporterImageConfigKey] = string(baseConfig)
 
-	opt := SolveOpt{
-		FrontendAttrs: map[string]string{
-			"attest:provenance": "mode=max,version=v1",
-		},
-		Exports: []ExportEntry{{
-			Type:  ExporterImage,
-			Attrs: attrs,
-		}},
-	}
-	if !expectedSet {
-		opt.CompatibilityVersion = version
-	}
-	_, err := c.Solve(ctx, def, opt, nil)
-	if err != nil {
+	if err := runCompatibilityExport(ctx, c, def, ExportEntry{
+		Type:  ExporterImage,
+		Attrs: attrs,
+	}, tc, version, expectedSet, platform, baseConfig); err != nil {
 		return compatibilityActual{}, err
 	}
 
@@ -458,31 +459,75 @@ func exportCompatibilityImageCase(ctx context.Context, t *testing.T, c *Client, 
 	return readCompatibilityActualFromProvider(ctx, t, provider, desc), nil
 }
 
-func exportCompatibilityOCICase(ctx context.Context, t *testing.T, c *Client, def *llb.Definition, tc compatibilityCase, version int, expectedSet bool, baseConfig []byte) (compatibilityActual, error) {
+func exportCompatibilityOCICase(ctx context.Context, t *testing.T, c *Client, def *llb.Definition, tc compatibilityCase, version int, expectedSet bool, platform ocispecs.Platform, baseConfig []byte) (compatibilityActual, error) {
 	t.Helper()
 
 	dir := t.TempDir()
 	attrs := cloneStringMap(tc.Attrs)
 	attrs["tar"] = "false"
+
+	if err := runCompatibilityExport(ctx, c, def, ExportEntry{
+		Type:      ExporterOCI,
+		OutputDir: dir,
+		Attrs:     attrs,
+	}, tc, version, expectedSet, platform, baseConfig); err != nil {
+		return compatibilityActual{}, err
+	}
+
+	return readCompatibilityActualFromOCILayout(t, dir), nil
+}
+
+func runCompatibilityExport(ctx context.Context, c *Client, def *llb.Definition, export ExportEntry, tc compatibilityCase, version int, expectedSet bool, platform ocispecs.Platform, baseConfig []byte) error {
+	attrs := cloneStringMap(export.Attrs)
 	attrs[exptypes.ExporterImageConfigKey] = string(baseConfig)
+	export.Attrs = attrs
 
 	opt := SolveOpt{
-		FrontendAttrs: map[string]string{
+		Exports: []ExportEntry{export},
+	}
+	if tc.AttestProvenance {
+		opt.FrontendAttrs = map[string]string{
 			"attest:provenance": "mode=max,version=v1",
-		},
-		Exports: []ExportEntry{{
-			Type:      ExporterOCI,
-			OutputDir: dir,
-			Attrs:     attrs,
-		}},
+		}
 	}
 	if !expectedSet {
 		opt.CompatibilityVersion = version
 	}
-	_, err := c.Solve(ctx, def, opt, nil)
-	if err != nil {
-		return compatibilityActual{}, err
-	}
+	return solveCompatibilityWithPlatform(ctx, c, def, opt, platform)
+}
+
+func solveCompatibilityWithPlatform(ctx context.Context, c *Client, def *llb.Definition, opt SolveOpt, platform ocispecs.Platform) error {
+	platform = platforms.Normalize(platform)
+	platformKey := platforms.Format(platform)
+
+	_, err := c.Build(ctx, opt, "", func(ctx context.Context, gw gateway.Client) (*gateway.Result, error) {
+		r, err := gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		res := gateway.NewResult()
+		res.SetRef(ref)
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: platformKey, Platform: platform}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+		return res, nil
+	}, nil)
+	return err
+}
+
+func readCompatibilityActualFromOCILayout(t *testing.T, dir string) compatibilityActual {
+	t.Helper()
 
 	indexDT, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageIndexFile))
 	require.NoError(t, err)
@@ -512,7 +557,7 @@ func exportCompatibilityOCICase(ctx context.Context, t *testing.T, c *Client, de
 		configDT, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageBlobsDir, manifest.Config.Digest.Algorithm().String(), manifest.Config.Digest.Encoded()))
 		require.NoError(t, err)
 
-		return compatibilityActualFromBytes(manifestDT, configDT, manifest.Layers), nil
+		return compatibilityActualFromBytes(manifestDT, configDT, manifest.Layers)
 	}
 
 	blobPaths, err := filepath.Glob(filepath.Join(dir, ocispecs.ImageBlobsDir, "*", "*"))
@@ -536,11 +581,11 @@ func exportCompatibilityOCICase(ctx context.Context, t *testing.T, c *Client, de
 		configDT, err := os.ReadFile(filepath.Join(dir, ocispecs.ImageBlobsDir, manifest.Config.Digest.Algorithm().String(), manifest.Config.Digest.Encoded()))
 		require.NoError(t, err)
 
-		return compatibilityActualFromBytes(manifestDT, configDT, manifest.Layers), nil
+		return compatibilityActualFromBytes(manifestDT, configDT, manifest.Layers)
 	}
 
 	t.Fatalf("missing platform manifest\nindex json:\n%s", normalizeJSON(indexDT))
-	return compatibilityActual{}, nil
+	return compatibilityActual{}
 }
 
 func compatibilityActualFromBytes(manifestDT, configDT []byte, layers []ocispecs.Descriptor) compatibilityActual {
@@ -672,15 +717,15 @@ func assertCompatibilityCase(t *testing.T, exporterType string, tc compatibility
 	t.Helper()
 
 	if os.Getenv(compatibilityUpdateEnv) != "" {
-		writeCompatibilityGoldens(t, tc.Name, version, actual)
+		writeCompatibilityGoldens(t, exporterType, tc.Name, version, actual)
 		t.Logf("compatibility expectation %s/%s/v%d manifest=%q config=%q layers=%s",
 			exporterType, tc.Name, version, actual.ManifestDigest, actual.ConfigDigest, formatLayerExpectations(actual.Layers))
 		return
 	}
 
-	expectedManifestJSON, err := compatibilityGoldens.ReadFile(goldenPath(tc.Name, version, "manifest.json"))
+	expectedManifestJSON, err := readGoldenFile(exporterType, tc.Name, version, "manifest.json")
 	require.NoError(t, err)
-	expectedConfigJSON, err := compatibilityGoldens.ReadFile(goldenPath(tc.Name, version, "config.json"))
+	expectedConfigJSON, err := readGoldenFile(exporterType, tc.Name, version, "config.json")
 	require.NoError(t, err)
 
 	exp, err := compatibilityExpectationFromGoldens(expectedManifestJSON, expectedConfigJSON)
@@ -737,22 +782,88 @@ func compatibilityExpectationFromGoldens(manifestDT, configDT []byte) (compatibi
 	return compatibilityActualFromBytes(manifestDT, configDT, manifest.Layers), nil
 }
 
-func writeCompatibilityGoldens(t *testing.T, caseName string, version int, actual compatibilityActual) {
+func writeCompatibilityGoldens(t *testing.T, exporterType, caseName string, version int, actual compatibilityActual) {
 	t.Helper()
 
-	_, currentFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-
-	baseDir := filepath.Dir(currentFile)
-	manifestPath := filepath.Join(baseDir, "testdata", "compatibility", caseName, fmt.Sprintf("v%d", version), "manifest.json")
-	configPath := filepath.Join(baseDir, "testdata", "compatibility", caseName, fmt.Sprintf("v%d", version), "config.json")
+	manifestPath := goldenAbsPath(exporterType, caseName, version, "manifest.json")
+	configPath := goldenAbsPath(exporterType, caseName, version, "config.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0o755))
 	require.NoError(t, os.WriteFile(manifestPath, actual.ManifestBytes, 0o644))
 	require.NoError(t, os.WriteFile(configPath, actual.ConfigBytes, 0o644))
+
+	otherExporter := compatibilityOtherExporter(exporterType)
+	if otherExporter == "" {
+		return
+	}
+
+	otherManifestPath := goldenAbsPath(otherExporter, caseName, version, "manifest.json")
+	otherConfigPath := goldenAbsPath(otherExporter, caseName, version, "config.json")
+	otherManifestDT, err := os.ReadFile(otherManifestPath)
+	if err == nil {
+		commonManifestPath := goldenAbsPath("common", caseName, version, "manifest.json")
+		if bytes.Equal(actual.ManifestBytes, otherManifestDT) {
+			require.NoError(t, os.MkdirAll(filepath.Dir(commonManifestPath), 0o755))
+			require.NoError(t, os.WriteFile(commonManifestPath, actual.ManifestBytes, 0o644))
+			removeGoldenFileIfExists(t, manifestPath)
+			removeGoldenFileIfExists(t, otherManifestPath)
+		} else {
+			removeGoldenFileIfExists(t, commonManifestPath)
+		}
+	}
+
+	otherConfigDT, err := os.ReadFile(otherConfigPath)
+	commonConfigPath := goldenAbsPath("common", caseName, version, "config.json")
+	if err == nil {
+		if bytes.Equal(actual.ConfigBytes, otherConfigDT) {
+			require.NoError(t, os.MkdirAll(filepath.Dir(commonConfigPath), 0o755))
+			require.NoError(t, os.WriteFile(commonConfigPath, actual.ConfigBytes, 0o644))
+			removeGoldenFileIfExists(t, configPath)
+			removeGoldenFileIfExists(t, otherConfigPath)
+		} else {
+			removeGoldenFileIfExists(t, commonConfigPath)
+		}
+	}
 }
 
-func goldenPath(caseName string, version int, file string) string {
-	return filepath.ToSlash(filepath.Join("testdata", "compatibility", caseName, fmt.Sprintf("v%d", version), file))
+func readGoldenFile(exporterType, caseName string, version int, file string) ([]byte, error) {
+	commonPath := goldenPath("common", caseName, version, file)
+	dt, err := compatibilityGoldens.ReadFile(commonPath)
+	if err == nil {
+		return dt, nil
+	}
+	return compatibilityGoldens.ReadFile(goldenPath(exporterType, caseName, version, file))
+}
+
+func goldenPath(exporterType, caseName string, version int, file string) string {
+	return filepath.ToSlash(filepath.Join("testdata", "compatibility", exporterType, caseName, fmt.Sprintf("v%d", version), file))
+}
+
+func goldenAbsPath(exporterType, caseName string, version int, file string) string {
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	baseDir := filepath.Dir(currentFile)
+	return filepath.Join(baseDir, goldenPath(exporterType, caseName, version, file))
+}
+
+func compatibilityOtherExporter(exporterType string) string {
+	switch exporterType {
+	case ExporterImage:
+		return ExporterOCI
+	case ExporterOCI:
+		return ExporterImage
+	default:
+		return ""
+	}
+}
+
+func removeGoldenFileIfExists(t *testing.T, path string) {
+	t.Helper()
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		require.NoError(t, err)
+	}
 }
 
 func formatCompatibilityDebug(exporterType, caseName string, version int, attrs map[string]string, exp compatibilityActual, actual compatibilityActual, manifestDiff, configDiff string) string {

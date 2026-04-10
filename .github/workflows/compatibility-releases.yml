@@ -9,6 +9,7 @@ permissions:
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - 'master'
@@ -16,6 +17,7 @@ on:
 
 env:
   GO_VERSION: "1.26"
+  REGISTRY_VERSION: "2.8.3"
 
 jobs:
   compatibility:
@@ -74,6 +76,17 @@ jobs:
           go-version: "${{ env.GO_VERSION }}"
           cache: true
       -
+        name: Download registry binary
+        run: |
+          mkdir -p .tmp/compat-bin
+          registry_asset="registry_${{ env.REGISTRY_VERSION }}_linux_amd64.tar.gz"
+          registry_url="https://github.com/distribution/distribution/releases/download/v${{ env.REGISTRY_VERSION }}/${registry_asset}"
+          curl -fsSLo ".tmp/${registry_asset}" "${registry_url}"
+          curl -fsSLo ".tmp/${registry_asset}.sha256" "${registry_url}.sha256"
+          test "$(cat ".tmp/${registry_asset}.sha256")" = "$(sha256sum ".tmp/${registry_asset}" | cut -d' ' -f1)"
+          tar -C .tmp/compat-bin -xzf ".tmp/${registry_asset}" registry
+          chmod +x .tmp/compat-bin/registry
+      -
         name: Prepare release binaries
         run: |
           mkdir -p .tmp/compat-bin
@@ -90,5 +103,7 @@ jobs:
         name: Test compatibility integration
         env:
           BUILDKIT_TEST_EXPECTED_COMPATIBILITY_VERSION: ${{ matrix.expected-compatibility-version }}
+          BUILDKIT_REGISTRY_MIRROR_DIR: ${{ github.workspace }}/.tmp/compat-registry
         run: |
-          go test ./client -run '^TestCompatibilityIntegration/Test(Image|OCI)ExporterCompatibilityVersion$' -count=1 -v
+          mkdir -p "$BUILDKIT_REGISTRY_MIRROR_DIR"
+          go test ./client -run '^TestCompatibilityIntegration/Test(Image|OCI)ExporterCompatibilityVersion/worker=(oci|containerd)$' -count=1 -v

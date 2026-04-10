@@ -211,8 +211,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportAnnotationsMediaTypes,
 	testExportAttestationsOCIArtifact,
 	testExportAttestationsImageManifest,
-	testImageExporterCompatibilityVersion,
-	testOCIExporterCompatibilityVersion,
 	testExportedImageLabels,
 	testAttestationDefaultSubject,
 	testSourceDateEpochLayerTimestamps,
