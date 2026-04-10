@@ -1,0 +1,94 @@
+name: Post-Merge
+
+on:
+  push:
+    branches:
+      - v0.22-base
+  workflow_dispatch:
+    inputs:
+      skip_integration_tests:
+        description: 'Skip integration tests'
+        required: false
+        type: boolean
+        default: false
+      skip_build:
+        description: 'Skip image build & push'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.24"
+  SETUP_BUILDX_VERSION: "edge"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
+  IMAGE_NAME: "baseten/buildkit"
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    if: ${{ !inputs.skip_integration_tests }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crazy-max/ghaction-github-runtime@v3
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+        with:
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
+          buildkitd-flags: --debug
+      - name: Build integration test image
+        uses: docker/bake-action@v6
+        with:
+          targets: integration-tests
+          set: |
+            *.cache-from=type=gha,scope=integration-tests
+            *.cache-to=type=gha,scope=integration-tests,repository=${{ github.repository }},ghtoken=${{ secrets.GITHUB_TOKEN }}
+      - name: Run integration tests
+        run: ./hack/test integration
+        env:
+          TESTPKGS: ./client ./cmd/buildctl ./solver ./frontend
+          TESTFLAGS: "-v --parallel=6 --timeout=30m"
+          GOTESTSUM_FORMAT: standard-verbose
+          TEST_IMAGE_BUILD: "0"
+          CACHE_FROM: type=gha,scope=integration-tests
+
+  build-and-push:
+    name: Build & Push Image
+    if: ${{ !inputs.skip_build }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+        with:
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
+          buildkitd-flags: --debug
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Generate tag
+        id: tag
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+          echo "tag=v0.22.0-${SHORT_SHA}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          target: buildkit
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=build-image
+          cache-to: type=gha,scope=build-image,mode=max
+      - name: Print image
+        run: echo "Pushed ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
