@@ -1580,7 +1580,14 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 			return errors.Errorf("parallel extract: could not determine fs path from mounts for layer %s", ref.ID())
 		}
 
-		if err := os.RemoveAll(fsPath); err != nil {
+		entries, err := os.ReadDir(fsPath)
+		if err != nil {
+			return errors.Wrapf(err, "parallel extract: failed to read fs dir")
+		}
+		if len(entries) > 0 {
+			return errors.Errorf("parallel extract: expected empty fs dir but found %d entries at %s", len(entries), fsPath)
+		}
+		if err := os.Remove(fsPath); err != nil {
 			return errors.Wrapf(err, "parallel extract: failed to remove empty fs dir")
 		}
 		if err := os.Rename(filepath.Join(result.tmpDir, "fs"), fsPath); err != nil {
