@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - v0.22-base
+  workflow_dispatch:
+    inputs:
+      skip_integration_tests:
+        description: 'Skip integration tests'
+        required: false
+        type: boolean
+        default: false
+      skip_build:
+        description: 'Skip image build & push'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +29,7 @@ env:
 jobs:
   integration-tests:
     name: Integration Tests
+    if: ${{ !inputs.skip_integration_tests }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +58,7 @@ jobs:
 
   build-and-push:
     name: Build & Push Image
+    if: ${{ !inputs.skip_build }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -76,3 +90,5 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=build-image
           cache-to: type=gha,scope=build-image,mode=max
+      - name: Print image
+        run: echo "Pushed ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
