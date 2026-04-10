@@ -459,6 +459,7 @@ RUN --mount=target=/tmp/gen_gpg_test_env.sh,source=hack/fixtures/gen_gpg_test_en
 RUN --mount=target=/tmp/gen_ssh_test_env.sh,source=hack/fixtures/gen_ssh_test_env.sh sh /tmp/gen_ssh_test_env.sh user1 && sh /tmp/gen_ssh_test_env.sh user2
 ENV CGO_ENABLED=0
 ENV GOTESTSUM_FORMAT=standard-verbose
+COPY --link --from=docker-engine / /usr/bin/
 COPY --link --from=gotestsum /out /usr/bin/
 COPY --link --from=minio /usr/bin/minio /usr/bin/
 COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
@@ -470,7 +471,6 @@ COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin
 COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
-COPY --link --from=docker-engine / /usr/bin/
 COPY --link --from=docker-cli / /usr/bin/
 COPY --link --from=docker-buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/firewall /opt/cni/bin/dnsname /opt/cni/bin/
