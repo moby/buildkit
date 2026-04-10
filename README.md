@@ -369,6 +369,15 @@ $ tree ./bin
     └── hello-linux-arm64
 ```
 
+Local output also supports `mode=<copy|delete>`:
+
+- `copy` (default) preserves existing files in destination that are not present in build result.
+- `delete` removes destination files and directories that are not present in build result.
+
+```bash
+buildctl build ... --output type=local,dest=./bin/release,mode=delete
+```
+
 Tar exporter is similar to local exporter but transfers the files through a tarball.
 
 ```bash

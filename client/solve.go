@@ -5,14 +5,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	gofs "io/fs"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
 	contentlocal "github.com/containerd/containerd/v2/plugins/content/local"
+	continuityfs "github.com/containerd/continuity/fs"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
@@ -108,6 +111,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	if opt.Ref != "" {
 		ref = opt.Ref
 	}
+	reconcileCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 
 	statusContext, cancelStatus := context.WithCancelCause(context.Background())
@@ -135,6 +139,37 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	storesToUpdate := []string{}
+
+	type localDeleteExport struct {
+		stageDir string
+		destDir  string
+	}
+	var localDeleteExports []localDeleteExport
+	defer func() {
+		for _, ex := range localDeleteExports {
+			_ = os.RemoveAll(ex.stageDir)
+		}
+	}()
+
+	if opt.SessionPreInitialized {
+		for _, ex := range opt.Exports {
+			if ex.Type != ExporterLocal {
+				continue
+			}
+			mode := filesync.FSSyncDirModeCopy
+			if ex.Attrs != nil {
+				mode, err = filesync.ParseFSSyncDirMode(ex.Attrs["mode"])
+				if err != nil {
+					return nil, err
+				}
+			}
+			if mode == filesync.FSSyncDirModeDelete {
+				// Delete mode stages into a temporary directory and reconciles after
+				// solve returns, which this preinitialized-session path cannot set up.
+				return nil, errors.New("local exporter mode=delete is not supported with SessionPreInitialized")
+			}
+		}
+	}
 
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
@@ -189,7 +224,33 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if ex.OutputDir == "" {
 					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
 				}
-				syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+				if ex.Type == ExporterLocal {
+					mode := filesync.FSSyncDirModeCopy
+					if ex.Attrs != nil {
+						mode, err = filesync.ParseFSSyncDirMode(ex.Attrs["mode"])
+						if err != nil {
+							return nil, err
+						}
+					}
+					if mode == filesync.FSSyncDirModeDelete {
+						// Delete mode is reconciled after solve returns. The DiffCopy
+						// stream only guarantees the staged copy, not follow-up delete
+						// work on the sync target.
+						stageDir, err := os.MkdirTemp("", "buildkit-local-export-")
+						if err != nil {
+							return nil, err
+						}
+						localDeleteExports = append(localDeleteExports, localDeleteExport{
+							stageDir: stageDir,
+							destDir:  ex.OutputDir,
+						})
+						syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, stageDir))
+					} else {
+						syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+					}
+				} else {
+					syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+				}
 			}
 			if supportStore {
 				store := ex.OutputStore
@@ -382,6 +443,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	for _, ex := range localDeleteExports {
+		if err := reconcileLocalDeleteExport(reconcileCtx, ex.stageDir, ex.destDir); err != nil {
+			return nil, err
+		}
+	}
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
 	if manifestDescJSON := res.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
@@ -421,6 +487,75 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 	return res, nil
+}
+
+func reconcileLocalDeleteExport(ctx context.Context, stageDir, destDir string) error {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return errors.Wrapf(err, "failed to create local export dir %s", destDir)
+	}
+
+	if err := continuityfs.Changes(ctx, destDir, stageDir, func(kind continuityfs.ChangeKind, p string, _ os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if kind != continuityfs.ChangeKindDelete {
+			return nil
+		}
+		if len(p) > 0 {
+			p = p[1:]
+		}
+		if p == "" {
+			return nil
+		}
+		return os.RemoveAll(filepath.Join(destDir, p))
+	}); err != nil {
+		return errors.WithStack(err)
+	}
+
+	stageFS, err := fsutil.NewFS(stageDir)
+	if err != nil {
+		return err
+	}
+	return writeLocalExportFS(ctx, stageFS, destDir)
+}
+
+func writeLocalExportFS(ctx context.Context, src fsutil.FS, dest string) error {
+	dw, err := fsutil.NewDiskWriter(ctx, dest, fsutil.DiskWriterOpt{
+		AsyncDataCb: func(ctx context.Context, p string, wc io.WriteCloser) (retErr error) {
+			defer func() {
+				if err := wc.Close(); retErr == nil {
+					retErr = err
+				}
+			}()
+
+			r, err := src.Open(p)
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			_, err = io.Copy(wc, r)
+			return err
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := src.Walk(ctx, "", func(p string, entry gofs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return dw.HandleChange(fsutil.ChangeKindAdd, p, info, nil)
+	}); err != nil {
+		return err
+	}
+
+	return dw.Wait(ctx)
 }
 
 func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {

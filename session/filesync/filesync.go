@@ -251,6 +251,24 @@ type FSSyncTarget interface {
 	target() *fsSyncTarget
 }
 
+type FSSyncDirMode string
+
+const (
+	FSSyncDirModeCopy   FSSyncDirMode = "copy"
+	FSSyncDirModeDelete FSSyncDirMode = "delete"
+)
+
+func ParseFSSyncDirMode(v string) (FSSyncDirMode, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", string(FSSyncDirModeCopy):
+		return FSSyncDirModeCopy, nil
+	case string(FSSyncDirModeDelete):
+		return FSSyncDirModeDelete, nil
+	default:
+		return "", errors.Errorf("invalid local exporter mode %q", v)
+	}
+}
+
 type fsSyncTarget struct {
 	id     int
 	outdir string
