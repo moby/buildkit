@@ -151,20 +151,20 @@ func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 	ctx := ep.ctx
 	s := session.NewGroup(ep.sessionID)
 
-	bklog.G(ctx).Debugf("eager compress starting for ref %s", ref.ID())
+	bklog.G(ctx).Infof("eager compress starting for ref %s", ref.ID())
 	remotes, err := ref.GetRemotes(ctx, true, ep.refCfg, false, s)
 	if err != nil {
 		bklog.G(ctx).WithError(err).Warnf("eager compress failed for ref %s", ref.ID())
 		return err
 	}
-	bklog.G(ctx).Debugf("eager compress done for ref %s", ref.ID())
+	bklog.G(ctx).Infof("eager compress done for ref %s", ref.ID())
 
 	if ep.mode == EagerExportPush {
 		if err := ep.pushBlobs(ctx, remotes); err != nil {
 			bklog.G(ctx).WithError(err).Warnf("eager push failed for ref %s", ref.ID())
 			return err
 		}
-		bklog.G(ctx).Debugf("eager push done for ref %s", ref.ID())
+		bklog.G(ctx).Infof("eager push done for ref %s", ref.ID())
 	}
 	return nil
 }
@@ -195,7 +195,7 @@ func (ep *eagerPipeline) pushBlobs(ctx context.Context, rems []*solver.Remote) e
 // concurrent workers via flightcontrol.
 func (ep *eagerPipeline) pushBlob(ctx context.Context, handler func(context.Context, ocispecs.Descriptor) ([]ocispecs.Descriptor, error), desc ocispecs.Descriptor) error {
 	_, err := ep.pushDedup.Do(ctx, desc.Digest.String(), func(ctx context.Context) (struct{}, error) {
-		bklog.G(ctx).Debugf("eager pushing blob %s (%d bytes)", desc.Digest, desc.Size)
+		bklog.G(ctx).Infof("eager pushing blob %s (%d bytes)", desc.Digest, desc.Size)
 		_, err := handler(ctx, desc)
 		return struct{}{}, err
 	})
