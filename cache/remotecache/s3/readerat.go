@@ -2,6 +2,7 @@ package s3
 
 import (
 	"io"
+	"sync"
 )
 
 type ReaderAtCloser interface {
@@ -10,6 +11,7 @@ type ReaderAtCloser interface {
 }
 
 type readerAtCloser struct {
+	mu     sync.Mutex
 	offset int64
 	rc     io.ReadCloser
 	ra     io.ReaderAt
@@ -24,6 +26,9 @@ func toReaderAtCloser(open func(offset int64) (io.ReadCloser, error)) ReaderAtCl
 }
 
 func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
+	hrs.mu.Lock()
+	defer hrs.mu.Unlock()
+
 	if hrs.closed {
 		return 0, io.EOF
 	}
@@ -63,6 +68,9 @@ func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
 }
 
 func (hrs *readerAtCloser) Close() error {
+	hrs.mu.Lock()
+	defer hrs.mu.Unlock()
+
 	if hrs.closed {
 		return nil
 	}
