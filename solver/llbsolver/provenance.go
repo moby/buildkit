@@ -506,6 +506,12 @@ func (p *ProvenanceCreator) Predicate(ctx context.Context) (any, error) {
 		p.pr.RunDetails.Metadata.BuildKitMetadata.SysUsage = sysSamples
 	}
 
+	compatibilityVersion, err := p.j.CompatibilityVersion()
+	if err != nil {
+		return nil, err
+	}
+	p.pr.BuildDefinition.ExternalParameters.Request.CompatibilityVersion = compatibilityVersion
+
 	if p.slsaVersion == provenancetypes.ProvenanceSLSA02 {
 		return p.pr.ConvertToSLSA02(), nil
 	}

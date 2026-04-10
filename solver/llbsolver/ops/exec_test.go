@@ -311,3 +311,7 @@ func (j *jobCtx) Cleanup(f func() error) error {
 func (j *jobCtx) ResolverCache() solver.ResolverCache {
 	return nil
 }
+
+func (j *jobCtx) CompatibilityVersion() (int, error) {
+	return 0, nil
+}

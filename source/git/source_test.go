@@ -27,8 +27,11 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/compat"
 	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
 	"github.com/moby/buildkit/util/gitutil/gitsign"
@@ -2188,6 +2191,54 @@ func setupGitSource(t *testing.T, tmpdir string) *Source {
 	return gs
 }
 
+type testJobContext struct {
+	compatibilityVersion int
+}
+
+func (j testJobContext) Session() session.Group {
+	return nil
+}
+
+func (j testJobContext) Cleanup(func() error) error {
+	return nil
+}
+
+func (j testJobContext) ResolverCache() solver.ResolverCache {
+	return nil
+}
+
+func (j testJobContext) CompatibilityVersion() (int, error) {
+	return j.compatibilityVersion, nil
+}
+
+func gitSnapshotMode(ctx context.Context, t *testing.T, gs *Source, id *GitIdentifier, jobCtx solver.JobContext) os.FileMode {
+	t.Helper()
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	_, _, _, done, err := g.CacheKey(ctx, jobCtx, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	ref, err := g.Snapshot(ctx, jobCtx)
+	require.NoError(t, err)
+	defer ref.Release(context.TODO())
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	st, err := os.Lstat(filepath.Join(dir, "def"))
+	require.NoError(t, err)
+
+	return st.Mode() & os.ModePerm
+}
+
 type gitRepoFixture struct {
 	mainPath, subPath string // Filesystem paths to the respective repos
 	mainURL, subURL   string // HTTP URLs for the respective repos
@@ -2495,6 +2546,25 @@ func TestCommitTimeMtimesSHA256(t *testing.T) {
 
 func TestCommitTimeMtimesKeepGitDirSHA256(t *testing.T) {
 	testCommitTimeMtimes(t, "sha256", true)
+}
+
+func TestCompatibility014FileModes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, "sha1")
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "master"}
+
+	currentMode := gitSnapshotMode(ctx, t, gs, id, testJobContext{compatibilityVersion: compat.CompatibilityVersionCurrent})
+	compat013Mode := gitSnapshotMode(ctx, t, gs, id, testJobContext{compatibilityVersion: compat.CompatibilityVersion013})
+
+	require.Equal(t, os.FileMode(0o644), currentMode)
+	require.Equal(t, os.FileMode(0o666), compat013Mode)
 }
 
 func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {

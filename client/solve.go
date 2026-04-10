@@ -36,6 +36,7 @@ import (
 
 type SolveOpt struct {
 	Exports               []ExportEntry
+	CompatibilityVersion  int
 	EnableSessionExporter bool
 	LocalDirs             map[string]string // Deprecated: use LocalMounts
 	LocalMounts           map[string]fsutil.FS
@@ -311,6 +312,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Cache:                   &cacheOpt.options,
 			Entitlements:            slices.Clone(opt.AllowedEntitlements),
 			Internal:                opt.Internal,
+			CompatibilityVersion:    int64(opt.CompatibilityVersion),
 			SourcePolicy:            opt.SourcePolicy,
 		}
 		if opt.SourcePolicyProvider != nil {

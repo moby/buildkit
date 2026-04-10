@@ -599,6 +599,10 @@ func (s *simpleJobContext) ResolverCache() solver.ResolverCache {
 	return nil
 }
 
+func (s *simpleJobContext) CompatibilityVersion() (int, error) {
+	return 0, nil
+}
+
 func readSignFixture(t *testing.T, fixturesPath, name string) []byte {
 	t.Helper()
 	p := filepath.Join(fixturesPath, name)
