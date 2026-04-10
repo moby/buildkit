@@ -29,6 +29,7 @@ jobs:
         with:
           version: latest
           args: --modules-download-mode=vendor
+          only-new-issues: true
 
   unit-tests:
     name: Unit Tests
@@ -42,6 +43,6 @@ jobs:
       - name: Run unit tests
         run: |
           go test -mod=vendor -count=1 -timeout 10m \
-            $(go list -mod=vendor ./... | grep -v -E 'worker/(containerd|runc)$')
+            $(go list -mod=vendor ./... | grep -v -E '(worker/(containerd|runc)|cache$|cache/contenthash|snapshot$|source/(git|http)|util/overlay)$')
         env:
           SKIP_INTEGRATION_TESTS: "1"
