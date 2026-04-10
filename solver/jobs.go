@@ -1157,10 +1157,18 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 }
 
 func (s *sharedOp) fireOnVertexComplete(results []Result) {
+	s.st.mu.Lock()
+	var callbacks []OnVertexCompleteFunc
 	for j := range s.st.jobs {
 		if j.onVertexComplete != nil {
-			j.onVertexComplete(s.st.vtx, results)
+			callbacks = append(callbacks, j.onVertexComplete)
 		}
+	}
+	vtx := s.st.vtx
+	s.st.mu.Unlock()
+
+	for _, cb := range callbacks {
+		cb(vtx, results)
 	}
 }
 

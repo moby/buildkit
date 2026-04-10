@@ -526,24 +526,31 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
-	// Create lease early so it covers both the build phase (eager compression
-	// creates content blobs) and the export/finalize phase (push to registry).
-	lm, err := s.leaseManager()
-	if err != nil {
-		return nil, err
+	createLease := func() error {
+		lm, err := s.leaseManager()
+		if err != nil {
+			return err
+		}
+		var done func(context.Context) error
+		ctx, done, err = leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
+		if err != nil {
+			return err
+		}
+		releasers = append(releasers, func() {
+			done(context.WithoutCancel(ctx))
+		})
+		return nil
 	}
-	ctx, done, err := leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
-	if err != nil {
-		return nil, err
-	}
-	releasers = append(releasers, func() {
-		done(context.WithoutCancel(ctx))
-	})
 
 	// Set up eager export pipeline before the build starts so the vertex
 	// completion callback can kick off compression/push during the build.
+	// When eager export is active, the lease must be created early so
+	// compressed blobs are GC-protected during the build phase.
 	var eager *eagerPipeline
 	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
+		if err := createLease(); err != nil {
+			return nil, err
+		}
 		comp := exp.Exporters[0].Config().Compression()
 		eager = newEagerPipeline(ctx, exp.EagerExport, comp, sessionID, s.sm)
 		j.SetOnVertexComplete(eager.onVertexComplete)
@@ -659,8 +666,15 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	// Lease already created earlier in the function (unconditionally or
-	// conditionally for eager export) — see createLease / leaseutil.WithLease above.
+	// When eager export is not active, the lease is created here (the original
+	// location) — after the build completes but before export. This avoids
+	// adding a disk write before gateway forwarder registration.
+	if eager == nil {
+		if err := createLease(); err != nil {
+			return nil, err
+		}
+	}
+
 	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
 
 	if exp.EnableSessionExporter {
