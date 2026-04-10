@@ -113,6 +113,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildHTTPSourceAuthHeaderSecret,
 	testBuildHTTPSourceHeader,
 	testBuildPushAndValidate,
+	testEagerExportCompress,
+	testEagerExportPush,
 	testBuildExportWithUncompressed,
 	testBuildExportScratch,
 	testResolveAndHosts,
@@ -5078,6 +5080,135 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
+}
+
+func testEagerExportCompress(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > /file1"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > /file2"`), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testeagercompress:latest"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":         target,
+					"push":         "true",
+					"eager-export": "compress",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Verify the pushed image is pullable and has the right content.
+	pullSt := llb.Image(target)
+	def, err = pullSt.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "file1"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "layer1")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "file2"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "layer2")
+}
+
+func testEagerExportPush(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > /file1"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > /file2"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer3 > /file3"`), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testeagerpush:latest"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":         target,
+					"push":         "true",
+					"eager-export": "push",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Verify the pushed image is pullable and has the right content.
+	pullSt := llb.Image(target)
+	def, err = pullSt.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "file1"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "layer1")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "file2"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "layer2")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "file3"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "layer3")
 }
 
 func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
