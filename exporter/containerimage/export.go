@@ -222,6 +222,19 @@ func (e *imageExporterInstance) Type() string {
 	return client.ExporterImage
 }
 
+func (e *imageExporterInstance) EagerPushConfig() *exporter.EagerPushConfig {
+	name := e.opts.ImageName
+	if name == "" || name == "*" || strings.Contains(name, ",") {
+		return nil
+	}
+	return &exporter.EagerPushConfig{
+		TargetName:    name,
+		RegistryHosts: e.opt.RegistryHosts,
+		Insecure:      e.insecure,
+		ContentStore:  e.opt.ImageWriter.ContentStore(),
+	}
+}
+
 func (e *imageExporterInstance) Attrs() map[string]string {
 	return e.attrs
 }

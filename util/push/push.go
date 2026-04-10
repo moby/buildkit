@@ -46,6 +46,32 @@ func Pusher(ctx context.Context, resolver remotes.Resolver, ref string) (remotes
 	return &pusher{Pusher: p}, nil
 }
 
+// NewPusher creates a registry pusher for the given target reference. It
+// handles reference parsing, insecure registry overrides, resolver creation,
+// and pusher wrapping.
+func NewPusher(ctx context.Context, sm *session.Manager, sid string, ref string, insecure bool, hosts docker.RegistryHosts) (remotes.Pusher, error) {
+	parsed, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	scope := "push"
+	if insecure {
+		insecureTrue := true
+		httpTrue := true
+		hosts = resolver.NewRegistryConfig(map[string]resolverconfig.RegistryConfig{
+			reference.Domain(parsed): {
+				Insecure:  &insecureTrue,
+				PlainHTTP: &httpTrue,
+			},
+		})
+		scope += ":insecure"
+	}
+
+	r := resolver.DefaultPool.GetResolver(hosts, ref, scope, sm, session.NewGroup(sid))
+	return Pusher(ctx, r, ref)
+}
+
 func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
 	ctx = contentutil.RegisterContentPayloadTypes(ctx)
 	desc := ocispecs.Descriptor{
@@ -70,22 +96,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		ref = r.String()
 	}
 
-	scope := "push"
-	if insecure {
-		insecureTrue := true
-		httpTrue := true
-		hosts = resolver.NewRegistryConfig(map[string]resolverconfig.RegistryConfig{
-			reference.Domain(parsed): {
-				Insecure:  &insecureTrue,
-				PlainHTTP: &httpTrue,
-			},
-		})
-		scope += ":insecure"
-	}
-
-	resolver := resolver.DefaultPool.GetResolver(hosts, ref, scope, sm, session.NewGroup(sid))
-
-	pusher, err := Pusher(ctx, resolver, ref)
+	pusher, err := NewPusher(ctx, sm, sid, ref, insecure, hosts)
 	if err != nil {
 		return err
 	}

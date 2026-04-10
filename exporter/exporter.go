@@ -3,6 +3,8 @@ package exporter
 import (
 	"context"
 
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/solver/result"
@@ -53,4 +55,19 @@ func NewConfigWithCompression(comp compression.Config) *Config {
 
 func (c *Config) Compression() compression.Config {
 	return c.compression
+}
+
+// EagerPushConfig holds the registry details needed to push individual layer
+// blobs during the build, before the final manifest is assembled.
+type EagerPushConfig struct {
+	TargetName    string
+	RegistryHosts docker.RegistryHosts
+	Insecure      bool
+	ContentStore  content.Store
+}
+
+// EagerExportProvider is an optional interface that ExporterInstances can
+// implement to supply configuration for the eager export pipeline.
+type EagerExportProvider interface {
+	EagerPushConfig() *EagerPushConfig
 }

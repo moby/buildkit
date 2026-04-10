@@ -61,8 +61,8 @@ type EagerExportMode int
 
 const (
 	EagerExportNone     EagerExportMode = iota
-	EagerExportCompress // compress layers as vertices complete
-	EagerExportPush     // compress AND push layer blobs as vertices complete
+	EagerExportCompress                 // compress layers as vertices complete
+	EagerExportPush                     // compress AND push layer blobs as vertices complete
 )
 
 type ExporterRequest struct {
@@ -70,6 +70,7 @@ type ExporterRequest struct {
 	CacheExporters        []RemoteCacheExporter
 	EnableSessionExporter bool
 	EagerExport           EagerExportMode
+	EagerPushConfig       *exporter.EagerPushConfig // non-nil when EagerExport == EagerExportPush
 }
 
 type RemoteCacheExporter struct {
@@ -552,7 +553,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		comp := exp.Exporters[0].Config().Compression()
-		eager = newEagerPipeline(ctx, exp.EagerExport, comp, sessionID, s.sm)
+		eager, err = newEagerPipeline(ctx, exp.EagerExport, comp, sessionID, s.sm, exp.EagerPushConfig)
+		if err != nil {
+			return nil, err
+		}
 		j.SetOnVertexComplete(eager.onVertexComplete)
 	}
 

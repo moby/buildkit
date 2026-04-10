@@ -511,7 +511,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		procs = append(procs, proc.ProvenanceProcessor(attrs))
 	}
 
-	eagerExport, err := resolveEagerExport(req.Exporters, expis)
+	eagerExport, eagerPushCfg, err := resolveEagerExport(req.Exporters, expis)
 	if err != nil {
 		return nil, err
 	}
@@ -527,6 +527,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheExporters:        cacheExporters,
 		EnableSessionExporter: req.EnableSessionExporter,
 		EagerExport:           eagerExport,
+		EagerPushConfig:       eagerPushCfg,
 	}, entitlementsFromPB(req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
@@ -538,20 +539,20 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 
 // resolveEagerExport checks whether the exporter requests eager export and
 // validates the configuration. Returns EagerExportNone if the flag is not set.
-func resolveEagerExport(rawExporters []*controlapi.Exporter, expis []exporter.ExporterInstance) (llbsolver.EagerExportMode, error) {
+func resolveEagerExport(rawExporters []*controlapi.Exporter, expis []exporter.ExporterInstance) (llbsolver.EagerExportMode, *exporter.EagerPushConfig, error) {
 	if len(rawExporters) != 1 {
 		for _, ex := range rawExporters {
 			if _, ok := ex.Attrs[string(exptypes.OptKeyEagerExport)]; ok {
-				return 0, errors.Errorf("eager-export requires exactly one exporter, got %d", len(rawExporters))
+				return 0, nil, errors.Errorf("eager-export requires exactly one exporter, got %d", len(rawExporters))
 			}
 		}
-		return llbsolver.EagerExportNone, nil
+		return llbsolver.EagerExportNone, nil, nil
 	}
 
 	ex := rawExporters[0]
 	v, ok := ex.Attrs[string(exptypes.OptKeyEagerExport)]
 	if !ok {
-		return llbsolver.EagerExportNone, nil
+		return llbsolver.EagerExportNone, nil, nil
 	}
 
 	var mode llbsolver.EagerExportMode
@@ -561,19 +562,29 @@ func resolveEagerExport(rawExporters []*controlapi.Exporter, expis []exporter.Ex
 	case exptypes.OptValEagerExportPush:
 		mode = llbsolver.EagerExportPush
 	default:
-		return 0, errors.Errorf("invalid eager-export value %q", v)
+		return 0, nil, errors.Errorf("invalid eager-export value %q", v)
 	}
 
 	if expis[0].Type() != client.ExporterImage {
-		return 0, errors.Errorf("eager-export requires image exporter, got %q", expis[0].Type())
+		return 0, nil, errors.Errorf("eager-export requires image exporter, got %q", expis[0].Type())
 	}
+
+	var pushCfg *exporter.EagerPushConfig
 	if mode == llbsolver.EagerExportPush {
 		push, _ := ex.Attrs[string(exptypes.OptKeyPush)]
 		if push != "true" {
-			return 0, errors.New("eager-export=push requires push=true")
+			return 0, nil, errors.New("eager-export=push requires push=true")
+		}
+		provider, ok := expis[0].(exporter.EagerExportProvider)
+		if !ok {
+			return 0, nil, errors.New("eager-export=push: exporter does not support eager push")
+		}
+		pushCfg = provider.EagerPushConfig()
+		if pushCfg == nil {
+			return 0, nil, errors.New("eager-export=push requires a single image name (not empty, wildcard, or comma-separated)")
 		}
 	}
-	return mode, nil
+	return mode, pushCfg, nil
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
