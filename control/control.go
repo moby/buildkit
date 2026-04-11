@@ -571,7 +571,7 @@ func resolveEagerExport(rawExporters []*controlapi.Exporter, expis []exporter.Ex
 
 	var pushCfg *exporter.EagerPushConfig
 	if mode == llbsolver.EagerExportPush {
-		push, _ := ex.Attrs[string(exptypes.OptKeyPush)]
+		push := ex.Attrs[string(exptypes.OptKeyPush)]
 		if push != "true" {
 			return 0, nil, errors.New("eager-export=push requires push=true")
 		}

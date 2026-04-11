@@ -74,19 +74,19 @@ func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
 	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
 
 	err := ep.wait()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, int32(2), released.Load(), "leftover refs should be released by wait()")
 }
 
 func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	ep := &eagerPipeline{
 		mode: EagerExportCompress,
 		ctx:  ctx,
 		work: make(chan eagerWorkItem, 10),
 	}
 
-	cancel()
+	cancel(nil)
 
 	ep.wg.Add(1)
 	go ep.worker()

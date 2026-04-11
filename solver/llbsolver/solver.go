@@ -527,20 +527,20 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
-	createLease := func() error {
+	createLease := func(ctx context.Context) (context.Context, error) {
 		lm, err := s.leaseManager()
 		if err != nil {
-			return err
+			return ctx, err
 		}
 		var done func(context.Context) error
 		ctx, done, err = leaseutil.WithLease(ctx, lm, leaseutil.MakeTemporary)
 		if err != nil {
-			return err
+			return ctx, err
 		}
 		releasers = append(releasers, func() {
 			done(context.WithoutCancel(ctx))
 		})
-		return nil
+		return ctx, nil
 	}
 
 	// Set up eager export pipeline before the build starts so the vertex
@@ -549,7 +549,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// compressed blobs are GC-protected during the build phase.
 	var eager *eagerPipeline
 	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
-		if err := createLease(); err != nil {
+		ctx, err = createLease(ctx)
+		if err != nil {
 			return nil, err
 		}
 		comp := exp.Exporters[0].Config().Compression()
@@ -674,7 +675,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// location) — after the build completes but before export. This avoids
 	// adding a disk write before gateway forwarder registration.
 	if eager == nil {
-		if err := createLease(); err != nil {
+		ctx, err = createLease(ctx)
+		if err != nil {
 			return nil, err
 		}
 	}

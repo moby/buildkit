@@ -19,10 +19,10 @@ type mockExporterInstance struct {
 	attrs map[string]string
 }
 
-func (m *mockExporterInstance) ID() int                { return 0 }
-func (m *mockExporterInstance) Name() string           { return "mock" }
+func (m *mockExporterInstance) ID() int                  { return 0 }
+func (m *mockExporterInstance) Name() string             { return "mock" }
 func (m *mockExporterInstance) Config() *exporter.Config { return exporter.NewConfig() }
-func (m *mockExporterInstance) Type() string           { return m.typ }
+func (m *mockExporterInstance) Type() string             { return m.typ }
 func (m *mockExporterInstance) Attrs() map[string]string { return m.attrs }
 func (m *mockExporterInstance) Export(context.Context, *exporter.Source, exptypes.InlineCache, string) (map[string]string, exporter.DescriptorReference, error) {
 	return nil, nil, nil
@@ -286,7 +286,7 @@ func TestResolveEagerExport(t *testing.T) {
 			instances: []exporter.ExporterInstance{
 				&mockEagerExporterInstance{
 					mockExporterInstance: mockExporterInstance{typ: client.ExporterImage},
-					pushCfg:             nil,
+					pushCfg:              nil,
 				},
 			},
 			wantErr: "eager-export=push requires a single image name",

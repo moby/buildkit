@@ -15,20 +15,20 @@ type mockVertex struct {
 	name string
 }
 
-func (v *mockVertex) Digest() digest.Digest    { return v.dgst }
-func (v *mockVertex) Sys() any                 { return nil }
-func (v *mockVertex) Options() VertexOptions   { return VertexOptions{} }
-func (v *mockVertex) Inputs() []Edge           { return nil }
-func (v *mockVertex) Name() string             { return v.name }
+func (v *mockVertex) Digest() digest.Digest  { return v.dgst }
+func (v *mockVertex) Sys() any               { return nil }
+func (v *mockVertex) Options() VertexOptions { return VertexOptions{} }
+func (v *mockVertex) Inputs() []Edge         { return nil }
+func (v *mockVertex) Name() string           { return v.name }
 
 type mockResult struct {
 	id string
 }
 
 func (r *mockResult) ID() string                    { return r.id }
-func (r *mockResult) Release(context.Context) error  { return nil }
-func (r *mockResult) Sys() any                       { return nil }
-func (r *mockResult) Clone() Result                  { return r }
+func (r *mockResult) Release(context.Context) error { return nil }
+func (r *mockResult) Sys() any                      { return nil }
+func (r *mockResult) Clone() Result                 { return r }
 
 func TestFireOnVertexComplete_CallsRegisteredCallbacks(t *testing.T) {
 	vtx := &mockVertex{dgst: "sha256:abc", name: "test-vertex"}
