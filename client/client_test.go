@@ -238,7 +238,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
 	testExportLocalForcePlatformSplit,
-	testSolverOptLocalDirsStillWorks,
 	testOCIIndexMediatype,
 	testLayerLimitOnMounts,
 	testFrontendVerifyPlatforms,
@@ -2135,60 +2134,6 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte(pathStr), dt)
 }
 
-// TODO: remove this test once `client.SolveOpt.LocalDirs`, now marked as deprecated, is removed.
-// For more context on this test, please check:
-// https://github.com/moby/buildkit/pull/4583#pullrequestreview-1847043452
-func testSolverOptLocalDirsStillWorks(t *testing.T, sb integration.Sandbox) {
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	imgName := integration.UnixOrWindows(
-		"docker.io/library/busybox:latest",
-		"mcr.microsoft.com/windows/nanoserver:ltsc2022",
-	)
-	cmdStr := integration.UnixOrWindows(
-		`sh -c "/bin/rev < input.txt > /out/output.txt"`,
-		`cmd /C "type input.txt > /out/output.txt"`,
-	)
-	out := llb.Image(imgName).
-		File(llb.Copy(llb.Local("mylocal"), "input.txt", "input.txt")).
-		Run(llb.Shlex(cmdStr)).
-		AddMount(`/out`, llb.Scratch())
-
-	def, err := out.Marshal(sb.Context())
-	require.NoError(t, err)
-
-	srcDir := integration.Tmpdir(t,
-		fstest.CreateFile("input.txt", []byte("Hello World"), 0600),
-	)
-
-	destDir := integration.Tmpdir(t)
-
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		LocalDirs: map[string]string{
-			"mylocal": srcDir.Name,
-		},
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir.Name,
-			},
-		},
-	}, nil)
-
-	require.NoError(t, err)
-
-	dt, err := os.ReadFile(filepath.Join(destDir.Name, "output.txt"))
-	require.NoError(t, err)
-	// not reversed on Windows since there's no handy rev utility
-	revStr := integration.UnixOrWindows(
-		"dlroW olleH",
-		"Hello World",
-	)
-	require.Equal(t, []byte(revStr), dt)
-}
-
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -2538,9 +2483,9 @@ func testFileOpCopyAlwaysReplaceExistingDestPaths(t *testing.T, sb integration.S
 				OutputDir: resultDirHostPath,
 			},
 		},
-		LocalDirs: map[string]string{
-			"destDir": destDirHostPath.Name,
-			"srcDir":  srcDirHostPath.Name,
+		LocalMounts: map[string]fsutil.FS{
+			"destDir": destDirHostPath,
+			"srcDir":  srcDirHostPath,
 		},
 	}, nil)
 	require.NoError(t, err)
