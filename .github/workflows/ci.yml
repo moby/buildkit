@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - v0.22-base
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.24"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          args: --modules-download-mode=vendor
+          only-new-issues: true
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Run unit tests
+        run: |
+          go test -mod=vendor -count=1 -timeout 10m \
+            $(go list -mod=vendor ./... | grep -v -E '(worker/(containerd|runc)|cache$|cache/contenthash|snapshot$|source/(git|http)|util/overlay)$')
+        env:
+          SKIP_INTEGRATION_TESTS: "1"

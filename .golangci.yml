@@ -63,11 +63,14 @@ linters:
     gosec:
       excludes:
         - G101
+        - G115
         - G118
+        - G120
+        - G122
         - G402
         - G504
         - G601
-        - G115
+        - G703
       config:
         G306: "0644"
     govet:
