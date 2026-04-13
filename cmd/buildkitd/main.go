@@ -367,7 +367,8 @@ func main() {
 		}
 		defer controller.Close()
 
-		healthv1.RegisterHealthServer(server, health.NewServer())
+		healthServer := health.NewServer()
+		healthv1.RegisterHealthServer(server, healthServer)
 		controller.Register(server)
 		reflection.Register(server)
 
@@ -414,6 +415,7 @@ func main() {
 			bklog.G(ctx).Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
 		}
 		if shutdownRequested {
+			healthServer.SetServingStatus("", healthv1.HealthCheckResponse_NOT_SERVING)
 			controller.GracefulStop()
 		}
 		server.GracefulStop()
