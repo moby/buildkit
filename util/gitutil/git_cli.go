@@ -219,9 +219,9 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 			}
 		} else {
 			cmd.Env = append(cmd.Env,
-				"GIT_CONFIG_NOSYSTEM=1",         // Disable reading from system gitconfig.
-				"HOME="+os.DevNull,              // Disable reading from user gitconfig.
-				"GIT_CONFIG_GLOBAL="+os.DevNull, // Disable reading from global gitconfig.
+				"GIT_CONFIG_NOSYSTEM=1",               // Disable reading from system gitconfig.
+				"HOME="+noConfigHome(),                // Disable reading from user gitconfig.
+				"GIT_CONFIG_GLOBAL="+noConfigGlobal(), // Disable reading from global gitconfig.
 			)
 		}
 		for _, ev := range proxyEnvVars {
