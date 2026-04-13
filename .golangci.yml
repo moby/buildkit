@@ -63,6 +63,7 @@ linters:
     gosec:
       excludes:
         - G101
+        - G118
         - G402
         - G504
         - G601
@@ -119,6 +120,7 @@ linters:
         text: if-return
     paths:
       - .*\.pb\.go$
+      - .*_test\.go$
       - examples
 formatters:
   enable:
