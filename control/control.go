@@ -7,7 +7,6 @@ import (
 	"runtime/trace"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	contentapi "github.com/containerd/containerd/api/services/content/v1"
@@ -79,8 +78,6 @@ type Opt struct {
 }
 
 type Controller struct { // TODO: ControlService
-	// buildCount needs to be 64bit aligned
-	buildCount                   int64
 	opt                          Opt
 	solver                       *llbsolver.Solver
 	history                      *history.Queue
@@ -89,6 +86,10 @@ type Controller struct { // TODO: ControlService
 	throttledGC                  func()
 	throttledReleaseUnreferenced func()
 	gcmu                         sync.Mutex
+	buildMu                      sync.Mutex
+	activeBuilds                 int
+	draining                     bool
+	buildsDrained                chan struct{}
 	tracev1.UnimplementedTraceServiceServer
 }
 
@@ -157,6 +158,54 @@ func (c *Controller) Close() error {
 	return stderrors.Join(errs...)
 }
 
+// GracefulStop prevents new builds from starting and waits for active builds to finish.
+// It returns the number of builds that were active when shutdown started.
+func (c *Controller) GracefulStop() int {
+	c.buildMu.Lock()
+	activeBuilds := c.activeBuilds
+	c.draining = true
+	if c.buildsDrained == nil {
+		c.buildsDrained = make(chan struct{})
+		if c.activeBuilds == 0 {
+			close(c.buildsDrained)
+		}
+	}
+	ch := c.buildsDrained
+	c.buildMu.Unlock()
+
+	<-ch
+	return activeBuilds
+}
+
+func (c *Controller) acquireBuild() error {
+	c.buildMu.Lock()
+	defer c.buildMu.Unlock()
+
+	if c.draining {
+		return status.Error(codes.Unavailable, "buildkitd is shutting down")
+	}
+
+	c.activeBuilds++
+	return nil
+}
+
+func (c *Controller) releaseBuild() {
+	c.buildMu.Lock()
+	defer c.buildMu.Unlock()
+
+	c.activeBuilds--
+	if c.activeBuilds == 0 && c.buildsDrained != nil {
+		close(c.buildsDrained)
+		c.buildsDrained = nil
+	}
+}
+
+func (c *Controller) activeBuildCount() int {
+	c.buildMu.Lock()
+	defer c.buildMu.Unlock()
+	return c.activeBuilds
+}
+
 func (c *Controller) Register(server *grpc.Server) {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
@@ -211,7 +260,7 @@ func (c *Controller) releaseUnreferencedCache(ctx context.Context) error {
 }
 
 func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Control_PruneServer) error {
-	if atomic.LoadInt64(&c.buildCount) == 0 {
+	if c.activeBuildCount() == 0 {
 		imageutil.CancelCacheLeases()
 	}
 
@@ -381,8 +430,10 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) {
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	defer trace.StartRegion(ctx, "Solve").End()
 	trace.Logf(ctx, "Request", "solve request: %v", req.Ref)
-	atomic.AddInt64(&c.buildCount, 1)
-	defer atomic.AddInt64(&c.buildCount, -1)
+	if err := c.acquireBuild(); err != nil {
+		return nil, err
+	}
+	defer c.releaseBuild()
 
 	if req.Cache == nil {
 		req.Cache = &controlapi.CacheOptions{} // make sure cache options are initialized

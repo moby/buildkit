@@ -398,11 +398,13 @@ func main() {
 			return err
 		}
 
+		shutdownRequested := false
 		select {
 		case serverErr := <-errCh:
 			err = serverErr
 			cancel(err)
 		case <-ctx.Done():
+			shutdownRequested = true
 			err = context.Cause(ctx)
 		}
 
@@ -410,6 +412,9 @@ func main() {
 		if os.Getenv("NOTIFY_SOCKET") != "" {
 			notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyStopping)
 			bklog.G(ctx).Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
+		}
+		if shutdownRequested {
+			controller.GracefulStop()
 		}
 		server.GracefulStop()
 
