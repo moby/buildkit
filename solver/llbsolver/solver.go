@@ -635,8 +635,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Wait for all eager compression/push jobs to finish before running
 	// exporters. The manifest needs final blob digests from every layer.
 	if eager != nil {
-		waitDone := progress.OneOff(ctx, eagerWaitProgressID(exp.EagerExport))
-		if err := waitDone(eager.wait()); err != nil {
+		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
+			return eager.wait()
+		}); err != nil {
 			return nil, errors.Wrap(err, "eager export pipeline failed")
 		}
 	}
