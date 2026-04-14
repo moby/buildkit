@@ -7,8 +7,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/util/compression"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,6 +108,43 @@ func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 
 	close(ep.work)
 	ep.wg.Wait()
+}
+
+func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
+	descs := []ocispecs.Descriptor{
+		{
+			Digest:    digest.FromString("push me"),
+			MediaType: ocispecs.MediaTypeImageLayerGzip,
+		},
+		{
+			Digest:    digest.FromString("skip me"),
+			MediaType: ocispecs.MediaTypeImageLayerNonDistributableGzip, //nolint:staticcheck // deprecated but still supported
+		},
+		{
+			Digest:    digest.FromString("push me too"),
+			MediaType: images.MediaTypeDockerSchema2Layer,
+		},
+	}
+
+	var pushed []digest.Digest
+	ep := &eagerPipeline{}
+	handler := func(_ context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		pushed = append(pushed, desc.Digest)
+		return nil, nil
+	}
+
+	for _, desc := range descs {
+		if !shouldEagerPushDesc(desc) {
+			continue
+		}
+		err := ep.pushBlob(context.Background(), handler, desc)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, []digest.Digest{
+		digest.FromString("push me"),
+		digest.FromString("push me too"),
+	}, pushed)
 }
 
 // releaseTracker is a minimal stub that satisfies cache.ImmutableRef

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes"
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -184,11 +185,18 @@ func (ep *eagerPipeline) pushBlobs(ctx context.Context, rems []*solver.Remote) e
 	)
 
 	for _, desc := range remote.Descriptors {
+		if !shouldEagerPushDesc(desc) {
+			continue
+		}
 		if err := ep.pushBlob(ctx, handler, desc); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func shouldEagerPushDesc(desc ocispecs.Descriptor) bool {
+	return !images.IsNonDistributable(desc.MediaType)
 }
 
 // pushBlob pushes a single descriptor, deduplicated by digest across all
