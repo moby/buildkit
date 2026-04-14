@@ -138,7 +138,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 			baseImg = &baseImgX
 		}
 
-		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), ref)
+		remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), opts.EagerExport, ref)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +200,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, opts.RefCfg, session.NewGroup(sessionID), opts.EagerExport, refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, eagerExport string, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
 	attr := []attribute.KeyValue{
 		attribute.String("exportLayers.compressionType", refCfg.Compression.Type.String()),
 		attribute.Bool("exportLayers.forceCompression", refCfg.Compression.Force),
@@ -360,8 +360,15 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	}
 	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(attr...))
 
+	// When eager export is active, blobs have already been compressed during
+	// the build. Use createIfNeeded=false to read existing blobs without
+	// re-compressing. If eager compression somehow missed a layer, this will
+	// return ErrNoBlobs — that is intentional; the build should fail rather
+	// than silently fall back.
+	createIfNeeded := eagerExport == ""
+
 	eg, ctx := errgroup.WithContext(ctx)
-	layersDone := progress.OneOff(ctx, "exporting layers")
+	layersDone := progress.OneOff(ctx, exportLayersProgressID(eagerExport))
 
 	out := make([]solver.Remote, len(refs))
 
@@ -371,7 +378,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 				return
 			}
 			eg.Go(func() error {
-				remotes, err := ref.GetRemotes(ctx, true, refCfg, false, s)
+				remotes, err := ref.GetRemotes(ctx, createIfNeeded, refCfg, false, s)
 				if err != nil {
 					return err
 				}
@@ -385,6 +392,13 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	err := layersDone(eg.Wait())
 	tracing.FinishWithError(span, err)
 	return out, err
+}
+
+func exportLayersProgressID(eagerExport string) string {
+	if eagerExport != "" {
+		return "loading eagerly compressed layers"
+	}
+	return "exporting layers"
 }
 
 // rewriteImageLayerWithEpoch rewrites the file timestamps in the layer blob to match the epoch, and returns a new descriptor that points to

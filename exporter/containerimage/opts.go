@@ -21,8 +21,9 @@ type ImageCommitOpts struct {
 	Annotations AnnotationsGroup
 	Epoch       *time.Time
 
-	ForceInlineAttestations bool // force inline attestations to be attached
-	RewriteTimestamp        bool // rewrite timestamps in layers to match the epoch
+	ForceInlineAttestations bool   // force inline attestations to be attached
+	RewriteTimestamp        bool   // rewrite timestamps in layers to match the epoch
+	EagerExport             string // "compress" or "push" — layers already compressed by eager pipeline
 }
 
 func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[string]string, error) {

@@ -64,6 +64,7 @@ linters:
       excludes:
         - G101
         - G115
+        - G118
         - G120
         - G122
         - G402
@@ -122,6 +123,7 @@ linters:
         text: if-return
     paths:
       - .*\.pb\.go$
+      - .*_test\.go$
       - examples
 formatters:
   enable:

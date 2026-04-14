@@ -170,6 +170,13 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.nameCanonical = b
+		case exptypes.OptKeyEagerExport:
+			switch v {
+			case exptypes.OptValEagerExportCompress, exptypes.OptValEagerExportPush:
+				i.eagerExport = v
+			default:
+				return nil, errors.Errorf("invalid value %q for %s, must be \"compress\" or \"push\"", v, k)
+			}
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -195,6 +202,7 @@ type imageExporterInstance struct {
 	nameCanonical        bool
 	danglingPrefix       string
 	danglingEmptyOnly    bool
+	eagerExport          string // "", "compress", or "push"
 	meta                 map[string][]byte
 }
 
@@ -214,6 +222,19 @@ func (e *imageExporterInstance) Type() string {
 	return client.ExporterImage
 }
 
+func (e *imageExporterInstance) EagerPushConfig() *exporter.EagerPushConfig {
+	name := e.opts.ImageName
+	if name == "" || name == "*" || strings.Contains(name, ",") {
+		return nil
+	}
+	return &exporter.EagerPushConfig{
+		TargetName:    name,
+		RegistryHosts: e.opt.RegistryHosts,
+		Insecure:      e.insecure,
+		ContentStore:  e.opt.ImageWriter.ContentStore(),
+	}
+}
+
 func (e *imageExporterInstance) Attrs() map[string]string {
 	return e.attrs
 }
@@ -226,6 +247,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	maps.Copy(src.Metadata, e.meta)
 
 	opts := e.opts
+	opts.EagerExport = e.eagerExport
 	as, _, err := ParseAnnotations(src.Metadata)
 	if err != nil {
 		return nil, nil, err
@@ -410,7 +432,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 			addAnnotations(annotations, desc)
 		}
 	}
-	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
+	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, e.eagerExport == exptypes.OptValEagerExportPush, annotations)
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {

@@ -296,6 +296,11 @@ func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(any) er
 	return nil
 }
 
+// OnVertexCompleteFunc is called after a vertex produces results, either from
+// execution (cache miss) or cache load (cache hit). The callback receives the
+// vertex and its output results. Implementations must be safe for concurrent use.
+type OnVertexCompleteFunc func(vtx Vertex, results []Result)
+
 type Job struct {
 	list          *Solver
 	pr            *progress.MultiReader
@@ -306,9 +311,14 @@ type Job struct {
 	startedTime   time.Time
 	completedTime time.Time
 
-	progressCloser func(error)
-	SessionID      string
-	uniqueID       string // unique ID is used for provenance. We use a different field that client can't control
+	progressCloser   func(error)
+	SessionID        string
+	uniqueID         string // unique ID is used for provenance. We use a different field that client can't control
+	onVertexComplete OnVertexCompleteFunc
+}
+
+func (j *Job) SetOnVertexComplete(f OnVertexCompleteFunc) {
+	j.onVertexComplete = f
 }
 
 type SolverOpt struct {
@@ -907,6 +917,9 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
 	tracing.FinishWithError(span, err)
 	notifyCompleted(err, true)
+	if err == nil && res != nil {
+		s.fireOnVertexComplete([]Result{res})
+	}
 	return res, err
 }
 
@@ -1127,6 +1140,8 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 				s.subBuilder.mu.Unlock()
 
 				s.execRes = &execRes{execRes: wrapShared(res), execExporters: subExporters}
+
+				s.fireOnVertexComplete(res)
 			}
 			s.execErr = err
 		}
@@ -1139,6 +1154,22 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		return nil, nil, err
 	}
 	return unwrapShared(res.execRes), res.execExporters, nil
+}
+
+func (s *sharedOp) fireOnVertexComplete(results []Result) {
+	s.st.mu.Lock()
+	var callbacks []OnVertexCompleteFunc
+	for j := range s.st.jobs {
+		if j.onVertexComplete != nil {
+			callbacks = append(callbacks, j.onVertexComplete)
+		}
+	}
+	vtx := s.st.vtx
+	s.st.mu.Unlock()
+
+	for _, cb := range callbacks {
+		cb(vtx, results)
+	}
 }
 
 func (s *sharedOp) getOp() (Op, error) {

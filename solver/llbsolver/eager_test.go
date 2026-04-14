@@ -1,0 +1,160 @@
+package llbsolver
+
+import (
+	"context"
+	"os"
+	"runtime"
+	"sync/atomic"
+	"testing"
+
+	"github.com/containerd/containerd/v2/core/images"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/util/compression"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestEagerWorkerCount_Default(t *testing.T) {
+	os.Unsetenv("BUILDKIT_EAGER_EXPORT_WORKERS")
+	n := eagerWorkerCount()
+	assert.Equal(t, max(defaultEagerWorkers, runtime.NumCPU()), n)
+}
+
+func TestEagerWorkerCount_EnvOverride(t *testing.T) {
+	t.Setenv("BUILDKIT_EAGER_EXPORT_WORKERS", "2")
+	assert.Equal(t, 2, eagerWorkerCount())
+}
+
+func TestEagerWorkerCount_EnvInvalid(t *testing.T) {
+	t.Setenv("BUILDKIT_EAGER_EXPORT_WORKERS", "not-a-number")
+	assert.Equal(t, max(defaultEagerWorkers, runtime.NumCPU()), eagerWorkerCount())
+}
+
+func TestEagerWorkerCount_EnvZero(t *testing.T) {
+	t.Setenv("BUILDKIT_EAGER_EXPORT_WORKERS", "0")
+	assert.Equal(t, max(defaultEagerWorkers, runtime.NumCPU()), eagerWorkerCount())
+}
+
+func TestEagerWorkerCount_EnvNegative(t *testing.T) {
+	t.Setenv("BUILDKIT_EAGER_EXPORT_WORKERS", "-1")
+	assert.Equal(t, max(defaultEagerWorkers, runtime.NumCPU()), eagerWorkerCount())
+}
+
+func TestNewEagerPipeline_PushRequiresConfig(t *testing.T) {
+	_, err := newEagerPipeline(context.Background(), EagerExportPush, compression.Config{}, "", nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "push config")
+}
+
+func TestEagerPipeline_WaitReturnsFirstError(t *testing.T) {
+	ep := &eagerPipeline{
+		work: make(chan eagerWorkItem),
+	}
+	ep.firstErr = assert.AnError
+
+	err := ep.wait()
+	assert.Equal(t, assert.AnError, err)
+}
+
+func TestEagerPipeline_WaitReturnsNilWhenNoError(t *testing.T) {
+	ep := &eagerPipeline{
+		work: make(chan eagerWorkItem),
+	}
+
+	err := ep.wait()
+	assert.NoError(t, err)
+}
+
+func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		work: make(chan eagerWorkItem, 10),
+	}
+
+	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+
+	err := ep.wait()
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), released.Load(), "leftover refs should be released by wait()")
+}
+
+func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	ep := &eagerPipeline{
+		mode: EagerExportCompress,
+		ctx:  ctx,
+		work: make(chan eagerWorkItem, 10),
+	}
+
+	cancel(nil)
+
+	ep.wg.Add(1)
+	go ep.worker()
+	ep.wg.Wait()
+}
+
+func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
+	ep := &eagerPipeline{
+		mode: EagerExportCompress,
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem),
+	}
+
+	ep.wg.Add(1)
+	go ep.worker()
+
+	close(ep.work)
+	ep.wg.Wait()
+}
+
+func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
+	descs := []ocispecs.Descriptor{
+		{
+			Digest:    digest.FromString("push me"),
+			MediaType: ocispecs.MediaTypeImageLayerGzip,
+		},
+		{
+			Digest:    digest.FromString("skip me"),
+			MediaType: ocispecs.MediaTypeImageLayerNonDistributableGzip, //nolint:staticcheck // deprecated but still supported
+		},
+		{
+			Digest:    digest.FromString("push me too"),
+			MediaType: images.MediaTypeDockerSchema2Layer,
+		},
+	}
+
+	var pushed []digest.Digest
+	ep := &eagerPipeline{}
+	handler := func(_ context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		pushed = append(pushed, desc.Digest)
+		return nil, nil
+	}
+
+	for _, desc := range descs {
+		if !shouldEagerPushDesc(desc) {
+			continue
+		}
+		err := ep.pushBlob(context.Background(), handler, desc)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, []digest.Digest{
+		digest.FromString("push me"),
+		digest.FromString("push me too"),
+	}, pushed)
+}
+
+// releaseTracker is a minimal stub that satisfies cache.ImmutableRef
+// for testing ref lifecycle (Release calls). All other methods panic.
+type releaseTracker struct {
+	cache.ImmutableRef
+	released *atomic.Int32
+}
+
+func (r *releaseTracker) Release(context.Context) error {
+	r.released.Add(1)
+	return nil
+}
