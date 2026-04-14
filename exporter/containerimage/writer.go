@@ -368,7 +368,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	createIfNeeded := eagerExport == ""
 
 	eg, ctx := errgroup.WithContext(ctx)
-	layersDone := progress.OneOff(ctx, "exporting layers")
+	layersDone := progress.OneOff(ctx, exportLayersProgressID(eagerExport))
 
 	out := make([]solver.Remote, len(refs))
 
@@ -392,6 +392,13 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	err := layersDone(eg.Wait())
 	tracing.FinishWithError(span, err)
 	return out, err
+}
+
+func exportLayersProgressID(eagerExport string) string {
+	if eagerExport != "" {
+		return "loading eagerly compressed layers"
+	}
+	return "exporting layers"
 }
 
 // rewriteImageLayerWithEpoch rewrites the file timestamps in the layer blob to match the epoch, and returns a new descriptor that points to

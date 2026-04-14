@@ -635,7 +635,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Wait for all eager compression/push jobs to finish before running
 	// exporters. The manifest needs final blob digests from every layer.
 	if eager != nil {
-		if err := eager.wait(); err != nil {
+		waitDone := progress.OneOff(ctx, eagerWaitProgressID(exp.EagerExport))
+		if err := waitDone(eager.wait()); err != nil {
 			return nil, errors.Wrap(err, "eager export pipeline failed")
 		}
 	}
@@ -1136,6 +1137,17 @@ func withDescHandlerCacheOpts(ctx context.Context, ref cache.ImmutableRef) conte
 		}
 		return vals
 	})
+}
+
+func eagerWaitProgressID(mode EagerExportMode) string {
+	switch mode {
+	case EagerExportPush:
+		return "waiting for eager compression and push to finish"
+	case EagerExportCompress:
+		return "waiting for eager compression to finish"
+	default:
+		return "waiting for eager export to finish"
+	}
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {

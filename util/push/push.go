@@ -72,7 +72,7 @@ func NewPusher(ctx context.Context, sm *session.Manager, sid string, ref string,
 	return Pusher(ctx, r, ref)
 }
 
-func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
+func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, eager bool, annotations map[digest.Digest]map[string]string) error {
 	ctx = contentutil.RegisterContentPayloadTypes(ctx)
 	desc := ocispecs.Descriptor{
 		Digest: dgst,
@@ -139,7 +139,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		return err
 	}
 
-	layersDone := progress.OneOff(ctx, "pushing layers")
+	layersDone := progress.OneOff(ctx, pushLayersProgressID(eager))
 	err = images.Dispatch(ctx, skipNonDistributableBlobs(images.Handlers(handlers...)), nil, ocispecs.Descriptor{
 		Digest:    dgst,
 		Size:      ra.Size(),
@@ -156,6 +156,13 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		}
 	}
 	return mfstDone(nil)
+}
+
+func pushLayersProgressID(eager bool) string {
+	if eager {
+		return "pushing any remaining layers"
+	}
+	return "pushing layers"
 }
 
 // TODO: the containerd function for this is filtering too much, that needs to be fixed.

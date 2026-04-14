@@ -432,7 +432,7 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 			addAnnotations(annotations, desc)
 		}
 	}
-	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
+	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, e.eagerExport == exptypes.OptValEagerExportPush, annotations)
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, s session.Group) (err0 error) {
