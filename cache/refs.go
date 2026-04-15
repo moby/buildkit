@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,51 @@ import (
 )
 
 var additionalAnnotations = append(append(compression.EStargzAnnotations, obdlabel.OverlayBDAnnotations...), labels.LabelUncompressed)
+
+func parallelExtractEnabled() bool {
+	v, _ := strconv.ParseBool(os.Getenv("BUILDKIT_PARALLEL_EXTRACT"))
+	return v
+}
+
+// extractFSPath extracts the writable fs directory path from snapshot mounts.
+// For overlay, this is the upperdir. For bind mounts (base layer), it's the Source.
+func extractFSPath(mounts []mount.Mount) string {
+	if len(mounts) == 0 {
+		return ""
+	}
+	m := mounts[0]
+	if m.Type == "bind" {
+		return m.Source
+	}
+	for _, opt := range m.Options {
+		if strings.HasPrefix(opt, "upperdir=") {
+			return strings.TrimPrefix(opt, "upperdir=")
+		}
+	}
+	return ""
+}
+
+// isLinearLayerChain reports whether chain is a pure linear Layer/BaseLayer
+// stack with no Merge or Diff refs. Parallel extract is only safe for such
+// chains because Phase 2's parentID tracking assumes each entry's overlay
+// parent is exactly the previous entry in the chain.
+func isLinearLayerChain(chain []*immutableRef) bool {
+	for i, ref := range chain {
+		switch ref.kind() {
+		case BaseLayer:
+			if i != 0 {
+				return false
+			}
+		case Layer:
+			if i == 0 || ref.layerParent != chain[i-1] {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // Ref is a reference to cacheable objects.
 type Ref interface {
@@ -1010,6 +1056,7 @@ func (sr *immutableRef) ensureLocalContentBlob(ctx context.Context, s session.Gr
 
 func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr error) {
 	if (sr.kind() == Layer || sr.kind() == BaseLayer) && !sr.getBlobOnly() {
+		bklog.G(ctx).Infof("Extract: skipping extract for ref %s", sr.ID())
 		return nil
 	}
 
@@ -1026,6 +1073,23 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 	} else if sr.cm.Snapshotter.Name() == "overlaybd" {
 		if rerr = sr.prepareRemoteSnapshotsOverlaybdMode(ctx); rerr == nil {
 			return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)
+		}
+	}
+
+	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
+		chain := sr.layerChain()
+		if isLinearLayerChain(chain) {
+			var needsExtract []*immutableRef
+			for _, ref := range chain {
+				if ref.getBlobOnly() {
+					needsExtract = append(needsExtract, ref)
+				}
+			}
+			if len(needsExtract) > 0 {
+				bklog.G(ctx).Infof("parallel extract: extracting %d/%d layers in parallel", len(needsExtract), len(chain))
+				return sr.parallelExtractLayers(ctx, chain, needsExtract, s)
+			}
+			return nil
 		}
 	}
 
@@ -1410,6 +1474,172 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	sr.queueSize(sizeUnknown)
 	if err := sr.commitMetadata(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// parallelExtractLayers extracts multiple layers in parallel by decompressing
+// into temp directories first, then doing the sequential Prepare→Commit chain
+// with pre-populated content. This avoids the sequential Apply bottleneck where
+// each layer must wait for its parent to be fully extracted before starting.
+//
+// Only used for the overlay snapshotter when BUILDKIT_PARALLEL_EXTRACT=1.
+func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immutableRef, needsExtract []*immutableRef, s session.Group) (rerr error) {
+	if sr.cm.Applier == nil {
+		return errors.New("parallel extract requires an applier")
+	}
+
+	if _, ok := leases.FromContext(ctx); !ok {
+		leaseCtx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
+		if err != nil {
+			return err
+		}
+		defer done(leaseCtx)
+		ctx = leaseCtx
+	}
+
+	sp, ctx := tracing.StartSpan(ctx, "parallel-extract", trace.WithAttributes(
+		attribute.Int("layers.total", len(chain)),
+		attribute.Int("layers.extract", len(needsExtract)),
+	))
+	defer sp.End()
+
+	// Phase 1: parallel download + decompress into temp dirs.
+	// A parent temp dir is created under cm.root to ensure it's on the same
+	// filesystem as the snapshotter (avoiding EXDEV from os.Rename in Phase 2)
+	// and to simplify cleanup.
+	parentTmpDir, err := os.MkdirTemp(sr.cm.root, "buildkit-parallel-extract-")
+	if err != nil {
+		return errors.Wrap(err, "parallel extract: failed to create temp dir")
+	}
+	defer os.RemoveAll(parentTmpDir)
+
+	type extractResult struct {
+		tmpDir string
+		desc   ocispecs.Descriptor
+	}
+	extractResults := make(map[string]*extractResult, len(needsExtract))
+	var mu sync.Mutex
+
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, ref := range needsExtract {
+		ref := ref
+		eg.Go(func() (rerr error) {
+			dhs := ref.descHandlers
+			desc, err := ref.ociDesc(egctx, dhs, true)
+			if err != nil {
+				return err
+			}
+			dh := dhs[desc.Digest]
+
+			if err := (lazyRefProvider{ref: ref, desc: desc, dh: dh, session: s}).Unlazy(egctx); err != nil {
+				return err
+			}
+
+			pg := ref.progress
+			if pg == nil && dh != nil {
+				pg = dh.Progress
+			}
+			if pg != nil {
+				_, stopProgress := pg.Start(egctx)
+				defer stopProgress(rerr)
+				statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
+				defer statusDone()
+			}
+
+			tmpDir, err := os.MkdirTemp(parentTmpDir, ref.ID()+"-")
+			if err != nil {
+				return err
+			}
+			fsDir := filepath.Join(tmpDir, "fs")
+			if err := os.Mkdir(fsDir, 0755); err != nil {
+				return err
+			}
+
+			mounts := []mount.Mount{{
+				Source:  fsDir,
+				Type:    "bind",
+				Options: []string{"rw", "rbind"},
+			}}
+			if _, err := ref.cm.Applier.Apply(egctx, desc, mounts); err != nil {
+				return err
+			}
+
+			mu.Lock()
+			extractResults[ref.ID()] = &extractResult{tmpDir: tmpDir, desc: desc}
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	// Phase 2: sequential Prepare → swap content → Commit.
+	// Walk the full chain in order. Layers already extracted are skipped
+	// (just advance parentID). Layers that were parallel-extracted get their
+	// temp dir content swapped into the snapshotter path.
+	parentID := ""
+	for _, ref := range chain {
+		if !ref.getBlobOnly() {
+			parentID = ref.getSnapshotID()
+			continue
+		}
+
+		result := extractResults[ref.ID()]
+		if result == nil {
+			return errors.Errorf("parallel extract: missing result for layer %s", ref.ID())
+		}
+
+		key := fmt.Sprintf("extract-%s %s", identity.NewID(), ref.getChainID())
+		if err := ref.cm.Snapshotter.Prepare(ctx, key, parentID); err != nil {
+			return err
+		}
+
+		mountable, err := ref.cm.Snapshotter.Mounts(ctx, key)
+		if err != nil {
+			return err
+		}
+		mounts, unmount, err := mountable.Mount()
+		if err != nil {
+			return err
+		}
+
+		fsPath := extractFSPath(mounts)
+		if err := unmount(); err != nil {
+			return err
+		}
+
+		if fsPath == "" {
+			return errors.Errorf("parallel extract: could not determine fs path from mounts for layer %s", ref.ID())
+		}
+
+		entries, err := os.ReadDir(fsPath)
+		if err != nil {
+			return errors.Wrapf(err, "parallel extract: failed to read fs dir")
+		}
+		if len(entries) > 0 {
+			return errors.Errorf("parallel extract: expected empty fs dir but found %d entries at %s", len(entries), fsPath)
+		}
+		if err := os.Remove(fsPath); err != nil {
+			return errors.Wrapf(err, "parallel extract: failed to remove empty fs dir")
+		}
+		if err := os.Rename(filepath.Join(result.tmpDir, "fs"), fsPath); err != nil {
+			return errors.Wrapf(err, "parallel extract: failed to rename extracted content into snapshot path")
+		}
+
+		if err := ref.cm.Snapshotter.Commit(ctx, ref.getSnapshotID(), key); err != nil {
+			if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
+				return err
+			}
+		}
+		ref.queueBlobOnly(false)
+		ref.queueSize(sizeUnknown)
+		if err := ref.commitMetadata(); err != nil {
+			return err
+		}
+		parentID = ref.getSnapshotID()
 	}
 	return nil
 }
