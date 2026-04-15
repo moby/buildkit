@@ -465,6 +465,13 @@ func NewProvenanceCreator(ctx context.Context, slsaVersion provenancetypes.Prove
 	}
 
 	pr.BuildDefinition.InternalParameters.ProvenanceCustomEnv = customEnv
+	if pr.BuildDefinition.ExternalParameters.Request.Frontend == "dockerfile.v0" {
+		dockerfileVersion, err := builtinDockerfileVersion()
+		if err != nil {
+			return nil, err
+		}
+		pr.BuildDefinition.InternalParameters.DockerfileVersion = dockerfileVersion
+	}
 
 	pc := &ProvenanceCreator{
 		pr:          pr,

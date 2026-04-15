@@ -28,6 +28,25 @@ RUN --mount=target=. <<EOT
   else
     VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*-$CHANNEL")
   fi
+  BUILTIN_VERSION=$(sed -n 's/^const Version = "\\(.*\\)"$/\\1/p' ./frontend/dockerfile/builder/version.go)
+  case "$BUILTIN_VERSION" in
+    *.*.*) EXPECTED_VERSION="$BUILTIN_VERSION" ;;
+    *.*) EXPECTED_VERSION="$BUILTIN_VERSION.0" ;;
+    *)
+      echo "invalid frontend/dockerfile/builder/version.go version: $BUILTIN_VERSION"
+      exit 1
+      ;;
+  esac
+  case "$VERSION" in
+    dockerfile/*)
+      ACTUAL_VERSION=${VERSION#dockerfile/}
+      ACTUAL_VERSION=${ACTUAL_VERSION%%-*}
+      if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+        echo "frontend/dockerfile/builder/version.go version $BUILTIN_VERSION does not match external frontend version $VERSION"
+        exit 1
+      fi
+      ;;
+  esac
   PKG=github.com/moby/buildkit/frontend/dockerfile/cmd/dockerfile-frontend
   REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
   echo "-X main.Version=${VERSION} -X main.Revision=${REVISION} -X main.Package=${PKG}" | tee /tmp/.ldflags

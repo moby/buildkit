@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	dockerfilebuilder "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -190,6 +191,10 @@ RUN echo ok> /foo
 				if isDockerd {
 					expCustom = provenancetypes.ProvenanceCustomEnv{}
 				}
+				expectedDockerfileVersionPrefix := dockerfilebuilder.Version
+				if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
+					expectedDockerfileVersionPrefix += ".0"
+				}
 
 				if slsaVersion == "" || slsaVersion == "v1" {
 					type stmtT struct {
@@ -277,6 +282,11 @@ RUN echo ok> /foo
 					require.True(t, pred.RunDetails.Metadata.StartedOn.Before(*pred.RunDetails.Metadata.FinishedOn))
 
 					require.Equal(t, platforms.Format(platforms.Normalize(platforms.DefaultSpec())), pred.BuildDefinition.InternalParameters.BuilderPlatform)
+					if isClient || isGateway {
+						require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
+					} else {
+						require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
+					}
 
 					require.False(t, pred.RunDetails.Metadata.Completeness.ResolvedDependencies)
 					require.False(t, pred.RunDetails.Metadata.Reproducible)
@@ -345,6 +355,11 @@ RUN echo ok> /foo
 							require.Equal(t, 1, len(args), "%v", args)
 						}
 						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
+					}
+					if isClient || isGateway {
+						require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
+					} else {
+						require.True(t, strings.HasPrefix(pred.Invocation.Environment.DockerfileVersion, expectedDockerfileVersionPrefix))
 					}
 
 					expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
@@ -515,6 +530,10 @@ COPY myapp.Dockerfile /
 
 			_, isClient := f.(*clientFrontend)
 			_, isGateway := f.(*gatewayFrontend)
+			expectedDockerfileVersionPrefix := dockerfilebuilder.Version
+			if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
+				expectedDockerfileVersionPrefix += ".0"
+			}
 
 			if slsaVersion == "" || slsaVersion == "v1" {
 				require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
@@ -530,10 +549,16 @@ COPY myapp.Dockerfile /
 					require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
 					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+					require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 				} else {
 					require.NotEmpty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
 					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 					require.Equal(t, "myapp.Dockerfile", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+					if isGateway {
+						require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
+					} else {
+						require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
+					}
 				}
 
 				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
@@ -585,10 +610,16 @@ COPY myapp.Dockerfile /
 					require.Empty(t, pred.Invocation.Parameters.Frontend)
 					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
 					require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
+					require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
 				} else {
 					require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
 					require.Equal(t, expectedURL+"/.git#v1", pred.Invocation.ConfigSource.URI)
 					require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
+					if isGateway {
+						require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
+					} else {
+						require.True(t, strings.HasPrefix(pred.Invocation.Environment.DockerfileVersion, expectedDockerfileVersionPrefix))
+					}
 				}
 
 				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
@@ -1039,6 +1070,11 @@ COPY --from=base C:\out C:\Files
 	pred := stmt.Predicate
 
 	require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
+	expectedDockerfileVersionPrefix := dockerfilebuilder.Version
+	if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
+		expectedDockerfileVersionPrefix += ".0"
+	}
+	require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
 	require.NotContains(t, pred.BuildDefinition.ExternalParameters.Request.Args, "source")
 	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
 
