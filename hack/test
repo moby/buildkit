@@ -21,6 +21,7 @@ set -eu -o pipefail
 : "${TEST_DOCKERFILE=}"
 : "${TEST_DOCKERD=}"
 : "${TEST_DOCKERD_BINARY=$(which dockerd)}"
+: "${TEST_BUILDKITD_BINARY=}"
 : "${TEST_REPORT_SUFFIX=}"
 : "${TEST_KEEP_CACHE=}"
 : "${TEST_SUITE_CONTEXT=}"
@@ -47,6 +48,20 @@ if [ "$TEST_DOCKERD" == "1" ]; then
     echo >&2 "WARN: BUILDKIT_TEST_DISABLE_FEATURES not set with TEST_DOCKERD=1. This might cause tests to fail."
   fi
 fi
+
+for binary_var in TEST_BUILDKITD_BINARY; do
+  binary_path=$(eval "printf '%s' \"\${$binary_var}\"")
+  if [ -z "$binary_path" ]; then
+    continue
+  fi
+  if [ ! -f "$binary_path" ]; then
+    echo >&2 "$binary_var file not found: $binary_path"
+    exit 1
+  fi
+  if [ ! -x "$binary_path" ]; then
+    chmod +x "$binary_path"
+  fi
+done
 
 if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
 
@@ -131,6 +146,7 @@ baseCreateFlags="--rm --privileged $dockerConfigMount \
 -e TEST_DOCKERD \
 -e BUILDKIT_TEST_ENABLE_FEATURES \
 -e BUILDKIT_TEST_DISABLE_FEATURES \
+-e BUILDKIT_TEST_EXPECTED_COMPATIBILITY_VERSION \
 -e GOTESTSUM_FORMAT \
 -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry \
 -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS \
@@ -145,6 +161,9 @@ if [ "$TEST_INTEGRATION" == 1 ]; then
     gotestsumandcover $gotestsumArgs --packages="${TESTPKGS:-./...}" -- $gotestArgs ${TESTFLAGS:--v})
   if [ "$TEST_DOCKERD" = "1" ]; then
     dockerCmd cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/dockerd
+  fi
+  if [ -n "$TEST_BUILDKITD_BINARY" ]; then
+    dockerCmd cp "$TEST_BUILDKITD_BINARY" $cid:/usr/bin/buildkitd
   fi
   dockerCmd start -a $cid
 fi
