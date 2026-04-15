@@ -72,6 +72,28 @@ func extractFSPath(mounts []mount.Mount) string {
 	return ""
 }
 
+// isLinearLayerChain reports whether chain is a pure linear Layer/BaseLayer
+// stack with no Merge or Diff refs. Parallel extract is only safe for such
+// chains because Phase 2's parentID tracking assumes each entry's overlay
+// parent is exactly the previous entry in the chain.
+func isLinearLayerChain(chain []*immutableRef) bool {
+	for i, ref := range chain {
+		switch ref.kind() {
+		case BaseLayer:
+			if i != 0 {
+				return false
+			}
+		case Layer:
+			if i == 0 || ref.layerParent != chain[i-1] {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // Ref is a reference to cacheable objects.
 type Ref interface {
 	Mountable
@@ -1056,17 +1078,19 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 
 	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
 		chain := sr.layerChain()
-		var needsExtract []*immutableRef
-		for _, ref := range chain {
-			if ref.getBlobOnly() {
-				needsExtract = append(needsExtract, ref)
+		if isLinearLayerChain(chain) {
+			var needsExtract []*immutableRef
+			for _, ref := range chain {
+				if ref.getBlobOnly() {
+					needsExtract = append(needsExtract, ref)
+				}
 			}
+			if len(needsExtract) > 0 {
+				bklog.G(ctx).Infof("parallel extract: extracting %d/%d layers in parallel", len(needsExtract), len(chain))
+				return sr.parallelExtractLayers(ctx, chain, needsExtract, s)
+			}
+			return nil
 		}
-		if len(needsExtract) > 0 {
-			bklog.G(ctx).Infof("parallel extract: extracting %d/%d layers in parallel", len(needsExtract), len(chain))
-			return sr.parallelExtractLayers(ctx, chain, needsExtract, s)
-		}
-		return nil
 	}
 
 	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true, false)

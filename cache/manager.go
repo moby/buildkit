@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -124,6 +126,8 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	if err := cm.init(context.TODO()); err != nil {
 		return nil, err
 	}
+
+	cm.cleanupParallelExtractDirs()
 
 	p, err := newSharableMountPool(opt.MountPoolRoot)
 	if err != nil {
@@ -338,6 +342,25 @@ func (cm *cacheManager) init(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// cleanupParallelExtractDirs removes any leftover temp directories from
+// parallel layer extraction that weren't cleaned up (e.g. due to a crash).
+func (cm *cacheManager) cleanupParallelExtractDirs() {
+	entries, err := os.ReadDir(cm.root)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "buildkit-parallel-extract-") {
+			p := filepath.Join(cm.root, e.Name())
+			if err := os.RemoveAll(p); err != nil {
+				bklog.G(context.TODO()).Warnf("failed to clean up parallel extract temp dir %s: %v", p, err)
+			} else {
+				bklog.G(context.TODO()).Infof("cleaned up leftover parallel extract temp dir %s", p)
+			}
+		}
+	}
 }
 
 // IdentityMapping returns the userns remapping used for refs
