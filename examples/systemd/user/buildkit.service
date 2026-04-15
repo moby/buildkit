@@ -5,6 +5,7 @@ Documentation=https://github.com/moby/buildkit
 [Service]
 Type=notify
 NotifyAccess=all
+# TODO: change the network driver from slirp4netns to gvisor-tap-vsock when rootlesskit v3.0 or later is widely used.
 ExecStart=rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback /usr/local/bin/buildkitd --addr unix://%t/buildkit/rootless
 
 [Install]

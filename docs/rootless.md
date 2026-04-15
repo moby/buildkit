@@ -23,8 +23,10 @@ buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
 > [!TIP]
 > To isolate BuildKit daemon's network namespace from the host (recommended):
 > ```bash
-> rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd
+> rootlesskit --net=gvisor-tap-vsock --copy-up=/etc --disable-host-loopback buildkitd
 > ```
+>
+> If you use RootlessKit older than v3.0, change `gvisor-tap-vsock` to other network drivers such as `slirp4netns`.
 
 ## Running BuildKit in Rootless mode (containerd worker)
 
