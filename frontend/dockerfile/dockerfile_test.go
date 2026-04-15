@@ -229,6 +229,9 @@ var heredocTests = []integration.Test{}
 // Tests that depend on reproducible env
 var reproTests = integration.TestFuncs(
 	testReproSourceDateEpoch,
+	testAddSourceDateEpochReproducible,
+	testCopySourceDateEpochReproducible,
+	testCopySourceDateEpochGitContextReproducible,
 	testWorkdirSourceDateEpochReproducible,
 	testSourceDateEpochDockerfileDefault,
 	testSourceDateEpochDockerfileDefaultOverride,
@@ -962,82 +965,138 @@ WORKDIR /
 	require.Equal(t, true, fi.IsDir())
 }
 
-// testWorkdirSourceDateEpochReproducible ensures that WORKDIR is reproducible with SOURCE_DATE_EPOCH.
-func testWorkdirSourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
+func testSourceDateEpochReproducibleBuild(t *testing.T, sb integration.Sandbox, dockerfile []byte, extraFiles ...fstest.Applier) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
-FROM alpine
-WORKDIR /mydir
-`)
-
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		append([]fstest.Applier{fstest.CreateFile("Dockerfile", dockerfile, 0600)}, extraFiles...)...,
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir1 := t.TempDir()
 	epoch := fmt.Sprintf("%d", time.Date(2023, 1, 10, 15, 34, 56, 0, time.UTC).Unix())
 
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:SOURCE_DATE_EPOCH": epoch,
-		},
-		Exports: []client.ExportEntry{
-			{
-				Type:      client.ExporterOCI,
-				OutputDir: destDir1,
-				Attrs: map[string]string{
-					"tar": "false",
-				},
+	build := func() []byte {
+		destDir := t.TempDir()
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			FrontendAttrs: map[string]string{
+				"build-arg:SOURCE_DATE_EPOCH": epoch,
 			},
-		},
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
-		},
-	}, nil)
-	require.NoError(t, err)
+			Exports: []client.ExportEntry{{
+				Type:      client.ExporterOCI,
+				OutputDir: destDir,
+				Attrs:     map[string]string{"tar": "false"},
+			}},
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+		idx, err := os.ReadFile(filepath.Join(destDir, "index.json"))
+		require.NoError(t, err)
+		return idx
+	}
 
-	index1, err := os.ReadFile(filepath.Join(destDir1, "index.json"))
-	require.NoError(t, err)
-
-	// Prune all cache
+	index1 := build()
 	ensurePruneAll(t, c, sb)
-
 	time.Sleep(3 * time.Second)
-
-	destDir2 := t.TempDir()
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:SOURCE_DATE_EPOCH": epoch,
-		},
-		Exports: []client.ExportEntry{
-			{
-				Type:      client.ExporterOCI,
-				OutputDir: destDir2,
-				Attrs: map[string]string{
-					"tar": "false",
-				},
-			},
-		},
-		LocalMounts: map[string]fsutil.FS{
-			dockerui.DefaultLocalNameDockerfile: dir,
-			dockerui.DefaultLocalNameContext:    dir,
-		},
-	}, nil)
-	require.NoError(t, err)
-
-	index2, err := os.ReadFile(filepath.Join(destDir2, "index.json"))
-	require.NoError(t, err)
+	index2 := build()
 
 	require.Equal(t, index1, index2)
+}
+
+func testAddSourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
+	testSourceDateEpochReproducibleBuild(t, sb, []byte(`
+FROM alpine
+ADD payload /app/payload
+`),
+		fstest.CreateDir("payload", 0755),
+		fstest.CreateFile("payload/greeting.txt", []byte("hello"), 0644),
+	)
+}
+
+func testCopySourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
+	testSourceDateEpochReproducibleBuild(t, sb, []byte(`
+FROM alpine AS src
+RUN mkdir -p /payload && echo hello > /payload/greeting.txt
+
+FROM alpine
+COPY --from=src /payload /app/payload
+`))
+}
+
+func testCopySourceDateEpochGitContextReproducible(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	gitDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(`FROM alpine AS src
+RUN mkdir -p /payload && echo hello > /payload/greeting.txt
+
+FROM alpine
+COPY --from=src /payload /app/payload
+`), 0600)
+	require.NoError(t, err)
+
+	err = runShell(gitDir,
+		"git init",
+		"git config --local user.email test@test.com",
+		"git config --local user.name test",
+		"git add Dockerfile",
+		"git commit -m initial",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	epoch := fmt.Sprintf("%d", time.Date(2023, 1, 10, 15, 34, 56, 0, time.UTC).Unix())
+	gitContext := server.URL + "/.git#master"
+
+	build := func() []byte {
+		destDir := t.TempDir()
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			FrontendAttrs: map[string]string{
+				"context":                     gitContext,
+				"build-arg:SOURCE_DATE_EPOCH": epoch,
+			},
+			Exports: []client.ExportEntry{{
+				Type:      client.ExporterOCI,
+				OutputDir: destDir,
+				Attrs:     map[string]string{"tar": "false"},
+			}},
+		}, nil)
+		require.NoError(t, err)
+		idx, err := os.ReadFile(filepath.Join(destDir, "index.json"))
+		require.NoError(t, err)
+		return idx
+	}
+
+	index1 := build()
+	ensurePruneAll(t, c, sb)
+	time.Sleep(3 * time.Second)
+	index2 := build()
+
+	require.Equal(t, index1, index2)
+}
+
+func testWorkdirSourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
+	testSourceDateEpochReproducibleBuild(t, sb, []byte(`
+FROM alpine
+WORKDIR /mydir
+`))
 }
 
 type tarContextFile struct {

@@ -62,6 +62,10 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
 	}
 
+	if d.epoch != nil {
+		copyOpt = append(copyOpt, llb.WithCreatedTime(*d.epoch))
+	}
+
 	var chopt *llb.ChmodOpt
 	if cfg.chmod != "" {
 		chopt = &llb.ChmodOpt{}
