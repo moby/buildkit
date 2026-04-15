@@ -7,7 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0
 	github.com/Microsoft/go-winio v0.6.2
-	github.com/Microsoft/hcsshim v0.14.0-rc.1
+	github.com/Microsoft/hcsshim v0.14.1
 	github.com/ProtonMail/go-crypto v1.3.0
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
