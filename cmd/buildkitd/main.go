@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
@@ -20,7 +21,6 @@ import (
 	"github.com/containerd/platforms"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/gofrs/flock"
-	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/azblob"
 	"github.com/moby/buildkit/cache/remotecache/gha"
@@ -399,12 +399,15 @@ func main() {
 	}
 
 	app.After = func(_ *cli.Context) (err error) {
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 5*time.Second, errors.New("telemetry shutdown timeout"))
+		defer cancel()
 		for _, c := range closers {
-			if e := c(context.TODO()); e != nil {
-				err = multierror.Append(err, e)
-			}
+			// Closers here are telemetry providers (TracerProvider,
+			// MeterProvider). Failures are non-fatal — an unreachable
+			// collector should not prevent clean daemon shutdown.
+			_ = c(ctx)
 		}
-		return err
+		return nil
 	}
 
 	profiler.Attach(app)
