@@ -51,6 +51,13 @@ ARG SOURCE_DATE_EPOCH=1704067200
 FROM alpine
 ```
 
+The Dockerfile frontend also supports the special value `SOURCE_DATE_EPOCH=context`.
+This resolves the main build context to a numeric Unix timestamp before the build:
+
+- git context: commit time
+- HTTP context: `Last-Modified`, or the newest archive entry mtime when building from an archive without `Last-Modified`
+- local context: ignored, leaving `SOURCE_DATE_EPOCH` unset
+
 ```console
 buildctl build --frontend dockerfile.v0 --opt build-arg:SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) ...
 ```

@@ -1,13 +1,16 @@
 package dockerfile2llb
 
 import (
+	"bytes"
 	"context"
+	"maps"
 	"testing"
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/appcontext"
@@ -275,4 +278,130 @@ func TestDispatchHealthcheckHistory(t *testing.T) {
 	require.NoError(t, err)
 	want := `HEALTHCHECK {Test:[bin -c exit 0] Interval:1s Timeout:10s StartPeriod:3s StartInterval:100ms Retries:5}`
 	require.Equal(t, want, d.image.History[0].CreatedBy)
+}
+
+func TestResolveSourceDateEpochValue(t *testing.T) {
+	t.Parallel()
+
+	globalArgs := &llb.EnvList{}
+	shlex := shell.NewLex('\\')
+
+	tm, err := resolveSourceDateEpochValue(context.Background(), "1700000501", ConvertOpt{}, nil, globalArgs, shlex)
+	require.NoError(t, err)
+	require.NotNil(t, tm)
+	assert.Equal(t, time.Unix(1700000501, 0).UTC(), *tm)
+	assert.Equal(t, "1700000501", formatSourceDateEpochValue(tm))
+
+	tm, err = resolveSourceDateEpochValue(context.Background(), "context", ConvertOpt{}, nil, globalArgs, shlex)
+	require.NoError(t, err)
+	assert.Nil(t, tm)
+	assert.Empty(t, formatSourceDateEpochValue(tm))
+
+	_, err = resolveSourceDateEpochValue(context.Background(), "not-a-timestamp", ConvertOpt{}, nil, globalArgs, shlex)
+	require.ErrorContains(t, err, "invalid SOURCE_DATE_EPOCH")
+}
+
+func TestResolveSourceDateEpochValueStageInvalid(t *testing.T) {
+	t.Parallel()
+
+	df := []byte(`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+COPY Dockerfile /Dockerfile
+FROM scratch
+`)
+
+	parsed, err := parser.Parse(bytes.NewReader(df))
+	require.NoError(t, err)
+
+	stages, _, err := instructions.Parse(parsed.AST, nil)
+	require.NoError(t, err)
+
+	globalArgs := (&llb.EnvList{}).AddOrReplace("SOURCE_DATE_EPOCH", "mysource")
+	_, err = resolveSourceDateEpochValue(context.Background(), "mysource", ConvertOpt{}, stages, globalArgs, shell.NewLex('\\'))
+	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage does not meet source-only requirements")
+}
+
+func TestSourceDateEpochStageSourceHTTP(t *testing.T) {
+	t.Parallel()
+
+	df := []byte(`
+FROM scratch AS mysource
+ARG URL=https://example.com/src.tar
+ADD $URL /
+`)
+
+	parsed, err := parser.Parse(bytes.NewReader(df))
+	require.NoError(t, err)
+
+	stages, _, err := instructions.Parse(parsed.AST, nil)
+	require.NoError(t, err)
+	require.Len(t, stages, 1)
+
+	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'))
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	sourceOp, err := sourceOpFromState(context.Background(), state)
+	require.NoError(t, err)
+	require.NotNil(t, sourceOp)
+	assert.Equal(t, "src.tar", sourceOp.Attrs["http.filename"])
+}
+
+func TestSourceDateEpochStageSourceRequiresScratch(t *testing.T) {
+	t.Parallel()
+
+	df := []byte(`
+FROM busybox AS mysource
+ADD https://example.com/src.tar /
+`)
+
+	parsed, err := parser.Parse(bytes.NewReader(df))
+	require.NoError(t, err)
+
+	stages, _, err := instructions.Parse(parsed.AST, nil)
+	require.NoError(t, err)
+	require.Len(t, stages, 1)
+
+	_, err = sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'))
+	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage must use FROM scratch")
+}
+
+func TestSourceOpFromStateWrappedCopy(t *testing.T) {
+	t.Parallel()
+
+	st := llb.Scratch().File(llb.Copy(llb.HTTP("https://example.com/src.tar"), "src.tar", "/foo"))
+
+	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	require.NoError(t, err)
+	require.NotNil(t, sourceOp)
+	assert.Equal(t, "https://example.com/src.tar", sourceOp.Identifier)
+}
+
+func TestSourceOpFromStateMultipleSourcesIgnored(t *testing.T) {
+	t.Parallel()
+
+	st := llb.Scratch().
+		File(llb.Copy(llb.HTTP("https://example.com/src1.tar"), "src1.tar", "/foo")).
+		File(llb.Copy(llb.HTTP("https://example.com/src2.tar"), "src2.tar", "/bar"))
+
+	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	require.NoError(t, err)
+	assert.Nil(t, sourceOp)
+}
+
+func TestSourceStateFromSourceOpWrappedCopy(t *testing.T) {
+	t.Parallel()
+
+	st := llb.Scratch().File(llb.Copy(llb.HTTP("https://example.com/src.tar", llb.Filename("src.tar")), "src.tar", "/foo"))
+
+	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	require.NoError(t, err)
+	require.NotNil(t, sourceOp)
+
+	sourceState := llb.NewState(llb.NewSource(sourceOp.Identifier, maps.Clone(sourceOp.Attrs), llb.Constraints{}).Output())
+	rewrittenSourceOp, err := sourceOpFromState(context.Background(), &sourceState)
+	require.NoError(t, err)
+	require.NotNil(t, rewrittenSourceOp)
+	assert.Equal(t, sourceOp.Identifier, rewrittenSourceOp.Identifier)
+	assert.Equal(t, sourceOp.Attrs, rewrittenSourceOp.Attrs)
 }
