@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
 	"runtime"
 	"time"
 
@@ -326,32 +327,73 @@ type pushFallbackProvider struct {
 	origin       content.Provider
 }
 
+const (
+	pushRegistryProbeTimeoutEnv     = "BUILDKIT_PREFER_PUSH_REGISTRY_PROBE_TIMEOUT"
+	defaultPushRegistryProbeTimeout = 500 * time.Millisecond
+)
+
+// pushRegistryProbeTimeout bounds how long we'll wait for the push registry
+// to respond to the existence probe before falling back to origin. Configurable
+// via BUILDKIT_PREFER_PUSH_REGISTRY_PROBE_TIMEOUT (Go duration format, e.g. "750ms").
+var pushRegistryProbeTimeout = func() time.Duration {
+	v := os.Getenv(pushRegistryProbeTimeoutEnv)
+	if v == "" {
+		return defaultPushRegistryProbeTimeout
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		bklog.L.Warnf("prefer-push-registry: invalid %s=%q, using default %s", pushRegistryProbeTimeoutEnv, v, defaultPushRegistryProbeTimeout)
+		return defaultPushRegistryProbeTimeout
+	}
+	bklog.L.Infof("prefer-push-registry: probe timeout overridden to %s via %s", d, pushRegistryProbeTimeoutEnv)
+	return d
+}()
+
 func (p *pushFallbackProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+	if err := p.probe(ctx, desc); err != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe against %s failed (%v), falling back to origin", desc.Digest, p.pushRef, err)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+
 	fetcher, err := p.pushResolver.Fetcher(ctx, p.pushRef)
 	if err != nil {
-		bklog.G(ctx).Infof("prefer-push-registry: could not get fetcher for %s (%v), falling back to origin for layer %s", p.pushRef, err, desc.Digest)
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe succeeded but fetcher failed for %s (%v), falling back to origin", desc.Digest, p.pushRef, err)
 		return p.origin.ReaderAt(ctx, desc)
 	}
-
-	ra, fetchErr := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
-	if fetchErr != nil {
-		bklog.G(ctx).Infof("prefer-push-registry: layer %s not in push registry %s (%v), falling back to origin", desc.Digest, p.pushRef, fetchErr)
-		return p.origin.ReaderAt(ctx, desc)
-	}
-
-	// Force the lazy httpReadSeeker to actually open the HTTP connection. Without
-	// this probe, fetcher construction and the ReaderAt wrapper succeed even if
-	// the blob doesn't exist in the push registry — the 404 only surfaces later
-	// when the extractor reads, by which point we can't transparently fall back.
-	probe := make([]byte, 1)
-	if _, probeErr := ra.ReadAt(probe, 0); probeErr != nil && !errors.Is(probeErr, io.EOF) {
-		ra.Close()
-		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe failed against %s (%v), falling back to origin", desc.Digest, p.pushRef, probeErr)
+	ra, err := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
+	if err != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe succeeded but ReaderAt failed for %s (%v), falling back to origin", desc.Digest, p.pushRef, err)
 		return p.origin.ReaderAt(ctx, desc)
 	}
 
 	bklog.G(ctx).Infof("prefer-push-registry: layer %s pulled from push registry %s", desc.Digest, p.pushRef)
 	return ra, nil
+}
+
+// probe forces an actual HTTP request against the push registry to confirm
+// the blob exists. Bounded by pushRegistryProbeTimeout. We can't reuse the
+// resulting ReaderAt because its context (with the short timeout) is captured
+// inside containerd's httpReadSeeker; the caller must construct a fresh one
+// with the original context for the real read.
+func (p *pushFallbackProvider) probe(ctx context.Context, desc ocispecs.Descriptor) error {
+	probeCtx, cancel := context.WithTimeout(ctx, pushRegistryProbeTimeout)
+	defer cancel()
+
+	fetcher, err := p.pushResolver.Fetcher(probeCtx, p.pushRef)
+	if err != nil {
+		return err
+	}
+	ra, err := contentutil.FromFetcher(fetcher).ReaderAt(probeCtx, desc)
+	if err != nil {
+		return err
+	}
+	defer ra.Close()
+
+	probe := make([]byte, 1)
+	if _, err := ra.ReadAt(probe, 0); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 // cacheKeyFromConfig returns a stable digest from image config. If image config
