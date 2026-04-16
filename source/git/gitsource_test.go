@@ -683,3 +683,42 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 	}()
 	return ctx
 }
+
+// TestValidateDirsOnly verifies that subdir path traversal and symlink escapes
+// are blocked (CVE-2026-33748).
+func TestValidateDirsOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink test not applicable on windows")
+	}
+	t.Parallel()
+	root := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "real", "nested"), 0o755))
+	require.NoError(t, os.Symlink("/tmp", filepath.Join(root, "escape")))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "file.txt"), []byte("x"), 0o644))
+
+	tests := []struct {
+		subpath string
+		wantErr bool
+	}{
+		{subpath: "real", wantErr: false},
+		{subpath: "real/nested", wantErr: false},
+		{subpath: "/real/nested", wantErr: false},
+		{subpath: "escape", wantErr: true},
+		{subpath: "file.txt", wantErr: true},
+		{subpath: "nonexistent", wantErr: true},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.subpath, func(t *testing.T) {
+			t.Parallel()
+			f, err := openSubdirSafe(root, tt.subpath)
+			if tt.wantErr {
+				require.Error(t, err, "subpath %q should be rejected", tt.subpath)
+			} else {
+				require.NoError(t, err, "subpath %q should be accepted", tt.subpath)
+				f.Close()
+			}
+		})
+	}
+}
