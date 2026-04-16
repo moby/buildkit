@@ -27,7 +27,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
-	dockerfilebuilder "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -68,6 +67,13 @@ var provenanceTests = integration.TestFuncs(
 
 func init() {
 	allTests = append(allTests, provenanceTests...)
+}
+
+func daemonDockerfileVersion(ctx context.Context, t *testing.T, c *client.Client) string {
+	info, err := c.Info(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, info.BuildkitVersion.DockerfileVersion)
+	return info.BuildkitVersion.DockerfileVersion
 }
 
 func testProvenanceAttestation(t *testing.T, sb integration.Sandbox) {
@@ -191,10 +197,7 @@ RUN echo ok> /foo
 				if isDockerd {
 					expCustom = provenancetypes.ProvenanceCustomEnv{}
 				}
-				expectedDockerfileVersionPrefix := dockerfilebuilder.Version
-				if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
-					expectedDockerfileVersionPrefix += ".0"
-				}
+				expectedDockerfileVersion := daemonDockerfileVersion(ctx, t, c)
 
 				if slsaVersion == "" || slsaVersion == "v1" {
 					type stmtT struct {
@@ -285,7 +288,7 @@ RUN echo ok> /foo
 					if isClient || isGateway {
 						require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 					} else {
-						require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
+						require.Equal(t, expectedDockerfileVersion, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 					}
 
 					require.False(t, pred.RunDetails.Metadata.Completeness.ResolvedDependencies)
@@ -359,7 +362,7 @@ RUN echo ok> /foo
 					if isClient || isGateway {
 						require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
 					} else {
-						require.True(t, strings.HasPrefix(pred.Invocation.Environment.DockerfileVersion, expectedDockerfileVersionPrefix))
+						require.Equal(t, expectedDockerfileVersion, pred.Invocation.Environment.DockerfileVersion)
 					}
 
 					expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
@@ -530,10 +533,7 @@ COPY myapp.Dockerfile /
 
 			_, isClient := f.(*clientFrontend)
 			_, isGateway := f.(*gatewayFrontend)
-			expectedDockerfileVersionPrefix := dockerfilebuilder.Version
-			if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
-				expectedDockerfileVersionPrefix += ".0"
-			}
+			expectedDockerfileVersion := daemonDockerfileVersion(ctx, t, c)
 
 			if slsaVersion == "" || slsaVersion == "v1" {
 				require.Equal(t, "https://slsa.dev/provenance/v1", attest.PredicateType) // intentionally not const
@@ -557,7 +557,7 @@ COPY myapp.Dockerfile /
 					if isGateway {
 						require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 					} else {
-						require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
+						require.Equal(t, expectedDockerfileVersion, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 					}
 				}
 
@@ -618,7 +618,7 @@ COPY myapp.Dockerfile /
 					if isGateway {
 						require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
 					} else {
-						require.True(t, strings.HasPrefix(pred.Invocation.Environment.DockerfileVersion, expectedDockerfileVersionPrefix))
+						require.Equal(t, expectedDockerfileVersion, pred.Invocation.Environment.DockerfileVersion)
 					}
 				}
 
@@ -1070,11 +1070,7 @@ COPY --from=base C:\out C:\Files
 	pred := stmt.Predicate
 
 	require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
-	expectedDockerfileVersionPrefix := dockerfilebuilder.Version
-	if strings.Count(expectedDockerfileVersionPrefix, ".") == 1 {
-		expectedDockerfileVersionPrefix += ".0"
-	}
-	require.True(t, strings.HasPrefix(pred.BuildDefinition.InternalParameters.DockerfileVersion, expectedDockerfileVersionPrefix))
+	require.Equal(t, daemonDockerfileVersion(ctx, t, c), pred.BuildDefinition.InternalParameters.DockerfileVersion)
 	require.NotContains(t, pred.BuildDefinition.ExternalParameters.Request.Args, "source")
 	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
 

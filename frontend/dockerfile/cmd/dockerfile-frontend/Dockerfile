@@ -25,24 +25,26 @@ RUN --mount=target=. <<EOT
   fi
   if [ "$CHANNEL" = "mainline" ]; then
     VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*")
+    EXACT_TAG=$(git describe --exact-match --tags --match "dockerfile/[0-9]*" 2>/dev/null || true)
   else
     VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*-$CHANNEL")
+    EXACT_TAG=$(git describe --exact-match --tags --match "dockerfile/[0-9]*-$CHANNEL" 2>/dev/null || true)
   fi
-  BUILTIN_VERSION=$(sed -n 's/^const Version = "\\(.*\\)"$/\\1/p' ./frontend/dockerfile/builder/version.go)
+  BUILTIN_VERSION=$(sed -n 's/^const version = "\(.*\)"$/\1/p' ./frontend/dockerfile/version/version.go)
   case "$BUILTIN_VERSION" in
     *.*.*) EXPECTED_VERSION="$BUILTIN_VERSION" ;;
     *.*) EXPECTED_VERSION="$BUILTIN_VERSION.0" ;;
     *)
-      echo "invalid frontend/dockerfile/builder/version.go version: $BUILTIN_VERSION"
+      echo "invalid frontend/dockerfile/version/version.go version: $BUILTIN_VERSION"
       exit 1
       ;;
   esac
-  case "$VERSION" in
+  case "$EXACT_TAG" in
     dockerfile/*)
-      ACTUAL_VERSION=${VERSION#dockerfile/}
+      ACTUAL_VERSION=${EXACT_TAG#dockerfile/}
       ACTUAL_VERSION=${ACTUAL_VERSION%%-*}
       if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
-        echo "frontend/dockerfile/builder/version.go version $BUILTIN_VERSION does not match external frontend version $VERSION"
+        echo "frontend/dockerfile/version/version.go version $BUILTIN_VERSION does not match external frontend version $EXACT_TAG"
         exit 1
       fi
       ;;

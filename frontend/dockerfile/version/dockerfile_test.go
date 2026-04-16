@@ -1,4 +1,4 @@
-package llbsolver
+package version
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuiltinDockerfileVersion(t *testing.T) {
+func TestNormalizeDockerfileVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		dockerfileVer   string
@@ -25,7 +25,7 @@ func TestBuiltinDockerfileVersion(t *testing.T) {
 		{name: "invalid dockerfile suffix", dockerfileVer: "1.24.x", buildkitVersion: "v0.29.0", wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := normalizeBuiltinDockerfileVersion(tc.dockerfileVer, tc.buildkitVersion)
+			got, err := normalizeDockerfileVersion(tc.dockerfileVer, tc.buildkitVersion)
 			if tc.wantErr {
 				require.Error(t, err)
 				return

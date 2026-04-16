@@ -1,19 +1,22 @@
-package llbsolver
+package version
 
 import (
 	"strings"
 
-	dockerfilebuilder "github.com/moby/buildkit/frontend/dockerfile/builder"
-	"github.com/moby/buildkit/version"
+	buildkitversion "github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 	"golang.org/x/mod/semver"
 )
 
-func builtinDockerfileVersion() (string, error) {
-	return normalizeBuiltinDockerfileVersion(dockerfilebuilder.Version, version.Version)
+func Version() string {
+	v, err := normalizeDockerfileVersion(version, buildkitversion.Version)
+	if err != nil {
+		return ""
+	}
+	return v
 }
 
-func normalizeBuiltinDockerfileVersion(v, buildkitVersion string) (string, error) {
+func normalizeDockerfileVersion(v, buildkitVersion string) (string, error) {
 	v = strings.TrimSpace(v)
 	parts := strings.Split(v, ".")
 	if len(parts) != 2 && len(parts) != 3 {
