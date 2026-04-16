@@ -483,6 +483,11 @@ func Git(url, fragment string, opts ...GitOption) State {
 		addCap(&gi.Constraints, pb.CapSourceGitMTime)
 	}
 
+	if gi.FetchByCommit {
+		attrs[pb.AttrGitFetchByCommit] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitFetchByCommit)
+	}
+
 	addCap(&gi.Constraints, pb.CapSourceGit)
 
 	source := NewSource("git://"+id, attrs, gi.Constraints)
@@ -511,6 +516,7 @@ type GitInfo struct {
 	SubDir           string
 	SkipSubmodules   bool
 	MTime            string
+	FetchByCommit    bool
 }
 
 func GitRef(v string) GitOption {
@@ -574,6 +580,21 @@ func MountSSHSock(sshID string) GitOption {
 func GitChecksum(v string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.Checksum = v
+	})
+}
+
+// GitFetchByCommit makes the git source trust the provided checksum as the
+// commit to fetch, without resolving the ref against the remote. The ref, if
+// set, is applied locally after the commit is fetched so that cache keys
+// still depend on it. This is useful when the remote ref may have moved
+// since the original resolution.
+//
+// Unqualified ref names are canonicalized to "refs/heads/<name>" to match
+// the normal path's cache keys for branches. Tags must be passed fully
+// qualified ("refs/tags/<name>").
+func GitFetchByCommit() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.FetchByCommit = true
 	})
 }
 

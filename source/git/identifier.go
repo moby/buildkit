@@ -20,6 +20,7 @@ type GitIdentifier struct {
 	KnownSSHHosts    string
 	SkipSubmodules   bool
 	MTime            string // "checkout" (default) or "commit"
+	FetchByCommit    bool
 
 	VerifySignature *GitSignatureVerifyOptions
 }

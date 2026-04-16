@@ -59,6 +59,11 @@ type GitRef struct {
 
 	// MTime controls file modification time policy: "checkout" (default) or "commit".
 	MTime string
+
+	// FetchByCommit, when true, trusts Checksum as the commit and skips comparing
+	// it against the remote ref. The commit is fetched directly and the ref name
+	// (if any) is applied locally.
+	FetchByCommit bool
 }
 
 // ParseGitRef parses a git ref.
@@ -134,7 +139,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 		case 0, 1:
 			if len(v) == 0 || v[0] == "" {
 				switch k {
-				case "submodules", "keep-git-dir":
+				case "submodules", "keep-git-dir", "fetch-by-commit":
 					v = nil
 				default:
 					return errors.Errorf("query %q has no value", k)
@@ -192,6 +197,18 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 			default:
 				return errors.Errorf("invalid mtime value: %q (must be \"checkout\" or \"commit\")", v[0])
 			}
+		case "fetch-by-commit":
+			var vv bool
+			if len(v) == 0 {
+				vv = true
+			} else {
+				var err error
+				vv, err = strconv.ParseBool(v[0])
+				if err != nil {
+					return errors.Errorf("invalid fetch-by-commit value: %q", v[0])
+				}
+			}
+			gf.FetchByCommit = vv
 		default:
 			return errors.Errorf("unexpected query %q", k)
 		}
