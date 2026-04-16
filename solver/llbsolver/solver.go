@@ -51,8 +51,9 @@ import (
 )
 
 const (
-	keyEntitlements = "llb.entitlements"
-	keySourcePolicy = "llb.sourcepolicy"
+	keyEntitlements    = "llb.entitlements"
+	keySourcePolicy    = "llb.sourcepolicy"
+	keyEagerPushConfig = "llb.eagerpushconfig"
 )
 
 // EagerExportMode controls whether layer compression and/or pushing
@@ -71,6 +72,7 @@ type ExporterRequest struct {
 	EnableSessionExporter bool
 	EagerExport           EagerExportMode
 	EagerPushConfig       *exporter.EagerPushConfig // non-nil when EagerExport == EagerExportPush
+	PushRegistryConfig    *exporter.EagerPushConfig // non-nil when prefer-push-registry=true
 }
 
 type RemoteCacheExporter struct {
@@ -153,8 +155,26 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 		if err != nil {
 			return nil, err
 		}
-		return w.ResolveOp(v, s.Bridge(b), s.sm)
+		op, err := w.ResolveOp(v, s.Bridge(b), s.sm)
+		if err != nil {
+			return nil, err
+		}
+		if setter, ok := op.(eagerPushConfigSetter); ok {
+			var pushCfg *exporter.EagerPushConfig
+			b.EachValue(context.TODO(), keyEagerPushConfig, func(v any) error {
+				pushCfg, _ = v.(*exporter.EagerPushConfig)
+				return nil
+			})
+			if pushCfg != nil {
+				setter.SetEagerPushConfig(pushCfg)
+			}
+		}
+		return op, nil
 	}
+}
+
+type eagerPushConfigSetter interface {
+	SetEagerPushConfig(*exporter.EagerPushConfig)
 }
 
 func (s *Solver) bridge(b solver.Builder) *provenanceBridge {
@@ -559,6 +579,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		j.SetOnVertexComplete(eager.onVertexComplete)
+	}
+
+	if exp.PushRegistryConfig != nil {
+		j.SetValue(keyEagerPushConfig, exp.PushRegistryConfig)
 	}
 
 	br := s.bridge(j)

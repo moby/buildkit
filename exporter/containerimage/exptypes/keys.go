@@ -93,6 +93,14 @@ var (
 	//   compress — compress layers as vertices complete; push everything at finalize
 	//   push    — compress AND push layer blobs as vertices complete; only push manifest at finalize
 	OptKeyEagerExport ImageExporterOptKey = "eager-export"
+
+	// When pulling base image layers, check the push (destination) registry
+	// first and pull from there if the layer exists. Falls back to the origin
+	// registry transparently. Useful when the push registry is closer than
+	// the origin (e.g., ECR in the same region vs Docker Hub).
+	// Requires push=true so the destination registry is known.
+	// Value: bool <true|false>
+	OptKeyPreferPushRegistry ImageExporterOptKey = "prefer-push-registry"
 )
 
 const (

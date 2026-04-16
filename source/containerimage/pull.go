@@ -3,7 +3,9 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"maps"
+	"os"
 	"runtime"
 	"time"
 
@@ -18,9 +20,12 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
@@ -47,7 +52,8 @@ type puller struct {
 	layerLimit     *int
 	vtx            solver.Vertex
 	ResolverType
-	store sourceresolver.ResolveImageConfigOptStore
+	store        sourceresolver.ResolveImageConfigOptStore
+	eagerPushCfg *exporter.EagerPushConfig
 
 	g                flightcontrol.Group[struct{}]
 	cacheKeyErr      error
@@ -58,6 +64,10 @@ type puller struct {
 	manifestKey      string
 	configKey        string
 	*pull.Puller
+}
+
+func (p *puller) SetEagerPushConfig(cfg *exporter.EagerPushConfig) {
+	p.eagerPushCfg = cfg
 }
 
 func mainManifestKey(desc ocispecs.Descriptor, platform ocispecs.Platform, layerLimit *int) (digest.Digest, error) {
@@ -134,6 +144,10 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				return struct{}{}, errors.Errorf("layer limit %d is greater than the number of layers in the image %d", *ll, len(p.manifest.Descriptors))
 			}
 			p.manifest.Descriptors = p.manifest.Descriptors[:*ll]
+		}
+
+		if p.eagerPushCfg != nil && p.eagerPushCfg.PreferPushRegistry && p.ResolverType == ResolverTypeRegistry && len(p.manifest.Descriptors) > 0 {
+			p.wrapProviderWithPushFallback(g)
 		}
 
 		if len(p.manifest.Descriptors) > 0 {
@@ -281,6 +295,105 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 	}
 
 	return current, nil
+}
+
+// wrapProviderWithPushFallback wraps the manifest's Provider so that when
+// a layer blob is lazily fetched, it first tries the push (destination)
+// registry. If the layer already exists there, it is pulled from the closer
+// registry instead of the origin. On any failure, the original provider is
+// used transparently.
+func (p *puller) wrapProviderWithPushFallback(g session.Group) {
+	cfg := p.eagerPushCfg
+	pushResolver := resolver.DefaultPool.GetResolver(cfg.RegistryHosts, cfg.TargetName, "pull", p.SessionManager, g)
+	origProvider := p.manifest.Provider
+	pushRef := cfg.TargetName
+
+	bklog.L.Infof("prefer-push-registry: wrapping provider for %s with fallback to push registry %s", p.Ref, pushRef)
+
+	p.manifest.Provider = func(g session.Group) content.Provider {
+		return &pushFallbackProvider{
+			pushResolver: pushResolver.WithSession(g),
+			pushRef:      pushRef,
+			origin:       origProvider(g),
+		}
+	}
+}
+
+// pushFallbackProvider tries fetching a blob from the push registry first,
+// falling back to the origin provider on any error (404, auth, network, etc.).
+type pushFallbackProvider struct {
+	pushResolver remotes.Resolver
+	pushRef      string
+	origin       content.Provider
+}
+
+const (
+	pushRegistryProbeTimeoutEnv     = "BUILDKIT_PREFER_PUSH_REGISTRY_PROBE_TIMEOUT"
+	defaultPushRegistryProbeTimeout = 500 * time.Millisecond
+)
+
+// pushRegistryProbeTimeout bounds how long we'll wait for the push registry
+// to respond to the existence probe before falling back to origin. Configurable
+// via BUILDKIT_PREFER_PUSH_REGISTRY_PROBE_TIMEOUT (Go duration format, e.g. "750ms").
+var pushRegistryProbeTimeout = func() time.Duration {
+	v := os.Getenv(pushRegistryProbeTimeoutEnv)
+	if v == "" {
+		return defaultPushRegistryProbeTimeout
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		bklog.L.Warnf("prefer-push-registry: invalid %s=%q, using default %s", pushRegistryProbeTimeoutEnv, v, defaultPushRegistryProbeTimeout)
+		return defaultPushRegistryProbeTimeout
+	}
+	bklog.L.Infof("prefer-push-registry: probe timeout overridden to %s via %s", d, pushRegistryProbeTimeoutEnv)
+	return d
+}()
+
+func (p *pushFallbackProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+	if err := p.probe(ctx, desc); err != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe against %s failed (%v), falling back to origin", desc.Digest, p.pushRef, err)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+
+	fetcher, err := p.pushResolver.Fetcher(ctx, p.pushRef)
+	if err != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe succeeded but fetcher failed for %s (%v), falling back to origin", desc.Digest, p.pushRef, err)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+	ra, err := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
+	if err != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe succeeded but ReaderAt failed for %s (%v), falling back to origin", desc.Digest, p.pushRef, err)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+
+	bklog.G(ctx).Infof("prefer-push-registry: layer %s pulled from push registry %s", desc.Digest, p.pushRef)
+	return ra, nil
+}
+
+// probe forces an actual HTTP request against the push registry to confirm
+// the blob exists. Bounded by pushRegistryProbeTimeout. We can't reuse the
+// resulting ReaderAt because its context (with the short timeout) is captured
+// inside containerd's httpReadSeeker; the caller must construct a fresh one
+// with the original context for the real read.
+func (p *pushFallbackProvider) probe(ctx context.Context, desc ocispecs.Descriptor) error {
+	probeCtx, cancel := context.WithTimeoutCause(ctx, pushRegistryProbeTimeout, errors.WithStack(context.DeadlineExceeded))
+	defer cancel()
+
+	fetcher, err := p.pushResolver.Fetcher(probeCtx, p.pushRef)
+	if err != nil {
+		return err
+	}
+	ra, err := contentutil.FromFetcher(fetcher).ReaderAt(probeCtx, desc)
+	if err != nil {
+		return err
+	}
+	defer ra.Close()
+
+	probe := make([]byte, 1)
+	if _, err := ra.ReadAt(probe, 0); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }
 
 // cacheKeyFromConfig returns a stable digest from image config. If image config
