@@ -51,9 +51,9 @@ import (
 )
 
 const (
-	keyEntitlements     = "llb.entitlements"
-	keySourcePolicy     = "llb.sourcepolicy"
-	keyEagerPushConfig  = "llb.eagerpushconfig"
+	keyEntitlements    = "llb.entitlements"
+	keySourcePolicy    = "llb.sourcepolicy"
+	keyEagerPushConfig = "llb.eagerpushconfig"
 )
 
 // EagerExportMode controls whether layer compression and/or pushing

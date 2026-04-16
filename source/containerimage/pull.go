@@ -3,6 +3,7 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"maps"
 	"runtime"
 	"time"
@@ -327,17 +328,30 @@ type pushFallbackProvider struct {
 
 func (p *pushFallbackProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	fetcher, err := p.pushResolver.Fetcher(ctx, p.pushRef)
-	if err == nil {
-		ra, fetchErr := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
-		if fetchErr == nil {
-			bklog.G(ctx).Infof("prefer-push-registry: layer %s pulled from push registry %s", desc.Digest, p.pushRef)
-			return ra, nil
-		}
-		bklog.G(ctx).Infof("prefer-push-registry: layer %s not in push registry %s (%v), falling back to origin", desc.Digest, p.pushRef, fetchErr)
-	} else {
+	if err != nil {
 		bklog.G(ctx).Infof("prefer-push-registry: could not get fetcher for %s (%v), falling back to origin for layer %s", p.pushRef, err, desc.Digest)
+		return p.origin.ReaderAt(ctx, desc)
 	}
-	return p.origin.ReaderAt(ctx, desc)
+
+	ra, fetchErr := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
+	if fetchErr != nil {
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s not in push registry %s (%v), falling back to origin", desc.Digest, p.pushRef, fetchErr)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+
+	// Force the lazy httpReadSeeker to actually open the HTTP connection. Without
+	// this probe, fetcher construction and the ReaderAt wrapper succeed even if
+	// the blob doesn't exist in the push registry — the 404 only surfaces later
+	// when the extractor reads, by which point we can't transparently fall back.
+	probe := make([]byte, 1)
+	if _, probeErr := ra.ReadAt(probe, 0); probeErr != nil && !errors.Is(probeErr, io.EOF) {
+		ra.Close()
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s probe failed against %s (%v), falling back to origin", desc.Digest, p.pushRef, probeErr)
+		return p.origin.ReaderAt(ctx, desc)
+	}
+
+	bklog.G(ctx).Infof("prefer-push-registry: layer %s pulled from push registry %s", desc.Digest, p.pushRef)
+	return ra, nil
 }
 
 // cacheKeyFromConfig returns a stable digest from image config. If image config
