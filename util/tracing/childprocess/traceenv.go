@@ -1,4 +1,4 @@
-package detect
+package childprocess
 
 import (
 	"context"
@@ -6,11 +6,6 @@ import (
 
 	"github.com/moby/buildkit/util/appcontext"
 	"go.opentelemetry.io/otel/propagation"
-)
-
-const (
-	traceparentHeader = "traceparent"
-	tracestateHeader  = "tracestate"
 )
 
 func init() {
@@ -38,27 +33,4 @@ func initContext(ctx context.Context) context.Context {
 
 	tc := propagation.TraceContext{}
 	return tc.Extract(ctx, &textMap{parent: parent, state: state})
-}
-
-type textMap struct {
-	parent string
-	state  string
-}
-
-func (tm *textMap) Get(key string) string {
-	switch key {
-	case traceparentHeader:
-		return tm.parent
-	case tracestateHeader:
-		return tm.state
-	default:
-		return ""
-	}
-}
-
-func (tm *textMap) Set(key string, value string) {
-}
-
-func (tm *textMap) Keys() []string {
-	return []string{traceparentHeader, tracestateHeader}
 }
