@@ -18,9 +18,12 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
@@ -47,7 +50,8 @@ type puller struct {
 	layerLimit     *int
 	vtx            solver.Vertex
 	ResolverType
-	store sourceresolver.ResolveImageConfigOptStore
+	store        sourceresolver.ResolveImageConfigOptStore
+	eagerPushCfg *exporter.EagerPushConfig
 
 	g                flightcontrol.Group[struct{}]
 	cacheKeyErr      error
@@ -58,6 +62,10 @@ type puller struct {
 	manifestKey      string
 	configKey        string
 	*pull.Puller
+}
+
+func (p *puller) SetEagerPushConfig(cfg *exporter.EagerPushConfig) {
+	p.eagerPushCfg = cfg
 }
 
 func mainManifestKey(desc ocispecs.Descriptor, platform ocispecs.Platform, layerLimit *int) (digest.Digest, error) {
@@ -134,6 +142,10 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				return struct{}{}, errors.Errorf("layer limit %d is greater than the number of layers in the image %d", *ll, len(p.manifest.Descriptors))
 			}
 			p.manifest.Descriptors = p.manifest.Descriptors[:*ll]
+		}
+
+		if p.eagerPushCfg != nil && p.eagerPushCfg.PreferPushRegistry && p.ResolverType == ResolverTypeRegistry && len(p.manifest.Descriptors) > 0 {
+			p.wrapProviderWithPushFallback(g)
 		}
 
 		if len(p.manifest.Descriptors) > 0 {
@@ -281,6 +293,51 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 	}
 
 	return current, nil
+}
+
+// wrapProviderWithPushFallback wraps the manifest's Provider so that when
+// a layer blob is lazily fetched, it first tries the push (destination)
+// registry. If the layer already exists there, it is pulled from the closer
+// registry instead of the origin. On any failure, the original provider is
+// used transparently.
+func (p *puller) wrapProviderWithPushFallback(g session.Group) {
+	cfg := p.eagerPushCfg
+	pushResolver := resolver.DefaultPool.GetResolver(cfg.RegistryHosts, cfg.TargetName, "pull", p.SessionManager, g)
+	origProvider := p.manifest.Provider
+	pushRef := cfg.TargetName
+
+	bklog.L.Infof("prefer-push-registry: wrapping provider for %s with fallback to push registry %s", p.Ref, pushRef)
+
+	p.manifest.Provider = func(g session.Group) content.Provider {
+		return &pushFallbackProvider{
+			pushResolver: pushResolver.WithSession(g),
+			pushRef:      pushRef,
+			origin:       origProvider(g),
+		}
+	}
+}
+
+// pushFallbackProvider tries fetching a blob from the push registry first,
+// falling back to the origin provider on any error (404, auth, network, etc.).
+type pushFallbackProvider struct {
+	pushResolver remotes.Resolver
+	pushRef      string
+	origin       content.Provider
+}
+
+func (p *pushFallbackProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+	fetcher, err := p.pushResolver.Fetcher(ctx, p.pushRef)
+	if err == nil {
+		ra, fetchErr := contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
+		if fetchErr == nil {
+			bklog.G(ctx).Infof("prefer-push-registry: layer %s pulled from push registry %s", desc.Digest, p.pushRef)
+			return ra, nil
+		}
+		bklog.G(ctx).Infof("prefer-push-registry: layer %s not in push registry %s (%v), falling back to origin", desc.Digest, p.pushRef, fetchErr)
+	} else {
+		bklog.G(ctx).Infof("prefer-push-registry: could not get fetcher for %s (%v), falling back to origin for layer %s", p.pushRef, err, desc.Digest)
+	}
+	return p.origin.ReaderAt(ctx, desc)
 }
 
 // cacheKeyFromConfig returns a stable digest from image config. If image config

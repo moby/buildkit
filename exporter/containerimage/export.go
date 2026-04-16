@@ -177,6 +177,16 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			default:
 				return nil, errors.Errorf("invalid value %q for %s, must be \"compress\" or \"push\"", v, k)
 			}
+		case exptypes.OptKeyPreferPushRegistry:
+			if v == "" {
+				i.preferPushRegistry = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.preferPushRegistry = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -203,6 +213,7 @@ type imageExporterInstance struct {
 	danglingPrefix       string
 	danglingEmptyOnly    bool
 	eagerExport          string // "", "compress", or "push"
+	preferPushRegistry   bool
 	meta                 map[string][]byte
 }
 
@@ -228,10 +239,11 @@ func (e *imageExporterInstance) EagerPushConfig() *exporter.EagerPushConfig {
 		return nil
 	}
 	return &exporter.EagerPushConfig{
-		TargetName:    name,
-		RegistryHosts: e.opt.RegistryHosts,
-		Insecure:      e.insecure,
-		ContentStore:  e.opt.ImageWriter.ContentStore(),
+		TargetName:         name,
+		RegistryHosts:      e.opt.RegistryHosts,
+		Insecure:           e.insecure,
+		ContentStore:       e.opt.ImageWriter.ContentStore(),
+		PreferPushRegistry: e.preferPushRegistry,
 	}
 }
 

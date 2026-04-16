@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
@@ -18,17 +19,18 @@ import (
 const sourceCacheType = "buildkit.source.v0"
 
 type SourceOp struct {
-	mu          sync.Mutex
-	op          *pb.Op_Source
-	platform    *pb.Platform
-	sm          *source.Manager
-	src         source.SourceInstance
-	sessM       *session.Manager
-	w           worker.Worker
-	vtx         solver.Vertex
-	parallelism *semaphore.Weighted
-	pin         string
-	id          source.Identifier
+	mu           sync.Mutex
+	op           *pb.Op_Source
+	platform     *pb.Platform
+	sm           *source.Manager
+	src          source.SourceInstance
+	sessM        *session.Manager
+	w            worker.Worker
+	vtx          solver.Vertex
+	parallelism  *semaphore.Weighted
+	pin          string
+	id           source.Identifier
+	eagerPushCfg *exporter.EagerPushConfig
 }
 
 var _ solver.Op = &SourceOp{}
@@ -46,6 +48,10 @@ func NewSourceOp(vtx solver.Vertex, op *pb.Op_Source, platform *pb.Platform, sm 
 		vtx:         vtx,
 		parallelism: parallelism,
 	}, nil
+}
+
+func (s *SourceOp) SetEagerPushConfig(cfg *exporter.EagerPushConfig) {
+	s.eagerPushCfg = cfg
 }
 
 func (s *SourceOp) IsProvenanceProvider() {}
@@ -67,6 +73,11 @@ func (s *SourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	src, err := s.sm.Resolve(ctx, id, s.sessM, s.vtx)
 	if err != nil {
 		return nil, err
+	}
+	if s.eagerPushCfg != nil {
+		if setter, ok := src.(pushRegistryConfigSetter); ok {
+			setter.SetEagerPushConfig(s.eagerPushCfg)
+		}
 	}
 	s.src = src
 	s.id = id
@@ -110,6 +121,10 @@ func (s *SourceOp) Exec(ctx context.Context, g session.Group, _ []solver.Result)
 		return nil, err
 	}
 	return []solver.Result{worker.NewWorkerRefResult(ref, s.w)}, nil
+}
+
+type pushRegistryConfigSetter interface {
+	SetEagerPushConfig(*exporter.EagerPushConfig)
 }
 
 func (s *SourceOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {

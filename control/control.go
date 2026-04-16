@@ -516,6 +516,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 
+	pushRegCfg, err := resolvePushRegistryConfig(req.Exporters, expis)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,
@@ -528,6 +533,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		EnableSessionExporter: req.EnableSessionExporter,
 		EagerExport:           eagerExport,
 		EagerPushConfig:       eagerPushCfg,
+		PushRegistryConfig:    pushRegCfg,
 	}, entitlementsFromPB(req.Entitlements), procs, req.Internal, req.SourcePolicy)
 	if err != nil {
 		return nil, err
@@ -585,6 +591,77 @@ func resolveEagerExport(rawExporters []*controlapi.Exporter, expis []exporter.Ex
 		}
 	}
 	return mode, pushCfg, nil
+}
+
+// resolvePushRegistryConfig scans all exporters for a single image exporter
+// with push=true and prefer-push-registry=true, and returns its push registry
+// configuration. Other exporter types (e.g. oci tarball, local) are ignored.
+// Returns an error if multiple image exporters have the flag set (ambiguous
+// destination).
+func resolvePushRegistryConfig(rawExporters []*controlapi.Exporter, expis []exporter.ExporterInstance) (*exporter.EagerPushConfig, error) {
+	var found *exporter.EagerPushConfig
+	for i, ex := range rawExporters {
+		cfg, err := exporterPushRegistryConfig(ex, expis[i])
+		if err != nil {
+			return nil, err
+		}
+		if cfg == nil {
+			continue
+		}
+		if found != nil {
+			return nil, errors.New("prefer-push-registry set on multiple image exporters; destination is ambiguous")
+		}
+		found = cfg
+	}
+	return found, nil
+}
+
+// exporterPushRegistryConfig returns the push registry config for a single
+// exporter if it has prefer-push-registry=true, or nil if the flag isn't set
+// (or the exporter doesn't support eager push config). Validation errors are
+// returned when the flag is set but the exporter is misconfigured.
+func exporterPushRegistryConfig(ex *controlapi.Exporter, expi exporter.ExporterInstance) (*exporter.EagerPushConfig, error) {
+	enabled, err := parseBoolAttr(ex.Attrs, string(exptypes.OptKeyPreferPushRegistry))
+	if err != nil || !enabled {
+		return nil, err
+	}
+	if expi.Type() != client.ExporterImage {
+		return nil, errors.Errorf("prefer-push-registry requires image exporter, got %q", expi.Type())
+	}
+	push, err := parseBoolAttr(ex.Attrs, string(exptypes.OptKeyPush))
+	if err != nil {
+		return nil, err
+	}
+	if !push {
+		return nil, errors.New("prefer-push-registry requires push=true")
+	}
+	provider, ok := expi.(exporter.EagerExportProvider)
+	if !ok {
+		return nil, nil
+	}
+	cfg := provider.EagerPushConfig()
+	if cfg == nil {
+		return nil, errors.New("prefer-push-registry requires a single image name")
+	}
+	return cfg, nil
+}
+
+// parseBoolAttr returns true if the attr is present and evaluates to a truthy
+// value. Follows the same convention as the image exporter: empty value means
+// true (for --output type=image,flag shorthand).
+func parseBoolAttr(attrs map[string]string, key string) (bool, error) {
+	v, ok := attrs[key]
+	if !ok {
+		return false, nil
+	}
+	if v == "" {
+		return true, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, errors.Wrapf(err, "non-bool value specified for %s", key)
+	}
+	return b, nil
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {

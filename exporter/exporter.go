@@ -60,10 +60,11 @@ func (c *Config) Compression() compression.Config {
 // EagerPushConfig holds the registry details needed to push individual layer
 // blobs during the build, before the final manifest is assembled.
 type EagerPushConfig struct {
-	TargetName    string
-	RegistryHosts docker.RegistryHosts
-	Insecure      bool
-	ContentStore  content.Store
+	TargetName          string
+	RegistryHosts       docker.RegistryHosts
+	Insecure            bool
+	ContentStore        content.Store
+	PreferPushRegistry  bool
 }
 
 // EagerExportProvider is an optional interface that ExporterInstances can
