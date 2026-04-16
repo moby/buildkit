@@ -376,7 +376,7 @@ func (p *pushFallbackProvider) ReaderAt(ctx context.Context, desc ocispecs.Descr
 // inside containerd's httpReadSeeker; the caller must construct a fresh one
 // with the original context for the real read.
 func (p *pushFallbackProvider) probe(ctx context.Context, desc ocispecs.Descriptor) error {
-	probeCtx, cancel := context.WithTimeout(ctx, pushRegistryProbeTimeout)
+	probeCtx, cancel := context.WithTimeoutCause(ctx, pushRegistryProbeTimeout, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 
 	fetcher, err := p.pushResolver.Fetcher(probeCtx, p.pushRef)
