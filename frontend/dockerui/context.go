@@ -317,6 +317,9 @@ func DetectGitContext(ref string, keepGit *bool, opts ...llb.GitOption) (*llb.St
 	if g.MTime != "" {
 		gitOpts = append(gitOpts, llb.GitMTime(g.MTime))
 	}
+	if g.FetchByCommit {
+		gitOpts = append(gitOpts, llb.GitFetchByCommit())
+	}
 
 	st := llb.Git(g.Remote, "", gitOpts...)
 	return &st, true, nil

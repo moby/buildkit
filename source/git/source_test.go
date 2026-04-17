@@ -445,6 +445,219 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 	require.Equal(t, "foo\n", string(dt))
 }
 
+func TestFetchByCommitSHA1(t *testing.T) {
+	testFetchByCommit(t, "sha1", false)
+}
+
+func TestFetchByCommitKeepGitDirSHA1(t *testing.T) {
+	testFetchByCommit(t, "sha1", true)
+}
+
+func TestFetchByCommitSHA256(t *testing.T) {
+	testFetchByCommit(t, "sha256", false)
+}
+
+func TestFetchByCommitKeepGitDirSHA256(t *testing.T) {
+	testFetchByCommit(t, "sha256", true)
+}
+
+// testFetchByCommit exercises the FetchByCommit mode: the branch points to
+// commit A initially, then it is moved to commit B on the remote. A second
+// fetch that asks for commit A via FetchByCommit with the branch ref must
+// still match the first cache key and produce identical content.
+func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	// Capture the SHA of the current master branch (points at "third").
+	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "refs/heads/master")
+	cmd.Dir = repo.mainPath
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	firstSha := strings.TrimSpace(string(out))
+
+	// First fetch: branch "master" at commit firstSha.
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "master", KeepGitDir: keepGitDir}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, _, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, firstSha, pin1)
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(context.TODO())
+
+	mount, err := ref1.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	dt1, err := os.ReadFile(filepath.Join(dir, "def"))
+	require.NoError(t, err)
+	require.Equal(t, "bar\n", string(dt1))
+	if keepGitDir {
+		require.Equal(t, firstSha, gitRevParse(t, dir, "refs/heads/master"))
+	}
+	require.NoError(t, lm.Unmount())
+
+	// Move master on the remote to a different commit.
+	runShell(t, repo.mainPath,
+		"git checkout master",
+		"echo moved > newfile",
+		"git add newfile",
+		"git commit -m moved",
+	)
+	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "refs/heads/master")
+	cmd.Dir = repo.mainPath
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	secondSha := strings.TrimSpace(string(out))
+	require.NotEqual(t, firstSha, secondSha)
+
+	// Sanity check: without FetchByCommit, resolving "master" now returns the
+	// new commit, which yields a different cache key.
+	idMoved := &GitIdentifier{Remote: repo.mainURL, Ref: "master", KeepGitDir: keepGitDir}
+	gMoved, err := gs.Resolve(ctx, idMoved, nil, nil)
+	require.NoError(t, err)
+	keyMoved, pinMoved, _, _, err := gMoved.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, secondSha, pinMoved)
+	require.NotEqual(t, key1, keyMoved)
+
+	// Without FetchByCommit, passing the old checksum for the now-moved ref
+	// is rejected because the ref resolves to a different commit.
+	idStale := &GitIdentifier{
+		Remote:     repo.mainURL,
+		Ref:        "refs/heads/master",
+		Checksum:   firstSha,
+		KeepGitDir: keepGitDir,
+	}
+	gStale, err := gs.Resolve(ctx, idStale, nil, nil)
+	require.NoError(t, err)
+	_, _, _, _, err = gStale.CacheKey(ctx, nil, 0)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "expected checksum to match")
+
+	// Fetch the old commit by checksum with FetchByCommit and the same
+	// fully-qualified ref name that was originally produced. The cache key
+	// and pin should match the first fetch.
+	idFbc := &GitIdentifier{
+		Remote:        repo.mainURL,
+		Ref:           "refs/heads/master",
+		Checksum:      firstSha,
+		KeepGitDir:    keepGitDir,
+		FetchByCommit: true,
+	}
+	gFbc, err := gs.Resolve(ctx, idFbc, nil, nil)
+	require.NoError(t, err)
+
+	key2, pin2, _, _, err := gFbc.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, key1, key2)
+	require.Equal(t, pin1, pin2)
+
+	ref2, err := gFbc.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(context.TODO())
+
+	// Snapshot is reused from the first fetch since the cache key matches.
+	require.Equal(t, ref1.ID(), ref2.ID())
+
+	// Unqualified short refs must be canonicalized to refs/heads/<name> so
+	// that FetchByCommit produces the same cache key as the original fetch,
+	// which used ls-remote-driven normalization. See discussion around
+	// shaToCacheKey and the partialRef/headRef resolution in resolveMetadata.
+	idFbcShort := &GitIdentifier{
+		Remote:        repo.mainURL,
+		Ref:           "master",
+		Checksum:      firstSha,
+		KeepGitDir:    keepGitDir,
+		FetchByCommit: true,
+	}
+	gFbcShort, err := gs.Resolve(ctx, idFbcShort, nil, nil)
+	require.NoError(t, err)
+	keyShort, pinShort, _, _, err := gFbcShort.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, key1, keyShort)
+	require.Equal(t, pin1, pinShort)
+
+	// A fresh git source (empty cache) fetching the same commit via
+	// FetchByCommit must produce the same cache key and identical content,
+	// even though no prior snapshot exists to reuse.
+	gsFresh := setupGitSource(t, t.TempDir())
+	gFresh, err := gsFresh.Resolve(ctx, idFbc, nil, nil)
+	require.NoError(t, err)
+
+	key3, pin3, _, _, err := gFresh.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, key1, key3)
+	require.Equal(t, pin1, pin3)
+
+	ref3, err := gFresh.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref3.Release(context.TODO())
+
+	require.NotEqual(t, ref1.ID(), ref3.ID())
+
+	mount, err = ref3.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	lm = snapshot.LocalMounter(mount)
+	dir, err = lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	dt3, err := os.ReadFile(filepath.Join(dir, "def"))
+	require.NoError(t, err)
+	require.Equal(t, "bar\n", string(dt3))
+	// File added by the "moved" commit must not be present, since we fetched
+	// the original firstSha rather than the new tip of master.
+	_, err = os.Lstat(filepath.Join(dir, "newfile"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	if keepGitDir {
+		require.Equal(t, firstSha, gitRevParse(t, dir, "refs/heads/master"))
+	}
+}
+
+func gitRevParse(t *testing.T, workDir, rev string) string {
+	t.Helper()
+	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", rev)
+	cmd.Dir = workDir
+	out, err := cmd.Output()
+	require.NoError(t, err, "git rev-parse %s in %s", rev, workDir)
+	return strings.TrimSpace(string(out))
+}
+
+func TestFetchByCommitRequiresChecksumSHA1(t *testing.T) {
+	testFetchByCommitRequiresChecksum(t, "sha1")
+}
+
+func testFetchByCommitRequiresChecksum(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "refs/heads/master", FetchByCommit: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+	_, _, _, _, err = g.CacheKey(ctx, nil, 0)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "fetch-by-commit")
+}
+
 func TestFetchByTagSHA1(t *testing.T) {
 	testFetchByTag(t, "lightweight-tag", "third", false, true, false, testChecksumModeNone, "sha1")
 }

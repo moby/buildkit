@@ -9,6 +9,7 @@ const AttrMountSSHSock = "git.mountsshsock"
 const AttrGitChecksum = "git.checksum"
 const AttrGitSkipSubmodules = "git.skipsubmodules"
 const AttrGitMTime = "git.mtime"
+const AttrGitFetchByCommit = "git.fetchbycommit"
 
 const AttrGitSignatureVerifyPubKey = "git.sig.pubkey"
 const AttrGitSignatureVerifyRejectExpired = "git.sig.rejectexpired"

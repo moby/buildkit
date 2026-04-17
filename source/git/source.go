@@ -137,6 +137,8 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.VerifySignature.IgnoreSignedTag = v == "true"
 		case pb.AttrGitMTime:
 			id.MTime = v
+		case pb.AttrGitFetchByCommit:
+			id.FetchByCommit = v == "true"
 		}
 	}
 	if err := validateGitRef(id.Ref); err != nil {
@@ -508,6 +510,29 @@ func (gs *gitSourceHandler) resolveMetadata(ctx context.Context, jobCtx solver.J
 		}, nil
 	}
 
+	if gs.src.FetchByCommit {
+		if gs.src.Checksum == "" {
+			return nil, errors.Errorf("fetch-by-commit requires a checksum or a commit SHA ref")
+		}
+		if !gitutil.IsCommitSHA(gs.src.Checksum) {
+			return nil, errors.Errorf("fetch-by-commit requires a full commit SHA checksum, got %q", gs.src.Checksum)
+		}
+		// Canonicalize unqualified refs so that cache keys match those
+		// produced by the normal path's ls-remote-driven normalization.
+		// Unqualified names are treated as branches (git's preferred
+		// resolution); tags must be passed as "refs/tags/<name>".
+		if gs.src.Ref != "" && !strings.HasPrefix(gs.src.Ref, "refs/") {
+			gs.src.Ref = "refs/heads/" + gs.src.Ref
+		}
+		if gs.src.Ref == "" {
+			gs.src.Ref = gs.src.Checksum
+		}
+		return &Metadata{
+			Ref:      gs.src.Ref,
+			Checksum: gs.src.Checksum,
+		}, nil
+	}
+
 	var g session.Group
 	if jobCtx != nil {
 		g = jobCtx.Session()
@@ -748,6 +773,11 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	}()
 
 	ref := gs.src.Ref
+	// With fetch-by-commit, the user-provided ref is not written into the
+	// bare repo, so resolve the checksum directly.
+	if gs.src.FetchByCommit && gs.src.Checksum != "" {
+		ref = gs.src.Checksum
+	}
 	git := repo.GitCLI
 	if gs.src.Checksum != "" {
 		actualHashBuf, err := repo.Run(ctx, "rev-parse", ref)
@@ -870,10 +900,16 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		}
 		gs.src.Ref = ref
 	}
+	// fetchRef is the identifier used to fetch from the remote. For fetch-by-commit
+	// mode this is the checksum (commit SHA); otherwise it is the ref itself.
+	fetchRef := ref
+	if gs.src.FetchByCommit && gs.src.Checksum != "" {
+		fetchRef = gs.src.Checksum
+	}
 	doFetch := true
-	if gitutil.IsCommitSHA(ref) {
+	if gitutil.IsCommitSHA(fetchRef) {
 		// skip fetch if commit already exists
-		if _, err := git.Run(ctx, "cat-file", "-e", "--", ref+"^{commit}"); err == nil {
+		if _, err := git.Run(ctx, "cat-file", "-e", "--", fetchRef+"^{commit}"); err == nil {
 			doFetch = false
 		}
 	}
@@ -897,7 +933,11 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		gitDirRoot.RemoveAll("shallow.lock")
 
 		args := []string{"fetch"}
-		if !gitutil.IsCommitSHA(ref) { // TODO: find a branch from ls-remote?
+		// For fetch-by-commit, assume the server supports
+		// uploadpack.allowReachableSHA1InWant / allowAnySHA1InWant and
+		// fetch only the requested commit, without the tag/unshallow
+		// fallback used by the generic SHA-ref path.
+		if gs.src.FetchByCommit || !gitutil.IsCommitSHA(fetchRef) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
 		} else {
 			args = append(args, "--tags")
@@ -909,7 +949,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		if gitutil.IsCommitSHA(ref) {
 			args = append(args, ref)
 		} else {
-			args = append(args, "--force", "--", ref+":"+targetRef)
+			args = append(args, "--force", "--", fetchRef+":"+targetRef)
 		}
 		if _, err := git.Run(ctx, args...); err != nil {
 			err := errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -928,7 +968,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 		}
 
 		// verify that commit matches the cache key commit
-		dt, err := git.Run(ctx, "rev-parse", ref)
+		dt, err := git.Run(ctx, "rev-parse", fetchRef)
 		if err != nil {
 			return nil, err
 		}
@@ -977,6 +1017,13 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 
 func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g session.Group) (_ cache.ImmutableRef, retErr error) {
 	ref := gs.src.Ref
+	// refOrCommit is the identifier to use against the bare repo. For
+	// fetch-by-commit, the user-provided ref is not written into the bare
+	// repo, so fall back to the commit checksum which is always present.
+	refOrCommit := ref
+	if gs.src.FetchByCommit && gs.src.Checksum != "" {
+		refOrCommit = gs.src.Checksum
+	}
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", urlutil.RedactCredentials(gs.src.Remote), ref)))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(gs.src.Remote))
@@ -1034,7 +1081,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 			return nil, err
 		}
 
-		gitCatFileBuf, err := git.Run(ctx, "cat-file", "-t", ref)
+		gitCatFileBuf, err := git.Run(ctx, "cat-file", "-t", refOrCommit)
 		if err != nil {
 			return nil, err
 		}
@@ -1047,6 +1094,11 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 				targetRef = "refs/tags/" + pullref
 			}
 			pullref += ":" + targetRef
+		} else if gs.src.FetchByCommit && ref != refOrCommit {
+			// Fetch the commit object from the bare repo and save it under the
+			// user-provided ref name in the checkout clone. The ref does not
+			// need to exist in the bare repo.
+			pullref = refOrCommit + ":" + ref
 		} else if gitutil.IsCommitSHA(ref) {
 			pullref = "refs/buildkit/" + identity.NewID()
 			_, err = git.Run(ctx, "update-ref", pullref, ref)
@@ -1084,7 +1136,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 			}
 		}
 		checkoutGit := git.New(gitutil.WithWorkTree(cd), gitutil.WithGitDir(gitDir))
-		_, err = checkoutGit.Run(ctx, "checkout", "--no-overlay", ref, "--", ".")
+		_, err = checkoutGit.Run(ctx, "checkout", "--no-overlay", refOrCommit, "--", ".")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
@@ -1139,7 +1191,7 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	}
 
 	if gs.src.MTime == "commit" {
-		commitTime, err := getCommitTime(ctx, git, ref)
+		commitTime, err := getCommitTime(ctx, git, refOrCommit)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to get commit time for %s", urlutil.RedactCredentials(gs.src.Remote))
 		}

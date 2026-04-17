@@ -235,6 +235,36 @@ func TestParseGitRef(t *testing.T) {
 			err: "invalid mtime value",
 		},
 		{
+			ref: "https://github.com/moby/buildkit.git?fetch-by-commit=true&checksum=deadbeef#refs/heads/branch",
+			expected: &GitRef{
+				Remote:        "https://github.com/moby/buildkit.git",
+				ShortName:     "buildkit",
+				Ref:           "refs/heads/branch",
+				Checksum:      "deadbeef",
+				FetchByCommit: true,
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-by-commit&checksum=deadbeef",
+			expected: &GitRef{
+				Remote:        "https://github.com/moby/buildkit.git",
+				ShortName:     "buildkit",
+				Checksum:      "deadbeef",
+				FetchByCommit: true,
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-by-commit=false",
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+			},
+		},
+		{
+			ref: "https://github.com/moby/buildkit.git?fetch-by-commit=invalid",
+			err: "invalid fetch-by-commit value",
+		},
+		{
 			ref: "https://github.com/moby/buildkit.git?invalid=123",
 			err: "unexpected query \"invalid\"",
 		},
