@@ -152,12 +152,31 @@ func (c *Capture) AddLocal(l provenancetypes.LocalSource) {
 
 func (c *Capture) AddGit(g provenancetypes.GitSource) {
 	g.URL = urlutil.RedactCredentials(g.URL)
+	// Dedupe on the tuple (URL, Bundle.URL). Two records with the same
+	// URL but different bundle identity (e.g. the same repo referenced
+	// once normally and once through a bundle, or through two different
+	// bundle locators) must both be preserved so neither material is
+	// silently dropped from the provenance. Bundle.URL is the canonical
+	// bundle identity: since scheme/ref/digest are derived from it,
+	// different URLs imply different bundle identity.
 	for _, v := range c.Sources.Git {
-		if v.URL == g.URL {
+		if v.URL != g.URL {
+			continue
+		}
+		if bundleKey(v.Bundle) == bundleKey(g.Bundle) {
 			return
 		}
 	}
 	c.Sources.Git = append(c.Sources.Git, g)
+}
+
+// bundleKey returns a comparable identity for dedupe. Nil bundles collapse
+// to the empty key.
+func bundleKey(b *provenancetypes.GitBundle) string {
+	if b == nil {
+		return ""
+	}
+	return b.URL
 }
 
 func (c *Capture) AddHTTP(h provenancetypes.HTTPSource) {

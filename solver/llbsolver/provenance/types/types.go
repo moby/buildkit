@@ -71,6 +71,19 @@ type ImageBlobSource struct {
 type GitSource struct {
 	URL    string
 	Commit string
+	// Bundle, when non-nil, records the bundle blob that the git source
+	// was resolved from. Only present on bundle-backed git sources; nil
+	// for normal remote-backed git sources.
+	Bundle *GitBundle `json:"bundle,omitempty"`
+}
+
+// GitBundle describes the bundle blob a git source was resolved from. URL
+// is the full locator (e.g. "docker-image+blob://example.com/repo@sha256:...")
+// and is the canonical data: scheme, reference body, and digest are all
+// derivable from it and are parsed on demand by consumers (such as the purl
+// emitter in predicate.go).
+type GitBundle struct {
+	URL string `json:"url"`
 }
 
 type HTTPSource struct {

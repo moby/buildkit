@@ -2745,6 +2745,65 @@ func TestResetSnapshotMtimes(t *testing.T) {
 	require.Equal(t, "file.txt", linkTarget)
 }
 
+// TestBundleStagedRefShape verifies that the unified metadata-resolution
+// path returns the same ref shape for a bundle as for an origin fetch:
+// resolving the symbolic ref "master" must yield Metadata.Ref ==
+// "refs/heads/master", not "refs/tags/master" (which is what the shared
+// bare repo carries after the main-path fetch maps branches into tags/*).
+func TestBundleStagedRefShape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx = logProgressStreams(ctx, t)
+
+	// Build a source-of-truth git repo with a single commit on master.
+	seedDir := t.TempDir()
+	runShell(t, seedDir,
+		"git -c init.defaultBranch=master init",
+		"git config --local user.email test@example.com",
+		"git config --local user.name test",
+		"echo hello > file.txt",
+		"git add file.txt",
+		"git commit -m initial",
+	)
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
+	cmd.Dir = seedDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	headSha := strings.TrimSpace(string(out))
+
+	// Create a bundle of refs/heads/master, then import it into a fresh
+	// bare repo — emulating stageBundle's output. ls-remote against its
+	// file:// URL should see refs/heads/master.
+	bundlePath := filepath.Join(t.TempDir(), "bundle.pack")
+	cmd = exec.CommandContext(ctx, "git", "bundle", "create", bundlePath, "refs/heads/master")
+	cmd.Dir = seedDir
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, "bundle create: %s", out)
+
+	stagedRepoDir := filepath.Join(t.TempDir(), "repo.git")
+	require.NoError(t, os.MkdirAll(stagedRepoDir, 0700))
+	runShell(t, stagedRepoDir,
+		"git -c init.defaultBranch=master init --bare",
+		"git fetch "+bundlePath+" +refs/*:refs/*",
+	)
+
+	gs := setupGitSource(t, t.TempDir())
+	gsh := &gitSourceHandler{
+		src:    GitIdentifier{Remote: "https://example.com/repo.git", Ref: "master", Checksum: headSha},
+		Source: gs,
+	}
+
+	md, err := gsh.resolveMetadataFromURL(ctx, nil, "file://"+stagedRepoDir)
+	require.NoError(t, err)
+	require.Equal(t, "refs/heads/master", md.Ref,
+		"bundle-mode resolveMetadataFromURL should return refs/heads/master (parity with origin path)")
+	require.Equal(t, headSha, md.Checksum)
+}
+
 func TestCommitTimeMtimesSHA1(t *testing.T) {
 	testCommitTimeMtimes(t, "sha1", false)
 }
