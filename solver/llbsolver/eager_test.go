@@ -125,26 +125,31 @@ func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 // Late fires of onVertexComplete must release the clone instead of sending
 // into the (now closed) work channel.
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
+	var cloned atomic.Int32
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 10),
+		done: make(chan struct{}),
 	}
 	require.NoError(t, ep.wait())
 
 	var released atomic.Int32
-	res := newWorkerRefResult(&releaseTracker{released: &released})
+	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
 
 	require.NotPanics(t, func() {
 		ep.onVertexComplete(nil, []solver.Result{res})
 	})
-	assert.Equal(t, int32(1), released.Load())
+	assert.Zero(t, cloned.Load())
+	assert.Zero(t, released.Load())
 }
 
-// Many concurrent late fires after wait() must all release cleanly.
+// Many concurrent late fires after wait() must be rejected before cloning.
 func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
+	var cloned atomic.Int32
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 10),
+		done: make(chan struct{}),
 	}
 	require.NoError(t, ep.wait())
 
@@ -156,21 +161,61 @@ func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	for range fires {
 		go func() {
 			defer wg.Done()
-			res := newWorkerRefResult(&releaseTracker{released: &released})
+			res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
 			ep.onVertexComplete(nil, []solver.Result{res})
 		}()
 	}
 	wg.Wait()
 
-	assert.Equal(t, int32(fires), released.Load())
+	assert.Zero(t, cloned.Load())
+	assert.Zero(t, released.Load())
+}
+
+// A sender admitted before wait() but blocked on a full queue must take the
+// done path, release its clone, and exit without panic.
+func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T) {
+	var cloned atomic.Int32
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem, 1),
+		done: make(chan struct{}),
+	}
+	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+
+	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
+
+	var senderWg sync.WaitGroup
+	senderWg.Add(1)
+	go func() {
+		defer senderWg.Done()
+		ep.onVertexComplete(nil, []solver.Result{res})
+	}()
+
+	for range 1000 {
+		if cloned.Load() == 1 {
+			break
+		}
+		runtime.Gosched()
+	}
+	require.Equal(t, int32(1), cloned.Load())
+
+	require.NotPanics(t, func() {
+		require.NoError(t, ep.wait())
+	})
+	senderWg.Wait()
+
+	assert.Equal(t, int32(2), released.Load())
 }
 
 // Fires racing concurrently with wait() must not panic and must not leak:
-// every clone is either drained by wait() or released by the sender.
+// every admitted clone is either drained by wait() or released by the sender.
 func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
+	var cloned atomic.Int32
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 256),
+		done: make(chan struct{}),
 	}
 
 	var released atomic.Int32
@@ -181,7 +226,7 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	for range fires {
 		go func() {
 			defer wg.Done()
-			res := newWorkerRefResult(&releaseTracker{released: &released})
+			res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
 			ep.onVertexComplete(nil, []solver.Result{res})
 		}()
 	}
@@ -191,7 +236,7 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	})
 	wg.Wait()
 
-	assert.Equal(t, int32(fires), released.Load())
+	assert.Equal(t, cloned.Load(), released.Load())
 }
 
 func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
@@ -236,6 +281,7 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
+	cloned   *atomic.Int32
 }
 
 func (r *releaseTracker) Release(context.Context) error {
@@ -244,6 +290,9 @@ func (r *releaseTracker) Release(context.Context) error {
 }
 
 func (r *releaseTracker) Clone() cache.ImmutableRef {
+	if r.cloned != nil {
+		r.cloned.Add(1)
+	}
 	return &releaseTracker{released: r.released}
 }
 
