@@ -42,12 +42,9 @@ type eagerPipeline struct {
 	work chan eagerWorkItem
 	wg   sync.WaitGroup
 
-	// closeMu serializes producers (RLock during send) against shutdown
-	// (Lock when wait() closes the work channel). Producers check closed
-	// under RLock before sending, so no producer can ever send on a
-	// closed channel — eliminating the "send on closed channel" panic
-	// that occurred when orphan scheduler goroutines (e.g. speculative
-	// loadCache) fired onVertexComplete after wait() had returned.
+	// closeMu gates producers (RLock) against shutdown (Lock). Producers
+	// check closed under RLock before sending, ensuring no send can race
+	// with the close of work.
 	closeMu  sync.RWMutex
 	closed   bool
 	waitOnce sync.Once
@@ -133,15 +130,9 @@ func (ep *eagerPipeline) worker() {
 
 // onVertexComplete is the callback registered on the solver Job. It extracts
 // ImmutableRefs from vertex results, clones them for safe async use, and
-// sends them to the worker pool for compression.
-//
-// Late fires (after wait()) are expected: orphan scheduler goroutines (e.g.
-// speculative loadCache calls) can fire after the owning Solve has already
-// finished. closeMu.RLock + the closed flag make the "am I still open?"
-// check atomic with the send: if closed is true the cloned ref is released
-// and dropped. Dropping these is safe because a vertex's full chain is
-// processed via GetRemotes from any descendant fire that happened before
-// wait(), and orphans by definition aren't on the final image's path.
+// sends them to the worker pool for compression. Fires that arrive after
+// wait() observe closed=true under RLock and release the clone instead of
+// sending.
 func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Result) {
 	for _, res := range results {
 		if res == nil {
@@ -239,14 +230,9 @@ func (ep *eagerPipeline) pushBlob(ctx context.Context, handler func(context.Cont
 }
 
 // wait closes ep.work and blocks until all workers finish. Returns the
-// first error encountered by any worker.
-//
-// closeMu.Lock waits for all in-flight producers to release their RLock
-// before setting closed and closing the channel. This guarantees no
-// producer is mid-send when the channel is closed, so the "send on closed
-// channel" panic cannot occur. Producers that arrive after closeMu.Lock
-// returns observe closed=true under RLock and release their cloned ref
-// without ever touching the channel.
+// first error encountered by any worker. closeMu.Lock waits for in-flight
+// producers to release RLock before flipping closed and closing the
+// channel, so no producer can be mid-send during the close.
 func (ep *eagerPipeline) wait() error {
 	ep.waitOnce.Do(func() {
 		ep.closeMu.Lock()
@@ -255,8 +241,8 @@ func (ep *eagerPipeline) wait() error {
 		ep.closeMu.Unlock()
 	})
 	ep.wg.Wait()
-	// If ctx was cancelled, workers may have exited without fully draining
-	// the channel. Release any leftover refs so their leases aren't leaked.
+	// Release any leftover refs in case workers exited via ctx cancellation
+	// before draining the channel.
 	for {
 		select {
 		case item, ok := <-ep.work:

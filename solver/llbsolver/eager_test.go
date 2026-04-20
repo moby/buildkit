@@ -90,7 +90,7 @@ func TestEagerPipeline_WaitIsIdempotent(t *testing.T) {
 	}
 
 	require.NoError(t, ep.wait())
-	require.NoError(t, ep.wait(), "second wait must not panic from double-close of work")
+	require.NoError(t, ep.wait(), "second wait must not panic")
 }
 
 func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
@@ -122,14 +122,8 @@ func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 	ep.wg.Wait()
 }
 
-// TestEagerPipeline_OnVertexCompleteAfterWait is the regression test for the
-// "send on closed channel" panic that crashed buildkitd-v2-1 on 2026-04-17.
-// A late fire from an orphan scheduler goroutine (e.g. a speculative
-// loadCache that finished after the owning Solve returned) used to panic
-// because wait() closed ep.work while the producer was mid-send. With
-// closeMu gating the send path, the closed flag is observed before the
-// channel is ever touched, so the late fire releases the cloned ref and
-// returns cleanly.
+// Late fires of onVertexComplete must release the clone instead of sending
+// into the (now closed) work channel.
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
@@ -142,15 +136,11 @@ func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 
 	require.NotPanics(t, func() {
 		ep.onVertexComplete(nil, []solver.Result{res})
-	}, "late onVertexComplete after wait() must not panic")
-
-	assert.Equal(t, int32(1), released.Load(),
-		"cloned ref from a late fire must be released, not leaked")
+	})
+	assert.Equal(t, int32(1), released.Load())
 }
 
-// TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent verifies the fix
-// holds under the realistic load pattern: many orphan goroutines firing
-// concurrently after wait() has been called.
+// Many concurrent late fires after wait() must all release cleanly.
 func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
@@ -172,14 +162,11 @@ func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Equal(t, int32(fires), released.Load(),
-		"every cloned ref from late fires must be released")
+	assert.Equal(t, int32(fires), released.Load())
 }
 
-// TestEagerPipeline_OnVertexCompleteRacingWait verifies no panic and no
-// leaks when fires happen concurrently with wait() being called. This is
-// the scenario that exposed the leak window in an earlier attempt at the
-// fix (an unprotected two-channel design).
+// Fires racing concurrently with wait() must not panic and must not leak:
+// every clone is either drained by wait() or released by the sender.
 func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
@@ -201,13 +188,9 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 
 	require.NotPanics(t, func() {
 		require.NoError(t, ep.wait())
-	}, "wait() racing with concurrent fires must not panic")
-
+	})
 	wg.Wait()
 
-	// Every cloned ref should be released exactly once: either the sender
-	// got its item into the channel before close (drained by wait()), or
-	// it saw closed=true under RLock and released the ref itself.
 	assert.Equal(t, int32(fires), released.Load())
 }
 
@@ -248,9 +231,8 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 	}, pushed)
 }
 
-// releaseTracker is a minimal stub that satisfies cache.ImmutableRef
-// for testing ref lifecycle (Release / Clone calls). All other methods
-// panic via the embedded interface.
+// releaseTracker is a minimal cache.ImmutableRef stub that counts
+// Release calls. Clones share the counter.
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
@@ -261,25 +243,16 @@ func (r *releaseTracker) Release(context.Context) error {
 	return nil
 }
 
-// Clone returns a sibling that shares the released counter so the test can
-// verify both the original and the cloned ref end up released.
-// onVertexComplete only ever calls Release on the clone, so the original
-// is left to the caller (the test) to release.
 func (r *releaseTracker) Clone() cache.ImmutableRef {
 	return &releaseTracker{released: r.released}
 }
 
 func (r *releaseTracker) ID() string { return "release-tracker" }
 
-// fakeWorker is the bare minimum worker.Worker that worker.WorkerRef.ID()
-// can call without panicking.
 type fakeWorker struct{ worker.Worker }
 
 func (fakeWorker) ID() string { return "fake-worker" }
 
-// newWorkerRefResult builds a solver.Result whose Sys() returns a
-// *worker.WorkerRef wrapping the given ImmutableRef, matching the shape
-// onVertexComplete expects.
 func newWorkerRefResult(ref cache.ImmutableRef) solver.Result {
 	return worker.NewWorkerRefResult(ref, fakeWorker{})
 }
