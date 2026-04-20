@@ -46,10 +46,10 @@ type eagerPipeline struct {
 	// closeMu gates new senders from entering shutdown. Senders increment
 	// senderWg while holding the mutex so wait() can stop admission before
 	// waiting for all in-flight send attempts to finish.
-	closeMu   sync.Mutex
-	closing   bool
-	senderWg  sync.WaitGroup
-	waitOnce  sync.Once
+	closeMu  sync.Mutex
+	closing  bool
+	senderWg sync.WaitGroup
+	waitOnce sync.Once
 
 	// ctx carries the lease so compressed blobs are GC-protected.
 	ctx context.Context
