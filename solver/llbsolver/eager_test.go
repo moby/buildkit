@@ -4,12 +4,15 @@ import (
 	"context"
 	"os"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -81,6 +84,15 @@ func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
 	assert.Equal(t, int32(2), released.Load(), "leftover refs should be released by wait()")
 }
 
+func TestEagerPipeline_WaitIsIdempotent(t *testing.T) {
+	ep := &eagerPipeline{
+		work: make(chan eagerWorkItem),
+	}
+
+	require.NoError(t, ep.wait())
+	require.NoError(t, ep.wait(), "second wait must not panic")
+}
+
 func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	ep := &eagerPipeline{
@@ -108,6 +120,123 @@ func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 
 	close(ep.work)
 	ep.wg.Wait()
+}
+
+// Late fires of onVertexComplete must release the clone instead of sending
+// into the (now closed) work channel.
+func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
+	var cloned atomic.Int32
+	ep := &eagerPipeline{
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem, 10),
+		done: make(chan struct{}),
+	}
+	require.NoError(t, ep.wait())
+
+	var released atomic.Int32
+	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
+
+	require.NotPanics(t, func() {
+		ep.onVertexComplete(nil, []solver.Result{res})
+	})
+	assert.Zero(t, cloned.Load())
+	assert.Zero(t, released.Load())
+}
+
+// Many concurrent late fires after wait() must be rejected before cloning.
+func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
+	var cloned atomic.Int32
+	ep := &eagerPipeline{
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem, 10),
+		done: make(chan struct{}),
+	}
+	require.NoError(t, ep.wait())
+
+	var released atomic.Int32
+	const fires = 100
+
+	var wg sync.WaitGroup
+	wg.Add(fires)
+	for range fires {
+		go func() {
+			defer wg.Done()
+			res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
+			ep.onVertexComplete(nil, []solver.Result{res})
+		}()
+	}
+	wg.Wait()
+
+	assert.Zero(t, cloned.Load())
+	assert.Zero(t, released.Load())
+}
+
+// A sender admitted before wait() but blocked on a full queue must take the
+// done path, release its clone, and exit without panic.
+func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T) {
+	var cloned atomic.Int32
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem, 1),
+		done: make(chan struct{}),
+	}
+	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+
+	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
+
+	var senderWg sync.WaitGroup
+	senderWg.Add(1)
+	go func() {
+		defer senderWg.Done()
+		ep.onVertexComplete(nil, []solver.Result{res})
+	}()
+
+	for range 1000 {
+		if cloned.Load() == 1 {
+			break
+		}
+		runtime.Gosched()
+	}
+	require.Equal(t, int32(1), cloned.Load())
+
+	require.NotPanics(t, func() {
+		require.NoError(t, ep.wait())
+	})
+	senderWg.Wait()
+
+	assert.Equal(t, int32(2), released.Load())
+}
+
+// Fires racing concurrently with wait() must not panic and must not leak:
+// every admitted clone is either drained by wait() or released by the sender.
+func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
+	var cloned atomic.Int32
+	ep := &eagerPipeline{
+		ctx:  context.Background(),
+		work: make(chan eagerWorkItem, 256),
+		done: make(chan struct{}),
+	}
+
+	var released atomic.Int32
+	const fires = 200
+
+	var wg sync.WaitGroup
+	wg.Add(fires)
+	for range fires {
+		go func() {
+			defer wg.Done()
+			res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
+			ep.onVertexComplete(nil, []solver.Result{res})
+		}()
+	}
+
+	require.NotPanics(t, func() {
+		require.NoError(t, ep.wait())
+	})
+	wg.Wait()
+
+	assert.Equal(t, cloned.Load(), released.Load())
 }
 
 func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
@@ -147,14 +276,32 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 	}, pushed)
 }
 
-// releaseTracker is a minimal stub that satisfies cache.ImmutableRef
-// for testing ref lifecycle (Release calls). All other methods panic.
+// releaseTracker is a minimal cache.ImmutableRef stub that counts
+// Release calls. Clones share the counter.
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
+	cloned   *atomic.Int32
 }
 
 func (r *releaseTracker) Release(context.Context) error {
 	r.released.Add(1)
 	return nil
+}
+
+func (r *releaseTracker) Clone() cache.ImmutableRef {
+	if r.cloned != nil {
+		r.cloned.Add(1)
+	}
+	return &releaseTracker{released: r.released}
+}
+
+func (r *releaseTracker) ID() string { return "release-tracker" }
+
+type fakeWorker struct{ worker.Worker }
+
+func (fakeWorker) ID() string { return "fake-worker" }
+
+func newWorkerRefResult(ref cache.ImmutableRef) solver.Result {
+	return worker.NewWorkerRefResult(ref, fakeWorker{})
 }

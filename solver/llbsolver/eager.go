@@ -40,7 +40,16 @@ type eagerPipeline struct {
 	pushCfg   *exporter.EagerPushConfig
 
 	work chan eagerWorkItem
+	done chan struct{}
 	wg   sync.WaitGroup
+
+	// closeMu gates new senders from entering shutdown. Senders increment
+	// senderWg while holding the mutex so wait() can stop admission before
+	// waiting for all in-flight send attempts to finish.
+	closeMu  sync.Mutex
+	closing  bool
+	senderWg sync.WaitGroup
+	waitOnce sync.Once
 
 	// ctx carries the lease so compressed blobs are GC-protected.
 	ctx context.Context
@@ -88,6 +97,7 @@ func newEagerPipeline(ctx context.Context, mode EagerExportMode, comp compressio
 		pusher:    pusher,
 		ctx:       ctx,
 		work:      make(chan eagerWorkItem, 256),
+		done:      make(chan struct{}),
 	}
 
 	numWorkers := eagerWorkerCount()
@@ -123,7 +133,8 @@ func (ep *eagerPipeline) worker() {
 
 // onVertexComplete is the callback registered on the solver Job. It extracts
 // ImmutableRefs from vertex results, clones them for safe async use, and
-// sends them to the worker pool for compression.
+// sends them to the worker pool for compression. Fires that arrive after
+// shutdown starts are rejected before enqueue and release their clones.
 func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Result) {
 	for _, res := range results {
 		if res == nil {
@@ -134,11 +145,24 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 			continue
 		}
 
+		ep.closeMu.Lock()
+		if ep.closing {
+			ep.closeMu.Unlock()
+			continue
+		}
+		ep.senderWg.Add(1)
+		ep.closeMu.Unlock()
+
 		cloned := workerRef.ImmutableRef.Clone()
 		select {
 		case ep.work <- eagerWorkItem{ref: cloned}:
+			ep.senderWg.Done()
+		case <-ep.done:
+			cloned.Release(context.TODO())
+			ep.senderWg.Done()
 		case <-ep.ctx.Done():
 			cloned.Release(context.TODO())
+			ep.senderWg.Done()
 			return
 		}
 	}
@@ -210,17 +234,37 @@ func (ep *eagerPipeline) pushBlob(ctx context.Context, handler func(context.Cont
 	return err
 }
 
-// wait closes the work channel and blocks until all workers finish.
-// Returns the first error encountered by any worker.
+// wait shuts down new senders, waits for in-flight send attempts to finish,
+// then closes ep.work and waits for workers to exit.
 func (ep *eagerPipeline) wait() error {
-	close(ep.work)
+	ep.waitOnce.Do(func() {
+		ep.closeMu.Lock()
+		if ep.done == nil {
+			ep.done = make(chan struct{})
+		}
+		ep.closing = true
+		ep.closeMu.Unlock()
+
+		close(ep.done)
+		ep.senderWg.Wait()
+		close(ep.work)
+	})
 	ep.wg.Wait()
-	// Release any refs left in the channel (e.g. if workers exited early
-	// due to context cancellation).
-	for item := range ep.work {
-		item.ref.Release(context.TODO())
+	// Release any leftover refs in case workers exited via ctx cancellation
+	// before draining the channel.
+	for {
+		select {
+		case item, ok := <-ep.work:
+			if !ok {
+				ep.mu.Lock()
+				defer ep.mu.Unlock()
+				return ep.firstErr
+			}
+			item.ref.Release(context.TODO())
+		default:
+			ep.mu.Lock()
+			defer ep.mu.Unlock()
+			return ep.firstErr
+		}
 	}
-	ep.mu.Lock()
-	defer ep.mu.Unlock()
-	return ep.firstErr
 }
