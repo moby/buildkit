@@ -4,6 +4,7 @@ ARG GO_VERSION=1.21
 ARG GOLANGCI_LINT_VERSION=1.54.2
 
 FROM golang:${GO_VERSION}-alpine
+ARG GOLANGCI_LINT_VERSION
 ENV GOFLAGS="-buildvcs=false"
 RUN apk add --no-cache gcc musl-dev yamllint
 RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v${GOLANGCI_LINT_VERSION}
