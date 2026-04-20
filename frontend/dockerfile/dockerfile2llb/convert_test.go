@@ -114,6 +114,24 @@ RUN ls -l
 	require.NoError(t, err)
 }
 
+func TestCopyFromKeepsStageLabels(t *testing.T) {
+	t.Parallel()
+
+	df := `FROM scratch AS base
+LABEL marker=base
+
+FROM base AS sibling
+LABEL marker=sibling
+
+FROM base AS consumer
+COPY --from=sibling / /
+`
+
+	res, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.NoError(t, err)
+	require.Equal(t, "base", res.Image.Config.Labels["marker"])
+}
+
 func TestAddEnv(t *testing.T) {
 	// k exists in env as key
 	// override = true
