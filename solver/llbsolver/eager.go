@@ -42,20 +42,15 @@ type eagerPipeline struct {
 	work chan eagerWorkItem
 	wg   sync.WaitGroup
 
-	// done is closed by wait() to signal shutdown to producers and workers.
-	// It is never reopened, so any onVertexComplete invocation that races
-	// in after wait() observes a closed channel and bails out instead of
-	// sending into work (which would have panicked when work was closed
-	// in the prior implementation).
-	done     chan struct{}
-	waitOnce sync.Once
-
 	// closeMu serializes producers (RLock during send) against shutdown
-	// (Lock when wait() flips closed). This eliminates the race window
-	// where an onVertexComplete invocation could land an item in work
-	// after wait() finished draining and returned.
-	closeMu sync.RWMutex
-	closed  bool
+	// (Lock when wait() closes the work channel). Producers check closed
+	// under RLock before sending, so no producer can ever send on a
+	// closed channel — eliminating the "send on closed channel" panic
+	// that occurred when orphan scheduler goroutines (e.g. speculative
+	// loadCache) fired onVertexComplete after wait() had returned.
+	closeMu  sync.RWMutex
+	closed   bool
+	waitOnce sync.Once
 
 	// ctx carries the lease so compressed blobs are GC-protected.
 	ctx context.Context
@@ -103,7 +98,6 @@ func newEagerPipeline(ctx context.Context, mode EagerExportMode, comp compressio
 		pusher:    pusher,
 		ctx:       ctx,
 		work:      make(chan eagerWorkItem, 256),
-		done:      make(chan struct{}),
 	}
 
 	numWorkers := eagerWorkerCount()
@@ -121,45 +115,33 @@ func (ep *eagerPipeline) worker() {
 		select {
 		case <-ep.ctx.Done():
 			return
-		case <-ep.done:
-			// wait() was called. Drain any items already queued so
-			// vertices that fired before shutdown still get compressed
-			// and pushed, then exit.
-			for {
-				select {
-				case item := <-ep.work:
-					ep.handleItem(item)
-				default:
-					return
-				}
+		case item, ok := <-ep.work:
+			if !ok {
+				return
 			}
-		case item := <-ep.work:
-			ep.handleItem(item)
+			if err := ep.processRef(item.ref); err != nil {
+				ep.mu.Lock()
+				if ep.firstErr == nil {
+					ep.firstErr = err
+				}
+				ep.mu.Unlock()
+			}
+			item.ref.Release(context.TODO())
 		}
 	}
-}
-
-func (ep *eagerPipeline) handleItem(item eagerWorkItem) {
-	if err := ep.processRef(item.ref); err != nil {
-		ep.mu.Lock()
-		if ep.firstErr == nil {
-			ep.firstErr = err
-		}
-		ep.mu.Unlock()
-	}
-	item.ref.Release(context.TODO())
 }
 
 // onVertexComplete is the callback registered on the solver Job. It extracts
 // ImmutableRefs from vertex results, clones them for safe async use, and
 // sends them to the worker pool for compression.
 //
-// Late fires (after wait()) are expected: orphaned loadCache goroutines
-// spawned by the scheduler can complete after the owning Solve has already
-// returned. When that happens, ep.done is closed and we release the cloned
-// ref instead of sending it. Dropping these is safe because a vertex's full
-// chain is processed via GetRemotes from any descendant fire that happened
-// before wait(), and orphans by definition aren't on the final image's path.
+// Late fires (after wait()) are expected: orphan scheduler goroutines (e.g.
+// speculative loadCache calls) can fire after the owning Solve has already
+// finished. closeMu.RLock + the closed flag make the "am I still open?"
+// check atomic with the send: if closed is true the cloned ref is released
+// and dropped. Dropping these is safe because a vertex's full chain is
+// processed via GetRemotes from any descendant fire that happened before
+// wait(), and orphans by definition aren't on the final image's path.
 func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Result) {
 	for _, res := range results {
 		if res == nil {
@@ -256,33 +238,33 @@ func (ep *eagerPipeline) pushBlob(ctx context.Context, handler func(context.Cont
 	return err
 }
 
-// wait signals shutdown via ep.done and blocks until all workers finish.
-// Returns the first error encountered by any worker.
+// wait closes ep.work and blocks until all workers finish. Returns the
+// first error encountered by any worker.
 //
-// ep.work is intentionally never closed because onVertexComplete can be
-// invoked from orphan scheduler goroutines that outlive the originating
-// Solve (e.g. a speculative loadCache that completes after the owning
-// build has moved past eg.Wait). Closing ep.work would panic those late
-// senders. Instead we close ep.done, which late senders observe and use
-// to bail out cleanly.
+// closeMu.Lock waits for all in-flight producers to release their RLock
+// before setting closed and closing the channel. This guarantees no
+// producer is mid-send when the channel is closed, so the "send on closed
+// channel" panic cannot occur. Producers that arrive after closeMu.Lock
+// returns observe closed=true under RLock and release their cloned ref
+// without ever touching the channel.
 func (ep *eagerPipeline) wait() error {
 	ep.waitOnce.Do(func() {
-		// closeMu.Lock waits for all in-flight producers to finish their
-		// send (under RLock) and blocks new producers from entering until
-		// closed is set. This guarantees no producer can land an item in
-		// ep.work after the drain below completes.
 		ep.closeMu.Lock()
 		ep.closed = true
-		close(ep.done)
+		close(ep.work)
 		ep.closeMu.Unlock()
 	})
 	ep.wg.Wait()
-	// Drain anything still in ep.work that workers didn't pick up before
-	// exiting. With closeMu protecting the send path, no further items
-	// can be added once we get here.
+	// If ctx was cancelled, workers may have exited without fully draining
+	// the channel. Release any leftover refs so their leases aren't leaked.
 	for {
 		select {
-		case item := <-ep.work:
+		case item, ok := <-ep.work:
+			if !ok {
+				ep.mu.Lock()
+				defer ep.mu.Unlock()
+				return ep.firstErr
+			}
 			item.ref.Release(context.TODO())
 		default:
 			ep.mu.Lock()

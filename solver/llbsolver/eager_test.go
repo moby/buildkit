@@ -54,7 +54,6 @@ func TestNewEagerPipeline_PushRequiresConfig(t *testing.T) {
 func TestEagerPipeline_WaitReturnsFirstError(t *testing.T) {
 	ep := &eagerPipeline{
 		work: make(chan eagerWorkItem),
-		done: make(chan struct{}),
 	}
 	ep.firstErr = assert.AnError
 
@@ -65,7 +64,6 @@ func TestEagerPipeline_WaitReturnsFirstError(t *testing.T) {
 func TestEagerPipeline_WaitReturnsNilWhenNoError(t *testing.T) {
 	ep := &eagerPipeline{
 		work: make(chan eagerWorkItem),
-		done: make(chan struct{}),
 	}
 
 	err := ep.wait()
@@ -76,7 +74,6 @@ func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
 	var released atomic.Int32
 	ep := &eagerPipeline{
 		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
 	}
 
 	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
@@ -90,11 +87,10 @@ func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
 func TestEagerPipeline_WaitIsIdempotent(t *testing.T) {
 	ep := &eagerPipeline{
 		work: make(chan eagerWorkItem),
-		done: make(chan struct{}),
 	}
 
 	require.NoError(t, ep.wait())
-	require.NoError(t, ep.wait(), "second wait must not panic from double-close of done")
+	require.NoError(t, ep.wait(), "second wait must not panic from double-close of work")
 }
 
 func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
@@ -103,7 +99,6 @@ func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
 		mode: EagerExportCompress,
 		ctx:  ctx,
 		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
 	}
 
 	cancel(nil)
@@ -113,18 +108,17 @@ func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
 	ep.wg.Wait()
 }
 
-func TestEagerPipeline_WorkerExitsOnDoneClose(t *testing.T) {
+func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 	ep := &eagerPipeline{
 		mode: EagerExportCompress,
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem),
-		done: make(chan struct{}),
 	}
 
 	ep.wg.Add(1)
 	go ep.worker()
 
-	close(ep.done)
+	close(ep.work)
 	ep.wg.Wait()
 }
 
@@ -132,13 +126,14 @@ func TestEagerPipeline_WorkerExitsOnDoneClose(t *testing.T) {
 // "send on closed channel" panic that crashed buildkitd-v2-1 on 2026-04-17.
 // A late fire from an orphan scheduler goroutine (e.g. a speculative
 // loadCache that finished after the owning Solve returned) used to panic
-// because wait() closed ep.work. With ep.done as the shutdown signal it
-// must instead release the cloned ref and return cleanly.
+// because wait() closed ep.work while the producer was mid-send. With
+// closeMu gating the send path, the closed flag is observed before the
+// channel is ever touched, so the late fire releases the cloned ref and
+// returns cleanly.
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
 	}
 	require.NoError(t, ep.wait())
 
@@ -160,7 +155,6 @@ func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
 	}
 	require.NoError(t, ep.wait())
 
@@ -182,13 +176,14 @@ func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 		"every cloned ref from late fires must be released")
 }
 
-// TestEagerPipeline_OnVertexCompleteRacingWait verifies the panic doesn't
-// reappear when fires happen concurrently with wait() being called.
+// TestEagerPipeline_OnVertexCompleteRacingWait verifies no panic and no
+// leaks when fires happen concurrently with wait() being called. This is
+// the scenario that exposed the leak window in an earlier attempt at the
+// fix (an unprotected two-channel design).
 func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	ep := &eagerPipeline{
 		ctx:  context.Background(),
 		work: make(chan eagerWorkItem, 256),
-		done: make(chan struct{}),
 	}
 
 	var released atomic.Int32
@@ -210,10 +205,9 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 
 	wg.Wait()
 
-	// Items not handed to a worker (because there are no workers in this
-	// test) are drained by wait() and released. Items that took the
-	// done branch are released by onVertexComplete. Either way every
-	// cloned ref should be released exactly once.
+	// Every cloned ref should be released exactly once: either the sender
+	// got its item into the channel before close (drained by wait()), or
+	// it saw closed=true under RLock and released the ref itself.
 	assert.Equal(t, int32(fires), released.Load())
 }
 
