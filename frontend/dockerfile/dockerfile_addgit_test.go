@@ -32,16 +32,26 @@ func init() {
 	allTests = append(allTests, addGitTests...)
 }
 
+// testAddGitSHA1 tests Dockerfile ADD from a Git URL using SHA-1 object format.
 func testAddGitSHA1(t *testing.T, sb integration.Sandbox) {
 	testAddGit(t, sb, "sha1")
 }
 
+// testAddGitSHA256 tests Dockerfile ADD from a Git URL using SHA-256 object format.
 func testAddGitSHA256(t *testing.T, sb integration.Sandbox) {
 	testAddGit(t, sb, "sha256")
 }
 
+// testAddGit verifies Dockerfile ADD from a Git HTTP URL. It creates a local Git repo
+// with tagged commits, serves it over HTTP, and tests fetching by tag, checksum
+// verification (correct, mismatched, and invalid), --keep-git-dir, and --chown.
 func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows:
+	// BuildKit's Git source handler fails to update submodules on Windows even when
+	// the repo has no submodules. The error "failed to update submodules ... git stderr:"
+	// occurs with empty stderr, indicating the submodule update command cannot execute
+	// properly on Windows.
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	f := getFrontend(t, sb)
 
 	gitDir, err := os.MkdirTemp("", "buildkit")
@@ -261,8 +271,15 @@ RUN [ ! -d /nogitdir/.git ]
 	require.Contains(t, err.Error(), "expected hex commit hash")
 }
 
+// testAddGitChecksumCache verifies that adding --checksum to a Git ADD does not
+// invalidate the build cache. Two builds fetching the same tag — one without checksum
+// and one with — should produce identical cached results.
 func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows:
+	// Same root cause as testAddGit — BuildKit's Git source handler fails to update
+	// submodules on Windows even when the repo has no submodules. The submodule update
+	// command fails silently with empty stderr.
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	f := getFrontend(t, sb)
 
 	gitDir, err := os.MkdirTemp("", "buildkit")
@@ -366,8 +383,15 @@ COPY --from=src /repo/unique.txt /
 	require.Equal(t, string(unique1), string(unique2), "cache should be matched and unique file content should be the same")
 }
 
+// testGitQueryString tests Git URL query string parameters for Dockerfile ADD and
+// build context, including ref, branch, tag, commit, subdir, keep-git-dir, and
+// submodules options.
 func testGitQueryString(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows:
+	// Same root cause as testAddGit — BuildKit's Git source handler fails to update
+	// submodules on Windows even when the repo has no submodules. The submodule update
+	// command fails silently with empty stderr.
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	f := getFrontend(t, sb)
 
 	subModDir := t.TempDir()
