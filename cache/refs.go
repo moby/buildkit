@@ -1422,6 +1422,15 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	}
 	dh := dhs[desc.Digest]
 
+	dhRef := ""
+	if dh != nil {
+		dhRef = dh.Ref
+	}
+	bklog.G(ctx).Infof(
+		"UNLAZY-LAYER ref=%s digest=%s ensureContentStore=%t dhFound=%t dh.Ref=%q dhsLen=%d imageRefs=%v",
+		sr.ID(), desc.Digest, ensureContentStore, dh != nil, dhRef, len(dhs), sr.getImageRefs(),
+	)
+
 	eg.Go(func() error {
 		// unlazies if needed, otherwise a no-op
 		return lazyRefProvider{
