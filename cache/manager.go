@@ -211,9 +211,14 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		if p != nil {
 			releaseParent = true
 		}
+		existingImageRefs := ref.getImageRefs()
 		if err := setImageRefMetadata(ref.cacheMetadata, opts...); err != nil {
 			return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", ref.ID())
 		}
+		bklog.G(ctx).Infof(
+			"DEDUP-HIT blobchain=%s reusingRef=%s blobDigest=%s existingImageRefs=%v newImageRefs=%v",
+			blobChainID, ref.ID(), ref.getBlob(), existingImageRefs, ref.getImageRefs(),
+		)
 		return ref, nil
 	}
 

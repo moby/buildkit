@@ -338,6 +338,10 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		if p.dh == nil {
 			// shouldn't happen, if you have a lazy immutable ref it already should be validated
 			// that descriptor handlers exist for it
+			bklog.G(ctx).Warnf(
+				"UNLAZY-NIL-DH ref=%s digest=%s imageRefs=%v",
+				p.ref.ID(), p.desc.Digest, p.ref.getImageRefs(),
+			)
 			return struct{}{}, errors.New("unexpected nil descriptor handler")
 		}
 
@@ -350,11 +354,19 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		// For now, just pull down the whole content and then return a ReaderAt from the local content
 		// store. If efficient partial reads are desired in the future, something more like a "tee"
 		// that caches remote partial reads to a local store may need to replace this.
+		bklog.G(ctx).Infof(
+			"UNLAZY-FETCH ref=%s digest=%s mediaType=%s size=%d dh.Ref=%q imageRefs=%v",
+			p.ref.ID(), p.desc.Digest, p.desc.MediaType, p.desc.Size, p.dh.Ref, p.ref.getImageRefs(),
+		)
 		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
 		}, p.desc, p.dh.Ref, logs.LoggerFromContext(ctx))
 		if err != nil {
+			bklog.G(ctx).Warnf(
+				"UNLAZY-FETCH-ERR ref=%s digest=%s dh.Ref=%q imageRefs=%v err=%v",
+				p.ref.ID(), p.desc.Digest, p.dh.Ref, p.ref.getImageRefs(), err,
+			)
 			return struct{}{}, err
 		}
 

@@ -317,8 +317,21 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 					}
 				}
 			}
+			recoveredRefs := make(map[string]string, len(descHandlers))
+			for d, h := range descHandlers {
+				recoveredRefs[string(d)] = h.Ref
+			}
+			bklog.G(ctx).Infof(
+				"LOADREF-RECOVER id=%s missingDigests=%v recoveredFromSolver=%v",
+				id, []digest.Digest(needsRemoteProviders), recoveredRefs,
+			)
 			opts = append(opts, descHandlers)
 			ref, err = w.CacheMgr.Get(ctx, id, pg, opts...)
+		} else {
+			bklog.G(ctx).Warnf(
+				"LOADREF-RECOVER-NOGETTER id=%s missingDigests=%v (no CacheOptGetter in ctx)",
+				id, []digest.Digest(needsRemoteProviders),
+			)
 		}
 	}
 	if err != nil {
