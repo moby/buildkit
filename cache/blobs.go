@@ -100,7 +100,11 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, nil
 				}
 				if !createIfNeeded {
-					return nil, errors.WithStack(ErrNoBlobs)
+					bklog.G(ctx).Warnf(
+						"computeBlobChain: ErrNoBlobs (createIfNeeded=false) ref=%s kind=%s blobOnly=%t snapshotID=%s compression=%s",
+						sr.ID(), sr.kind(), sr.getBlobOnly(), sr.getSnapshotID(), comp.Type,
+					)
+					return nil, errors.Wrapf(ErrNoBlobs, "ref %s (kind=%s, snapshotID=%s, blobOnly=%t)", sr.ID(), sr.kind(), sr.getSnapshotID(), sr.getBlobOnly())
 				}
 
 				l, ctx, err := leaseutil.NewLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
