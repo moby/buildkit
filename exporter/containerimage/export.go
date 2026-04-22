@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -371,7 +372,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 						eg.Go(func() error {
 							remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 							if err != nil {
-								return err
+								if errors.Is(err, cache.ErrNoBlobs) {
+									bklog.G(ctx).Warnf("imageExporter unlazy: ErrNoBlobs for top-level ref=%s", ref.ID())
+								}
+								return errors.Wrapf(err, "imageExporter unlazy: top-level ref %s", ref.ID())
 							}
 							remote := remotes[0]
 							if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
@@ -436,7 +440,10 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	for _, ref := range refs {
 		remotes, err := ref.GetRemotes(ctx, false, e.opts.RefCfg, false, session.NewGroup(sessionID))
 		if err != nil {
-			return err
+			if errors.Is(err, cache.ErrNoBlobs) {
+				bklog.G(ctx).Warnf("pushImage: ErrNoBlobs for top-level ref=%s targetName=%s", ref.ID(), targetName)
+			}
+			return errors.Wrapf(err, "pushImage: top-level ref %s", ref.ID())
 		}
 		remote := remotes[0]
 		for _, desc := range remote.Descriptors {

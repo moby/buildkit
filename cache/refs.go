@@ -267,6 +267,21 @@ const (
 	Diff
 )
 
+func (k refKind) String() string {
+	switch k {
+	case BaseLayer:
+		return "BaseLayer"
+	case Layer:
+		return "Layer"
+	case Merge:
+		return "Merge"
+	case Diff:
+		return "Diff"
+	default:
+		return fmt.Sprintf("refKind(%d)", int(k))
+	}
+}
+
 func (cr *cacheRecord) kind() refKind {
 	if len(cr.mergeParents) > 0 {
 		return Merge

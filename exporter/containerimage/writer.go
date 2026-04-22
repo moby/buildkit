@@ -380,7 +380,10 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 			eg.Go(func() error {
 				remotes, err := ref.GetRemotes(ctx, createIfNeeded, refCfg, false, s)
 				if err != nil {
-					return err
+					if errors.Is(err, cache.ErrNoBlobs) {
+						bklog.G(ctx).Warnf("exportLayers: ErrNoBlobs for top-level ref=%s eagerExport=%q createIfNeeded=%t", ref.ID(), eagerExport, createIfNeeded)
+					}
+					return errors.Wrapf(err, "exportLayers: top-level ref %s", ref.ID())
 				}
 				remote := remotes[0]
 				out[i] = *remote
