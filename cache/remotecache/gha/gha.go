@@ -173,6 +173,10 @@ func (*exporter) Name() string {
 	return "exporting to GitHub Actions Cache"
 }
 
+func (*exporter) Type() string {
+	return remotecache.ExporterGithubActions
+}
+
 func (ce *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),

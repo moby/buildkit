@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, j *solver.Job, usage *resources.SysSampler) (func(context.Context, *Result, []exporter.DescriptorReference, error) error, error) {
+func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend.SolveRequest, exps []Exporter, j *solver.Job, usage *resources.SysSampler) (func(context.Context, *Result, []exporter.DescriptorReference, error) error, error) {
 	stopTrace, err := detect.Recorder.Record(ctx)
 	if err != nil {
 		return nil, errdefs.Internal(err)
@@ -39,7 +39,7 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 		CreatedAt:     timestamppb.Now(),
 	}
 
-	for _, e := range exp.Exporters {
+	for _, e := range exps {
 		rec.Exporters = append(rec.Exporters, &controlapi.Exporter{
 			Type:  e.Type(),
 			Attrs: e.Attrs(),

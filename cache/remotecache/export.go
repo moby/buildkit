@@ -31,6 +31,8 @@ type Exporter interface {
 	solver.CacheExporterTarget
 	// Name uniquely identifies the exporter
 	Name() string
+	// Type identifies the exporter's type
+	Type() string
 	// Finalize finalizes and return metadata that are returned to the client
 	// e.g. ExporterResponseManifestDesc
 	Finalize(ctx context.Context) (map[string]string, error)
@@ -55,6 +57,15 @@ const (
 	ImageManifest
 )
 
+const (
+	ExporterRegistry      = "registry"
+	ExporterGithubActions = "gha"
+	ExporterS3            = "s3"
+	ExporterAzureBlob     = "azblob"
+	ExporterLocal         = "local"
+	ExporterInline        = "inline"
+)
+
 func (data CacheType) String() string {
 	switch data {
 	case ManifestList:
@@ -66,9 +77,9 @@ func (data CacheType) String() string {
 	}
 }
 
-func NewExporter(ingester content.Ingester, ref string, oci bool, imageManifest bool, compressionConfig compression.Config) Exporter {
+func NewExporter(ingester content.Ingester, ref string, oci bool, imageManifest bool, compressionConfig compression.Config, typ string) Exporter {
 	cc := v1.NewCacheChains()
-	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, imageManifest: imageManifest, ref: ref, comp: compressionConfig}
+	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, imageManifest: imageManifest, ref: ref, comp: compressionConfig, typ: typ}
 }
 
 type ExportableCache struct {
@@ -170,10 +181,15 @@ type contentCacheExporter struct {
 	imageManifest bool
 	ref           string
 	comp          compression.Config
+	typ           string
 }
 
 func (ce *contentCacheExporter) Name() string {
 	return "exporting content cache"
+}
+
+func (ce *contentCacheExporter) Type() string {
+	return ce.typ
 }
 
 func (ce *contentCacheExporter) Config() Config {

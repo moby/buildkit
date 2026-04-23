@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -60,10 +59,9 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &imageExporterInstance{
 		imageExporter: e,
-		id:            id,
 		attrs:         opt,
 		tar:           true,
 		opts: containerimage.ImageCommitOpts{
@@ -103,16 +101,11 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 
 type imageExporterInstance struct {
 	*imageExporter
-	id    int
 	attrs map[string]string
 
 	opts containerimage.ImageCommitOpts
 	tar  bool
 	meta map[string][]byte
-}
-
-func (e *imageExporterInstance) ID() int {
-	return e.id
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -260,7 +253,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := filesync.CopyFileWriter(ctx, resp, e.id, caller)
+		w, err := buildInfo.IO.CopyFileWriter(ctx, resp, caller)
 		if err != nil {
 			return nil, nil, nil, err
 		}

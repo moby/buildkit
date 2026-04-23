@@ -64,6 +64,10 @@ func (ce *exporter) Name() string {
 	return "exporting cache to Azure Blob Storage"
 }
 
+func (ce *exporter) Type() string {
+	return remotecache.ExporterAzureBlob
+}
+
 func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	config, descs, err := ce.chains.Marshal(ctx)
 	if err != nil {

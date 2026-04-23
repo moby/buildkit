@@ -228,6 +228,10 @@ func (*exporter) Name() string {
 	return "exporting cache to Amazon S3"
 }
 
+func (*exporter) Type() string {
+	return remotecache.ExporterS3
+}
+
 func (e *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),

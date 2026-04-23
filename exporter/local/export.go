@@ -13,7 +13,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -36,9 +35,8 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &localExporterInstance{
-		id:            id,
 		attrs:         opt,
 		localExporter: e,
 	}
@@ -52,14 +50,9 @@ func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 
 type localExporterInstance struct {
 	*localExporter
-	id    int
 	attrs map[string]string
 
 	opts CreateFSOpts
-}
-
-func (e *localExporterInstance) ID() int {
-	return e.id
 }
 
 func (e *localExporterInstance) Name() string {
@@ -162,7 +155,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			}
 
 			progress := NewProgressHandler(ctx, lbl)
-			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
+			if err := buildInfo.IO.CopyToCaller(ctx, outputFS, caller, progress); err != nil {
 				return err
 			}
 			return nil

@@ -2,12 +2,15 @@ package exporter
 
 import (
 	"context"
+	"io"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/compression"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/tonistiigi/fsutil"
 )
 
 type Source = result.Result[cache.ImmutableRef]
@@ -15,7 +18,7 @@ type Source = result.Result[cache.ImmutableRef]
 type Attestation = result.Attestation[cache.ImmutableRef]
 
 type Exporter interface {
-	Resolve(context.Context, int, map[string]string) (ExporterInstance, error)
+	Resolve(context.Context, map[string]string) (ExporterInstance, error)
 }
 
 // FinalizeFunc completes an export operation after all exports have created
@@ -29,7 +32,6 @@ type Exporter interface {
 type FinalizeFunc func(ctx context.Context) error
 
 type ExporterInstance interface {
-	ID() int
 	Name() string
 	Config() *Config
 	Type() string
@@ -53,6 +55,13 @@ type ExportBuildInfo struct {
 	Ref         string
 	InlineCache exptypes.InlineCache
 	SessionID   string
+	IO          ExporterIO
+}
+
+// ExporterIO encapsulates the streaming APIs.
+type ExporterIO struct {
+	CopyFileWriter func(context.Context, map[string]string /*metadata*/, session.Caller) (io.WriteCloser, error)
+	CopyToCaller   func(context.Context, fsutil.FS, session.Caller, func(int, bool) /*progress*/) error
 }
 
 type DescriptorReference interface {

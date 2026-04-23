@@ -37,6 +37,10 @@ func (*exporter) Name() string {
 	return "exporting inline cache"
 }
 
+func (*exporter) Type() string {
+	return remotecache.ExporterInline
+}
+
 func (ce *exporter) Config() remotecache.Config {
 	return remotecache.Config{
 		Compression: compression.New(compression.Default),

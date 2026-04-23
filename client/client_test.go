@@ -178,6 +178,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testTarExporterSymlink,
 	testMultipleRegistryCacheImportExport,
 	testMultipleExporters,
+	testMultipleImageExporters,
+	testExporterResponses,
 	testSourceMap,
 	testSourceMapFromRef,
 	testLazyImagePush,
@@ -3011,7 +3013,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "foo", resp.Entries[1].Path)
 
 		exporterCalled = true
-		target.Add(filesync.WithFSSync(0, fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW})))
+		target.Add(filesync.WithFSSync("0", fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW})))
 		return []*exporter.ExporterRequest{
 			{
 				Type: ExporterOCI,
@@ -4238,6 +4240,157 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		}
 		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
 	}
+
+	require.Len(t, resp.ExporterResponses, len(exporters))
+	for i, exporterResp := range resp.ExporterResponses {
+		require.NotEmpty(t, exporterResp.Type, "exporter %d should have Type", i)
+		require.Equal(t, exporters[i].Type, exporterResp.Type,
+			"ExporterResponses[%d].Type should match Exports[%d].Type", i, i)
+	}
+}
+
+func testMultipleImageExporters(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Scratch().Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	ociTar := filepath.Join(destDir, "oci.tar")
+	ociOut, err := os.Create(ociTar)
+	require.NoError(t, err)
+	defer ociOut.Close()
+
+	dockerTar := filepath.Join(destDir, "docker.tar")
+	dockerOut, err := os.Create(dockerTar)
+	require.NoError(t, err)
+	defer dockerOut.Close()
+
+	exporters := []ExportEntry{
+		{
+			Type: ExporterOCI,
+			Attrs: map[string]string{
+				"dest": ociTar,
+			},
+			Output: fixedWriteCloser(ociOut),
+		},
+		{
+			Type: ExporterDocker,
+			Attrs: map[string]string{
+				"dest": dockerTar,
+			},
+			Output: fixedWriteCloser(dockerOut),
+		},
+	}
+
+	ref := identity.NewID()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Ref:     ref,
+		Exports: exporters,
+	}, nil)
+	require.NoError(t, err)
+
+	require.FileExists(t, filepath.Join(destDir, "oci.tar"))
+	require.FileExists(t, filepath.Join(destDir, "docker.tar"))
+
+	ociConfig := extractImageConfig(t, ociTar)
+	dockerConfig := extractImageConfig(t, dockerTar)
+	// Validate that the image configurtion is not empty
+	require.NotEmpty(t, ociConfig.Architecture, "architecture is missing")
+	require.NotEmpty(t, dockerConfig.Architecture, "architecture is missing")
+}
+
+func extractImageConfig(t *testing.T, path string) ocispecs.Image {
+	t.Helper()
+
+	dt, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.NotEmpty(t, index.Manifests, "index is missing platform manifests")
+
+	var manifest ocispecs.Manifest
+	err = json.Unmarshal(m[filepath.Join("blobs", "sha256", index.Manifests[0].Digest.Encoded())].Data, &manifest)
+	require.NoError(t, err)
+
+	var config ocispecs.Image
+	err = json.Unmarshal(m[filepath.Join("blobs", "sha256", manifest.Config.Digest.Encoded())].Data, &config)
+	require.NoError(t, err)
+
+	return config
+}
+
+func testExporterResponses(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Scratch().File(llb.Mkfile("foo.txt", 0o755, nil)).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	ociTar := filepath.Join(destDir, "oci.tar")
+	dockerTar := filepath.Join(destDir, "docker.tar")
+	localDir := filepath.Join(destDir, "local")
+
+	ociOut, err := os.Create(ociTar)
+	require.NoError(t, err)
+	defer ociOut.Close()
+	dockerOut, err := os.Create(dockerTar)
+	require.NoError(t, err)
+	defer dockerOut.Close()
+
+	exporters := []ExportEntry{
+		{
+			Type:   ExporterOCI,
+			Attrs:  map[string]string{"dest": ociTar},
+			Output: fixedWriteCloser(ociOut),
+		},
+		{
+			Type:   ExporterDocker,
+			Attrs:  map[string]string{"dest": dockerTar},
+			Output: fixedWriteCloser(dockerOut),
+		},
+		{
+			Type:      ExporterLocal,
+			OutputDir: localDir,
+		},
+		{
+			Type:  ExporterImage,
+			Attrs: map[string]string{"name": "test:0.0.1"},
+		},
+	}
+
+	// exercise
+	resp, err := c.Solve(sb.Context(), def, SolveOpt{
+		Exports: exporters,
+	}, nil)
+	require.NoError(t, err)
+
+	// verify
+	require.Len(t, resp.ExporterResponses, 4)
+	require.Equal(t, ExporterOCI, resp.ExporterResponses[0].Type)
+	require.Equal(t, ExporterDocker, resp.ExporterResponses[1].Type)
+	require.Equal(t, ExporterLocal, resp.ExporterResponses[2].Type)
+	require.Equal(t, ExporterImage, resp.ExporterResponses[3].Type)
+
+	require.Contains(t, resp.ExporterResponses[0].Data, exptypes.ExporterImageDescriptorKey, "expected descriptor in OCI export response")
+	require.Contains(t, resp.ExporterResponses[0].Data, exptypes.ExporterImageDigestKey, "expected descriptor in OCI export response")
+	require.Contains(t, resp.ExporterResponses[3].Data, exptypes.ExporterImageNameKey, "expected image name in image export response")
+	require.NotContains(t, resp.ExporterResponses[2].Data, exptypes.ExporterImageDigestKey, "did not expect image-specific data in local export response")
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
@@ -11653,25 +11806,25 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 		},
 		CacheExports: []CacheOptionsEntry{
 			{
-				Type: "local",
+				Type: CacheExporterLocal,
 				Attrs: map[string]string{
 					"dest": cacheOutDir,
 				},
 			},
 			{
-				Type: "local",
+				Type: CacheExporterLocal,
 				Attrs: map[string]string{
 					"dest": cacheOutDir2,
 				},
 			},
 			{
-				Type: "registry",
+				Type: CacheExporterRegistry,
 				Attrs: map[string]string{
 					"ref": cacheRef,
 				},
 			},
 			{
-				Type: "inline",
+				Type: CacheExporterInline,
 			},
 		},
 	}, nil)
@@ -11679,6 +11832,18 @@ func testMultipleCacheExports(t *testing.T, sb integration.Sandbox) {
 
 	ensureFile(t, filepath.Join(cacheOutDir, ocispecs.ImageIndexFile))
 	ensureFile(t, filepath.Join(cacheOutDir2, ocispecs.ImageIndexFile))
+
+	require.NotEmpty(t, res.CacheExporterResponses, "should have cache exporter responses")
+	contentCacheResponses := 0
+	for i, cacheResp := range res.CacheExporterResponses {
+		require.NotEmpty(t, cacheResp.Type, "cache exporter %d should have Type", i)
+		require.NotNil(t, cacheResp.Data, "cache exporter %d should have Data", i)
+		if _, ok := cacheResp.Data[exporterResponseManifestDesc]; ok {
+			contentCacheResponses++
+		}
+	}
+	// 2 local + 1 registry
+	require.Equal(t, 3, contentCacheResponses, "should have 3 responses from content cache exporters")
 
 	dgst := res.ExporterResponse[exptypes.ExporterImageDigestKey]
 
