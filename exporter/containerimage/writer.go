@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/labels"
+	"github.com/containerd/continuity/fs"
 	"github.com/containerd/platforms"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/cache"
@@ -680,6 +683,87 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 	}, nil
 }
 
+// CommitAttestationsForDescriptor wraps an existing artifact/image manifest
+// descriptor in an OCI index alongside its attestation manifest.
+func (ic *ImageWriter) CommitAttestationsForDescriptor(ctx context.Context, opts *ImageCommitOpts, target ocispecs.Descriptor, sessionID string, attestations []exporter.Attestation, defaultSubjects []intoto.Subject, annotations *Annotations) (*ocispecs.Descriptor, error) {
+	if len(attestations) == 0 {
+		return &target, nil
+	}
+	if annotations == nil {
+		annotations = &Annotations{}
+	}
+
+	opts.EnableOCITypes(ctx, "attestations")
+
+	attestations, err := attestation.Unbundle(ctx, session.NewGroup(sessionID), attestations)
+	if err != nil {
+		return nil, err
+	}
+
+	stmts, err := attestation.MakeInTotoStatements(ctx, session.NewGroup(sessionID), attestations, defaultSubjects)
+	if err != nil {
+		return nil, err
+	}
+
+	attestationDesc, err := ic.commitAttestationsManifest(ctx, opts, target, stmts, true)
+	if err != nil {
+		return nil, err
+	}
+	attestationDesc.Platform = &intotoPlatform
+
+	indexTarget := target
+	if len(target.Annotations) > 0 {
+		indexTarget.Annotations = maps.Clone(target.Annotations)
+		delete(indexTarget.Annotations, exptypes.ExporterConfigDigestKey)
+		if len(indexTarget.Annotations) == 0 {
+			indexTarget.Annotations = nil
+		}
+	}
+
+	idx := ocispecs.Index{
+		MediaType:   ocispecs.MediaTypeImageIndex,
+		Annotations: maps.Clone(annotations.Index),
+		Versioned: specs.Versioned{
+			SchemaVersion: 2,
+		},
+		Manifests: []ocispecs.Descriptor{
+			indexTarget,
+			*attestationDesc,
+		},
+	}
+	idxLabels := map[string]string{
+		"containerd.io/gc.ref.content.0": target.Digest.String(),
+		"containerd.io/gc.ref.content.1": attestationDesc.Digest.String(),
+	}
+
+	idxBytes, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal artifact attestation index")
+	}
+
+	idxDigest := digest.FromBytes(idxBytes)
+	idxDesc := ocispecs.Descriptor{
+		Digest:      idxDigest,
+		Size:        int64(len(idxBytes)),
+		MediaType:   idx.MediaType,
+		Annotations: maps.Clone(annotations.IndexDescriptor),
+	}
+	if v, ok := target.Annotations[exptypes.ExporterConfigDigestKey]; ok {
+		if idxDesc.Annotations == nil {
+			idxDesc.Annotations = map[string]string{}
+		}
+		idxDesc.Annotations[exptypes.ExporterConfigDigestKey] = v
+	}
+
+	done := progress.OneOff(ctx, "exporting attestation index "+idxDigest.String())
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(idxLabels)); err != nil {
+		return nil, done(errors.Wrapf(err, "error writing attestation index blob %s", idxDigest))
+	}
+	done(nil)
+
+	return &idxDesc, nil
+}
+
 func (ic *ImageWriter) ContentStore() content.Store {
 	return ic.opt.ContentStore
 }
@@ -969,4 +1053,186 @@ func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
 		meta.createdAt = &createdAt
 	}
 	return metas
+}
+
+// CommitOCILayout reads an OCI image layout from the given ref's filesystem,
+// ingests all blobs (config, layers, manifest) into the content store, and
+// returns the manifest descriptor. If annotations is non-nil, manifest and
+// manifest-descriptor annotations are applied before ingestion.
+func (ic *ImageWriter) CommitOCILayout(ctx context.Context, ref cache.ImmutableRef, sessionID string, annotations *Annotations) (*ocispecs.Descriptor, error) {
+	if ref == nil {
+		return nil, errors.New("cannot commit OCI layout: ref is nil")
+	}
+
+	// Mount the ref to get filesystem access
+	mount, err := ref.Mount(ctx, true, session.NewGroup(sessionID))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to mount ref for OCI layout")
+	}
+	lm := snapshot.LocalMounter(mount)
+	rootDir, err := lm.Mount()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to locally mount ref for OCI layout")
+	}
+	defer lm.Unmount()
+
+	// Helper to read a small file safely from the mounted root
+	readFileFromRoot := func(p string) ([]byte, error) {
+		fp, err := fs.RootPath(rootDir, p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to resolve path %s", p)
+		}
+		return os.ReadFile(fp)
+	}
+
+	// Helper to open a file safely from the mounted root for streaming
+	openFileFromRoot := func(p string) (*os.File, error) {
+		fp, err := fs.RootPath(rootDir, p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to resolve path %s", p)
+		}
+		return os.Open(fp)
+	}
+	blobPath := func(d digest.Digest) string {
+		return ocispecs.ImageBlobsDir + "/" + d.Algorithm().String() + "/" + d.Encoded()
+	}
+
+	cs := ic.opt.ContentStore
+
+	// 1. Read and validate oci-layout file
+	layoutData, err := readFileFromRoot(ocispecs.ImageLayoutFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read oci-layout file")
+	}
+	var layout ocispecs.ImageLayout
+	if err := json.Unmarshal(layoutData, &layout); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal oci-layout")
+	}
+	if layout.Version != ocispecs.ImageLayoutVersion {
+		return nil, errors.Errorf("unsupported OCI image layout version: %s", layout.Version)
+	}
+
+	// 2. Read index.json
+	indexData, err := readFileFromRoot(ocispecs.ImageIndexFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read index.json")
+	}
+	var idx ocispecs.Index
+	if err := json.Unmarshal(indexData, &idx); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal index.json")
+	}
+
+	// 3. Validate: must have exactly 1 manifest
+	if len(idx.Manifests) != 1 {
+		return nil, errors.Errorf("OCI layout index.json must contain exactly 1 manifest, got %d", len(idx.Manifests))
+	}
+	mfstDesc := idx.Manifests[0]
+	if mfstDesc.MediaType == "" {
+		return nil, errors.New("OCI layout manifest descriptor mediaType is required")
+	}
+
+	// 4. Read the manifest blob
+	mfstData, err := readFileFromRoot(blobPath(mfstDesc.Digest))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read manifest blob %s", mfstDesc.Digest)
+	}
+	var mfst ocispecs.Manifest
+	if err := json.Unmarshal(mfstData, &mfst); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal manifest")
+	}
+	if mfst.Config.MediaType == "" {
+		return nil, errors.New("OCI layout config descriptor mediaType is required")
+	}
+	for i, layer := range mfst.Layers {
+		if layer.MediaType == "" {
+			return nil, errors.Errorf("OCI layout layer %d descriptor mediaType is required", i)
+		}
+	}
+	switch {
+	case mfstDesc.ArtifactType == "":
+		mfstDesc.ArtifactType = mfst.ArtifactType
+	case mfst.ArtifactType != "" && mfstDesc.ArtifactType != mfst.ArtifactType:
+		return nil, errors.New("OCI layout manifest descriptor artifactType does not match manifest artifactType")
+	}
+
+	// Apply user-requested manifest annotations. This changes the manifest
+	// content, so we must re-serialize and recompute the digest/size.
+	if annotations != nil && len(annotations.Manifest) > 0 {
+		if mfst.Annotations == nil {
+			mfst.Annotations = make(map[string]string)
+		}
+		for k, v := range annotations.Manifest {
+			mfst.Annotations[k] = v
+		}
+		mfstData, err = json.Marshal(mfst)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to re-marshal manifest with annotations")
+		}
+		mfstDesc.Digest = digest.FromBytes(mfstData)
+		mfstDesc.Size = int64(len(mfstData))
+	}
+
+	if annotations != nil && len(annotations.ManifestDescriptor) > 0 {
+		if mfstDesc.Annotations == nil {
+			mfstDesc.Annotations = make(map[string]string)
+		}
+		for k, v := range annotations.ManifestDescriptor {
+			mfstDesc.Annotations[k] = v
+		}
+	}
+
+	// 5. Ingest config blob
+	configData, err := readFileFromRoot(blobPath(mfst.Config.Digest))
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read config blob %s", mfst.Config.Digest)
+	}
+	configDone := progress.OneOff(ctx, "ingesting OCI layout config "+mfst.Config.Digest.String())
+	if err := content.WriteBlob(ctx, cs, mfst.Config.Digest.String(), bytes.NewReader(configData), mfst.Config); err != nil {
+		return nil, configDone(errors.Wrapf(err, "failed to ingest config blob %s", mfst.Config.Digest))
+	}
+	configDone(nil)
+
+	// 6. Ingest layer blobs — stream from mounted files to avoid buffering
+	//    large artifacts (e.g. multi-GB model files) entirely in memory.
+	for i, layer := range mfst.Layers {
+		layerFile, err := openFileFromRoot(blobPath(layer.Digest))
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to open layer blob %s", layer.Digest)
+		}
+		layerDone := progress.OneOff(ctx, fmt.Sprintf("ingesting OCI layout layer %d/%d %s", i+1, len(mfst.Layers), layer.Digest.String()))
+		err = content.WriteBlob(ctx, cs, layer.Digest.String(), layerFile, layer)
+		layerFile.Close()
+		if err != nil {
+			return nil, layerDone(errors.Wrapf(err, "failed to ingest layer blob %s", layer.Digest))
+		}
+		layerDone(nil)
+	}
+
+	// 7. Ingest manifest blob with GC reference labels
+	gcLabels := map[string]string{
+		"containerd.io/gc.ref.content.config": mfst.Config.Digest.String(),
+	}
+	for i, l := range mfst.Layers {
+		gcLabels[fmt.Sprintf("containerd.io/gc.ref.content.l.%d", i)] = l.Digest.String()
+	}
+
+	mfstBlobDesc := ocispecs.Descriptor{
+		Digest:    mfstDesc.Digest,
+		Size:      int64(len(mfstData)),
+		MediaType: mfstDesc.MediaType,
+	}
+	mfstDone := progress.OneOff(ctx, "ingesting OCI layout manifest "+mfstDesc.Digest.String())
+	if err := content.WriteBlob(ctx, cs, mfstDesc.Digest.String(), bytes.NewReader(mfstData), mfstBlobDesc, content.WithLabels(gcLabels)); err != nil {
+		return nil, mfstDone(errors.Wrapf(err, "failed to ingest manifest blob %s", mfstDesc.Digest))
+	}
+	mfstDone(nil)
+
+	if mfstDesc.Annotations == nil {
+		mfstDesc.Annotations = make(map[string]string)
+	}
+	mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = mfst.Config.Digest.String()
+
+	bklog.G(ctx).Debugf("committed OCI layout: manifest=%s config=%s layers=%d", mfstDesc.Digest, mfst.Config.Digest, len(mfst.Layers))
+
+	return &mfstDesc, nil
 }

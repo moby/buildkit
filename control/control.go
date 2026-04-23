@@ -516,6 +516,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache, resolveMode, params))
 	}
 
+	procs = append(procs, proc.ArtifactProcessor())
+
 	if attrs, ok := attests["provenance"]; ok {
 		var slsaVersion provenancetypes.ProvenanceSLSA
 		params := make(map[string]string)
