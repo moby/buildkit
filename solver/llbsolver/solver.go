@@ -660,7 +660,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// exporters. The manifest needs final blob digests from every layer.
 	if eager != nil {
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
-			return eager.wait()
+			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
+			err := eager.wait()
+			tracing.FinishWithError(span, err)
+			return err
 		}); err != nil {
 			return nil, errors.Wrap(err, "eager export pipeline failed")
 		}

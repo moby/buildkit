@@ -779,7 +779,7 @@ func (c *Controller) gc() {
 	}
 	<-done
 	if size > 0 {
-		bklog.G(ctx).Debugf("gc cleaned up %d bytes", size)
+		bklog.G(ctx).Infof("gc cleaned up %d bytes", size)
 		go c.throttledReleaseUnreferenced()
 	}
 }
