@@ -2492,6 +2492,12 @@ the `WORKDIR` may likely be set by the base image you're using.
 
 Therefore, to avoid unintended operations in unknown directories, it's best practice to set your `WORKDIR` explicitly.
 
+`WORKDIR` pivots the working directory that subsequent instructions run in;
+it doesn't execute `cd(1)` inside a shell, so the shell-only variables that
+`cd(1)` maintains are not set or updated. In particular, `$OLDPWD` is not
+set by `WORKDIR`, and `$PWD` is set by the shell from the process's current
+working directory rather than by `WORKDIR` itself.
+
 ## ARG
 
 ```dockerfile
