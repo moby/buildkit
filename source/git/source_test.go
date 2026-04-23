@@ -2804,6 +2804,40 @@ func TestBundleStagedRefShape(t *testing.T) {
 	require.Equal(t, headSha, md.Checksum)
 }
 
+func TestDetectBundleSHA256(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on git bundle support exercised via shell helpers")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(context.Background(), t)
+
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			repo := setupGitRepo(t, format)
+			bundlePath := filepath.Join(t.TempDir(), "bundle.pack")
+			runShell(t, repo.mainPath, "git bundle create "+bundlePath+" refs/heads/master")
+
+			sha256, err := detectBundleSHA256(ctx, bundlePath)
+			require.NoError(t, err)
+			require.Equal(t, format == "sha256", sha256)
+
+			stagedRepoDir := filepath.Join(t.TempDir(), "repo.git")
+			require.NoError(t, os.MkdirAll(stagedRepoDir, 0700))
+
+			initArgs := "git -c init.defaultBranch=master init --bare"
+			if sha256 {
+				initArgs += " --object-format=sha256"
+			}
+			runShell(t, stagedRepoDir,
+				initArgs,
+				"git fetch "+bundlePath+" +refs/*:refs/*",
+				"git cat-file -e refs/heads/master^{commit}",
+			)
+		})
+	}
+}
+
 func TestCommitTimeMtimesSHA1(t *testing.T) {
 	testCommitTimeMtimes(t, "sha1", false)
 }

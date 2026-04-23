@@ -944,12 +944,6 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		}
 	}()
 
-	// In bundle mode, derive sha256-ness from the required git.checksum
-	// length. mountRemote uses this only when the bare repo is created fresh.
-	if gs.src.Bundle != "" && len(gs.src.Checksum) == 64 {
-		gs.sha256 = true
-	}
-
 	// Auth args only apply to non-bundle fetches. In bundle mode the
 	// payload comes from a blob fetch, so there is no http remote to
 	// authenticate against.
@@ -963,6 +957,17 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		return nil, err
 	}
 	repo.releasers = append(repo.releasers, cleanup)
+
+	// Bundle mode may need to create the shared bare repo before the main
+	// fetch. Stage the bundle first so stageBundle can probe the bundle's
+	// object format via ls-remote and set gs.sha256 for mountRemote.
+	stagedURL := ""
+	if gs.src.Bundle != "" {
+		stagedURL, err = gs.ensureStagedBundle(ctx, jobCtx, g)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, authArgs, gs.sha256, reset, g)
 	if err != nil {
@@ -1000,14 +1005,10 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		// repo (from a prior origin or bundle fetch), skip staging
 		// entirely. The doFetch check below will no-op the fetch.
 		if _, err := repo.Run(ctx, "cat-file", "-e", gs.src.Checksum+"^{commit}"); err != nil {
-			// Reuse the staged bundle if CacheKey already built one via
-			// resolveBundleMetadata. ensureStagedBundle owns the
+			// Reuse the staged bundle if CacheKey or the eager bundle-format
+			// probe above already built one. ensureStagedBundle owns the
 			// teardown (wired to jobCtx.Cleanup on first call), so the
 			// cleanup is intentionally not appended to repo.releasers.
-			stagedURL, err := gs.ensureStagedBundle(ctx, jobCtx, g)
-			if err != nil {
-				return nil, err
-			}
 			fetchSource = stagedURL
 		}
 	}

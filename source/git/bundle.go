@@ -67,6 +67,28 @@ func bundleTargetRef(ref string) string {
 	return "refs/heads/" + name
 }
 
+// detectBundleSHA256 probes a raw git bundle and returns whether it carries
+// sha256 object IDs. git ls-remote reads bundle files directly, so this works
+// before a destination repo exists and lets callers initialize the right object
+// format for a subsequent fetch/import.
+func detectBundleSHA256(ctx context.Context, bundlePath string) (bool, error) {
+	buf, err := gitCLI().Run(ctx, "ls-remote", "--", bundlePath)
+	if err != nil {
+		return false, errors.Wrapf(err, "failed to inspect git bundle %s", bundlePath)
+	}
+	for line := range strings.SplitSeq(string(buf), "\n") {
+		if line == "" {
+			continue
+		}
+		sha, _, _ := strings.Cut(line, "\t")
+		if !gitutil.IsCommitSHA(sha) {
+			return false, errors.Errorf("failed to inspect git bundle %s: invalid object ID %q", bundlePath, sha)
+		}
+		return len(sha) == 64, nil
+	}
+	return false, errors.Errorf("failed to inspect git bundle %s: no refs found", bundlePath)
+}
+
 // stageBundle downloads the bundle blob into an isolated temp bare repo,
 // imports it, and validates that the pinned commit is present. The returned
 // URL (file://<tmpRepoDir>) is suitable for use as a git fetch source (for
@@ -97,6 +119,11 @@ func (gs *gitSourceHandler) stageBundle(ctx context.Context, g session.Group) (_
 		return "", nil, err
 	}
 	bundlePath := filepath.Join(tmpDir, bundleImportFileName)
+	sha256, err := detectBundleSHA256(ctx, bundlePath)
+	if err != nil {
+		return "", nil, err
+	}
+	gs.sha256 = sha256
 
 	// Initialize an isolated bare repo in the temp dir and import the
 	// bundle there. This lets us validate the bundle and stage the refs
@@ -107,7 +134,7 @@ func (gs *gitSourceHandler) stageBundle(ctx context.Context, g session.Group) (_
 	}
 	tmpGit := gitCLI(gitutil.WithGitDir(tmpRepoDir))
 	initArgs := []string{"-c", "init.defaultBranch=master", "init", "--bare"}
-	if gs.sha256 {
+	if sha256 {
 		initArgs = append(initArgs, "--object-format=sha256")
 	}
 	if _, err := tmpGit.Run(ctx, initArgs...); err != nil {
