@@ -216,7 +216,7 @@ jobs:
       -
         name: Scout
         id: scout
-        uses: crazy-max/.github/.github/actions/docker-scout@4a17dbaa9ce13920fc5bb8824eb89c16301e5ab2 # v1.7.0
+        uses: crazy-max/.github/.github/actions/docker-scout@64a0bfaf6e6bb1c448d6e4c42b11034ee7094f16 # v1.7.1
         with:
           version: ${{ env.SCOUT_VERSION }}
           format: sarif
