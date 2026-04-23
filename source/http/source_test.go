@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -596,6 +597,10 @@ func (s *simpleJobContext) Release() error {
 }
 
 func (s *simpleJobContext) ResolverCache() solver.ResolverCache {
+	return nil
+}
+
+func (s *simpleJobContext) LinuxResources() *pb.LinuxResources {
 	return nil
 }
 

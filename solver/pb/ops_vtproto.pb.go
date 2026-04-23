@@ -495,6 +495,7 @@ func (m *OpMetadata) CloneVT() *OpMetadata {
 	r.IgnoreCache = m.IgnoreCache
 	r.ExportCache = m.ExportCache.CloneVT()
 	r.ProgressGroup = m.ProgressGroup.CloneVT()
+	r.LinuxResources = m.LinuxResources.CloneVT()
 	if rhs := m.Description; rhs != nil {
 		tmpContainer := make(map[string]string, len(rhs))
 		for k, v := range rhs {
@@ -690,6 +691,29 @@ func (m *ProgressGroup) CloneVT() *ProgressGroup {
 }
 
 func (m *ProgressGroup) CloneMessageVT() proto.Message {
+	return m.CloneVT()
+}
+
+func (m *LinuxResources) CloneVT() *LinuxResources {
+	if m == nil {
+		return (*LinuxResources)(nil)
+	}
+	r := new(LinuxResources)
+	r.Memory = m.Memory
+	r.MemorySwap = m.MemorySwap
+	r.CpuShares = m.CpuShares
+	r.CpuPeriod = m.CpuPeriod
+	r.CpuQuota = m.CpuQuota
+	r.CpusetCpus = m.CpusetCpus
+	r.CpusetMems = m.CpusetMems
+	if len(m.unknownFields) > 0 {
+		r.unknownFields = make([]byte, len(m.unknownFields))
+		copy(r.unknownFields, m.unknownFields)
+	}
+	return r
+}
+
+func (m *LinuxResources) CloneMessageVT() proto.Message {
 	return m.CloneVT()
 }
 
@@ -1973,6 +1997,9 @@ func (this *OpMetadata) EqualVT(that *OpMetadata) bool {
 	if !this.ProgressGroup.EqualVT(that.ProgressGroup) {
 		return false
 	}
+	if !this.LinuxResources.EqualVT(that.LinuxResources) {
+		return false
+	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
 
@@ -2216,6 +2243,43 @@ func (this *ProgressGroup) EqualVT(that *ProgressGroup) bool {
 
 func (this *ProgressGroup) EqualMessageVT(thatMsg proto.Message) bool {
 	that, ok := thatMsg.(*ProgressGroup)
+	if !ok {
+		return false
+	}
+	return this.EqualVT(that)
+}
+func (this *LinuxResources) EqualVT(that *LinuxResources) bool {
+	if this == that {
+		return true
+	} else if this == nil || that == nil {
+		return false
+	}
+	if this.Memory != that.Memory {
+		return false
+	}
+	if this.MemorySwap != that.MemorySwap {
+		return false
+	}
+	if this.CpuShares != that.CpuShares {
+		return false
+	}
+	if this.CpuPeriod != that.CpuPeriod {
+		return false
+	}
+	if this.CpuQuota != that.CpuQuota {
+		return false
+	}
+	if this.CpusetCpus != that.CpusetCpus {
+		return false
+	}
+	if this.CpusetMems != that.CpusetMems {
+		return false
+	}
+	return string(this.unknownFields) == string(that.unknownFields)
+}
+
+func (this *LinuxResources) EqualMessageVT(thatMsg proto.Message) bool {
+	that, ok := thatMsg.(*LinuxResources)
 	if !ok {
 		return false
 	}
@@ -4270,6 +4334,16 @@ func (m *OpMetadata) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.LinuxResources != nil {
+		size, err := m.LinuxResources.MarshalToSizedBufferVT(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x3a
+	}
 	if m.ProgressGroup != nil {
 		size, err := m.ProgressGroup.MarshalToSizedBufferVT(dAtA[:i])
 		if err != nil {
@@ -4762,6 +4836,78 @@ func (m *ProgressGroup) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.Id)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *LinuxResources) MarshalVT() (dAtA []byte, err error) {
+	if m == nil {
+		return nil, nil
+	}
+	size := m.SizeVT()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBufferVT(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *LinuxResources) MarshalToVT(dAtA []byte) (int, error) {
+	size := m.SizeVT()
+	return m.MarshalToSizedBufferVT(dAtA[:size])
+}
+
+func (m *LinuxResources) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.unknownFields != nil {
+		i -= len(m.unknownFields)
+		copy(dAtA[i:], m.unknownFields)
+	}
+	if len(m.CpusetMems) > 0 {
+		i -= len(m.CpusetMems)
+		copy(dAtA[i:], m.CpusetMems)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.CpusetMems)))
+		i--
+		dAtA[i] = 0x3a
+	}
+	if len(m.CpusetCpus) > 0 {
+		i -= len(m.CpusetCpus)
+		copy(dAtA[i:], m.CpusetCpus)
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(len(m.CpusetCpus)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if m.CpuQuota != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CpuQuota))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.CpuPeriod != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CpuPeriod))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.CpuShares != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CpuShares))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.MemorySwap != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.MemorySwap))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Memory != 0 {
+		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.Memory))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -6565,6 +6711,10 @@ func (m *OpMetadata) SizeVT() (n int) {
 		l = m.ProgressGroup.SizeVT()
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
+	if m.LinuxResources != nil {
+		l = m.LinuxResources.SizeVT()
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
 	n += len(m.unknownFields)
 	return n
 }
@@ -6722,6 +6872,39 @@ func (m *ProgressGroup) SizeVT() (n int) {
 	}
 	if m.Weak {
 		n += 2
+	}
+	n += len(m.unknownFields)
+	return n
+}
+
+func (m *LinuxResources) SizeVT() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Memory != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.Memory))
+	}
+	if m.MemorySwap != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.MemorySwap))
+	}
+	if m.CpuShares != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.CpuShares))
+	}
+	if m.CpuPeriod != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.CpuPeriod))
+	}
+	if m.CpuQuota != 0 {
+		n += 1 + protohelpers.SizeOfVarint(uint64(m.CpuQuota))
+	}
+	l = len(m.CpusetCpus)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	l = len(m.CpusetMems)
+	if l > 0 {
+		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
 	}
 	n += len(m.unknownFields)
 	return n
@@ -10973,6 +11156,42 @@ func (m *OpMetadata) UnmarshalVT(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LinuxResources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LinuxResources == nil {
+				m.LinuxResources = &LinuxResources{}
+			}
+			if err := m.LinuxResources.UnmarshalVT(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
@@ -11979,6 +12198,216 @@ func (m *ProgressGroup) UnmarshalVT(dAtA []byte) error {
 				}
 			}
 			m.Weak = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := protohelpers.Skip(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.unknownFields = append(m.unknownFields, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *LinuxResources) UnmarshalVT(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return protohelpers.ErrIntOverflow
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LinuxResources: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LinuxResources: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Memory", wireType)
+			}
+			m.Memory = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Memory |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MemorySwap", wireType)
+			}
+			m.MemorySwap = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MemorySwap |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CpuShares", wireType)
+			}
+			m.CpuShares = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CpuShares |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CpuPeriod", wireType)
+			}
+			m.CpuPeriod = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CpuPeriod |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CpuQuota", wireType)
+			}
+			m.CpuQuota = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CpuQuota |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CpusetCpus", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CpusetCpus = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CpusetMems", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return protohelpers.ErrInvalidLength
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CpusetMems = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

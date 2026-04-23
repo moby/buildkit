@@ -456,6 +456,7 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		Ulimit:                    e.op.Meta.Ulimit,
 		CDIDevices:                e.op.CdiDevices,
 		CgroupParent:              e.op.Meta.CgroupParent,
+		LinuxResources:            jobCtx.LinuxResources(),
 		NetMode:                   e.op.Network,
 		SecurityMode:              e.op.Security,
 		RemoveMountStubsRecursive: e.op.Meta.RemoveMountStubsRecursive,
