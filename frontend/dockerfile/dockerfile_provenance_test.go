@@ -444,7 +444,8 @@ COPY myapp.Dockerfile /
 `)
 			dir := integration.Tmpdir(
 				t,
-				fstest.CreateFile("myapp.Dockerfile", dockerfile, 0600),
+				fstest.CreateDir("src", 0700),
+				fstest.CreateFile("src/myapp.Dockerfile", dockerfile, 0600),
 			)
 
 			initOptions := ""
@@ -455,7 +456,7 @@ COPY myapp.Dockerfile /
 				"git init"+initOptions,
 				"git config --local user.email test",
 				"git config --local user.name test",
-				"git add myapp.Dockerfile",
+				"git add src/myapp.Dockerfile",
 				"git commit -m initial",
 				"git branch v1",
 				"git update-server-info",
@@ -479,7 +480,7 @@ COPY myapp.Dockerfile /
 
 			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 				FrontendAttrs: map[string]string{
-					"context":           server.URL + "/.git#v1",
+					"context":           server.URL + "/.git#v1:src",
 					"attest:provenance": strings.Join(provArgs, ","),
 					"filename":          "myapp.Dockerfile",
 				},
@@ -532,7 +533,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 				} else {
 					require.NotEmpty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
-					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+					require.Equal(t, expectedURL+"/.git#v1:src", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 					require.Equal(t, "myapp.Dockerfile", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 				}
 
@@ -587,7 +588,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
 				} else {
 					require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
-					require.Equal(t, expectedURL+"/.git#v1", pred.Invocation.ConfigSource.URI)
+					require.Equal(t, expectedURL+"/.git#v1:src", pred.Invocation.ConfigSource.URI)
 					require.Equal(t, "myapp.Dockerfile", pred.Invocation.ConfigSource.EntryPoint)
 				}
 

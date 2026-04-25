@@ -112,11 +112,15 @@ func setPURLQualifier(uri string, q packageurl.Qualifier) (string, error) {
 }
 
 func findMaterial(srcs provenancetypes.Sources, uri string) (*slsa.ProvenanceMaterial, bool) {
-	uri, _ = dfgitutil.FragmentFormat(uri)
+	configURI := uri
+	if formatted, ok := dfgitutil.FragmentFormat(uri, true); ok {
+		configURI = formatted
+	}
+	uri, _ = dfgitutil.FragmentFormat(uri, false)
 	for _, s := range srcs.Git {
 		if s.URL == uri {
 			return &slsa.ProvenanceMaterial{
-				URI:    s.URL,
+				URI:    configURI,
 				Digest: digestSetForCommit(s.Commit),
 			}, true
 		}

@@ -3,6 +3,7 @@ package dfgitutil
 
 import (
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 
@@ -240,16 +241,23 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 	return nil
 }
 
-// FragmentFormat returns a simplified git URL in fragment format with only ref.
+// FragmentFormat returns a simplified git URL in fragment format.
 // If the URL cannot be parsed, the original string is returned with false.
-func FragmentFormat(remote string) (string, bool) {
+func FragmentFormat(remote string, withSubdir bool) (string, bool) {
 	gitRef, _, err := ParseGitRef(remote)
 	if err != nil || gitRef == nil {
 		return remote, false
 	}
 	u := gitRef.Remote
-	if gitRef.Ref != "" {
+	subdir := ""
+	if withSubdir {
+		subdir = strings.TrimPrefix(path.Join("/", gitRef.SubDir), "/")
+	}
+	if gitRef.Ref != "" || subdir != "" {
 		u += "#" + gitRef.Ref
+		if subdir != "" {
+			u += ":" + subdir
+		}
 	}
 	return u, true
 }

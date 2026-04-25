@@ -127,6 +127,7 @@ func TestFindMaterial(t *testing.T) {
 	srcs := provenancetypes.Sources{
 		Git: []provenancetypes.GitSource{
 			{URL: "https://github.com/moby/buildkit.git", Commit: "abc123def456abc123def456abc123def456abcd"},
+			{URL: "https://github.com/moby/buildkit.git#refs/heads/master", Commit: "def123def456abc123def456abc123def456abcd"},
 		},
 		HTTP: []provenancetypes.HTTPSource{
 			{URL: "https://example.com/file.tar.gz", Digest: digest.FromString("data")},
@@ -141,6 +142,56 @@ func TestFindMaterial(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "https://example.com/file.tar.gz", m.URI)
 
+	m, ok = findMaterial(srcs, "https://github.com/moby/buildkit.git?branch=master&subdir=src")
+	require.True(t, ok)
+	require.Equal(t, "https://github.com/moby/buildkit.git#refs/heads/master:src", m.URI)
+	require.Equal(t, "def123def456abc123def456abc123def456abcd", m.Digest["sha1"])
+
 	_, ok = findMaterial(srcs, "https://notfound.com")
 	require.False(t, ok)
+}
+
+func TestNewPredicateGitConfigSourceSubdir(t *testing.T) {
+	t.Parallel()
+
+	commit := "abc123def456abc123def456abc123def456abcd"
+	c := &Capture{
+		Frontend: "dockerfile.v0",
+		Args: map[string]string{
+			"context":  "https://github.com/moby/buildkit.git?branch=master&subdir=src",
+			"filename": "Dockerfile",
+		},
+		Sources: provenancetypes.Sources{
+			Git: []provenancetypes.GitSource{
+				{URL: "https://github.com/moby/buildkit.git#refs/heads/master", Commit: commit},
+			},
+		},
+	}
+
+	pr, err := NewPredicate(c)
+	require.NoError(t, err)
+
+	require.Equal(t, "https://github.com/moby/buildkit.git#refs/heads/master:src", pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Equal(t, commit, pr.BuildDefinition.ExternalParameters.ConfigSource.Digest["sha1"])
+	require.Equal(t, "Dockerfile", pr.BuildDefinition.ExternalParameters.ConfigSource.Path)
+	require.Equal(t, "https://github.com/moby/buildkit.git#refs/heads/master", pr.BuildDefinition.ResolvedDependencies[0].URI)
+	require.Equal(t, commit, pr.BuildDefinition.ResolvedDependencies[0].Digest["sha1"])
+}
+
+func TestNewPredicateKeepsContextSubdir(t *testing.T) {
+	t.Parallel()
+
+	c := &Capture{
+		Frontend: "dockerfile.v0",
+		Args: map[string]string{
+			"contextsubdir": "src",
+			"filename":      "Dockerfile",
+		},
+	}
+
+	pr, err := NewPredicate(c)
+	require.NoError(t, err)
+
+	require.Equal(t, "", pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Equal(t, "src", pr.BuildDefinition.ExternalParameters.Request.Args["contextsubdir"])
 }
