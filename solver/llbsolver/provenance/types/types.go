@@ -172,12 +172,12 @@ type ProvenanceMetadataSLSA1 struct {
 }
 
 type Parameters struct {
-	Frontend string            `json:"frontend,omitempty"`
-	Args     map[string]string `json:"args,omitempty"`
-	Secrets  []*Secret         `json:"secrets,omitempty"`
-	SSH      []*SSH            `json:"ssh,omitempty"`
-	Locals   []*LocalSource    `json:"locals,omitempty"`
-	// TODO: select export attributes
+	Frontend             string            `json:"frontend,omitempty"`
+	Args                 map[string]string `json:"args,omitempty"`
+	Secrets              []*Secret         `json:"secrets,omitempty"`
+	SSH                  []*SSH            `json:"ssh,omitempty"`
+	Locals               []*LocalSource    `json:"locals,omitempty"`
+	CompatibilityVersion int               `json:"compatibilityVersion,omitempty"`
 	// TODO: frontend inputs
 }
 

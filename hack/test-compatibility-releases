@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail
+
+: "${TEST_IMAGE_NAME:=buildkit-compatibility-tests}"
+: "${TESTPKGS:=./client}"
+: "${TESTFLAGS:=--run=^TestCompatibilityIntegration/Test(Image|OCI)ExporterCompatibilityVersion/worker=(oci|containerd)$ --count=1 -v}"
+: "${TEST_IMAGE_BUILD:=0}"
+
+export TEST_IMAGE_NAME TESTPKGS TESTFLAGS TEST_IMAGE_BUILD
+
+if [ -z "${COMPATIBILITY_RELEASES:-}" ]; then
+  COMPATIBILITY_RELEASES="
+v0.13.0:10
+v0.14.0:10
+v0.15.0:20
+v0.16.0:20
+v0.17.0:20
+v0.18.0:20
+v0.19.0:20
+v0.20.0:20
+v0.21.0:20
+v0.22.0:20
+v0.23.0:20
+v0.24.0:20
+v0.25.0:20
+v0.26.0:20
+v0.27.0:20
+v0.28.0:20
+v0.29.0:20
+"
+fi
+
+failures=0
+
+for entry in $COMPATIBILITY_RELEASES; do
+  release=${entry%:*}
+  expected=${entry#*:}
+  suffix=$(printf '%s' "$release" | tr -cd '[:alnum:]-')
+  bindir=".tmp/compat-bin/$release"
+
+  mkdir -p "$bindir"
+
+  echo "::group::compatibility $release"
+  docker pull "moby/buildkit:$release"
+  cid=$(docker create "moby/buildkit:$release")
+  trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+  docker cp "$cid:/usr/bin/buildkitd" "$bindir/buildkitd"
+  chmod +x "$bindir/buildkitd"
+  docker rm -f "$cid" >/dev/null
+  trap - EXIT
+
+  if ! TEST_REPORT_SUFFIX="-$suffix" \
+    BUILDKIT_TEST_EXPECTED_COMPATIBILITY_VERSION="$expected" \
+    TEST_BUILDKITD_BINARY="$PWD/$bindir/buildkitd" \
+    ./hack/test integration; then
+    failures=1
+  fi
+  echo "::endgroup::"
+done
+
+exit "$failures"

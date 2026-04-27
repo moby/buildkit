@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/compat"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
@@ -819,6 +820,14 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 		g = jobCtx.Session()
 	}
 	gs.getAuthToken(ctx, g)
+	compatibilityVersion := 0
+	if jobCtx != nil {
+		var err error
+		compatibilityVersion, err = jobCtx.CompatibilityVersion()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	snapshotKey := cacheKey + ":" + gs.src.Subdir
 	gs.locker.Lock(snapshotKey)
@@ -838,7 +847,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 	}
 	defer repo.Release()
 
-	ref, err := gs.checkout(ctx, repo, g)
+	ref, err := gs.checkout(ctx, repo, g, compatibilityVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -1015,7 +1024,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, g session.Group,
 	return repo, nil
 }
 
-func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g session.Group) (_ cache.ImmutableRef, retErr error) {
+func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g session.Group, compatibilityVersion int) (_ cache.ImmutableRef, retErr error) {
 	ref := gs.src.Ref
 	// refOrCommit is the identifier to use against the bare repo. For
 	// fetch-by-commit, the user-provided ref is not written into the bare
@@ -1190,6 +1199,12 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		}
 	}
 
+	if compatibilityVersion == compat.CompatibilityVersion013 {
+		if err := resetCompatibility014FileModes(checkoutDir); err != nil {
+			return nil, errors.Wrapf(err, "failed to normalize compatibility file modes for %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+	}
+
 	if gs.src.MTime == "commit" {
 		commitTime, err := getCommitTime(ctx, git, refOrCommit)
 		if err != nil {
@@ -1270,6 +1285,33 @@ func resetSnapshotMtimes(dir string, t time.Time) error {
 		}
 	}
 	return nil
+}
+
+// resetCompatibility014FileModes restores the pre-v0.15 git checkout file
+// mode for non-executable regular files, which were stored with group/other
+// write bits set before the exec-option propagation fix. Executable files are
+// left untouched: their pre-v0.15 behavior is not covered by the current
+// compatibility matrix, and blindly adding write bits to 0o755 would be a
+// guess.
+func resetCompatibility014FileModes(dir string) error {
+	return filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		mode := info.Mode()
+		if !mode.IsRegular() || mode&0o111 != 0 {
+			return nil
+		}
+		return os.Chmod(p, mode|0o222)
+	})
 }
 
 type wouldClobberExistingTagError struct {

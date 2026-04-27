@@ -188,11 +188,16 @@ func (s *Solver) runExporters(ctx context.Context, ref string, exporters []expor
 					defer inlineCacheMu.Unlock()
 					return runInlineCacheExporter(ctx, exp, inlineCacheExporter, job, cached)
 				})
+				compatibilityVersion, err := job.CompatibilityVersion()
+				if err != nil {
+					return err
+				}
 
 				resp, finalize, desc, expErr := exp.Export(ctx, inp, exporter.ExportBuildInfo{
-					Ref:         ref,
-					SessionID:   job.SessionID,
-					InlineCache: inlineCache,
+					Ref:                  ref,
+					SessionID:            job.SessionID,
+					InlineCache:          inlineCache,
+					CompatibilityVersion: compatibilityVersion,
 				})
 				resps[i], finalizeFuncs[i], descs[i] = resp, finalize, desc
 				if expErr != nil {

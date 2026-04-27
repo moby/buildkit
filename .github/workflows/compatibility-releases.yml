@@ -1,0 +1,67 @@
+name: compatibility-releases
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+      - 'v[0-9]+.[0-9]+'
+
+env:
+  SETUP_BUILDX_VERSION: "edge"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
+  TEST_IMAGE_NAME: "buildkit-compatibility-tests"
+  CACHE_SCOPE: "build-integration-tests"
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-24.04
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        with:
+          platforms: arm64
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        with:
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
+          buildkitd-flags: --debug
+      -
+        name: Build integration-tests-base
+        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # v7.0.0
+        with:
+          targets: integration-tests-base
+          set: |
+            *.cache-from=type=gha,scope=${{ env.CACHE_SCOPE }}
+            *.cache-to=type=gha,scope=${{ env.CACHE_SCOPE }},repository=${{ github.repository }},ghtoken=${{ github.token }}
+      -
+        name: Build test image
+        uses: docker/bake-action@82490499d2e5613fcead7e128237ef0b0ea210f7 # v7.0.0
+        with:
+          targets: integration-tests
+          set: |
+            *.cache-from=type=gha,scope=${{ env.CACHE_SCOPE }}
+      -
+        name: Test compatibility releases
+        env:
+          TEST_IMAGE_BUILD: "0"
+          TEST_IMAGE_NAME: ${{ env.TEST_IMAGE_NAME }}
+        run: |
+          ./hack/test-compatibility-releases

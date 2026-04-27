@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/compat"
 	"github.com/moby/buildkit/solver/llbsolver/history"
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
@@ -153,7 +154,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, compatibilityVersion int, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
 	hasNamedDockerfileContext := false
 	for k := range req.FrontendOpt {
 		if k == "context:dockerfile.v0" || strings.HasPrefix(k, "context:dockerfile.v0::") {
@@ -216,6 +217,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	if policySession != "" {
 		j.SetValue(keySourcePolicySession, policySession)
 	}
+	if compatibilityVersion == 0 {
+		compatibilityVersion = compat.CompatibilityVersionCurrent
+	}
+	j.SetValue(compat.JobValueKey, compatibilityVersion)
 
 	j.SessionID = sessionID
 

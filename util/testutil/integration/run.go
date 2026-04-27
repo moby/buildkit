@@ -473,8 +473,8 @@ func RunMirror() (_ *Mirror, err error) {
 		return nil, err
 	}
 	defer func() {
-		if err != nil {
-			lock.Unlock()
+		if err != nil && lock != nil {
+			_ = lock.Unlock()
 		}
 	}()
 
