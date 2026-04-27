@@ -75,7 +75,7 @@ require (
 	github.com/prometheus/procfs v0.17.0
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sigstore/sigstore-go v1.1.4
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.9.5-0.20260426203557-6878cb36b029
 	github.com/spdx/tools-golang v0.5.7
 	github.com/stretchr/testify v1.11.1
 	github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
