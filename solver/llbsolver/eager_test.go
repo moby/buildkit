@@ -45,6 +45,16 @@ func TestEagerWorkerCount_EnvNegative(t *testing.T) {
 	assert.Equal(t, max(defaultEagerWorkers, runtime.NumCPU()), eagerWorkerCount())
 }
 
+func TestEagerPushWorkerCount_Default(t *testing.T) {
+	os.Unsetenv("BUILDKIT_EAGER_PUSH_WORKERS")
+	assert.Equal(t, max(defaultEagerPushWorkers, runtime.NumCPU()), eagerPushWorkerCount())
+}
+
+func TestEagerPushWorkerCount_EnvOverride(t *testing.T) {
+	t.Setenv("BUILDKIT_EAGER_PUSH_WORKERS", "5")
+	assert.Equal(t, 5, eagerPushWorkerCount())
+}
+
 func TestNewEagerPipeline_PushRequiresConfig(t *testing.T) {
 	_, err := newEagerPipeline(context.Background(), EagerExportPush, compression.Config{}, "", nil, nil)
 	require.Error(t, err)
@@ -53,73 +63,86 @@ func TestNewEagerPipeline_PushRequiresConfig(t *testing.T) {
 
 func TestEagerPipeline_WaitReturnsFirstError(t *testing.T) {
 	ep := &eagerPipeline{
-		work: make(chan eagerWorkItem),
+		compressWork: make(chan eagerWorkItem),
 	}
 	ep.firstErr = assert.AnError
 
-	err := ep.wait()
+	err := ep.wait(nil)
 	assert.Equal(t, assert.AnError, err)
 }
 
 func TestEagerPipeline_WaitReturnsNilWhenNoError(t *testing.T) {
 	ep := &eagerPipeline{
-		work: make(chan eagerWorkItem),
+		compressWork: make(chan eagerWorkItem),
 	}
 
-	err := ep.wait()
+	err := ep.wait(nil)
 	assert.NoError(t, err)
 }
 
 func TestEagerPipeline_WaitDrainsLeftoverRefs(t *testing.T) {
 	var released atomic.Int32
 	ep := &eagerPipeline{
-		work: make(chan eagerWorkItem, 10),
+		compressWork: make(chan eagerWorkItem, 10),
 	}
 
-	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
-	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+	ep.compressWork <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+	ep.compressWork <- eagerWorkItem{ref: &releaseTracker{released: &released}}
 
-	err := ep.wait()
+	err := ep.wait(nil)
 	require.NoError(t, err)
 	assert.Equal(t, int32(2), released.Load(), "leftover refs should be released by wait()")
 }
 
 func TestEagerPipeline_WaitIsIdempotent(t *testing.T) {
 	ep := &eagerPipeline{
-		work: make(chan eagerWorkItem),
+		compressWork: make(chan eagerWorkItem),
 	}
 
-	require.NoError(t, ep.wait())
-	require.NoError(t, ep.wait(), "second wait must not panic")
+	require.NoError(t, ep.wait(nil))
+	require.NoError(t, ep.wait(nil), "second wait must not panic")
 }
 
-func TestEagerPipeline_WorkerExitsOnContextCancel(t *testing.T) {
+func TestEagerPipeline_CompressWorkerExitsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	ep := &eagerPipeline{
-		mode: EagerExportCompress,
-		ctx:  ctx,
-		work: make(chan eagerWorkItem, 10),
+		mode:         EagerExportCompress,
+		ctx:          ctx,
+		compressWork: make(chan eagerWorkItem, 10),
 	}
 
 	cancel(nil)
 
-	ep.wg.Add(1)
-	go ep.worker()
-	ep.wg.Wait()
+	ep.compressWG.Add(1)
+	go ep.compressWorker()
+	ep.compressWG.Wait()
 }
 
-func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
+func TestEagerPipeline_CompressWorkerExitsOnChannelClose(t *testing.T) {
 	ep := &eagerPipeline{
-		mode: EagerExportCompress,
-		ctx:  context.Background(),
-		work: make(chan eagerWorkItem),
+		mode:         EagerExportCompress,
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem),
 	}
 
-	ep.wg.Add(1)
-	go ep.worker()
+	ep.compressWG.Add(1)
+	go ep.compressWorker()
 
-	close(ep.work)
-	ep.wg.Wait()
+	close(ep.compressWork)
+	ep.compressWG.Wait()
+}
+
+func TestEagerPipeline_PushWorkerExitsOnChannelClose(t *testing.T) {
+	ep := &eagerPipeline{
+		ctx:      context.Background(),
+		pushWork: make(chan eagerPushItem),
+	}
+
+	ep.pushWG.Add(1)
+	go ep.pushWorker()
+
+	close(ep.pushWork)
+	ep.pushWG.Wait()
 }
 
 // Late fires of onVertexComplete must release the clone instead of sending
@@ -127,11 +150,11 @@ func TestEagerPipeline_WorkerExitsOnChannelClose(t *testing.T) {
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
-		ctx:  context.Background(),
-		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
 	}
-	require.NoError(t, ep.wait())
+	require.NoError(t, ep.wait(nil))
 
 	var released atomic.Int32
 	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
@@ -147,11 +170,11 @@ func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
-		ctx:  context.Background(),
-		work: make(chan eagerWorkItem, 10),
-		done: make(chan struct{}),
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
 	}
-	require.NoError(t, ep.wait())
+	require.NoError(t, ep.wait(nil))
 
 	var released atomic.Int32
 	const fires = 100
@@ -177,11 +200,11 @@ func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T)
 	var cloned atomic.Int32
 	var released atomic.Int32
 	ep := &eagerPipeline{
-		ctx:  context.Background(),
-		work: make(chan eagerWorkItem, 1),
-		done: make(chan struct{}),
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 1),
+		done:         make(chan struct{}),
 	}
-	ep.work <- eagerWorkItem{ref: &releaseTracker{released: &released}}
+	ep.compressWork <- eagerWorkItem{ref: &releaseTracker{released: &released}}
 
 	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned})
 
@@ -201,7 +224,7 @@ func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T)
 	require.Equal(t, int32(1), cloned.Load())
 
 	require.NotPanics(t, func() {
-		require.NoError(t, ep.wait())
+		require.NoError(t, ep.wait(nil))
 	})
 	senderWg.Wait()
 
@@ -213,9 +236,9 @@ func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T)
 func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
-		ctx:  context.Background(),
-		work: make(chan eagerWorkItem, 256),
-		done: make(chan struct{}),
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 256),
+		done:         make(chan struct{}),
 	}
 
 	var released atomic.Int32
@@ -232,7 +255,7 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	}
 
 	require.NotPanics(t, func() {
-		require.NoError(t, ep.wait())
+		require.NoError(t, ep.wait(nil))
 	})
 	wg.Wait()
 
@@ -266,7 +289,11 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 		if !shouldEagerPushDesc(desc) {
 			continue
 		}
-		err := ep.pushBlob(context.Background(), handler, desc)
+		err := ep.pushDescriptor(context.Background(), eagerPushItem{
+			refID:   "test-ref",
+			desc:    desc,
+			handler: handler,
+		})
 		require.NoError(t, err)
 	}
 
@@ -274,6 +301,179 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 		digest.FromString("push me"),
 		digest.FromString("push me too"),
 	}, pushed)
+}
+
+// pushDescriptor must short-circuit on the second call for the same digest,
+// without invoking the handler again. This is the fix for the noisy
+// "eager pushing blob" log entries that appeared once per shared parent
+// blob per ref.
+func TestEagerPushDescriptor_DedupsAfterSuccess(t *testing.T) {
+	desc := ocispecs.Descriptor{
+		Digest:    digest.FromString("shared-blob"),
+		MediaType: ocispecs.MediaTypeImageLayerGzip,
+		Size:      1234,
+	}
+	var calls atomic.Int32
+	handler := func(_ context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		calls.Add(1)
+		return nil, nil
+	}
+
+	ep := &eagerPipeline{}
+	for range 5 {
+		require.NoError(t, ep.pushDescriptor(context.Background(), eagerPushItem{
+			refID:   "ref-test",
+			desc:    desc,
+			handler: handler,
+		}))
+	}
+	assert.Equal(t, int32(1), calls.Load(), "handler must run exactly once across repeated calls for the same digest")
+}
+
+// pushDescriptor must skip — without invoking the handler — when the
+// keep-set is installed and the requesting refID is not in it.
+func TestEagerPushDescriptor_SkipsNonKeptRef(t *testing.T) {
+	desc := ocispecs.Descriptor{
+		Digest:    digest.FromString("intermediate-blob"),
+		MediaType: ocispecs.MediaTypeImageLayerGzip,
+		Size:      4096,
+	}
+	var calls atomic.Int32
+	handler := func(_ context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		calls.Add(1)
+		return nil, nil
+	}
+
+	ep := &eagerPipeline{}
+	keep := map[string]struct{}{"final-ref": {}}
+	ep.keepRefIDs.Store(&keep)
+
+	require.NoError(t, ep.pushDescriptor(context.Background(), eagerPushItem{
+		refID:   "intermediate-ref",
+		desc:    desc,
+		handler: handler,
+	}))
+	assert.Zero(t, calls.Load(), "non-kept ref must not invoke the push handler")
+
+	// And the digest must still appear in the inflight tracker so
+	// cancelNonKeptInflight can reason about it.
+	v, ok := ep.inflight.Load(desc.Digest.String())
+	require.True(t, ok)
+	tracker := v.(*pushTracker)
+	tracker.mu.Lock()
+	_, hasRef := tracker.refIDs["intermediate-ref"]
+	tracker.mu.Unlock()
+	assert.True(t, hasRef, "tracker must record requester even when filtered")
+}
+
+// pushDescriptor must still push when at least one kept ref requests the
+// digest, even if a non-kept ref also asked for it.
+func TestEagerPushDescriptor_PushesWhenAnyRequesterKept(t *testing.T) {
+	desc := ocispecs.Descriptor{
+		Digest:    digest.FromString("shared-blob"),
+		MediaType: ocispecs.MediaTypeImageLayerGzip,
+		Size:      4096,
+	}
+	var calls atomic.Int32
+	handler := func(_ context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		calls.Add(1)
+		return nil, nil
+	}
+
+	ep := &eagerPipeline{}
+	keep := map[string]struct{}{"final-ref": {}}
+	ep.keepRefIDs.Store(&keep)
+
+	require.NoError(t, ep.pushDescriptor(context.Background(), eagerPushItem{
+		refID:   "intermediate-ref",
+		desc:    desc,
+		handler: handler,
+	}))
+	require.NoError(t, ep.pushDescriptor(context.Background(), eagerPushItem{
+		refID:   "final-ref",
+		desc:    desc,
+		handler: handler,
+	}))
+	assert.Equal(t, int32(1), calls.Load(), "kept-ref call must drive exactly one push")
+}
+
+// cancelNonKeptInflight must cancel every waiter for a digest whose
+// requesters are all non-kept, and must leave digests with at least one
+// kept requester completely alone (because the kept waiter's
+// flightcontrol.Do still needs the closure result).
+func TestEagerPipeline_CancelNonKeptInflight(t *testing.T) {
+	ep := &eagerPipeline{ctx: context.Background()}
+
+	keep := map[string]struct{}{"final-ref": {}}
+
+	// Digest A: two non-kept requesters in flight. Both cancels must fire,
+	// matching flightcontrol's all-waiters-must-cancel semantics.
+	var cancelA1, cancelA2 atomic.Bool
+	ep.inflight.Store("digest-a", &pushTracker{
+		refIDs: map[string]struct{}{"int-ref-1": {}, "int-ref-2": {}},
+		cancels: map[string]context.CancelFunc{
+			"int-ref-1": func() { cancelA1.Store(true) },
+			"int-ref-2": func() { cancelA2.Store(true) },
+		},
+	})
+	// Digest B: requested by both kept and non-kept — must be spared
+	// even though the non-kept waiter has a cancel registered.
+	var cancelB atomic.Bool
+	ep.inflight.Store("digest-b", &pushTracker{
+		refIDs: map[string]struct{}{"int-ref-3": {}, "final-ref": {}},
+		cancels: map[string]context.CancelFunc{
+			"int-ref-3": func() { cancelB.Store(true) },
+		},
+	})
+	// Digest C: non-kept requester but no cancel yet (still queued).
+	// Must not be counted and must not panic.
+	ep.inflight.Store("digest-c", &pushTracker{
+		refIDs: map[string]struct{}{"int-ref-4": {}},
+	})
+
+	n := ep.cancelNonKeptInflight(keep)
+	assert.Equal(t, 1, n, "exactly one digest's waiters should be cancelled")
+	assert.True(t, cancelA1.Load(), "digest A waiter 1 must be cancelled")
+	assert.True(t, cancelA2.Load(), "digest A waiter 2 must be cancelled")
+	assert.False(t, cancelB.Load(), "digest B must be spared (kept requester)")
+
+	trackerA, _ := ep.inflight.Load("digest-a")
+	assert.Empty(t, trackerA.(*pushTracker).cancels, "cancels map should be drained after cancellation")
+}
+
+// After cancelNonKeptInflight has fired, a kept ref that arrives later
+// must not be skipped — it still needs to push the blob (the previous
+// closure was cancelled before completion).
+func TestEagerPushDescriptor_KeptRefAfterCancelStillPushes(t *testing.T) {
+	desc := ocispecs.Descriptor{
+		Digest:    digest.FromString("retry-after-cancel"),
+		MediaType: ocispecs.MediaTypeImageLayerGzip,
+		Size:      4096,
+	}
+	var calls atomic.Int32
+	handler := func(_ context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		calls.Add(1)
+		return nil, nil
+	}
+
+	ep := &eagerPipeline{}
+	keep := map[string]struct{}{"final-ref": {}}
+	ep.keepRefIDs.Store(&keep)
+
+	// Simulate a prior cancel pass: tracker exists with the requester
+	// recorded and an empty cancels map (the in-flight waiter already
+	// got cancelled and unregistered itself).
+	ep.inflight.Store(desc.Digest.String(), &pushTracker{
+		refIDs:  map[string]struct{}{"int-ref": {}},
+		cancels: map[string]context.CancelFunc{},
+	})
+
+	require.NoError(t, ep.pushDescriptor(context.Background(), eagerPushItem{
+		refID:   "final-ref",
+		desc:    desc,
+		handler: handler,
+	}))
+	assert.Equal(t, int32(1), calls.Load(), "kept ref must drive a fresh push after a prior cancellation")
 }
 
 // releaseTracker is a minimal cache.ImmutableRef stub that counts

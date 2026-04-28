@@ -659,9 +659,18 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Wait for all eager compression/push jobs to finish before running
 	// exporters. The manifest needs final blob digests from every layer.
 	if eager != nil {
+		// Compute the keep-set: the set of ImmutableRef.ID()s that
+		// belong to the final exported result. Any ref that the
+		// solver's vertex callback fired for but that didn't end up in
+		// res (e.g. intermediate stages from a multi-stage Dockerfile,
+		// or the cache_warmer pattern's source layers) is filtered out
+		// — its compressed blobs stay in the local content store, but
+		// no registry bandwidth is spent on it. With a gateway
+		// frontend, res is final by this point so the set is complete.
+		keep := computeEagerKeepSet(ctx, res)
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
 			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
-			err := eager.wait()
+			err := eager.wait(keep)
 			tracing.FinishWithError(span, err)
 			return err
 		}); err != nil {
