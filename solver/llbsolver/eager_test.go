@@ -145,8 +145,7 @@ func TestEagerPipeline_PushWorkerExitsOnChannelClose(t *testing.T) {
 	ep.pushWG.Wait()
 }
 
-// Late fires of onVertexComplete must release the clone instead of sending
-// into the (now closed) work channel.
+// Late callbacks must be ignored after wait() starts shutdown.
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
@@ -166,7 +165,7 @@ func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	assert.Zero(t, released.Load())
 }
 
-// Many concurrent late fires after wait() must be rejected before cloning.
+// Concurrent late callbacks must not clone refs.
 func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
@@ -194,8 +193,7 @@ func TestEagerPipeline_OnVertexCompleteAfterWait_Concurrent(t *testing.T) {
 	assert.Zero(t, released.Load())
 }
 
-// A sender admitted before wait() but blocked on a full queue must take the
-// done path, release its clone, and exit without panic.
+// Blocked senders must release clones when wait() closes the done channel.
 func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T) {
 	var cloned atomic.Int32
 	var released atomic.Int32
@@ -231,8 +229,7 @@ func TestEagerPipeline_OnVertexCompleteBlockedSenderReleasedOnWait(t *testing.T)
 	assert.Equal(t, int32(2), released.Load())
 }
 
-// Fires racing concurrently with wait() must not panic and must not leak:
-// every admitted clone is either drained by wait() or released by the sender.
+// Callbacks racing with wait() must not panic or leak clones.
 func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	var cloned atomic.Int32
 	ep := &eagerPipeline{
@@ -303,10 +300,7 @@ func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 	}, pushed)
 }
 
-// pushDescriptor must short-circuit on the second call for the same digest,
-// without invoking the handler again. This is the fix for the noisy
-// "eager pushing blob" log entries that appeared once per shared parent
-// blob per ref.
+// Repeated pushes of the same digest should only call the handler once.
 func TestEagerPushDescriptor_DedupsAfterSuccess(t *testing.T) {
 	desc := ocispecs.Descriptor{
 		Digest:    digest.FromString("shared-blob"),
@@ -330,8 +324,7 @@ func TestEagerPushDescriptor_DedupsAfterSuccess(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load(), "handler must run exactly once across repeated calls for the same digest")
 }
 
-// pushDescriptor must skip — without invoking the handler — when the
-// keep-set is installed and the requesting refID is not in it.
+// Non-kept refs should be tracked but not pushed.
 func TestEagerPushDescriptor_SkipsNonKeptRef(t *testing.T) {
 	desc := ocispecs.Descriptor{
 		Digest:    digest.FromString("intermediate-blob"),
@@ -355,8 +348,6 @@ func TestEagerPushDescriptor_SkipsNonKeptRef(t *testing.T) {
 	}))
 	assert.Zero(t, calls.Load(), "non-kept ref must not invoke the push handler")
 
-	// And the digest must still appear in the inflight tracker so
-	// cancelNonKeptInflight can reason about it.
 	v, ok := ep.inflight.Load(desc.Digest.String())
 	require.True(t, ok)
 	tracker := v.(*pushTracker)
@@ -366,8 +357,7 @@ func TestEagerPushDescriptor_SkipsNonKeptRef(t *testing.T) {
 	assert.True(t, hasRef, "tracker must record requester even when filtered")
 }
 
-// pushDescriptor must still push when at least one kept ref requests the
-// digest, even if a non-kept ref also asked for it.
+// A kept requester should push even if the digest was first requested by a non-kept ref.
 func TestEagerPushDescriptor_PushesWhenAnyRequesterKept(t *testing.T) {
 	desc := ocispecs.Descriptor{
 		Digest:    digest.FromString("shared-blob"),
@@ -397,17 +387,13 @@ func TestEagerPushDescriptor_PushesWhenAnyRequesterKept(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load(), "kept-ref call must drive exactly one push")
 }
 
-// cancelNonKeptInflight must cancel every waiter for a digest whose
-// requesters are all non-kept, and must leave digests with at least one
-// kept requester completely alone (because the kept waiter's
-// flightcontrol.Do still needs the closure result).
+// cancelNonKeptInflight cancels only digests with no kept requesters.
 func TestEagerPipeline_CancelNonKeptInflight(t *testing.T) {
 	ep := &eagerPipeline{ctx: context.Background()}
 
 	keep := map[string]struct{}{"final-ref": {}}
 
-	// Digest A: two non-kept requesters in flight. Both cancels must fire,
-	// matching flightcontrol's all-waiters-must-cancel semantics.
+	// Digest A: all requesters are non-kept, so every waiter must cancel.
 	var cancelA1, cancelA2 atomic.Bool
 	ep.inflight.Store("digest-a", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-1": {}, "int-ref-2": {}},
@@ -416,8 +402,7 @@ func TestEagerPipeline_CancelNonKeptInflight(t *testing.T) {
 			"int-ref-2": func() { cancelA2.Store(true) },
 		},
 	})
-	// Digest B: requested by both kept and non-kept — must be spared
-	// even though the non-kept waiter has a cancel registered.
+	// Digest B: one kept requester keeps the shared push alive.
 	var cancelB atomic.Bool
 	ep.inflight.Store("digest-b", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-3": {}, "final-ref": {}},
@@ -425,8 +410,7 @@ func TestEagerPipeline_CancelNonKeptInflight(t *testing.T) {
 			"int-ref-3": func() { cancelB.Store(true) },
 		},
 	})
-	// Digest C: non-kept requester but no cancel yet (still queued).
-	// Must not be counted and must not panic.
+	// Digest C: queued work has no waiter to cancel.
 	ep.inflight.Store("digest-c", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-4": {}},
 	})
@@ -441,9 +425,7 @@ func TestEagerPipeline_CancelNonKeptInflight(t *testing.T) {
 	assert.Empty(t, trackerA.(*pushTracker).cancels, "cancels map should be drained after cancellation")
 }
 
-// After cancelNonKeptInflight has fired, a kept ref that arrives later
-// must not be skipped — it still needs to push the blob (the previous
-// closure was cancelled before completion).
+// A kept ref arriving after cancellation should start a fresh push.
 func TestEagerPushDescriptor_KeptRefAfterCancelStillPushes(t *testing.T) {
 	desc := ocispecs.Descriptor{
 		Digest:    digest.FromString("retry-after-cancel"),
@@ -460,9 +442,7 @@ func TestEagerPushDescriptor_KeptRefAfterCancelStillPushes(t *testing.T) {
 	keep := map[string]struct{}{"final-ref": {}}
 	ep.keepRefIDs.Store(&keep)
 
-	// Simulate a prior cancel pass: tracker exists with the requester
-	// recorded and an empty cancels map (the in-flight waiter already
-	// got cancelled and unregistered itself).
+	// Simulate a prior cancel pass that already removed its waiter.
 	ep.inflight.Store(desc.Digest.String(), &pushTracker{
 		refIDs:  map[string]struct{}{"int-ref": {}},
 		cancels: map[string]context.CancelFunc{},
@@ -476,8 +456,7 @@ func TestEagerPushDescriptor_KeptRefAfterCancelStillPushes(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load(), "kept ref must drive a fresh push after a prior cancellation")
 }
 
-// releaseTracker is a minimal cache.ImmutableRef stub that counts
-// Release calls. Clones share the counter.
+// releaseTracker counts Release calls across clones.
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
