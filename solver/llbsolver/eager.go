@@ -50,8 +50,10 @@ type eagerPushItem struct {
 	result  chan<- error
 }
 
-// eagerPipeline compresses refs as vertices complete and optionally pushes
-// their descriptors through a separate pool for per-chain parallelism.
+// eagerPipeline receives completed vertex refs, compresses their layer chains,
+// and optionally fans out pushable descriptors to a separate push pool. Once
+// the final export refs are known, it filters/cancels non-export work and
+// drains both pools.
 type eagerPipeline struct {
 	mode      EagerExportMode
 	refCfg    cacheconfig.RefConfig
@@ -92,8 +94,12 @@ type eagerPipeline struct {
 	firstErr error
 }
 
-// pushTracker records every ref that requested a digest and every active
-// waiter. flightcontrol only cancels the shared push when all waiters cancel.
+// pushTracker is per digest. refIDs records every ref that requested the blob,
+// including refs later filtered out of the final export; cancels records only
+// active push waiters. When the final export refs are known, a digest is
+// cancelled only if none of its requesters are part of the export. If it is
+// cancelled, every active waiter must be cancelled because flightcontrol keeps
+// the shared push running until all waiter contexts are done.
 type pushTracker struct {
 	mu      sync.Mutex
 	refIDs  map[string]struct{}
@@ -434,6 +440,8 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	pushCtx, cancel := context.WithCancelCause(pushCtx)
 	defer cancel(errors.WithStack(context.Canceled))
 
+	// Register requester and cancel func atomically with export-ref filtering
+	// so cancelNonExportInflight cannot miss an about-to-start push.
 	tracker.mu.Lock()
 	tracker.refIDs[item.refID] = struct{}{}
 	if !ep.isExportRef(item.refID) {
