@@ -2,7 +2,9 @@ package common
 
 import (
 	"context"
+	"errors"
 	"os"
+	"time"
 
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/tracing/delegated"
@@ -69,7 +71,13 @@ func AttachAppContext(app *cli.App) error {
 		if span != nil {
 			span.End()
 		}
-		return tp.Shutdown(context.TODO())
+		// Trace export is best-effort: don't block the CLI on a slow or
+		// unreachable OTLP collector, and don't fail the build either.
+		// See https://github.com/moby/buildkit/issues/4616.
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 5*time.Second, errors.New("tracer shutdown timeout"))
+		defer cancel()
+		_ = tp.Shutdown(ctx)
+		return nil
 	}
 	return nil
 }

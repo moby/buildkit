@@ -54,9 +54,7 @@ import (
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -297,11 +295,17 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 
 func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
 	if c.opt.TraceCollector == nil {
-		return nil, status.Errorf(codes.Unavailable, "trace collector not configured")
+		// Trace collection on the daemon is optional. Returning OK when
+		// it is not configured avoids surfacing a noisy error to clients
+		// that always emit traces. See moby/buildkit#4616.
+		return &tracev1.ExportTraceServiceResponse{}, nil
 	}
-	err := c.opt.TraceCollector.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
-	if err != nil {
-		return nil, err
+	// Cap the export so a slow or unreachable downstream collector cannot
+	// stall the gRPC handler (and, by extension, the build).
+	ctx, cancel := context.WithTimeoutCause(ctx, 5*time.Second, errors.New("trace export timeout"))
+	defer cancel()
+	if err := c.opt.TraceCollector.ExportSpans(ctx, transform.Spans(req.GetResourceSpans())); err != nil {
+		bklog.G(ctx).WithError(err).Debug("trace export to collector failed")
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil
 }

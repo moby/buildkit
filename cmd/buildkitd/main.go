@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
@@ -417,13 +418,16 @@ func main() {
 	}
 
 	app.After = func(_ *cli.Context) (err error) {
-		var errs []error
+		// closers are telemetry providers (TracerProvider, MeterProvider).
+		// Failures are non-fatal: an unreachable OTLP collector should
+		// not block daemon shutdown or surface as a process-exit error.
+		// See https://github.com/moby/buildkit/issues/4616.
+		ctx, cancel := context.WithTimeoutCause(context.Background(), 5*time.Second, stderrors.New("telemetry shutdown timeout"))
+		defer cancel()
 		for _, c := range closers {
-			if e := c(context.TODO()); e != nil {
-				errs = append(errs, e)
-			}
+			_ = c(ctx)
 		}
-		return stderrors.Join(errs...)
+		return nil
 	}
 
 	profiler.Attach(app)
