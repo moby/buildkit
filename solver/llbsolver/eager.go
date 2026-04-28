@@ -23,9 +23,12 @@ import (
 	pushutil "github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Keep the pools large enough for a ref's descriptor chain to fan out without
@@ -311,18 +314,20 @@ func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 		return nil
 	}
 
-	bklog.G(ctx).Infof("eager compress starting ref=%s", refID)
-	compressStart := time.Now()
-	rems, err := ref.GetRemotes(ctx, true, ep.refCfg, false, s)
+	compressSpan, compressCtx := tracing.StartSpan(ctx, "eager compress ref", trace.WithAttributes(
+		attribute.String("ref.id", refID),
+	))
+	rems, err := ref.GetRemotes(compressCtx, true, ep.refCfg, false, s)
+	descCount, totalBytes := summarizeDescriptors(rems)
+	compressSpan.SetAttributes(
+		attribute.Int("descriptors", descCount),
+		attribute.Int64("bytes", totalBytes),
+	)
+	tracing.FinishWithError(compressSpan, err)
 	if err != nil {
 		bklog.G(ctx).WithError(err).Warnf("eager compress failed ref=%s", refID)
 		return err
 	}
-	compressDur := time.Since(compressStart).Round(time.Millisecond)
-
-	descCount, totalBytes := summarizeDescriptors(rems)
-	bklog.G(ctx).Infof("eager compress done ref=%s descriptors=%d bytes=%d duration=%s",
-		refID, descCount, totalBytes, compressDur)
 
 	if ep.mode != EagerExportPush {
 		return nil
@@ -414,20 +419,27 @@ func shouldEagerPushDesc(desc ocispecs.Descriptor) bool {
 func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	ctx := ep.ctx
 	digest := item.desc.Digest.String()
+	span, pushCtx := tracing.StartSpan(ctx, "eager push descriptor", trace.WithAttributes(
+		attribute.String("ref.id", item.refID),
+		attribute.String("digest", digest),
+		attribute.Int64("size", item.desc.Size),
+	))
 	if _, done := ep.pushedDigests.Load(digest); done {
-		bklog.G(ctx).Debugf("eager push deduped ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
+		span.SetAttributes(attribute.Bool("deduped", true))
+		span.End()
 		return nil
 	}
 
 	tracker := ep.trackerFor(digest)
-	pushCtx, cancel := context.WithCancelCause(ctx)
+	pushCtx, cancel := context.WithCancelCause(pushCtx)
 	defer cancel(errors.WithStack(context.Canceled))
 
 	tracker.mu.Lock()
 	tracker.refIDs[item.refID] = struct{}{}
 	if !ep.isExportRef(item.refID) {
 		tracker.mu.Unlock()
-		bklog.G(ctx).Debugf("eager push skipped (filtered) ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
+		span.SetAttributes(attribute.Bool("filtered", true))
+		span.End()
 		return nil
 	}
 	if tracker.cancels == nil {
@@ -441,9 +453,6 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 		delete(tracker.cancels, item.refID)
 		tracker.mu.Unlock()
 	}()
-
-	start := time.Now()
-	bklog.G(ctx).Infof("eager push starting ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
 
 	pushed, err := ep.pushDedup.Do(pushCtx, digest, func(ctx context.Context) (bool, error) {
 		if _, done := ep.pushedDigests.Load(digest); done {
@@ -459,19 +468,20 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	if err != nil {
 		// A cancelled pushCtx with a live parent means export ref set filtering won.
 		if context.Cause(pushCtx) != nil && context.Cause(ctx) == nil {
-			bklog.G(ctx).Infof("eager push cancelled (filtered) ref=%s digest=%s size=%d after=%s",
-				item.refID, digest, item.desc.Size, time.Since(start).Round(time.Millisecond))
+			span.SetAttributes(attribute.Bool("cancelled", true))
+			span.End()
 			return nil
 		}
+		tracing.FinishWithError(span, err)
 		return err
 	}
 	if !pushed {
-		bklog.G(ctx).Debugf("eager push deduped ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
+		span.SetAttributes(attribute.Bool("deduped", true))
+		span.End()
 		return nil
 	}
 
-	bklog.G(ctx).Infof("eager push done ref=%s digest=%s size=%d duration=%s",
-		item.refID, digest, item.desc.Size, time.Since(start).Round(time.Millisecond))
+	span.End()
 	return nil
 }
 
