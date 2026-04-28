@@ -44,8 +44,7 @@ type eagerPushItem struct {
 	refID   string
 	desc    ocispecs.Descriptor
 	handler func(context.Context, ocispecs.Descriptor) ([]ocispecs.Descriptor, error)
-	wg      *sync.WaitGroup
-	errCh   chan<- error
+	result  chan<- error
 }
 
 // eagerPipeline compresses refs as vertices complete and optionally pushes
@@ -79,9 +78,9 @@ type eagerPipeline struct {
 	pushDedup     flightcontrol.Group[struct{}]
 	pushedDigests sync.Map
 
-	// keepRefIDs is nil until wait() installs the final image ref set. After
-	// that, non-kept refs are skipped or cancelled.
-	keepRefIDs atomic.Pointer[map[string]struct{}]
+	// exportRefIDs is nil until applyExportRefs installs the final export refs.
+	// After that, non-export refs are skipped or cancelled.
+	exportRefIDs atomic.Pointer[map[string]struct{}]
 	// inflight tracks requesters and cancel funcs per digest.
 	inflight sync.Map // map[string]*pushTracker
 
@@ -188,14 +187,12 @@ func (ep *eagerPipeline) pushWorker() {
 		if !ok {
 			return
 		}
-		if err := ep.pushDescriptor(ep.ctx, item); err != nil {
+		if err := ep.pushDescriptor(item); err != nil {
 			ep.recordErr(err)
-			select {
-			case item.errCh <- err:
-			default:
-			}
+			item.result <- err
+		} else {
+			item.result <- nil
 		}
-		item.wg.Done()
 	}
 }
 
@@ -241,13 +238,13 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 	}
 }
 
-// computeEagerKeepSet returns every ref ID that contributes to the final image,
+// computeEagerExportRefs returns every ref ID that contributes to the final image,
 // including parent-chain layers. Each layer has its own vertex/ref ID, so
-// keeping only the final ref would filter out the eager layer pushes.
-func computeEagerKeepSet(ctx context.Context, res *frontend.Result) map[string]struct{} {
-	keep := make(map[string]struct{})
+// exporting only the final ref would filter out the eager layer pushes.
+func computeEagerExportRefs(ctx context.Context, res *frontend.Result) map[string]struct{} {
+	exportRefs := make(map[string]struct{})
 	if res == nil {
-		return keep
+		return exportRefs
 	}
 	res.EachRef(func(rp solver.ResultProxy) error {
 		if rp == nil {
@@ -255,7 +252,7 @@ func computeEagerKeepSet(ctx context.Context, res *frontend.Result) map[string]s
 		}
 		cached, err := rp.Result(ctx)
 		if err != nil {
-			bklog.G(ctx).WithError(err).Warnf("eager keep-set: failed to resolve ref")
+			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to resolve ref")
 			return nil
 		}
 		workerRef, ok := cached.Sys().(*worker.WorkerRef)
@@ -268,31 +265,23 @@ func computeEagerKeepSet(ctx context.Context, res *frontend.Result) map[string]s
 			if layer == nil {
 				continue
 			}
-			keep[layer.ID()] = struct{}{}
+			exportRefs[layer.ID()] = struct{}{}
 		}
 		if err := chain.Release(context.WithoutCancel(ctx)); err != nil {
-			bklog.G(ctx).WithError(err).Warnf("eager keep-set: failed to release chain clones")
+			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to release chain clones")
 		}
 		return nil
 	})
-	return keep
+	return exportRefs
 }
 
-// keepSet returns nil until filtering is enabled.
-func (ep *eagerPipeline) keepSet() map[string]struct{} {
-	if p := ep.keepRefIDs.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// isKept treats every ref as kept until a keep-set is installed.
-func (ep *eagerPipeline) isKept(refID string) bool {
-	keep := ep.keepSet()
-	if keep == nil {
+// isExportRef treats every ref as exportable until an export ref set is installed.
+func (ep *eagerPipeline) isExportRef(refID string) bool {
+	exportRefs := ep.exportRefIDs.Load()
+	if exportRefs == nil {
 		return true
 	}
-	_, ok := keep[refID]
+	_, ok := (*exportRefs)[refID]
 	return ok
 }
 
@@ -314,7 +303,7 @@ func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 	refID := ref.ID()
 
 	// Skip queued work that became irrelevant before compression started.
-	if !ep.isKept(refID) {
+	if !ep.isExportRef(refID) {
 		bklog.G(ctx).Debugf("eager compress skipped (filtered) ref=%s", refID)
 		return nil
 	}
@@ -336,8 +325,8 @@ func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 		return nil
 	}
 
-	// The keep-set may have been installed during GetRemotes.
-	if !ep.isKept(refID) {
+	// The export ref set may have been installed during GetRemotes.
+	if !ep.isExportRef(refID) {
 		bklog.G(ctx).Debugf("eager push skipped after compress (filtered) ref=%s", refID)
 		return nil
 	}
@@ -373,63 +362,42 @@ func (ep *eagerPipeline) dispatchPushes(ctx context.Context, refID string, rems 
 	}
 
 	remote := rems[0]
+	resultCh := make(chan error, len(remote.Descriptors))
 	handler := retryhandler.New(
 		limited.PushHandler(ep.pusher, remote.Provider, ep.pushCfg.TargetName),
 		nil,
 	)
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, len(remote.Descriptors))
 
 	enqueued := 0
 	for _, desc := range remote.Descriptors {
 		if !shouldEagerPushDesc(desc) {
 			continue
 		}
-		wg.Add(1)
 		item := eagerPushItem{
 			refID:   refID,
 			desc:    desc,
 			handler: handler,
-			wg:      &wg,
-			errCh:   errCh,
+			result:  resultCh,
 		}
 		select {
 		case ep.pushWork <- item:
 			enqueued++
 		case <-ctx.Done():
-			wg.Done()
-			waitWithCtx(ctx, &wg)
 			return context.Cause(ctx)
 		}
 	}
 
-	if err := waitWithCtx(ctx, &wg); err != nil {
-		return err
-	}
-
-	close(errCh)
-	for e := range errCh {
-		if e != nil {
-			return e
+	for range enqueued {
+		select {
+		case err := <-resultCh:
+			if err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return context.Cause(ctx)
 		}
 	}
 	return nil
-}
-
-// waitWithCtx returns early on context cancellation instead of blocking shutdown.
-func waitWithCtx(ctx context.Context, wg *sync.WaitGroup) error {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return context.Cause(ctx)
-	}
 }
 
 func shouldEagerPushDesc(desc ocispecs.Descriptor) bool {
@@ -438,33 +406,31 @@ func shouldEagerPushDesc(desc ocispecs.Descriptor) bool {
 
 // pushDescriptor deduplicates by digest and records requesters so wait() can
 // cancel pushes that only serve non-final refs.
-func (ep *eagerPipeline) pushDescriptor(ctx context.Context, item eagerPushItem) error {
+func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
+	ctx := ep.ctx
 	digest := item.desc.Digest.String()
 	if _, done := ep.pushedDigests.Load(digest); done {
 		bklog.G(ctx).Debugf("eager push deduped ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
 		return nil
 	}
 
-	// Record before filtering so cancellation can see all requesters.
 	tracker := ep.trackerFor(digest)
-	tracker.mu.Lock()
-	tracker.refIDs[item.refID] = struct{}{}
-	tracker.mu.Unlock()
-
-	if !ep.isKept(item.refID) {
-		bklog.G(ctx).Debugf("eager push skipped (filtered) ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
-		return nil
-	}
-
 	pushCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	tracker.mu.Lock()
+	tracker.refIDs[item.refID] = struct{}{}
+	if !ep.isExportRef(item.refID) {
+		tracker.mu.Unlock()
+		bklog.G(ctx).Debugf("eager push skipped (filtered) ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
+		return nil
+	}
 	if tracker.cancels == nil {
 		tracker.cancels = make(map[string]context.CancelFunc)
 	}
 	tracker.cancels[item.refID] = cancel
 	tracker.mu.Unlock()
+
 	defer func() {
 		tracker.mu.Lock()
 		delete(tracker.cancels, item.refID)
@@ -479,7 +445,7 @@ func (ep *eagerPipeline) pushDescriptor(ctx context.Context, item eagerPushItem)
 		return struct{}{}, herr
 	})
 	if err != nil {
-		// A cancelled pushCtx with a live parent means keep-set filtering won.
+		// A cancelled pushCtx with a live parent means export ref set filtering won.
 		if pushCtx.Err() != nil && ctx.Err() == nil {
 			bklog.G(ctx).Infof("eager push cancelled (filtered) ref=%s digest=%s size=%d after=%s",
 				item.refID, digest, item.desc.Size, time.Since(start).Round(time.Millisecond))
@@ -494,17 +460,20 @@ func (ep *eagerPipeline) pushDescriptor(ctx context.Context, item eagerPushItem)
 	return nil
 }
 
-// wait installs the optional keep-set, cancels in-flight pushes that only serve
-// non-kept refs, then drains the compress and push pools in order.
-func (ep *eagerPipeline) wait(keep map[string]struct{}) error {
-	ep.waitOnce.Do(func() {
-		if keep != nil {
-			cp := keep
-			ep.keepRefIDs.Store(&cp)
-			n := ep.cancelNonKeptInflight(keep)
-			bklog.G(ep.ctx).Infof("eager wait keep_set_size=%d cancelled_inflight=%d", len(keep), n)
-		}
+// applyExportRefs installs the final export refs and cancels in-flight pushes that
+// only serve non-export refs.
+func (ep *eagerPipeline) applyExportRefs(exportRefs map[string]struct{}) int {
+	if exportRefs == nil {
+		return 0
+	}
+	cp := exportRefs
+	ep.exportRefIDs.Store(&cp)
+	return ep.cancelNonExportInflight(exportRefs)
+}
 
+// wait drains the compress and push pools in order.
+func (ep *eagerPipeline) wait() error {
+	ep.waitOnce.Do(func() {
 		ep.closeMu.Lock()
 		if ep.done == nil {
 			ep.done = make(chan struct{})
@@ -529,10 +498,10 @@ func (ep *eagerPipeline) wait(keep map[string]struct{}) error {
 	return ep.firstErr
 }
 
-// cancelNonKeptInflight cancels digests whose requesters are all non-kept.
-// All waiters for a digest must be cancelled, or flightcontrol keeps the
+// cancelNonExportInflight cancels digests whose requesters are all non-export.
+// All waiters for a digest must be cancelled, or flightcontrol leaves the
 // shared push running.
-func (ep *eagerPipeline) cancelNonKeptInflight(keep map[string]struct{}) int {
+func (ep *eagerPipeline) cancelNonExportInflight(exportRefs map[string]struct{}) int {
 	var digestsCancelled int
 	ep.inflight.Range(func(key, val any) bool {
 		digest := key.(string)
@@ -542,7 +511,7 @@ func (ep *eagerPipeline) cancelNonKeptInflight(keep map[string]struct{}) int {
 		defer tracker.mu.Unlock()
 
 		for refID := range tracker.refIDs {
-			if _, ok := keep[refID]; ok {
+			if _, ok := exportRefs[refID]; ok {
 				return true
 			}
 		}
@@ -586,7 +555,7 @@ func (ep *eagerPipeline) drainPushWork() {
 			if !ok {
 				return
 			}
-			item.wg.Done()
+			item.result <- nil
 		default:
 			return
 		}

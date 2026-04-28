@@ -656,10 +656,12 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Exporters need the final layer digests, so wait for eager work first.
 	if eager != nil {
 		// Filter out completed vertices that are not part of the final result.
-		keep := computeEagerKeepSet(ctx, res)
+		exportRefs := computeEagerExportRefs(ctx, res)
+		cancelled := eager.applyExportRefs(exportRefs)
+		bklog.G(ctx).Infof("eager export_refs=%d cancelled_inflight=%d", len(exportRefs), cancelled)
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
 			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
-			err := eager.wait(keep)
+			err := eager.wait()
 			tracing.FinishWithError(span, err)
 			return err
 		}); err != nil {
