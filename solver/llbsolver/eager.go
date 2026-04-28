@@ -69,13 +69,14 @@ type eagerPipeline struct {
 	waitOnce sync.Once
 
 	// ctx carries the lease that keeps compressed blobs GC-protected.
-	ctx context.Context
+	ctx    context.Context
+	cancel context.CancelCauseFunc
 
 	pusher remotes.Pusher
 
 	// pushDedup coalesces concurrent pushes; pushedDigests skips digests that
 	// already succeeded in this build.
-	pushDedup     flightcontrol.Group[struct{}]
+	pushDedup     flightcontrol.Group[bool]
 	pushedDigests sync.Map
 
 	// exportRefIDs is nil until applyExportRefs installs the final export refs.
@@ -127,6 +128,7 @@ func newEagerPipeline(ctx context.Context, mode EagerExportMode, comp compressio
 		}
 	}
 
+	pipelineCtx, cancel := context.WithCancelCause(ctx)
 	ep := &eagerPipeline{
 		mode: mode,
 		refCfg: cacheconfig.RefConfig{
@@ -135,7 +137,8 @@ func newEagerPipeline(ctx context.Context, mode EagerExportMode, comp compressio
 		sessionID:    sessionID,
 		pushCfg:      pushCfg,
 		pusher:       pusher,
-		ctx:          ctx,
+		ctx:          pipelineCtx,
+		cancel:       cancel,
 		compressWork: make(chan eagerWorkItem, 256),
 		pushWork:     make(chan eagerPushItem, 1024),
 		done:         make(chan struct{}),
@@ -362,6 +365,8 @@ func (ep *eagerPipeline) dispatchPushes(ctx context.Context, refID string, rems 
 	}
 
 	remote := rems[0]
+	// Buffered to the descriptor count so workers can report completion even if
+	// dispatchPushes returns early on context cancellation.
 	resultCh := make(chan error, len(remote.Descriptors))
 	handler := retryhandler.New(
 		limited.PushHandler(ep.pusher, remote.Provider, ep.pushCfg.TargetName),
@@ -415,8 +420,8 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	}
 
 	tracker := ep.trackerFor(digest)
-	pushCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	pushCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(errors.WithStack(context.Canceled))
 
 	tracker.mu.Lock()
 	tracker.refIDs[item.refID] = struct{}{}
@@ -428,7 +433,7 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	if tracker.cancels == nil {
 		tracker.cancels = make(map[string]context.CancelFunc)
 	}
-	tracker.cancels[item.refID] = cancel
+	tracker.cancels[item.refID] = func() { cancel(errors.WithStack(context.Canceled)) }
 	tracker.mu.Unlock()
 
 	defer func() {
@@ -440,21 +445,31 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	start := time.Now()
 	bklog.G(ctx).Infof("eager push starting ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
 
-	_, err := ep.pushDedup.Do(pushCtx, digest, func(ctx context.Context) (struct{}, error) {
+	pushed, err := ep.pushDedup.Do(pushCtx, digest, func(ctx context.Context) (bool, error) {
+		if _, done := ep.pushedDigests.Load(digest); done {
+			return false, nil
+		}
 		_, herr := item.handler(ctx, item.desc)
-		return struct{}{}, herr
+		if herr != nil {
+			return false, herr
+		}
+		ep.pushedDigests.Store(digest, struct{}{})
+		return true, nil
 	})
 	if err != nil {
 		// A cancelled pushCtx with a live parent means export ref set filtering won.
-		if pushCtx.Err() != nil && ctx.Err() == nil {
+		if context.Cause(pushCtx) != nil && context.Cause(ctx) == nil {
 			bklog.G(ctx).Infof("eager push cancelled (filtered) ref=%s digest=%s size=%d after=%s",
 				item.refID, digest, item.desc.Size, time.Since(start).Round(time.Millisecond))
 			return nil
 		}
 		return err
 	}
+	if !pushed {
+		bklog.G(ctx).Debugf("eager push deduped ref=%s digest=%s size=%d", item.refID, digest, item.desc.Size)
+		return nil
+	}
 
-	ep.pushedDigests.Store(digest, struct{}{})
 	bklog.G(ctx).Infof("eager push done ref=%s digest=%s size=%d duration=%s",
 		item.refID, digest, item.desc.Size, time.Since(start).Round(time.Millisecond))
 	return nil
@@ -474,6 +489,10 @@ func (ep *eagerPipeline) applyExportRefs(exportRefs map[string]struct{}) int {
 // wait drains the compress and push pools in order.
 func (ep *eagerPipeline) wait() error {
 	ep.waitOnce.Do(func() {
+		if ep.cancel != nil {
+			defer ep.cancel(errors.WithStack(context.Canceled))
+		}
+
 		ep.closeMu.Lock()
 		if ep.done == nil {
 			ep.done = make(chan struct{})

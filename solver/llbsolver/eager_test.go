@@ -145,6 +145,32 @@ func TestEagerPipeline_PushWorkerExitsOnChannelClose(t *testing.T) {
 	ep.pushWG.Wait()
 }
 
+func TestEagerPipeline_PushWorkerErrorReturnedByWait(t *testing.T) {
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem),
+		pushWork:     make(chan eagerPushItem, 1),
+	}
+	ep.pushWG.Add(1)
+	go ep.pushWorker()
+
+	resultCh := make(chan error, 1)
+	ep.pushWork <- eagerPushItem{
+		refID: "test-ref",
+		desc: ocispecs.Descriptor{
+			Digest:    digest.FromString("push-error"),
+			MediaType: ocispecs.MediaTypeImageLayerGzip,
+		},
+		handler: func(context.Context, ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+			return nil, assert.AnError
+		},
+		result: resultCh,
+	}
+
+	require.Equal(t, assert.AnError, <-resultCh)
+	require.Equal(t, assert.AnError, ep.wait())
+}
+
 // Late callbacks must be ignored after wait() starts shutdown.
 func TestEagerPipeline_OnVertexCompleteAfterWait(t *testing.T) {
 	var cloned atomic.Int32
@@ -322,6 +348,47 @@ func TestEagerPushDescriptor_DedupsAfterSuccess(t *testing.T) {
 		}))
 	}
 	assert.Equal(t, int32(1), calls.Load(), "handler must run exactly once across repeated calls for the same digest")
+}
+
+func TestEagerPushDescriptor_DedupsConcurrentPushes(t *testing.T) {
+	desc := ocispecs.Descriptor{
+		Digest:    digest.FromString("shared-blob"),
+		MediaType: ocispecs.MediaTypeImageLayerGzip,
+		Size:      1234,
+	}
+	var calls atomic.Int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+	handler := func(_ context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+		}
+		<-release
+		return nil, nil
+	}
+
+	ep := &eagerPipeline{ctx: context.Background()}
+	errCh := make(chan error, 2)
+	go func() {
+		errCh <- ep.pushDescriptor(eagerPushItem{
+			refID:   "ref-a",
+			desc:    desc,
+			handler: handler,
+		})
+	}()
+	<-started
+	go func() {
+		errCh <- ep.pushDescriptor(eagerPushItem{
+			refID:   "ref-b",
+			desc:    desc,
+			handler: handler,
+		})
+	}()
+	close(release)
+
+	require.NoError(t, <-errCh)
+	require.NoError(t, <-errCh)
+	assert.Equal(t, int32(1), calls.Load(), "handler must run exactly once for concurrent pushes of the same digest")
 }
 
 // Non-export refs should be tracked but not pushed.

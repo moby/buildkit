@@ -565,6 +565,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Start eager export before the build so completed vertices can enqueue work.
 	// The lease is needed early to protect compressed blobs during the build.
 	var eager *eagerPipeline
+	eagerWaited := false
 	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
 		ctx, err = createLease(ctx)
 		if err != nil {
@@ -576,6 +577,15 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		j.SetOnVertexComplete(eager.onVertexComplete)
+		defer func() {
+			if eagerWaited {
+				return
+			}
+			eager.cancel(errors.WithStack(context.Canceled))
+			if err := eager.wait(); err != nil {
+				bklog.G(ctx).WithError(err).Warnf("eager export cleanup failed")
+			}
+		}()
 	}
 
 	if exp.PushRegistryConfig != nil {
@@ -662,6 +672,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
 			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
 			err := eager.wait()
+			eagerWaited = true
 			tracing.FinishWithError(span, err)
 			return err
 		}); err != nil {
