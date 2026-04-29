@@ -56,8 +56,7 @@ const (
 	keyEagerPushConfig = "llb.eagerpushconfig"
 )
 
-// EagerExportMode controls whether layer compression and/or pushing
-// happens concurrently with the build, rather than after all vertices complete.
+// EagerExportMode controls whether layers are handled during the build.
 type EagerExportMode int
 
 const (
@@ -563,11 +562,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return ctx, nil
 	}
 
-	// Set up eager export pipeline before the build starts so the vertex
-	// completion callback can kick off compression/push during the build.
-	// When eager export is active, the lease must be created early so
-	// compressed blobs are GC-protected during the build phase.
+	// Start eager export before the build so completed vertices can enqueue work.
+	// The lease is needed early to protect compressed blobs during the build.
 	var eager *eagerPipeline
+	eagerWaited := false
 	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
 		ctx, err = createLease(ctx)
 		if err != nil {
@@ -579,6 +577,15 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		j.SetOnVertexComplete(eager.onVertexComplete)
+		defer func() {
+			if eagerWaited {
+				return
+			}
+			eager.cancel(errors.WithStack(context.Canceled))
+			if err := eager.wait(); err != nil {
+				bklog.G(ctx).WithError(err).Warnf("eager export cleanup failed")
+			}
+		}()
 	}
 
 	if exp.PushRegistryConfig != nil {
@@ -656,12 +663,20 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	// Wait for all eager compression/push jobs to finish before running
-	// exporters. The manifest needs final blob digests from every layer.
+	// Exporters need the final layer digests, so wait for eager work first.
 	if eager != nil {
+		// Filter out completed vertices that are not part of the final result.
+		exportRefs, err := computeEagerExportRefs(ctx, res)
+		if err != nil {
+			bklog.G(ctx).WithError(err).Warnf("failed to compute eager export refs; skipping eager export filtering")
+		} else {
+			cancelled := eager.applyExportRefs(exportRefs)
+			bklog.G(ctx).Infof("eager export_refs=%d cancelled_inflight=%d", len(exportRefs), cancelled)
+		}
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
 			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
 			err := eager.wait()
+			eagerWaited = true
 			tracing.FinishWithError(span, err)
 			return err
 		}); err != nil {
@@ -700,9 +715,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	// When eager export is not active, the lease is created here (the original
-	// location) — after the build completes but before export. This avoids
-	// adding a disk write before gateway forwarder registration.
+	// Without eager export, keep the original lease timing.
 	if eager == nil {
 		ctx, err = createLease(ctx)
 		if err != nil {
