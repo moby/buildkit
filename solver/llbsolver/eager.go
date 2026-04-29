@@ -34,8 +34,8 @@ import (
 // Keep the pools large enough for a ref's descriptor chain to fan out without
 // serializing pushes.
 const (
-	defaultEagerWorkers     = 100
-	defaultEagerPushWorkers = 100
+	defaultEagerWorkers     = 128
+	defaultEagerPushWorkers = 128
 )
 
 type eagerWorkItem struct {
@@ -253,19 +253,18 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 // computeEagerExportRefs returns every ref ID that contributes to the final image,
 // including parent-chain layers. Each layer has its own vertex/ref ID, so
 // exporting only the final ref would filter out the eager layer pushes.
-func computeEagerExportRefs(ctx context.Context, res *frontend.Result) map[string]struct{} {
+func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[string]struct{}, error) {
 	exportRefs := make(map[string]struct{})
 	if res == nil {
-		return exportRefs
+		return exportRefs, nil
 	}
-	res.EachRef(func(rp solver.ResultProxy) error {
+	if err := res.EachRef(func(rp solver.ResultProxy) error {
 		if rp == nil {
 			return nil
 		}
 		cached, err := rp.Result(ctx)
 		if err != nil {
-			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to resolve ref")
-			return nil
+			return errors.Wrap(err, "eager export ref set: failed to resolve ref")
 		}
 		workerRef, ok := cached.Sys().(*worker.WorkerRef)
 		if !ok || workerRef.ImmutableRef == nil {
@@ -283,8 +282,10 @@ func computeEagerExportRefs(ctx context.Context, res *frontend.Result) map[strin
 			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to release chain clones")
 		}
 		return nil
-	})
-	return exportRefs
+	}); err != nil {
+		return nil, err
+	}
+	return exportRefs, nil
 }
 
 // isExportRef treats every ref as exportable until an export ref set is installed.
@@ -430,9 +431,9 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 		attribute.String("digest", digest),
 		attribute.Int64("size", item.desc.Size),
 	))
+	defer span.End()
 	if _, done := ep.pushedDigests.Load(digest); done {
 		span.SetAttributes(attribute.Bool("deduped", true))
-		span.End()
 		return nil
 	}
 
@@ -447,7 +448,6 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	if !ep.isExportRef(item.refID) {
 		tracker.mu.Unlock()
 		span.SetAttributes(attribute.Bool("filtered", true))
-		span.End()
 		return nil
 	}
 	if tracker.cancels == nil {
@@ -477,19 +477,16 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 		// A cancelled pushCtx with a live parent means export ref set filtering won.
 		if context.Cause(pushCtx) != nil && context.Cause(ctx) == nil {
 			span.SetAttributes(attribute.Bool("cancelled", true))
-			span.End()
 			return nil
 		}
-		tracing.FinishWithError(span, err)
+		span.RecordError(err)
 		return err
 	}
 	if !pushed {
 		span.SetAttributes(attribute.Bool("deduped", true))
-		span.End()
 		return nil
 	}
 
-	span.End()
 	return nil
 }
 
