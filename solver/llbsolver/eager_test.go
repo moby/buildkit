@@ -154,7 +154,6 @@ func TestEagerPipeline_PushWorkerErrorReturnedByWait(t *testing.T) {
 	ep.pushWG.Add(1)
 	go ep.pushWorker()
 
-	resultCh := make(chan error, 1)
 	ep.pushWork <- eagerPushItem{
 		refID: "test-ref",
 		desc: ocispecs.Descriptor{
@@ -164,10 +163,8 @@ func TestEagerPipeline_PushWorkerErrorReturnedByWait(t *testing.T) {
 		handler: func(context.Context, ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 			return nil, assert.AnError
 		},
-		result: resultCh,
 	}
 
-	require.Equal(t, assert.AnError, <-resultCh)
 	require.Equal(t, assert.AnError, ep.wait())
 }
 
@@ -368,7 +365,7 @@ func TestEagerPushDescriptor_DedupsConcurrentPushes(t *testing.T) {
 	}
 
 	ep := &eagerPipeline{ctx: context.Background()}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 1)
 	go func() {
 		errCh <- ep.pushDescriptor(eagerPushItem{
 			refID:   "ref-a",
@@ -377,16 +374,16 @@ func TestEagerPushDescriptor_DedupsConcurrentPushes(t *testing.T) {
 		})
 	}()
 	<-started
-	go func() {
-		errCh <- ep.pushDescriptor(eagerPushItem{
-			refID:   "ref-b",
-			desc:    desc,
-			handler: handler,
-		})
-	}()
+
+	require.NoError(t, ep.pushDescriptor(eagerPushItem{
+		refID:   "ref-b",
+		desc:    desc,
+		handler: handler,
+	}), "duplicate push should skip instead of waiting for the active pusher")
+	assert.Equal(t, int32(1), calls.Load(), "duplicate push must not call the handler")
+
 	close(release)
 
-	require.NoError(t, <-errCh)
 	require.NoError(t, <-errCh)
 	assert.Equal(t, int32(1), calls.Load(), "handler must run exactly once for concurrent pushes of the same digest")
 }
@@ -460,36 +457,30 @@ func TestEagerPipeline_CancelNonExportInflight(t *testing.T) {
 
 	exportRefs := map[string]struct{}{"final-ref": {}}
 
-	// Digest A: all requesters are non-export, so every waiter must cancel.
-	var cancelA1, cancelA2 atomic.Bool
+	// Digest A: all requesters are non-export, so the active push must cancel.
+	var cancelA atomic.Bool
 	ep.inflight.Store("digest-a", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-1": {}, "int-ref-2": {}},
-		cancels: map[string]context.CancelFunc{
-			"int-ref-1": func() { cancelA1.Store(true) },
-			"int-ref-2": func() { cancelA2.Store(true) },
-		},
+		active: &activePush{cancel: func() { cancelA.Store(true) }},
 	})
 	// Digest B: one export requester leaves the shared push alive.
 	var cancelB atomic.Bool
 	ep.inflight.Store("digest-b", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-3": {}, "final-ref": {}},
-		cancels: map[string]context.CancelFunc{
-			"int-ref-3": func() { cancelB.Store(true) },
-		},
+		active: &activePush{cancel: func() { cancelB.Store(true) }},
 	})
-	// Digest C: queued work has no waiter to cancel.
+	// Digest C: queued work has no active push to cancel.
 	ep.inflight.Store("digest-c", &pushTracker{
 		refIDs: map[string]struct{}{"int-ref-4": {}},
 	})
 
 	n := ep.cancelNonExportInflight(exportRefs)
-	assert.Equal(t, 1, n, "exactly one digest's waiters should be cancelled")
-	assert.True(t, cancelA1.Load(), "digest A waiter 1 must be cancelled")
-	assert.True(t, cancelA2.Load(), "digest A waiter 2 must be cancelled")
+	assert.Equal(t, 1, n, "exactly one digest's active push should be cancelled")
+	assert.True(t, cancelA.Load(), "digest A active push must be cancelled")
 	assert.False(t, cancelB.Load(), "digest B must be spared (export requester)")
 
 	trackerA, _ := ep.inflight.Load("digest-a")
-	assert.Empty(t, trackerA.(*pushTracker).cancels, "cancels map should be drained after cancellation")
+	assert.Nil(t, trackerA.(*pushTracker).active, "active push should be cleared after cancellation")
 }
 
 // An export ref arriving after cancellation should start a fresh push.
@@ -509,10 +500,9 @@ func TestEagerPushDescriptor_ExportRefAfterCancelStillPushes(t *testing.T) {
 	exportRefs := map[string]struct{}{"final-ref": {}}
 	ep.exportRefIDs.Store(&exportRefs)
 
-	// Simulate a prior cancel pass that already removed its waiter.
+	// Simulate a prior cancel pass that already cleared its active push.
 	ep.inflight.Store(desc.Digest.String(), &pushTracker{
-		refIDs:  map[string]struct{}{"int-ref": {}},
-		cancels: map[string]context.CancelFunc{},
+		refIDs: map[string]struct{}{"int-ref": {}},
 	})
 
 	require.NoError(t, ep.pushDescriptor(eagerPushItem{
