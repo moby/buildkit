@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes"
@@ -19,7 +18,6 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/moby/buildkit/util/flightcontrol"
 	pushutil "github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
@@ -47,7 +45,6 @@ type eagerPushItem struct {
 	refID   string
 	desc    ocispecs.Descriptor
 	handler func(context.Context, ocispecs.Descriptor) ([]ocispecs.Descriptor, error)
-	result  chan<- error
 }
 
 // eagerPipeline receives completed vertex refs, compresses their layer chains,
@@ -79,15 +76,13 @@ type eagerPipeline struct {
 
 	pusher remotes.Pusher
 
-	// pushDedup coalesces concurrent pushes; pushedDigests skips digests that
-	// already succeeded in this build.
-	pushDedup     flightcontrol.Group[bool]
+	// pushedDigests skips digests that already succeeded in this build.
 	pushedDigests sync.Map
 
 	// exportRefIDs is nil until applyExportRefs installs the final export refs.
 	// After that, non-export refs are skipped or cancelled.
 	exportRefIDs atomic.Pointer[map[string]struct{}]
-	// inflight tracks requesters and cancel funcs per digest.
+	// inflight tracks requesters and active push cancel funcs per digest.
 	inflight sync.Map // map[string]*pushTracker
 
 	mu       sync.Mutex
@@ -95,15 +90,19 @@ type eagerPipeline struct {
 }
 
 // pushTracker is per digest. refIDs records every ref that requested the blob,
-// including refs later filtered out of the final export; cancels records only
-// active push waiters. When the final export refs are known, a digest is
-// cancelled only if none of its requesters are part of the export. If it is
-// cancelled, every active waiter must be cancelled because flightcontrol keeps
-// the shared push running until all waiter contexts are done.
+// including refs later filtered out of the final export. active is non-nil while
+// a worker is pushing the blob; duplicate requesters skip instead of waiting.
 type pushTracker struct {
-	mu      sync.Mutex
-	refIDs  map[string]struct{}
-	cancels map[string]context.CancelFunc
+	mu     sync.Mutex
+	refIDs map[string]struct{}
+	active *activePush
+}
+
+// activePush is the per-push state for a digest. Pointer identity (tracker.active
+// == me) tells the cleanup defer whether its push is still the active one, so a
+// later push started after cancellation is not clobbered.
+type activePush struct {
+	cancel context.CancelFunc
 }
 
 func eagerWorkerCount() int {
@@ -194,16 +193,13 @@ func (ep *eagerPipeline) compressWorker() {
 func (ep *eagerPipeline) pushWorker() {
 	defer ep.pushWG.Done()
 	for {
-		// Drain pushWork even after ctx cancellation so per-ref waiters finish.
+		// Drain pushWork even after ctx cancellation so queued push errors are recorded.
 		item, ok := <-ep.pushWork
 		if !ok {
 			return
 		}
 		if err := ep.pushDescriptor(item); err != nil {
 			ep.recordErr(err)
-			item.result <- err
-		} else {
-			item.result <- nil
 		}
 	}
 }
@@ -346,13 +342,11 @@ func (ep *eagerPipeline) processRef(ref cache.ImmutableRef) error {
 		return nil
 	}
 
-	pushStart := time.Now()
 	if err := ep.dispatchPushes(ctx, refID, rems); err != nil {
-		bklog.G(ctx).WithError(err).Warnf("eager push failed ref=%s", refID)
+		bklog.G(ctx).WithError(err).Warnf("eager push queue failed ref=%s", refID)
 		return err
 	}
-	bklog.G(ctx).Infof("eager push complete ref=%s descriptors=%d bytes=%d duration=%s",
-		refID, descCount, totalBytes, time.Since(pushStart).Round(time.Millisecond))
+	bklog.G(ctx).Infof("eager push queued ref=%s descriptors=%d bytes=%d", refID, descCount, totalBytes)
 	return nil
 }
 
@@ -370,22 +364,19 @@ func summarizeDescriptors(rems []*solver.Remote) (count int, totalBytes int64) {
 	return
 }
 
-// dispatchPushes fans a ref's pushable descriptors out to the push pool.
+// dispatchPushes fans a ref's pushable descriptors out to the push pool without
+// waiting for push completion.
 func (ep *eagerPipeline) dispatchPushes(ctx context.Context, refID string, rems []*solver.Remote) error {
 	if len(rems) == 0 {
 		return nil
 	}
 
 	remote := rems[0]
-	// Buffered to the descriptor count so workers can report completion even if
-	// dispatchPushes returns early on context cancellation.
-	resultCh := make(chan error, len(remote.Descriptors))
 	handler := retryhandler.New(
 		limited.PushHandler(ep.pusher, remote.Provider, ep.pushCfg.TargetName),
 		nil,
 	)
 
-	enqueued := 0
 	for _, desc := range remote.Descriptors {
 		if !shouldEagerPushDesc(desc) {
 			continue
@@ -394,22 +385,9 @@ func (ep *eagerPipeline) dispatchPushes(ctx context.Context, refID string, rems 
 			refID:   refID,
 			desc:    desc,
 			handler: handler,
-			result:  resultCh,
 		}
 		select {
 		case ep.pushWork <- item:
-			enqueued++
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		}
-	}
-
-	for range enqueued {
-		select {
-		case err := <-resultCh:
-			if err != nil {
-				return err
-			}
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		}
@@ -438,11 +416,8 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 	}
 
 	tracker := ep.trackerFor(digest)
-	pushCtx, cancel := context.WithCancelCause(pushCtx)
-	defer cancel(errors.WithStack(context.Canceled))
-
-	// Register requester and cancel func atomically with export-ref filtering
-	// so cancelNonExportInflight cannot miss an about-to-start push.
+	// Register requester atomically with export-ref filtering so
+	// cancelNonExportInflight cannot miss an about-to-start push.
 	tracker.mu.Lock()
 	tracker.refIDs[item.refID] = struct{}{}
 	if !ep.isExportRef(item.refID) {
@@ -450,29 +425,31 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 		span.SetAttributes(attribute.Bool("filtered", true))
 		return nil
 	}
-	if tracker.cancels == nil {
-		tracker.cancels = make(map[string]context.CancelFunc)
+	if tracker.active != nil {
+		tracker.mu.Unlock()
+		span.SetAttributes(attribute.Bool("deduped", true))
+		return nil
 	}
-	tracker.cancels[item.refID] = func() { cancel(errors.WithStack(context.Canceled)) }
+	pushCtx, cancel := context.WithCancelCause(pushCtx)
+	defer cancel(errors.WithStack(context.Canceled))
+	me := &activePush{cancel: func() { cancel(errors.WithStack(context.Canceled)) }}
+	tracker.active = me
 	tracker.mu.Unlock()
 
 	defer func() {
 		tracker.mu.Lock()
-		delete(tracker.cancels, item.refID)
+		if tracker.active == me {
+			tracker.active = nil
+		}
 		tracker.mu.Unlock()
 	}()
 
-	pushed, err := ep.pushDedup.Do(pushCtx, digest, func(ctx context.Context) (bool, error) {
-		if _, done := ep.pushedDigests.Load(digest); done {
-			return false, nil
-		}
-		_, herr := item.handler(ctx, item.desc)
-		if herr != nil {
-			return false, herr
-		}
-		ep.pushedDigests.Store(digest, struct{}{})
-		return true, nil
-	})
+	if _, done := ep.pushedDigests.Load(digest); done {
+		span.SetAttributes(attribute.Bool("deduped", true))
+		return nil
+	}
+
+	_, err := item.handler(pushCtx, item.desc)
 	if err != nil {
 		// A cancelled pushCtx with a live parent means export ref set filtering won.
 		if context.Cause(pushCtx) != nil && context.Cause(ctx) == nil {
@@ -482,11 +459,7 @@ func (ep *eagerPipeline) pushDescriptor(item eagerPushItem) error {
 		span.RecordError(err)
 		return err
 	}
-	if !pushed {
-		span.SetAttributes(attribute.Bool("deduped", true))
-		return nil
-	}
-
+	ep.pushedDigests.Store(digest, struct{}{})
 	return nil
 }
 
@@ -533,8 +506,6 @@ func (ep *eagerPipeline) wait() error {
 }
 
 // cancelNonExportInflight cancels digests whose requesters are all non-export.
-// All waiters for a digest must be cancelled, or flightcontrol leaves the
-// shared push running.
 func (ep *eagerPipeline) cancelNonExportInflight(exportRefs map[string]struct{}) int {
 	var digestsCancelled int
 	ep.inflight.Range(func(key, val any) bool {
@@ -549,18 +520,15 @@ func (ep *eagerPipeline) cancelNonExportInflight(exportRefs map[string]struct{})
 				return true
 			}
 		}
-		if len(tracker.cancels) == 0 {
+		if tracker.active == nil {
 			// Queued items will be filtered at dequeue.
 			return true
 		}
-		n := len(tracker.cancels)
-		for refID, cancelFn := range tracker.cancels {
-			cancelFn()
-			delete(tracker.cancels, refID)
-		}
+		tracker.active.cancel()
+		tracker.active = nil
 		digestsCancelled++
-		bklog.G(ep.ctx).Infof("eager push cancel digest=%s requesters=%d cancelled_waiters=%d",
-			digest, len(tracker.refIDs), n)
+		bklog.G(ep.ctx).Infof("eager push cancel digest=%s requesters=%d",
+			digest, len(tracker.refIDs))
 		return true
 	})
 	return digestsCancelled
@@ -581,15 +549,14 @@ func (ep *eagerPipeline) drainCompress() {
 	}
 }
 
-// drainPushWork unblocks any dispatchers still waiting on queued push items.
+// drainPushWork drops push items left behind after workers exit.
 func (ep *eagerPipeline) drainPushWork() {
 	for {
 		select {
-		case item, ok := <-ep.pushWork:
+		case _, ok := <-ep.pushWork:
 			if !ok {
 				return
 			}
-			item.result <- nil
 		default:
 			return
 		}
