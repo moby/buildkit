@@ -223,39 +223,25 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 		})
 	}
 
-	args := maps.Clone(c.Args)
-
-	contextKey := "context"
-	if v, ok := args["contextkey"]; ok && v != "" {
-		contextKey = v
-	} else if v, ok := c.Args["input:context"]; ok && v != "" {
-		contextKey = "input:context"
-	}
-
 	ext := provenancetypes.ProvenanceExternalParametersSLSA1{}
-	if v, ok := args[contextKey]; ok && v != "" {
-		if m, ok := findMaterial(c.Sources, v); ok {
-			ext.ConfigSource.URI = m.URI
-			ext.ConfigSource.Digest = m.Digest
-		} else {
-			ext.ConfigSource.URI = v
-		}
-		ext.ConfigSource.URI = urlutil.RedactCredentials(ext.ConfigSource.URI)
-		delete(args, contextKey)
-	}
-
-	if v, ok := args["filename"]; ok && v != "" {
-		ext.ConfigSource.Path = v
-		delete(args, "filename")
-	}
+	reqProv := RequestProvenance(c.Request.Frontend, maps.Clone(c.Request.Args), c.Sources)
+	ext.ConfigSource = reqProv.ConfigSource
 
 	vcs := make(map[string]string)
-	for k, v := range args {
+	req := c.Request.Clone()
+	if req == nil {
+		req = &provenancetypes.Parameters{}
+	}
+	if reqProv.Request != nil {
+		req.Frontend = reqProv.Request.Frontend
+		req.Args = reqProv.Request.Args
+	}
+	for k, v := range req.Args {
 		if strings.HasPrefix(k, "vcs:") {
 			if k == "vcs:source" {
 				v = urlutil.RedactCredentials(v)
 			}
-			delete(args, k)
+			delete(req.Args, k)
 			if v != "" {
 				vcs[strings.TrimPrefix(k, "vcs:")] = v
 			}
@@ -265,27 +251,12 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 	internal := provenancetypes.ProvenanceInternalParametersSLSA1{}
 	internal.BuilderPlatform = platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
-	req := provenancetypes.Parameters{}
-	req.Frontend = c.Frontend
-	req.Args = args
-	for _, s := range c.Secrets {
-		req.Secrets = append(req.Secrets, &provenancetypes.Secret{
-			ID:       s.ID,
-			Optional: s.Optional,
-		})
-	}
-	for _, s := range c.SSH {
-		req.SSH = append(req.SSH, &provenancetypes.SSH{
-			ID:       s.ID,
-			Optional: s.Optional,
-		})
-	}
 	for _, s := range c.Sources.Local {
 		req.Locals = append(req.Locals, &provenancetypes.LocalSource{
 			Name: s.Name,
 		})
 	}
-	ext.Request = req
+	ext.Request = *req
 
 	incompleteMaterials := c.IncompleteMaterials
 	if !incompleteMaterials {
@@ -306,7 +277,7 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 		RunDetails: provenancetypes.ProvenanceRunDetailsSLSA1{
 			Metadata: &provenancetypes.ProvenanceMetadataSLSA1{
 				Completeness: provenancetypes.BuildKitComplete{
-					Request:              c.Frontend != "",
+					Request:              c.Request.Frontend != "",
 					ResolvedDependencies: !incompleteMaterials,
 				},
 				Hermetic: !incompleteMaterials && !c.NetworkAccess,
@@ -319,6 +290,42 @@ func NewPredicate(c *Capture) (*provenancetypes.ProvenancePredicateSLSA1, error)
 	}
 
 	return pr, nil
+}
+
+func RequestProvenance(frontend string, args map[string]string, srcs provenancetypes.Sources) *provenancetypes.RequestProvenance {
+	args = maps.Clone(args)
+	contextKey := "context"
+	if v, ok := args["contextkey"]; ok && v != "" {
+		contextKey = v
+	} else if v, ok := args["input:context"]; ok && v != "" {
+		contextKey = "input:context"
+	}
+
+	ext := provenancetypes.RequestProvenance{
+		Request: &provenancetypes.Parameters{
+			Frontend: frontend,
+			Args:     args,
+		},
+	}
+	if v, ok := args[contextKey]; ok && v != "" {
+		if m, ok := findMaterial(srcs, v); ok {
+			ext.ConfigSource.URI = m.URI
+			ext.ConfigSource.Digest = m.Digest
+		} else {
+			ext.ConfigSource.URI = v
+		}
+		ext.ConfigSource.URI = urlutil.RedactCredentials(ext.ConfigSource.URI)
+		delete(args, contextKey)
+	}
+
+	if v, ok := args["filename"]; ok && v != "" {
+		ext.ConfigSource.Path = v
+		delete(args, "filename")
+	}
+	if len(args) == 0 {
+		ext.Request.Args = nil
+	}
+	return &ext
 }
 
 func FilterArgs(m map[string]string) map[string]string {

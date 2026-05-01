@@ -38,12 +38,14 @@ type resultWithBridge struct {
 // provenanceBridge provides scoped access to LLBBridge and captures the request it makes for provenance
 type provenanceBridge struct {
 	*llbBridge
-	mu  sync.Mutex
-	req *frontend.SolveRequest
+	mu      sync.Mutex
+	req     *frontend.SolveRequest
+	rootReq *frontend.SolveRequest
 
-	images     []provenancetypes.ImageSource
-	builds     []resultWithBridge
-	subBridges []*provenanceBridge
+	images                 []provenancetypes.ImageSource
+	builds                 []resultWithBridge
+	subBridges             []*provenanceBridge
+	provenanceRefRecordIDs []string
 }
 
 func (b *provenanceBridge) eachRef(f func(r solver.ResultProxy) error) error {
@@ -165,6 +167,7 @@ func (b *provenanceBridge) ResolveSourceMetadata(ctx context.Context, op *pb.Sou
 }
 
 func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid string) (res *frontend.Result, err error) {
+	req = req.Clone()
 	if req.Definition != nil && req.Definition.Def != nil && req.Frontend != "" {
 		return nil, errors.New("cannot solve with both Definition and Frontend specified")
 	}
@@ -180,7 +183,11 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		wb := &provenanceBridge{llbBridge: b.llbBridge, req: &req}
+		rootReq := b.rootReq
+		if !hasRequestProvenance(rootReq) {
+			rootReq = b.req
+		}
+		wb := &provenanceBridge{llbBridge: b.llbBridge, req: &req, rootReq: rootReq}
 		res, err = f.Solve(ctx, wb, b.llbBridge, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
 		if err != nil {
 			fe := errdefs.Frontend{
@@ -201,6 +208,9 @@ func (b *provenanceBridge) Solve(ctx context.Context, req frontend.SolveRequest,
 			_, err := ref.Result(ctx)
 			return err
 		})
+	}
+	if err == nil {
+		err = b.registerProvenanceRefs(res)
 	}
 	return
 }
@@ -671,14 +681,26 @@ func getRefProvenance(ref solver.ResultProxy, br *provenanceBridge) (*provenance
 	if !ok {
 		return nil, errors.Errorf("invalid provenance type %T", p)
 	}
+	pr = pr.Clone()
 
 	if br.req != nil {
 		if pr == nil {
 			return nil, errors.Errorf("missing provenance for %s", ref.ID())
 		}
 
-		pr.Frontend = br.req.Frontend
-		pr.Args = provenance.FilterArgs(br.req.FrontendOpt)
+		pr.Request.Frontend = br.req.Frontend
+		pr.Request.Args = provenance.FilterArgs(br.req.FrontendOpt)
+		pr.Request.Inputs = br.inputProvenance(br.req.FrontendInputs)
+		if root := br.rootRequestProvenance(pr.Sources); root != nil {
+			req := provenance.RequestProvenance(pr.Request.Frontend, pr.Request.Args, pr.Sources)
+			if req.Request == nil {
+				req.Request = &provenancetypes.Parameters{}
+			}
+			req.Request.Inputs = pr.Request.Inputs
+			if !root.Equal(req) {
+				pr.Request.Root = root
+			}
+		}
 		// TODO: should also save some output options like compression
 	}
 
