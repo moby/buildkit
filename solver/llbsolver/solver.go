@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -60,6 +61,7 @@ type Opt struct {
 	HistoryQueue     *history.Queue
 	ResourceMonitor  *resources.Monitor
 	ProvenanceEnv    map[string]any
+	MeterProvider    metric.MeterProvider
 }
 
 type Solver struct {
@@ -76,6 +78,7 @@ type Solver struct {
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
 	provenanceEnv             map[string]any
 	provenanceStore           *provenanceStore
+	metrics                   *buildMetrics
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -95,6 +98,11 @@ func New(opt Opt) (*Solver, error) {
 		}
 	}
 
+	bm, err := newBuildMetrics(opt.MeterProvider)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to register build metrics")
+	}
+
 	s := &Solver{
 		workerController:          opt.WorkerController,
 		resolveWorker:             defaultResolver(opt.WorkerController),
@@ -107,6 +115,7 @@ func New(opt Opt) (*Solver, error) {
 		history:                   opt.HistoryQueue,
 		provenanceEnv:             opt.ProvenanceEnv,
 		provenanceStore:           newProvenanceStore(),
+		metrics:                   bm,
 	}
 
 	sampler, err := resources.NewSysSampler()
