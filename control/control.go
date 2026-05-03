@@ -50,6 +50,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
@@ -69,6 +70,7 @@ type Opt struct {
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
 	TraceCollector            sdktrace.SpanExporter
+	MeterProvider             metric.MeterProvider
 	HistoryDB                 db.DB
 	CacheStore                *bboltcachestorage.Store
 	LeaseManager              *leaseutil.Manager
@@ -118,6 +120,7 @@ func NewController(opt Opt) (*Controller, error) {
 		Entitlements:     opt.Entitlements,
 		HistoryQueue:     hq,
 		ProvenanceEnv:    opt.ProvenanceEnv,
+		MeterProvider:    opt.MeterProvider,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")

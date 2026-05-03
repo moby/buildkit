@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -60,6 +61,12 @@ type Opt struct {
 	HistoryQueue     *history.Queue
 	ResourceMonitor  *resources.Monitor
 	ProvenanceEnv    map[string]any
+	// MeterProvider is the OTEL metric provider used to register build
+	// observability instruments. Passed explicitly rather than read from
+	// otel.GetMeterProvider() so that this package does not depend on the
+	// global provider — see moby/buildkit#4957 review for rationale. A
+	// nil value selects an internal no-op provider.
+	MeterProvider metric.MeterProvider
 }
 
 type Solver struct {
@@ -75,6 +82,7 @@ type Solver struct {
 	history                   *history.Queue
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
 	provenanceEnv             map[string]any
+	metrics                   *buildMetrics
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -94,6 +102,11 @@ func New(opt Opt) (*Solver, error) {
 		}
 	}
 
+	bm, err := newBuildMetrics(opt.MeterProvider)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to register build metrics")
+	}
+
 	s := &Solver{
 		workerController:          opt.WorkerController,
 		resolveWorker:             defaultResolver(opt.WorkerController),
@@ -105,6 +118,7 @@ func New(opt Opt) (*Solver, error) {
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
 		provenanceEnv:             opt.ProvenanceEnv,
+		metrics:                   bm,
 	}
 
 	sampler, err := resources.NewSysSampler()

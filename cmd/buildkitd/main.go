@@ -68,7 +68,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -361,7 +363,7 @@ func main() {
 			defer db.Close()
 		}
 
-		controller, err := newController(ctx, c, &cfg)
+		controller, err := newController(ctx, c, &cfg, mp)
 		if err != nil {
 			return err
 		}
@@ -779,7 +781,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(ctx context.Context, c *cli.Context, cfg *config.Config, mp metric.MeterProvider) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -882,6 +884,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		CacheManager:              solver.NewCacheManager(context.TODO(), "local", cacheStorage, worker.NewCacheResultStorage(wc)),
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
+		MeterProvider:             mp,
 		HistoryDB:                 historyDB,
 		CacheStore:                cacheStorage,
 		LeaseManager:              w.LeaseManager(),
@@ -1054,6 +1057,7 @@ func newTracerProvider(ctx context.Context) (*sdktrace.TracerProvider, error) {
 func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 	opts := []sdkmetric.Option{
 		sdkmetric.WithResource(detect.Resource()),
+		sdkmetric.WithView(buildDurationView()),
 	}
 
 	if r, err := prometheus.New(); err != nil {
@@ -1072,6 +1076,32 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 		opts = append(opts, sdkmetric.WithReader(r))
 	}
 	return sdkmetric.NewMeterProvider(opts...), nil
+}
+
+// buildDurationView routes the buildkit.build.duration histogram to a
+// Base2 exponential aggregation so that the OTEL Prometheus exporter
+// renders it as a Prometheus native histogram. Native histograms avoid
+// the "tens of millions of series" cardinality blow-up reported in
+// moby/buildkit#5777 by storing observations in dynamically-sized
+// exponential buckets rather than a fixed bucket schedule.
+//
+// The AttributeFilter is defense in depth: only the status attribute
+// is recorded on this histogram, regardless of what the call site
+// supplies.
+func buildDurationView() sdkmetric.View {
+	return sdkmetric.NewView(
+		sdkmetric.Instrument{
+			Name: "buildkit.build.duration",
+			Kind: sdkmetric.InstrumentKindHistogram,
+		},
+		sdkmetric.Stream{
+			Aggregation: sdkmetric.AggregationBase2ExponentialHistogram{
+				MaxSize:  160,
+				MaxScale: 20,
+			},
+			AttributeFilter: attribute.NewAllowKeysFilter("status"),
+		},
+	)
 }
 
 func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {
