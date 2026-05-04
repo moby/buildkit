@@ -671,11 +671,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			bklog.G(ctx).WithError(err).Warnf("failed to compute eager export refs; skipping eager export filtering")
 		} else {
 			cancelled := eager.applyExportRefs(exportRefs)
-			// Backfill closes the onVertexComplete gap for concurrent solves
-			// that share a vertex: the second build's job may never get the
-			// callback (sharedOp/edge dedup short-circuits), so we synchronously
-			// enqueue every export ref here. enqueueExportRefs dedupes against
-			// onVertexComplete, so the happy path is a fast no-op iteration.
+			// Backfill every export ref to cover concurrent solves that share
+			// a vertex and miss onVertexComplete; dedupes on the happy path.
 			enqueued, deduped := eager.enqueueExportRefs(backfillRefs)
 			bklog.G(ctx).Infof("eager export_refs=%d cancelled_inflight=%d backfill_enqueued=%d backfill_deduped=%d",
 				len(exportRefs), cancelled, enqueued, deduped)

@@ -282,9 +282,7 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	assert.Equal(t, cloned.Load(), released.Load())
 }
 
-// onVertexComplete must dedupe by ref ID so the same ref is only enqueued once
-// even if multiple vertex completions deliver it (concurrent solves sharing a
-// vertex, late-firing producer-side fires, etc).
+// Repeated fires for the same ref ID must enqueue only once.
 func TestEagerPipeline_OnVertexCompleteDedupesByRefID(t *testing.T) {
 	var cloned, released atomic.Int32
 	ep := &eagerPipeline{
@@ -301,12 +299,11 @@ func TestEagerPipeline_OnVertexCompleteDedupesByRefID(t *testing.T) {
 	ep.onVertexComplete(nil, []solver.Result{res2})
 	ep.onVertexComplete(nil, []solver.Result{res3})
 
-	assert.Equal(t, 2, len(ep.compressWork), "duplicate ref ID must be deduped")
-	assert.Equal(t, int32(2), cloned.Load(), "deduped second call must skip Clone()")
+	assert.Equal(t, 2, len(ep.compressWork), "duplicate ref ID must dedupe")
+	assert.Equal(t, int32(2), cloned.Load(), "dedupe must skip Clone")
 }
 
-// Concurrent onVertexComplete invocations for the same ref ID should atomically
-// fall to a single enqueue (LoadOrStore on ep.enqueued).
+// Concurrent fires for the same ref ID collapse to a single enqueue.
 func TestEagerPipeline_OnVertexCompleteDedupesConcurrent(t *testing.T) {
 	var cloned, released atomic.Int32
 	ep := &eagerPipeline{
@@ -327,12 +324,11 @@ func TestEagerPipeline_OnVertexCompleteDedupesConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Equal(t, 1, len(ep.compressWork), "concurrent enqueues for one ref ID must collapse to one item")
-	assert.Equal(t, int32(1), cloned.Load(), "only the first onVertexComplete must Clone")
+	assert.Equal(t, 1, len(ep.compressWork), "concurrent enqueues must collapse to one")
+	assert.Equal(t, int32(1), cloned.Load(), "only the first fire must Clone")
 }
 
-// enqueueExportRefs sends every ref it owns into compressWork, even when
-// onVertexComplete never fired for them — closes the producer-side gap.
+// Refs onVertexComplete never fired for still get enqueued via the backfill.
 func TestEagerPipeline_EnqueueExportRefsBackfillsMissing(t *testing.T) {
 	var released atomic.Int32
 	ep := &eagerPipeline{
@@ -348,15 +344,13 @@ func TestEagerPipeline_EnqueueExportRefsBackfillsMissing(t *testing.T) {
 	}
 	enq, dedup := ep.enqueueExportRefs(refs)
 
-	assert.Equal(t, 3, enq, "all three refs should be enqueued")
-	assert.Equal(t, 0, dedup, "nothing was previously enqueued")
+	assert.Equal(t, 3, enq)
+	assert.Equal(t, 0, dedup)
 	assert.Equal(t, 3, len(ep.compressWork))
-	assert.Zero(t, released.Load(), "successful enqueue must not release the ref (consumer owns it)")
+	assert.Zero(t, released.Load(), "consumer owns the ref on successful enqueue")
 }
 
-// enqueueExportRefs called after onVertexComplete already enqueued every ref
-// is a fast no-op iteration: no extra work goes into compressWork, the
-// backfill clones are released by enqueueExportRefs itself.
+// Refs onVertexComplete already enqueued are deduped, and their backfill clones released.
 func TestEagerPipeline_EnqueueExportRefsDedupesAgainstOnVertexComplete(t *testing.T) {
 	var cloned, released atomic.Int32
 	ep := &eagerPipeline{
@@ -375,14 +369,13 @@ func TestEagerPipeline_EnqueueExportRefsDedupesAgainstOnVertexComplete(t *testin
 	}
 	enq, dedup := ep.enqueueExportRefs(backfill)
 
-	assert.Equal(t, 1, enq, "only ref-B (new) should be enqueued")
-	assert.Equal(t, 1, dedup, "ref-A must be deduped against the prior onVertexComplete")
-	assert.Equal(t, 2, len(ep.compressWork), "compressWork now holds ref-A (from onVertexComplete) and ref-B (from backfill)")
-	assert.Equal(t, int32(1), released.Load(), "deduped backfill clone of ref-A must be released")
+	assert.Equal(t, 1, enq, "only the new ref-B is enqueued")
+	assert.Equal(t, 1, dedup, "ref-A is deduped against the prior fire")
+	assert.Equal(t, 2, len(ep.compressWork))
+	assert.Equal(t, int32(1), released.Load(), "deduped backfill clone is released")
 }
 
-// enqueueExportRefs after wait() started must release refs without enqueueing
-// or panicking, mirroring the late-callback contract of onVertexComplete.
+// After wait(), enqueueExportRefs must release refs without enqueueing or panicking.
 func TestEagerPipeline_EnqueueExportRefsAfterWait(t *testing.T) {
 	var released atomic.Int32
 	ep := &eagerPipeline{
@@ -398,10 +391,10 @@ func TestEagerPipeline_EnqueueExportRefsAfterWait(t *testing.T) {
 	}
 	require.NotPanics(t, func() {
 		enq, dedup := ep.enqueueExportRefs(refs)
-		assert.Zero(t, enq, "no enqueue after wait()")
-		assert.Zero(t, dedup, "nothing was deduped, just dropped under closing")
+		assert.Zero(t, enq)
+		assert.Zero(t, dedup)
 	})
-	assert.Equal(t, int32(2), released.Load(), "both refs must be released since the pipeline is closing")
+	assert.Equal(t, int32(2), released.Load(), "closing pipeline must release refs")
 }
 
 // nil entries in the backfill list are skipped without panicking.
@@ -440,7 +433,7 @@ func TestEagerPipeline_EnqueueExportRefsReleasesOnContextCancel(t *testing.T) {
 	enq, dedup := ep.enqueueExportRefs(refs)
 	assert.Zero(t, enq)
 	assert.Zero(t, dedup)
-	assert.Equal(t, int32(1), released.Load(), "ctx-cancelled enqueue must release the ref")
+	assert.Equal(t, int32(1), released.Load(), "ctx-cancelled ref must be released")
 }
 
 func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
@@ -674,8 +667,8 @@ func TestEagerPushDescriptor_ExportRefAfterCancelStillPushes(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load(), "export ref must drive a fresh push after a prior cancellation")
 }
 
-// releaseTracker counts Release calls across clones. id, when non-empty,
-// overrides the default ID so dedup tests can use distinct ref identities.
+// releaseTracker counts Release calls across clones. id, when set, overrides
+// the default ID so dedupe tests can use distinct ref identities.
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
