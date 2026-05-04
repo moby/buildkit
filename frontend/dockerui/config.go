@@ -435,20 +435,29 @@ func (bc *Client) MainContext(ctx context.Context, opts ...llb.LocalOption) (*ll
 	}
 
 	sessionID := bc.bopts.SessionID
-	if v, ok := bc.localsSessionIDs[bctx.contextLocalName]; ok {
-		sessionID = v
+	sharedSessionID, sharedSession := bc.localsSessionIDs[bctx.contextLocalName]
+	if sharedSession {
+		sessionID = sharedSessionID
 	}
 
-	opts = append([]llb.LocalOption{
-		llb.SessionID(sessionID),
-		llb.ExcludePatterns(excludes),
-		llb.SharedKeyHint(bctx.contextLocalName),
-		WithInternalName("load build context"),
-	}, opts...)
-
+	opts = mainContextLocalOpts(bctx.contextLocalName, sessionID, excludes, opts, sharedSession)
 	st := llb.Local(bctx.contextLocalName, opts...)
 
 	return &st, nil
+}
+
+func mainContextLocalOpts(name, sessionID string, excludes []string, callerOpts []llb.LocalOption, sharedSession bool) []llb.LocalOption {
+	opts := []llb.LocalOption{
+		llb.SessionID(sessionID),
+		llb.ExcludePatterns(excludes),
+		llb.SharedKeyHint(name),
+		WithInternalName("load build context"),
+	}
+	opts = append(opts, callerOpts...)
+	if sharedSession {
+		opts = append(opts, llb.FollowPaths(nil))
+	}
+	return opts
 }
 
 func (bc *Client) NamedContext(name string, opt ContextOpt) (*NamedContext, error) {
