@@ -35,6 +35,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
+	dockerfileversion "github.com/moby/buildkit/frontend/dockerfile/version"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
@@ -986,11 +987,15 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 }
 
 func getBuildkitVersion() client.BuildkitVersion {
-	return client.BuildkitVersion{
+	buildkitVersion := client.BuildkitVersion{
 		Package:  version.Package,
 		Version:  version.Version,
 		Revision: version.Revision,
 	}
+	if dockerfileVersion := dockerfileversion.Version(); dockerfileVersion != "" {
+		buildkitVersion.DockerfileVersion = dockerfileVersion
+	}
+	return buildkitVersion
 }
 
 func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {

@@ -44,5 +44,8 @@ func info(clicontext *cli.Context) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	_, _ = fmt.Fprintf(w, "BuildKit:\t%s %s %s\n", res.BuildkitVersion.Package, res.BuildkitVersion.Version, res.BuildkitVersion.Revision)
+	if res.BuildkitVersion.DockerfileVersion != "" {
+		_, _ = fmt.Fprintf(w, "Dockerfile:\t%s\n", res.BuildkitVersion.DockerfileVersion)
+	}
 	return w.Flush()
 }
