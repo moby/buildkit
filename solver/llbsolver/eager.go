@@ -228,31 +228,56 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 			continue
 		}
 
-		refID := workerRef.ImmutableRef.ID()
-		if _, loaded := ep.enqueued.LoadOrStore(refID, struct{}{}); loaded {
+		if !ep.claimEnqueueSlot(workerRef.ImmutableRef.ID()) {
 			continue
 		}
-
-		ep.closeMu.Lock()
-		if ep.closing {
-			ep.closeMu.Unlock()
+		if !ep.claimSenderSlot() {
 			continue
 		}
-		ep.senderWg.Add(1)
-		ep.closeMu.Unlock()
-
-		cloned := workerRef.ImmutableRef.Clone()
-		select {
-		case ep.compressWork <- eagerWorkItem{ref: cloned}:
-			ep.senderWg.Done()
-		case <-ep.done:
-			cloned.Release(context.TODO())
-			ep.senderWg.Done()
-		case <-ep.ctx.Done():
-			cloned.Release(context.TODO())
-			ep.senderWg.Done()
+		if _, ctxDone := ep.dispatchSend(workerRef.ImmutableRef.Clone()); ctxDone {
 			return
 		}
+	}
+}
+
+// claimEnqueueSlot returns true iff refID has not yet been enqueued by another
+// caller. Centralizes the LoadOrStore idiom; callers handle their own cleanup
+// on a missed claim (e.g. releasing a ref they already cloned).
+func (ep *eagerPipeline) claimEnqueueSlot(refID string) bool {
+	_, loaded := ep.enqueued.LoadOrStore(refID, struct{}{})
+	return !loaded
+}
+
+// claimSenderSlot atomically observes the closing flag and registers a sender
+// on senderWg. Returns false if the pipeline is closing, in which case the
+// caller must not enqueue (and is responsible for releasing any ref it owns).
+func (ep *eagerPipeline) claimSenderSlot() bool {
+	ep.closeMu.Lock()
+	defer ep.closeMu.Unlock()
+	if ep.closing {
+		return false
+	}
+	ep.senderWg.Add(1)
+	return true
+}
+
+// dispatchSend takes ownership of ref and sends it into compressWork. Caller
+// must have already claimed a slot via claimSenderSlot. On done / ctx cancel
+// the ref is released and senderWg.Done() is called. ctxDone signals the
+// caller should stop iterating.
+func (ep *eagerPipeline) dispatchSend(ref cache.ImmutableRef) (sent, ctxDone bool) {
+	select {
+	case ep.compressWork <- eagerWorkItem{ref: ref}:
+		ep.senderWg.Done()
+		return true, false
+	case <-ep.done:
+		ref.Release(context.TODO())
+		ep.senderWg.Done()
+		return false, false
+	case <-ep.ctx.Done():
+		ref.Release(context.TODO())
+		ep.senderWg.Done()
+		return false, true
 	}
 }
 
@@ -324,32 +349,20 @@ func (ep *eagerPipeline) enqueueExportRefs(refs []cache.ImmutableRef) (enqueued,
 		if ref == nil {
 			continue
 		}
-		refID := ref.ID()
-		if _, loaded := ep.enqueued.LoadOrStore(refID, struct{}{}); loaded {
+		if !ep.claimEnqueueSlot(ref.ID()) {
 			ref.Release(context.TODO())
 			deduped++
 			continue
 		}
-
-		ep.closeMu.Lock()
-		if ep.closing {
-			ep.closeMu.Unlock()
+		if !ep.claimSenderSlot() {
 			ref.Release(context.TODO())
 			continue
 		}
-		ep.senderWg.Add(1)
-		ep.closeMu.Unlock()
-
-		select {
-		case ep.compressWork <- eagerWorkItem{ref: ref}:
-			ep.senderWg.Done()
+		sent, ctxDone := ep.dispatchSend(ref)
+		if sent {
 			enqueued++
-		case <-ep.done:
-			ref.Release(context.TODO())
-			ep.senderWg.Done()
-		case <-ep.ctx.Done():
-			ref.Release(context.TODO())
-			ep.senderWg.Done()
+		}
+		if ctxDone {
 			return
 		}
 	}
