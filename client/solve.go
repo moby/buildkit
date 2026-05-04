@@ -8,10 +8,13 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/images"
 	contentlocal "github.com/containerd/containerd/v2/plugins/content/local"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -417,7 +420,79 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 		}
 	}
+	// Reset cache stores that have reset=true — delete unreferenced blobs
+	for _, ref := range cacheOpt.storesToReset {
+		if err := resetCacheStore(ctx, ref.store, ref.path); err != nil {
+			bklog.G(ctx).WithError(err).Warn("failed to reset cache store")
+		}
+	}
 	return res, nil
+}
+
+// resetCacheStore deletes all blobs not referenced by any manifest in
+// index.json. Referenced blobs are always preserved.
+func resetCacheStore(ctx context.Context, cs content.Store, storePath string) error {
+	idx := ociindex.NewStoreIndex(storePath)
+	index, err := idx.Read()
+	if err != nil {
+		return errors.Wrap(err, "reset: failed to read index.json")
+	}
+
+	var mu sync.Mutex
+	referenced := make(map[digest.Digest]struct{})
+	collectReferencedHandler := images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		mu.Lock()
+		referenced[desc.Digest] = struct{}{}
+		mu.Unlock()
+
+		if images.IsIndexType(desc.MediaType) {
+			dt, err := content.ReadBlob(ctx, cs, desc)
+			if err != nil {
+				return nil, errors.Wrapf(err, "reset: failed to read blob %s", desc.Digest)
+			}
+			var childIdx ocispecs.Index
+			if err := json.Unmarshal(dt, &childIdx); err != nil {
+				return nil, errors.Wrapf(err, "reset: failed to unmarshal index %s", desc.Digest)
+			}
+			return childIdx.Manifests, nil
+		} else if images.IsManifestType(desc.MediaType) {
+			dt, err := content.ReadBlob(ctx, cs, desc)
+			if err != nil {
+				return nil, errors.Wrapf(err, "reset: failed to read blob %s", desc.Digest)
+			}
+			var manifest ocispecs.Manifest
+			if err := json.Unmarshal(dt, &manifest); err != nil {
+				return nil, errors.Wrapf(err, "reset: failed to unmarshal manifest %s", desc.Digest)
+			}
+			mu.Lock()
+			referenced[manifest.Config.Digest] = struct{}{}
+			for _, l := range manifest.Layers {
+				referenced[l.Digest] = struct{}{}
+			}
+			mu.Unlock()
+		}
+		return nil, nil
+	})
+	if err := images.Dispatch(ctx, collectReferencedHandler, nil, index.Manifests...); err != nil {
+		return errors.Wrap(err, "reset: failed to collect referenced blobs")
+	}
+
+	var toDelete []digest.Digest
+	if err := cs.Walk(ctx, func(info content.Info) error {
+		if _, ok := referenced[info.Digest]; !ok {
+			toDelete = append(toDelete, info.Digest)
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "reset: failed to walk content store")
+	}
+
+	for _, dgst := range toDelete {
+		if err := cs.Delete(ctx, dgst); err != nil {
+			bklog.G(ctx).WithError(err).Warnf("reset: failed to delete blob %s", dgst)
+		}
+	}
+	return nil
 }
 
 func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {
@@ -464,10 +539,16 @@ func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (
 	return result, nil
 }
 
+type cacheStoreRef struct {
+	path  string
+	store content.Store
+}
+
 type cacheOptions struct {
 	options        controlapi.CacheOptions
 	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
 	storesToUpdate map[string]string        // key: path to content store, value: tag
+	storesToReset  []cacheStoreRef          // cache stores with reset=true
 	frontendAttrs  map[string]string
 }
 
@@ -476,6 +557,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
 	)
+	var storesToReset []cacheStoreRef
 	contentStores := make(map[string]content.Store)
 	storesToUpdate := make(map[string]string)
 	frontendAttrs := make(map[string]string)
@@ -500,6 +582,16 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			}
 			// TODO(AkihiroSuda): support custom index JSON path and tag
 			storesToUpdate[csDir] = tag
+
+			if v, ok := ex.Attrs["reset"]; ok {
+				b, err := strconv.ParseBool(v)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to parse reset attribute")
+				}
+				if b {
+					storesToReset = append(storesToReset, cacheStoreRef{path: csDir, store: cs})
+				}
+			}
 		}
 		if ex.Type == "registry" {
 			regRef := ex.Attrs["ref"]
@@ -579,6 +671,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 		},
 		contentStores:  contentStores,
 		storesToUpdate: storesToUpdate,
+		storesToReset:  storesToReset,
 		frontendAttrs:  frontendAttrs,
 	}
 	return &res, nil
