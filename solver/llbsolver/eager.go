@@ -79,6 +79,11 @@ type eagerPipeline struct {
 	// pushedDigests skips digests that already succeeded in this build.
 	pushedDigests sync.Map
 
+	// enqueued tracks ref IDs that have already been sent to compressWork so
+	// onVertexComplete and the export-set backfill don't double-process the
+	// same ref. Keyed by ref.ID(), values are struct{}.
+	enqueued sync.Map
+
 	// exportRefIDs is nil until applyExportRefs installs the final export refs.
 	// After that, non-export refs are skipped or cancelled.
 	exportRefIDs atomic.Pointer[map[string]struct{}]
@@ -213,6 +218,9 @@ func (ep *eagerPipeline) recordErr(err error) {
 }
 
 // onVertexComplete clones finished refs and enqueues them for eager work.
+// Refs already enqueued (via a prior onVertexComplete or a backfill from
+// enqueueExportRefs) are deduplicated atomically via ep.enqueued so we don't
+// pay for redundant Clone / processRef cycles.
 func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Result) {
 	for _, res := range results {
 		if res == nil {
@@ -220,6 +228,11 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 		}
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok || workerRef.ImmutableRef == nil {
+			continue
+		}
+
+		refID := workerRef.ImmutableRef.ID()
+		if _, loaded := ep.enqueued.LoadOrStore(refID, struct{}{}); loaded {
 			continue
 		}
 
@@ -249,10 +262,29 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 // computeEagerExportRefs returns every ref ID that contributes to the final image,
 // including parent-chain layers. Each layer has its own vertex/ref ID, so
 // exporting only the final ref would filter out the eager layer pushes.
-func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[string]struct{}, error) {
+//
+// In addition to the ID set used to filter the eager pipeline, it also returns
+// a list of cloned refs that the caller can hand to enqueueExportRefs as a
+// backfill. The backfill closes a race in onVertexComplete: when two concurrent
+// solves share a vertex, only the first build's job receives the callback (see
+// sharedOp.fireOnVertexComplete), so the second build's pipeline can be missing
+// some export refs by the time wait() starts. The backfill clones are owned by
+// the caller; on error we release them ourselves.
+func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[string]struct{}, []cache.ImmutableRef, error) {
 	exportRefs := make(map[string]struct{})
+	var backfill []cache.ImmutableRef
+
+	releaseBackfill := func() {
+		for _, ref := range backfill {
+			if ref == nil {
+				continue
+			}
+			ref.Release(context.WithoutCancel(ctx))
+		}
+	}
+
 	if res == nil {
-		return exportRefs, nil
+		return exportRefs, nil, nil
 	}
 	if err := res.EachRef(func(rp solver.ResultProxy) error {
 		if rp == nil {
@@ -266,22 +298,78 @@ func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[stri
 		if !ok || workerRef.ImmutableRef == nil {
 			return nil
 		}
-		// LayerChain returns clones, so release them after reading IDs.
+		// LayerChain returns clones; we read each ID, take a fresh Clone for
+		// the backfill list (which the eager pipeline will own once enqueued),
+		// then release the chain.
 		chain := workerRef.ImmutableRef.LayerChain()
 		for _, layer := range chain {
 			if layer == nil {
 				continue
 			}
-			exportRefs[layer.ID()] = struct{}{}
+			id := layer.ID()
+			if _, ok := exportRefs[id]; ok {
+				continue
+			}
+			exportRefs[id] = struct{}{}
+			backfill = append(backfill, layer.Clone())
 		}
 		if err := chain.Release(context.WithoutCancel(ctx)); err != nil {
 			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to release chain clones")
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		releaseBackfill()
+		return nil, nil, err
 	}
-	return exportRefs, nil
+	return exportRefs, backfill, nil
+}
+
+// enqueueExportRefs sends the given refs into compressWork, taking ownership
+// of each clone. Refs already seen by ep.enqueued (e.g. from onVertexComplete)
+// are released and counted as deduped. Must be called before wait(); refs
+// arriving after closing=true is set are released without enqueue.
+//
+// This is the consumer-side guarantee that every export ref enters the eager
+// pipeline regardless of whether onVertexComplete fired for the calling build.
+// It complements (rather than replaces) the producer-side fire in
+// sharedOp.LoadCache / sharedOp.Exec — those still fire normally and handle
+// the fast happy path; this backfill closes the gap when those don't reach
+// every job that ends up using the result.
+func (ep *eagerPipeline) enqueueExportRefs(refs []cache.ImmutableRef) (enqueued, deduped int) {
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		refID := ref.ID()
+		if _, loaded := ep.enqueued.LoadOrStore(refID, struct{}{}); loaded {
+			ref.Release(context.TODO())
+			deduped++
+			continue
+		}
+
+		ep.closeMu.Lock()
+		if ep.closing {
+			ep.closeMu.Unlock()
+			ref.Release(context.TODO())
+			continue
+		}
+		ep.senderWg.Add(1)
+		ep.closeMu.Unlock()
+
+		select {
+		case ep.compressWork <- eagerWorkItem{ref: ref}:
+			ep.senderWg.Done()
+			enqueued++
+		case <-ep.done:
+			ref.Release(context.TODO())
+			ep.senderWg.Done()
+		case <-ep.ctx.Done():
+			ref.Release(context.TODO())
+			ep.senderWg.Done()
+			return
+		}
+	}
+	return
 }
 
 // isExportRef treats every ref as exportable until an export ref set is installed.

@@ -282,6 +282,167 @@ func TestEagerPipeline_OnVertexCompleteRacingWait(t *testing.T) {
 	assert.Equal(t, cloned.Load(), released.Load())
 }
 
+// onVertexComplete must dedupe by ref ID so the same ref is only enqueued once
+// even if multiple vertex completions deliver it (concurrent solves sharing a
+// vertex, late-firing producer-side fires, etc).
+func TestEagerPipeline_OnVertexCompleteDedupesByRefID(t *testing.T) {
+	var cloned, released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
+	}
+
+	res1 := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned, id: "ref-A"})
+	res2 := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned, id: "ref-A"})
+	res3 := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned, id: "ref-B"})
+
+	ep.onVertexComplete(nil, []solver.Result{res1})
+	ep.onVertexComplete(nil, []solver.Result{res2})
+	ep.onVertexComplete(nil, []solver.Result{res3})
+
+	assert.Equal(t, 2, len(ep.compressWork), "duplicate ref ID must be deduped")
+	assert.Equal(t, int32(2), cloned.Load(), "deduped second call must skip Clone()")
+}
+
+// Concurrent onVertexComplete invocations for the same ref ID should atomically
+// fall to a single enqueue (LoadOrStore on ep.enqueued).
+func TestEagerPipeline_OnVertexCompleteDedupesConcurrent(t *testing.T) {
+	var cloned, released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 256),
+		done:         make(chan struct{}),
+	}
+
+	const fires = 100
+	var wg sync.WaitGroup
+	wg.Add(fires)
+	for range fires {
+		go func() {
+			defer wg.Done()
+			res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned, id: "ref-shared"})
+			ep.onVertexComplete(nil, []solver.Result{res})
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, 1, len(ep.compressWork), "concurrent enqueues for one ref ID must collapse to one item")
+	assert.Equal(t, int32(1), cloned.Load(), "only the first onVertexComplete must Clone")
+}
+
+// enqueueExportRefs sends every ref it owns into compressWork, even when
+// onVertexComplete never fired for them — closes the producer-side gap.
+func TestEagerPipeline_EnqueueExportRefsBackfillsMissing(t *testing.T) {
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
+	}
+
+	refs := []cache.ImmutableRef{
+		&releaseTracker{released: &released, id: "ref-A"},
+		&releaseTracker{released: &released, id: "ref-B"},
+		&releaseTracker{released: &released, id: "ref-C"},
+	}
+	enq, dedup := ep.enqueueExportRefs(refs)
+
+	assert.Equal(t, 3, enq, "all three refs should be enqueued")
+	assert.Equal(t, 0, dedup, "nothing was previously enqueued")
+	assert.Equal(t, 3, len(ep.compressWork))
+	assert.Zero(t, released.Load(), "successful enqueue must not release the ref (consumer owns it)")
+}
+
+// enqueueExportRefs called after onVertexComplete already enqueued every ref
+// is a fast no-op iteration: no extra work goes into compressWork, the
+// backfill clones are released by enqueueExportRefs itself.
+func TestEagerPipeline_EnqueueExportRefsDedupesAgainstOnVertexComplete(t *testing.T) {
+	var cloned, released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
+	}
+
+	res := newWorkerRefResult(&releaseTracker{released: &released, cloned: &cloned, id: "ref-A"})
+	ep.onVertexComplete(nil, []solver.Result{res})
+	require.Equal(t, 1, len(ep.compressWork))
+
+	backfill := []cache.ImmutableRef{
+		&releaseTracker{released: &released, id: "ref-A"},
+		&releaseTracker{released: &released, id: "ref-B"},
+	}
+	enq, dedup := ep.enqueueExportRefs(backfill)
+
+	assert.Equal(t, 1, enq, "only ref-B (new) should be enqueued")
+	assert.Equal(t, 1, dedup, "ref-A must be deduped against the prior onVertexComplete")
+	assert.Equal(t, 2, len(ep.compressWork), "compressWork now holds ref-A (from onVertexComplete) and ref-B (from backfill)")
+	assert.Equal(t, int32(1), released.Load(), "deduped backfill clone of ref-A must be released")
+}
+
+// enqueueExportRefs after wait() started must release refs without enqueueing
+// or panicking, mirroring the late-callback contract of onVertexComplete.
+func TestEagerPipeline_EnqueueExportRefsAfterWait(t *testing.T) {
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
+	}
+	require.NoError(t, ep.wait())
+
+	refs := []cache.ImmutableRef{
+		&releaseTracker{released: &released, id: "ref-A"},
+		&releaseTracker{released: &released, id: "ref-B"},
+	}
+	require.NotPanics(t, func() {
+		enq, dedup := ep.enqueueExportRefs(refs)
+		assert.Zero(t, enq, "no enqueue after wait()")
+		assert.Zero(t, dedup, "nothing was deduped, just dropped under closing")
+	})
+	assert.Equal(t, int32(2), released.Load(), "both refs must be released since the pipeline is closing")
+}
+
+// nil entries in the backfill list are skipped without panicking.
+func TestEagerPipeline_EnqueueExportRefsHandlesNilEntries(t *testing.T) {
+	var released atomic.Int32
+	ep := &eagerPipeline{
+		ctx:          context.Background(),
+		compressWork: make(chan eagerWorkItem, 10),
+		done:         make(chan struct{}),
+	}
+
+	refs := []cache.ImmutableRef{
+		nil,
+		&releaseTracker{released: &released, id: "ref-A"},
+		nil,
+	}
+	enq, dedup := ep.enqueueExportRefs(refs)
+	assert.Equal(t, 1, enq)
+	assert.Equal(t, 0, dedup)
+	assert.Equal(t, 1, len(ep.compressWork))
+}
+
+func TestEagerPipeline_EnqueueExportRefsReleasesOnContextCancel(t *testing.T) {
+	var released atomic.Int32
+	ctx, cancel := context.WithCancelCause(context.Background())
+	ep := &eagerPipeline{
+		ctx:          ctx,
+		compressWork: make(chan eagerWorkItem), // unbuffered to force the select
+		done:         make(chan struct{}),
+	}
+	cancel(assert.AnError)
+
+	refs := []cache.ImmutableRef{
+		&releaseTracker{released: &released, id: "ref-A"},
+	}
+	enq, dedup := ep.enqueueExportRefs(refs)
+	assert.Zero(t, enq)
+	assert.Zero(t, dedup)
+	assert.Equal(t, int32(1), released.Load(), "ctx-cancelled enqueue must release the ref")
+}
+
 func TestEagerPushSkipsNonDistributableDescriptors(t *testing.T) {
 	descs := []ocispecs.Descriptor{
 		{
@@ -513,11 +674,13 @@ func TestEagerPushDescriptor_ExportRefAfterCancelStillPushes(t *testing.T) {
 	assert.Equal(t, int32(1), calls.Load(), "export ref must drive a fresh push after a prior cancellation")
 }
 
-// releaseTracker counts Release calls across clones.
+// releaseTracker counts Release calls across clones. id, when non-empty,
+// overrides the default ID so dedup tests can use distinct ref identities.
 type releaseTracker struct {
 	cache.ImmutableRef
 	released *atomic.Int32
 	cloned   *atomic.Int32
+	id       string
 }
 
 func (r *releaseTracker) Release(context.Context) error {
@@ -529,10 +692,15 @@ func (r *releaseTracker) Clone() cache.ImmutableRef {
 	if r.cloned != nil {
 		r.cloned.Add(1)
 	}
-	return &releaseTracker{released: r.released}
+	return &releaseTracker{released: r.released, id: r.id}
 }
 
-func (r *releaseTracker) ID() string { return "release-tracker" }
+func (r *releaseTracker) ID() string {
+	if r.id != "" {
+		return r.id
+	}
+	return "release-tracker"
+}
 
 type fakeWorker struct{ worker.Worker }
 
