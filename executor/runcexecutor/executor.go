@@ -191,6 +191,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	if err != nil {
 		return nil, err
 	}
+	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
+		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+	}
 	doReleaseNetwork := true
 	defer func() {
 		if doReleaseNetwork {
@@ -254,6 +257,13 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	defer mount.Unmount(rootFSPath, 0)
 
 	defer executor.MountStubsCleaner(context.WithoutCancel(ctx), rootFSPath, mounts, meta.RemoveMountStubsRecursive)()
+	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
+		cleanProxyCA, err := executor.InjectProxyCA(rootFSPath, proxyNS.ProxyCACert())
+		if err != nil {
+			return nil, err
+		}
+		defer cleanProxyCA()
+	}
 
 	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {

@@ -160,6 +160,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCgroupParent,
 	testLinuxResources,
 	testNetworkMode,
+	testProxyNetworkNoRootless,
 	testFrontendMetadataReturn,
 	testFrontendUseSolveResults,
 	testSSHMount,
