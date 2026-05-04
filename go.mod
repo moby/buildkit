@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
@@ -18,7 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.89.1
 	github.com/aws/smithy-go v1.24.2
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/containerd/accelerated-container-image v1.3.0
+	github.com/containerd/accelerated-container-image v1.4.3
 	github.com/containerd/console v1.0.5
 	github.com/containerd/containerd/api v1.10.0
 	github.com/containerd/containerd/v2 v2.2.2
