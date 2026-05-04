@@ -1,6 +1,7 @@
 package attestation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -9,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/containerd/continuity/fs"
-	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/exporter"
+	intotojson "github.com/moby/buildkit/exporter/attestation/intoto"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -137,7 +138,7 @@ func unbundle(root string, bundle exporter.Attestation) ([]exporter.Attestation,
 			return nil, err
 		}
 		dec := json.NewDecoder(f)
-		var stmt intoto.Statement
+		var stmt intotojson.Statement
 		if err := dec.Decode(&stmt); err != nil {
 			return nil, errors.Wrap(err, "cannot decode in-toto statement")
 		}
@@ -146,11 +147,6 @@ func unbundle(root string, bundle exporter.Attestation) ([]exporter.Attestation,
 		}
 		if bundle.InToto.PredicateType != "" && stmt.PredicateType != bundle.InToto.PredicateType {
 			return nil, errors.Errorf("bundle entry %s does not match required predicate type %s", stmt.PredicateType, bundle.InToto.PredicateType)
-		}
-
-		predicate, err := json.Marshal(stmt.Predicate)
-		if err != nil {
-			return nil, err
 		}
 
 		subjects := make([]result.InTotoSubject, len(stmt.Subject))
@@ -165,7 +161,7 @@ func unbundle(root string, bundle exporter.Attestation) ([]exporter.Attestation,
 			Kind:        gatewaypb.AttestationKind_InToto,
 			Metadata:    bundle.Metadata,
 			Path:        path.Join(bundle.Path, entry.Name()),
-			ContentFunc: func(context.Context) ([]byte, error) { return predicate, nil },
+			ContentFunc: func(context.Context) ([]byte, error) { return bytes.Clone(stmt.Predicate), nil },
 			InToto: result.InTotoAttestation{
 				PredicateType: stmt.PredicateType,
 				Subjects:      subjects,

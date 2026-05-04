@@ -20,6 +20,7 @@ import (
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/attestation"
+	intotojson "github.com/moby/buildkit/exporter/attestation/intoto"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/session"
@@ -320,7 +321,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				return nil, err
 			}
 
-			var defaultSubjects []intoto.Subject
+			var defaultSubjects []intotojson.Subject
 			for name := range strings.SplitSeq(opts.ImageName, ",") {
 				if name == "" {
 					continue
@@ -329,7 +330,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				if err != nil {
 					return nil, err
 				}
-				defaultSubjects = append(defaultSubjects, intoto.Subject{
+				defaultSubjects = append(defaultSubjects, intotojson.Subject{
 					Name:   pl,
 					Digest: result.ToDigestMap(desc.Digest),
 				})
@@ -579,7 +580,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, opts *Ima
 	}, &configDesc, nil
 }
 
-func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, target ocispecs.Descriptor, statements []intoto.Statement, ociArtifact bool) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *ImageCommitOpts, target ocispecs.Descriptor, statements []*intotojson.Statement, ociArtifact bool) (*ocispecs.Descriptor, error) {
 	var (
 		manifestType = ocispecs.MediaTypeImageManifest
 		configType   = ocispecs.MediaTypeImageConfig

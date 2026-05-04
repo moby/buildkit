@@ -136,7 +136,7 @@ build:
 
 ```json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://slsa.dev/provenance/v1",
   "subject": [
     {
@@ -202,7 +202,7 @@ For a similar build, but with `mode=max`:
 
 ```json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://slsa.dev/provenance/v1",
   "subject": [
     {
