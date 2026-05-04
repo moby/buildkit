@@ -187,6 +187,12 @@ func main() {
 			Value: "text",
 		},
 		cli.StringFlag{
+			Name:   "log-level",
+			Usage:  "set the log level",
+			Value:  "info",
+			EnvVar: "BUILDKITD_LOG_LEVEL",
+		},
+		cli.StringFlag{
 			Name:  "group",
 			Usage: groupUsageStr,
 			Value: groupValue(defaultConf.GRPC.GID),
@@ -271,6 +277,14 @@ func main() {
 		}
 		if cfg.Trace {
 			logrus.SetLevel(logrus.TraceLevel)
+		}
+
+		if cfg.Log.Level != "" {
+			level, err := logrus.ParseLevel(cfg.Log.Level)
+			if err != nil {
+				return errors.Wrap(err, "unsupported log level")
+			}
+			logrus.SetLevel(level)
 		}
 
 		if sc := cfg.System; sc != nil {
@@ -597,6 +611,9 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	}
 	if c.IsSet("log-format") {
 		cfg.Log.Format = c.String("log-format")
+	}
+	if c.IsSet("log-level") {
+		cfg.Log.Level = c.String("log-level")
 	}
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
 		cfg.GRPC.Address = c.StringSlice("addr")

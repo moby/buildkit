@@ -63,6 +63,7 @@ type SystemConfig struct {
 
 type LogConfig struct {
 	Format string `toml:"format"`
+	Level  string `toml:"level"`
 }
 
 type GRPCConfig struct {
