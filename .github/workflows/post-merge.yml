@@ -6,6 +6,16 @@ on:
       - v0.22-base
   workflow_dispatch:
     inputs:
+      test_scope:
+        description: 'Integration test scope'
+        required: false
+        type: choice
+        options:
+          - default
+          - full
+          - solver
+          - client
+        default: default
       skip_integration_tests:
         description: 'Skip integration tests'
         required: false
@@ -51,11 +61,31 @@ jobs:
           set: |
             *.cache-from=type=gha,scope=integration-tests
             *.cache-to=type=gha,scope=integration-tests,repository=${{ github.repository }},ghtoken=${{ secrets.GITHUB_TOKEN }}
+      - name: Configure test scope
+        run: |
+          scope="${{ inputs.test_scope || 'default' }}"
+          case "$scope" in
+            full)
+              echo "TESTPKGS=./client ./cmd/buildctl ./solver ./frontend" >> "$GITHUB_ENV"
+              echo 'TESTFLAGS=-v --parallel=6 --timeout=30m' >> "$GITHUB_ENV"
+              ;;
+            solver)
+              echo "TESTPKGS=./solver" >> "$GITHUB_ENV"
+              echo 'TESTFLAGS=-v --parallel=6 --timeout=30m --run=//worker=oci$' >> "$GITHUB_ENV"
+              ;;
+            client)
+              echo "TESTPKGS=./client" >> "$GITHUB_ENV"
+              echo 'TESTFLAGS=-v --parallel=6 --timeout=30m --run=//worker=oci$' >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "TESTPKGS=./solver ./client" >> "$GITHUB_ENV"
+              echo 'TESTFLAGS=-v --parallel=6 --timeout=30m --run=//worker=oci$' >> "$GITHUB_ENV"
+              ;;
+          esac
+          echo "scope=$scope"
       - name: Run integration tests
         run: ./hack/test integration
         env:
-          TESTPKGS: ./client ./cmd/buildctl ./solver ./frontend
-          TESTFLAGS: "-v --parallel=6 --timeout=30m"
           GOTESTSUM_FORMAT: standard-verbose
           TEST_IMAGE_BUILD: "0"
           CACHE_FROM: type=gha,scope=integration-tests
