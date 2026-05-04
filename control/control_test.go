@@ -2,9 +2,12 @@ package control
 
 import (
 	"testing"
+	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestDuplicateCacheOptions(t *testing.T) {
@@ -200,4 +203,52 @@ func TestParseCacheExportIgnoreError(t *testing.T) {
 			require.Equal(t, test.expectedSupported, supported)
 		})
 	}
+}
+
+func TestGracefulStopWaitsForActiveBuilds(t *testing.T) {
+	c := &Controller{}
+
+	require.NoError(t, c.acquireBuild())
+
+	stopped := make(chan int, 1)
+	go func() {
+		stopped <- c.GracefulStop()
+	}()
+
+	require.Eventually(t, func() bool {
+		err := c.acquireBuild()
+		if err == nil {
+			c.releaseBuild()
+			return false
+		}
+		s, ok := status.FromError(err)
+		return ok && s.Code() == codes.Unavailable
+	}, time.Second, 10*time.Millisecond)
+
+	select {
+	case <-stopped:
+		t.Fatal("graceful stop returned before active builds completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	c.releaseBuild()
+
+	select {
+	case active := <-stopped:
+		require.Equal(t, 1, active)
+	case <-time.After(time.Second):
+		t.Fatal("graceful stop did not return after active builds completed")
+	}
+}
+
+func TestGracefulStopRejectsNewBuilds(t *testing.T) {
+	c := &Controller{}
+
+	require.Equal(t, 0, c.GracefulStop())
+
+	err := c.acquireBuild()
+	require.Error(t, err)
+	s, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Unavailable, s.Code())
 }
