@@ -232,8 +232,8 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 }
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
-		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
+	return loadLLB(ctx, def, polEngine, opts, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+		vtx, err := newVertex(dgst, op.Op, op.Options, load)
 		if err != nil {
 			return nil, err
 		}
@@ -241,7 +241,7 @@ func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluat
 	})
 }
 
-func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
+func vertexOptions(opMeta *pb.OpMetadata) solver.VertexOptions {
 	opt := solver.VertexOptions{}
 	if opMeta != nil {
 		opt.IgnoreCache = opMeta.IgnoreCache
@@ -251,12 +251,10 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		}
 		opt.ProgressGroup = opMeta.ProgressGroup
 	}
-	for _, fn := range opts {
-		if err := fn(op, opMeta, &opt); err != nil {
-			return nil, err
-		}
-	}
+	return opt
+}
 
+func newVertex(dgst digest.Digest, op *pb.Op, opt solver.VertexOptions, load func(digest.Digest) (solver.Vertex, error)) (*vertex, error) {
 	name, err := llbOpName(op, func(dgst string) (solver.Vertex, error) {
 		return load(digest.Digest(dgst))
 	})
@@ -315,11 +313,12 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 type op struct {
 	*pb.Op
 	Metadata *pb.OpMetadata
+	Options  solver.VertexOptions
 }
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts []LoadOpt, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
@@ -343,6 +342,16 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			Metadata: def.Metadata[string(dgst)],
 		}
 		lastDgst = dgst
+	}
+
+	for _, op := range allOps {
+		opt := vertexOptions(op.Metadata)
+		for _, fn := range opts {
+			if err := fn(op.Op, op.Metadata, &opt); err != nil {
+				return solver.Edge{}, err
+			}
+		}
+		op.Options = opt
 	}
 
 	if polEngine != nil && len(sources) > 0 {

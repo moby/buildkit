@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/resources"
+	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
@@ -354,13 +355,62 @@ func (w *Worker) CacheManager() cache.Manager {
 	return w.CacheMgr
 }
 
+type proxyPolicyProvider interface {
+	ProxyPolicy() (network.ProxyPolicy, error)
+}
+
+type proxyPolicyExecutor struct {
+	executor.Executor
+	provider proxyPolicyProvider
+}
+
+func (e *proxyPolicyExecutor) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (resourcestypes.Recorder, error) {
+	if process.Meta.NetMode == pb.NetMode_PROXY {
+		var err error
+		ctx, err = e.withProxyPolicy(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return e.Executor.Run(ctx, id, rootfs, mounts, process, started)
+}
+
+func (e *proxyPolicyExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+	if process.Meta.NetMode == pb.NetMode_PROXY {
+		var err error
+		ctx, err = e.withProxyPolicy(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return e.Executor.Exec(ctx, id, process)
+}
+
+func (e *proxyPolicyExecutor) withProxyPolicy(ctx context.Context) (context.Context, error) {
+	policy, err := e.provider.ProxyPolicy()
+	if err != nil {
+		return nil, err
+	}
+	if policy == nil {
+		return ctx, nil
+	}
+	return network.WithProxyPolicy(ctx, policy), nil
+}
+
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w.ParallelismSem, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, w.WorkerOpt.Executor, w)
+			exec := w.WorkerOpt.Executor
+			if op.Exec != nil && op.Exec.Network == pb.NetMode_PROXY {
+				provider, ok := s.(proxyPolicyProvider)
+				if ok {
+					exec = &proxyPolicyExecutor{Executor: exec, provider: provider}
+				}
+			}
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, exec, w)
 		case *pb.Op_File:
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:

@@ -103,6 +103,10 @@ var buildCommand = cli.Command{
 			Name:  "source-policy-file",
 			Usage: "Read source policy file from a JSON file",
 		},
+		cli.BoolFlag{
+			Name:  "proxy-network",
+			Usage: "Run build with proxy network enforcement",
+		},
 		cli.StringFlag{
 			Name:  "ref-file",
 			Usage: "Write build ref to a file",
@@ -243,7 +247,6 @@ func buildAction(clicontext *cli.Context) error {
 		}
 		srcPol = &srcPolStruct
 	}
-
 	eg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
 
 	ref := identity.NewID()
@@ -259,6 +262,7 @@ func buildAction(clicontext *cli.Context) error {
 		Session:             attachable,
 		AllowedEntitlements: clicontext.StringSlice("allow"),
 		SourcePolicy:        srcPol,
+		ProxyNetwork:        clicontext.Bool("proxy-network"),
 		Ref:                 ref,
 	}
 

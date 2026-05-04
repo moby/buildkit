@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +38,123 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	payload := []byte("buildkit proxy ok\n")
+	httpSrv, httpURL := newProxyReachableHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/allowed" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer httpSrv.Close()
+	var leakHit atomic.Int32
+	leakSrv, leakURL := newProxyReachableHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leakHit.Add(1)
+		_, _ = w.Write([]byte("host namespace leak\n"))
+	}))
+	defer leakSrv.Close()
+	_, leakPort, err := net.SplitHostPort(strings.TrimPrefix(leakURL, "http://"))
+	require.NoError(t, err)
+
+	st := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c 'wget -q -O- %s/allowed | grep "buildkit proxy ok"'`, httpURL)).
+		Root().
+		Run(llb.Shlex(`sh -c '! wget -S -O- https://buildkit-ca-test.invalid/denied 2>/tmp/wget.log; grep "HTTP/1.1 502 Bad Gateway" /tmp/wget.log'`)).
+		Root().
+		Run(llb.Shlex(`sh -c 'unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy; ! wget -T 2 -q -O- http://1.1.1.1/'`)).
+		Root().
+		Run(llb.Shlexf(`sh -c 'proxy=${HTTP_PROXY#http://}; host=${proxy%%:*}; unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy; ! wget -T 2 -q -O- http://$host:%s/'`, leakPort)).
+		Root().
+		Run(llb.Shlex(`sh -c 'grep "buildkit proxy CA begin" /etc/ssl/certs/ca-certificates.crt'`)).
+		Root().
+		Run(llb.Shlex(`sh -c '! grep "buildkit proxy CA begin" /etc/ssl/certs/ca-certificates.crt'`), llb.Network(llb.NetModeNone))
+
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, int32(0), leakHit.Load())
+
+	var checked atomic.Int32
+	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		if req.Source.Source.Identifier != httpURL+"/allowed" {
+			return &policysession.DecisionResponse{
+				Action: sourcepolicypb.PolicyAction_ALLOW,
+			}, nil, nil
+		}
+		checked.Add(1)
+		return &policysession.DecisionResponse{
+			Action: sourcepolicypb.PolicyAction_DENY,
+		}, nil, nil
+	})
+
+	deny := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`wget -q -O- %s/allowed`, httpURL), llb.IgnoreCache)
+	def, err = deny.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork:         true,
+		SourcePolicyProvider: denyProvider,
+	}, nil)
+	require.Error(t, err)
+	require.Equal(t, int32(1), checked.Load())
+}
+
+func newProxyReachableHTTPServer(t *testing.T, handler http.Handler) (*httptest.Server, string) {
+	t.Helper()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(t.Context(), "tcp4", "0.0.0.0:0")
+	require.NoError(t, err)
+	srv := httptest.NewUnstartedServer(handler)
+	srv.Listener = ln
+	srv.Start()
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	require.NoError(t, err)
+	return srv, "http://" + net.JoinHostPort(testHostIP(t), port)
+}
+
+func testHostIP(t *testing.T) string {
+	t.Helper()
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "udp4", "8.8.8.8:80")
+	if err == nil {
+		defer conn.Close()
+		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok && !addr.IP.IsLoopback() {
+			return addr.IP.String()
+		}
+	}
+	ifaces, err := net.Interfaces()
+	require.NoError(t, err)
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		require.NoError(t, err)
+		for _, addr := range addrs {
+			ipnet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			ip := ipnet.IP.To4()
+			if ip != nil && !ip.IsLoopback() {
+				return ip.String()
+			}
+		}
+	}
+	t.Fatal("could not find non-loopback host IP for proxy integration test")
+	return ""
+}
 
 func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)

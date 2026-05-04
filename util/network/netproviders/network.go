@@ -7,6 +7,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/cniprovider"
+	"github.com/moby/buildkit/util/network/proxyprovider"
 	"github.com/pkg/errors"
 )
 
@@ -66,6 +67,16 @@ func Providers(opt Opt) (providers map[pb.NetMode]network.Provider, resolvedMode
 	providers = map[pb.NetMode]network.Provider{
 		pb.NetMode_UNSET: defaultProvider,
 		pb.NetMode_NONE:  network.NewNoneProvider(),
+	}
+	if proxyprovider.Supported() {
+		proxyProvider, err := proxyprovider.New(proxyprovider.Opt{
+			Root:     opt.CNI.Root,
+			PoolSize: opt.CNI.PoolSize,
+		})
+		if err != nil {
+			return nil, resolvedMode, err
+		}
+		providers[pb.NetMode_PROXY] = proxyProvider
 	}
 
 	if hostProvider, ok := getHostProvider(); ok {
