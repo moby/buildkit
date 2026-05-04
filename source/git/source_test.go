@@ -2672,7 +2672,7 @@ func logProgressStreams(ctx context.Context, t *testing.T) context.Context {
 	go func() {
 		defer close(done)
 		for {
-			prog, err := pr.Read(context.Background())
+			prog, err := pr.Read(ctx)
 			if err != nil {
 				return
 			}

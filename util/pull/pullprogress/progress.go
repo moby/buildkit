@@ -110,7 +110,7 @@ func trackProgress(ctx context.Context, desc ocispecs.Descriptor, manager PullMa
 		case <-ctx.Done():
 			onFinalStatus = true
 			// we need a context for the manager.Status() calls to pass once. after that this function will exit
-			ctx = context.TODO()
+			ctx = context.WithoutCancel(ctx) //nolint:fatcontext // ignore "nested context in loop"
 		case <-ticker.C:
 		}
 
