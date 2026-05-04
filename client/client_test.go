@@ -5091,8 +5091,8 @@ func testEagerExportCompress(t *testing.T, sb integration.Sandbox) {
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
-	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > /file1"`), llb.Dir("/wd")).AddMount("/wd", st)
-	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > /file2"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > file1"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > file2"`), llb.Dir("/wd")).AddMount("/wd", st)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
@@ -5153,9 +5153,9 @@ func testEagerExportPush(t *testing.T, sb integration.Sandbox) {
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
-	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > /file1"`), llb.Dir("/wd")).AddMount("/wd", st)
-	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > /file2"`), llb.Dir("/wd")).AddMount("/wd", st)
-	st = busybox.Run(llb.Shlex(`sh -c "echo layer3 > /file3"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer1 > file1"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer2 > file2"`), llb.Dir("/wd")).AddMount("/wd", st)
+	st = busybox.Run(llb.Shlex(`sh -c "echo layer3 > file3"`), llb.Dir("/wd")).AddMount("/wd", st)
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
