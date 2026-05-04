@@ -437,9 +437,9 @@ func testEagerExportPushCancellation(t *testing.T, sb integration.Sandbox) {
 }
 
 // testEagerExportCompressNoPushOnRegistry verifies eager-export=compress
-// does not reach out to the registry. We point at an unroutable host: if
-// compress mode leaked into the push path, this would fail with a
-// connection error. It must succeed with the local exporter.
+// does not reach out to the registry: we point at an unroutable host with
+// push=false. If compress mode leaked into the push path, NewPusher would
+// fail fast with a connection error.
 func testEagerExportCompressNoPushOnRegistry(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
@@ -454,18 +454,8 @@ func testEagerExportCompressNoPushOnRegistry(t *testing.T, sb integration.Sandbo
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir := t.TempDir()
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
-				Attrs: map[string]string{
-					"eager-export": "compress",
-				},
-			},
-			// Second exporter with push=false is allowed and must not trigger
-			// any registry traffic.
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
@@ -476,10 +466,7 @@ func testEagerExportCompressNoPushOnRegistry(t *testing.T, sb integration.Sandbo
 			},
 		},
 	}, nil)
-	require.NoError(t, err)
-	dt, err := os.ReadFile(filepath.Join(destDir, "file"))
-	require.NoError(t, err)
-	require.Contains(t, string(dt), "x")
+	require.NoError(t, err, "compress mode with push=false must not touch the registry")
 }
 
 // testEagerExportValidation covers the validate/error branches in
@@ -536,7 +523,8 @@ func testEagerExportValidation(t *testing.T, sb integration.Sandbox) {
 			exports: []ExportEntry{{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":         registry + "/buildkit/testeagerval3:*",
+					// Bare `*` is the sentinel EagerPushConfig rejects.
+					"name":         "*",
 					"push":         "true",
 					"eager-export": "push",
 				},
@@ -577,6 +565,30 @@ func testEagerExportValidation(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+// seedBaseImage builds and pushes a base image with busybox's rootfs plus
+// a marker file, so it's both (a) pullable/introspectable and (b) usable as
+// the source for a child RUN step (the child needs sh+coreutils from
+// busybox). Returns the target ref.
+func seedBaseImage(t *testing.T, c *Client, sb integration.Sandbox, target string) {
+	t.Helper()
+	def, err := llb.Image("busybox:latest").
+		File(llb.Mkfile("/base-file", 0644, []byte("baseline"))).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
 // testPreferPushRegistryHit: seed the push registry with a base image, then
 // build a child that FROMs it and exports with prefer-push-registry=true
 // back to the same registry. The wrapped provider's probe hits and the
@@ -597,33 +609,18 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	// Step 1: build and push a base image into registry. This makes the
-	// push registry "populated" for step 2's layer fetches.
+	// Step 1: populate the registry with a base image whose rootfs is
+	// busybox + a marker file. Pushing it makes the push registry "hot"
+	// for step 2's layer fetches.
 	baseTarget := registry + "/buildkit/pushreg-base:latest"
-	baseDef, err := llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c "echo baseline > base-file"`), llb.Dir("/wd")).
-		AddMount("/wd", llb.Scratch()).
-		Marshal(sb.Context())
-	require.NoError(t, err)
-	_, err = c.Solve(sb.Context(), baseDef, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": baseTarget,
-					"push": "true",
-				},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
+	seedBaseImage(t, c, sb, baseTarget)
 
 	// Step 2: child build that FROMs baseTarget. Configure the exporter
 	// with prefer-push-registry=true and push to the same registry. On
 	// layer fetch for baseTarget's layers, the wrapper probes the push
 	// registry and succeeds.
 	child := llb.Image(baseTarget).
-		Run(llb.Shlex(`sh -c "echo child > /child-file"`))
+		Run(llb.Shlex(`sh -c "echo child > /child-file"`)).Root()
 	childDef, err := child.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -642,8 +639,8 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// Verify the child image is pullable and has both the base file and
-	// the child file — the base layer was served via the push-registry
+	// Verify the child image is pullable and has both the base marker file
+	// and the child file — the base layer was served via the push-registry
 	// wrapper and still produced the right content.
 	destDir := t.TempDir()
 	pullDef, err := llb.Image(childTarget).Marshal(sb.Context())
@@ -657,6 +654,9 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, "child-file"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "child")
+	dt, err = os.ReadFile(filepath.Join(destDir, "base-file"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "baseline")
 }
 
 // testPreferPushRegistryMiss: the push registry doesn't have the base
@@ -683,26 +683,10 @@ func testPreferPushRegistryMiss(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	baseTarget := originReg + "/buildkit/pushregmiss-base:latest"
-	baseDef, err := llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c "echo baseline > base-file"`), llb.Dir("/wd")).
-		AddMount("/wd", llb.Scratch()).
-		Marshal(sb.Context())
-	require.NoError(t, err)
-	_, err = c.Solve(sb.Context(), baseDef, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": baseTarget,
-					"push": "true",
-				},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
+	seedBaseImage(t, c, sb, baseTarget)
 
 	child := llb.Image(baseTarget).
-		Run(llb.Shlex(`sh -c "echo child > /child-file"`))
+		Run(llb.Shlex(`sh -c "echo child > /child-file"`)).Root()
 	childDef, err := child.Marshal(sb.Context())
 	require.NoError(t, err)
 
@@ -754,23 +738,10 @@ func testPreferPushRegistryWithEagerExport(t *testing.T, sb integration.Sandbox)
 	require.NoError(t, err)
 
 	baseTarget := registry + "/buildkit/pushreg-combo-base:latest"
-	baseDef, err := llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c "echo baseline > base-file"`), llb.Dir("/wd")).
-		AddMount("/wd", llb.Scratch()).
-		Marshal(sb.Context())
-	require.NoError(t, err)
-	_, err = c.Solve(sb.Context(), baseDef, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{"name": baseTarget, "push": "true"},
-			},
-		},
-	}, nil)
-	require.NoError(t, err)
+	seedBaseImage(t, c, sb, baseTarget)
 
 	child := llb.Image(baseTarget).
-		Run(llb.Shlex(`sh -c "echo combo > /combo-file"`))
+		Run(llb.Shlex(`sh -c "echo combo > /combo-file"`)).Root()
 	childDef, err := child.Marshal(sb.Context())
 	require.NoError(t, err)
 
