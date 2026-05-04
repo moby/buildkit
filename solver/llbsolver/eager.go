@@ -79,6 +79,9 @@ type eagerPipeline struct {
 	// pushedDigests skips digests that already succeeded in this build.
 	pushedDigests sync.Map
 
+	// enqueued dedupes ref IDs across onVertexComplete and the export-ref backfill.
+	enqueued sync.Map
+
 	// exportRefIDs is nil until applyExportRefs installs the final export refs.
 	// After that, non-export refs are skipped or cancelled.
 	exportRefIDs atomic.Pointer[map[string]struct{}]
@@ -213,6 +216,8 @@ func (ep *eagerPipeline) recordErr(err error) {
 }
 
 // onVertexComplete clones finished refs and enqueues them for eager work.
+// Refs already in ep.enqueued (from a prior fire or the export backfill) are
+// skipped to avoid redundant Clone / processRef cycles.
 func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Result) {
 	for _, res := range results {
 		if res == nil {
@@ -223,36 +228,80 @@ func (ep *eagerPipeline) onVertexComplete(vtx solver.Vertex, results []solver.Re
 			continue
 		}
 
-		ep.closeMu.Lock()
-		if ep.closing {
-			ep.closeMu.Unlock()
+		if !ep.claimEnqueueSlot(workerRef.ImmutableRef.ID()) {
 			continue
 		}
-		ep.senderWg.Add(1)
-		ep.closeMu.Unlock()
-
-		cloned := workerRef.ImmutableRef.Clone()
-		select {
-		case ep.compressWork <- eagerWorkItem{ref: cloned}:
-			ep.senderWg.Done()
-		case <-ep.done:
-			cloned.Release(context.TODO())
-			ep.senderWg.Done()
-		case <-ep.ctx.Done():
-			cloned.Release(context.TODO())
-			ep.senderWg.Done()
+		if !ep.claimSenderSlot() {
+			continue
+		}
+		if _, ctxDone := ep.dispatchSend(workerRef.ImmutableRef.Clone()); ctxDone {
 			return
 		}
 	}
 }
 
-// computeEagerExportRefs returns every ref ID that contributes to the final image,
-// including parent-chain layers. Each layer has its own vertex/ref ID, so
-// exporting only the final ref would filter out the eager layer pushes.
-func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[string]struct{}, error) {
+// claimEnqueueSlot returns true iff refID has not yet been enqueued by another
+// caller. Centralizes the LoadOrStore idiom; callers handle their own cleanup
+// on a missed claim (e.g. releasing a ref they already cloned).
+func (ep *eagerPipeline) claimEnqueueSlot(refID string) bool {
+	_, loaded := ep.enqueued.LoadOrStore(refID, struct{}{})
+	return !loaded
+}
+
+// claimSenderSlot atomically observes the closing flag and registers a sender
+// on senderWg. Returns false if the pipeline is closing, in which case the
+// caller must not enqueue (and is responsible for releasing any ref it owns).
+func (ep *eagerPipeline) claimSenderSlot() bool {
+	ep.closeMu.Lock()
+	defer ep.closeMu.Unlock()
+	if ep.closing {
+		return false
+	}
+	ep.senderWg.Add(1)
+	return true
+}
+
+// dispatchSend takes ownership of ref and sends it into compressWork. Caller
+// must have already claimed a slot via claimSenderSlot. On done / ctx cancel
+// the ref is released and senderWg.Done() is called. ctxDone signals the
+// caller should stop iterating.
+func (ep *eagerPipeline) dispatchSend(ref cache.ImmutableRef) (sent, ctxDone bool) {
+	select {
+	case ep.compressWork <- eagerWorkItem{ref: ref}:
+		ep.senderWg.Done()
+		return true, false
+	case <-ep.done:
+		ref.Release(context.TODO())
+		ep.senderWg.Done()
+		return false, false
+	case <-ep.ctx.Done():
+		ref.Release(context.TODO())
+		ep.senderWg.Done()
+		return false, true
+	}
+}
+
+// computeEagerExportRefs returns the ref IDs that make up the final image
+// (every parent-chain layer, since each has its own ref ID) plus cloned refs
+// for enqueueExportRefs to backfill into the pipeline. The backfill closes a
+// race where concurrent solves sharing a vertex cause the second build's job
+// to miss its onVertexComplete callback. Caller owns the returned clones; on
+// error we release them.
+func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[string]struct{}, []cache.ImmutableRef, error) {
 	exportRefs := make(map[string]struct{})
+	var backfill []cache.ImmutableRef
+
+	releaseBackfill := func() {
+		for _, ref := range backfill {
+			if ref == nil {
+				continue
+			}
+			ref.Release(context.WithoutCancel(ctx))
+		}
+	}
+
 	if res == nil {
-		return exportRefs, nil
+		return exportRefs, nil, nil
 	}
 	if err := res.EachRef(func(rp solver.ResultProxy) error {
 		if rp == nil {
@@ -266,22 +315,58 @@ func computeEagerExportRefs(ctx context.Context, res *frontend.Result) (map[stri
 		if !ok || workerRef.ImmutableRef == nil {
 			return nil
 		}
-		// LayerChain returns clones, so release them after reading IDs.
+		// LayerChain returns clones; take a fresh Clone per layer for the
+		// backfill (owned by the pipeline once enqueued) and release the chain.
 		chain := workerRef.ImmutableRef.LayerChain()
 		for _, layer := range chain {
 			if layer == nil {
 				continue
 			}
-			exportRefs[layer.ID()] = struct{}{}
+			id := layer.ID()
+			if _, ok := exportRefs[id]; ok {
+				continue
+			}
+			exportRefs[id] = struct{}{}
+			backfill = append(backfill, layer.Clone())
 		}
 		if err := chain.Release(context.WithoutCancel(ctx)); err != nil {
 			bklog.G(ctx).WithError(err).Warnf("eager export ref set: failed to release chain clones")
 		}
 		return nil
 	}); err != nil {
-		return nil, err
+		releaseBackfill()
+		return nil, nil, err
 	}
-	return exportRefs, nil
+	return exportRefs, backfill, nil
+}
+
+// enqueueExportRefs sends refs into compressWork (taking ownership of each
+// clone) so every export ref enters the pipeline even when onVertexComplete
+// missed it. Refs already in ep.enqueued are released and counted as deduped;
+// refs arriving after closing / done / ctx cancel are released without enqueue.
+func (ep *eagerPipeline) enqueueExportRefs(refs []cache.ImmutableRef) (enqueued, deduped int) {
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		if !ep.claimEnqueueSlot(ref.ID()) {
+			ref.Release(context.TODO())
+			deduped++
+			continue
+		}
+		if !ep.claimSenderSlot() {
+			ref.Release(context.TODO())
+			continue
+		}
+		sent, ctxDone := ep.dispatchSend(ref)
+		if sent {
+			enqueued++
+		}
+		if ctxDone {
+			return
+		}
+	}
+	return
 }
 
 // isExportRef treats every ref as exportable until an export ref set is installed.

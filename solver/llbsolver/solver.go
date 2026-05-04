@@ -666,12 +666,16 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	// Exporters need the final layer digests, so wait for eager work first.
 	if eager != nil {
 		// Filter out completed vertices that are not part of the final result.
-		exportRefs, err := computeEagerExportRefs(ctx, res)
+		exportRefs, backfillRefs, err := computeEagerExportRefs(ctx, res)
 		if err != nil {
 			bklog.G(ctx).WithError(err).Warnf("failed to compute eager export refs; skipping eager export filtering")
 		} else {
 			cancelled := eager.applyExportRefs(exportRefs)
-			bklog.G(ctx).Infof("eager export_refs=%d cancelled_inflight=%d", len(exportRefs), cancelled)
+			// Backfill every export ref to cover concurrent solves that share
+			// a vertex and miss onVertexComplete; dedupes on the happy path.
+			enqueued, deduped := eager.enqueueExportRefs(backfillRefs)
+			bklog.G(ctx).Infof("eager export_refs=%d cancelled_inflight=%d backfill_enqueued=%d backfill_deduped=%d",
+				len(exportRefs), cancelled, enqueued, deduped)
 		}
 		if err := inBuilderContext(ctx, j, eagerWaitProgressID(exp.EagerExport), "", func(ctx context.Context, _ session.Group) error {
 			span, _ := tracing.StartSpan(ctx, eagerWaitProgressID(exp.EagerExport))
