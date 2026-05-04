@@ -10,6 +10,8 @@ const AttrGitChecksum = "git.checksum"
 const AttrGitSkipSubmodules = "git.skipsubmodules"
 const AttrGitMTime = "git.mtime"
 const AttrGitFetchByCommit = "git.fetchbycommit"
+const AttrGitBundle = "git.bundle"
+const AttrGitCheckoutBundle = "git.checkoutbundle"
 
 const AttrGitSignatureVerifyPubKey = "git.sig.pubkey"
 const AttrGitSignatureVerifyRejectExpired = "git.sig.rejectexpired"

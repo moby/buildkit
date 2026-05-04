@@ -9,8 +9,10 @@ import (
 	slsa1 "github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1"
 	"github.com/moby/buildkit/frontend/dockerfile/dfgitutil"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
+	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/purl"
 	"github.com/moby/buildkit/util/urlutil"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/package-url/packageurl-go"
 )
 
@@ -68,9 +70,54 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 	}
 
 	for _, s := range srcs.Git {
+		// Git material URI is always the raw repository URL (same shape
+		// for bundle-backed and normal git sources).
 		out = append(out, slsa.ProvenanceMaterial{
 			URI:    s.URL,
 			Digest: digestSetForCommit(s.Commit),
+		})
+		if s.Bundle == nil {
+			continue
+		}
+
+		// Bundle-backed git source: parse the canonical locator into
+		// its scheme / ref-body / digest components on demand. On parse
+		// failure (shouldn't happen — validateBundleAttrs rejects bad
+		// locators at LLB op construction time) skip bundle material
+		// emission rather than erroring.
+		scheme, refBody, bundleDgst := parseBundleLocatorURL(s.Bundle.URL)
+		if scheme == "" || refBody == "" || bundleDgst == "" {
+			continue
+		}
+
+		bundlePurlType := packageurl.TypeDocker
+		if scheme == srctypes.OCIBlobScheme {
+			bundlePurlType = packageurl.TypeOCI
+		}
+		bundleURI, err := purl.RefToPURL(bundlePurlType, refBody, nil)
+		if err != nil {
+			return nil, err
+		}
+		bundleURI, err = setPURLQualifier(bundleURI, packageurl.Qualifier{
+			Key:   "ref_type",
+			Value: "bundle",
+		})
+		if err != nil {
+			return nil, err
+		}
+		bundleURI, err = setPURLQualifier(bundleURI, packageurl.Qualifier{
+			Key:   "vcs_url",
+			Value: s.URL,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, slsa.ProvenanceMaterial{
+			URI: bundleURI,
+			Digest: slsa.DigestSet{
+				bundleDgst.Algorithm().String(): bundleDgst.Hex(),
+			},
 		})
 	}
 
@@ -84,6 +131,31 @@ func slsaMaterials(srcs provenancetypes.Sources) ([]slsa.ProvenanceMaterial, err
 	}
 
 	return out, nil
+}
+
+// parseBundleLocatorURL parses a "<scheme>://<ref>@<algo>:<hex>" bundle
+// locator into its components. It returns empty values on parse failure; the
+// caller handles that by falling back to the non-bundle emission path.
+//
+// The identifier package has a stricter parseBundleLocator used at LLB op
+// construction time (validateBundleAttrs) that validates the reference and
+// digest algorithm. We intentionally don't import that helper here because
+// the identifier package imports this provenance package. Since the locator
+// has already been validated upstream, the logic here just splits the
+// locator back into its parts for purl emission.
+func parseBundleLocatorURL(raw string) (scheme, refBody string, dgst digest.Digest) {
+	const sep = "://"
+	i := strings.Index(raw, sep)
+	if i <= 0 {
+		return "", "", ""
+	}
+	scheme = raw[:i]
+	body := raw[i+len(sep):]
+	at := strings.LastIndex(body, "@")
+	if at <= 0 {
+		return "", "", ""
+	}
+	return scheme, body[:at], digest.Digest(body[at+1:])
 }
 
 func digestSetForCommit(commit string) slsa.DigestSet {

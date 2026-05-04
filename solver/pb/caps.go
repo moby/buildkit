@@ -36,6 +36,8 @@ const (
 	CapSourceGitSignatureVerify apicaps.CapID = "source.git.signatureverify"
 	CapSourceGitMTime           apicaps.CapID = "source.git.mtime"
 	CapSourceGitFetchByCommit   apicaps.CapID = "source.git.fetchbycommit"
+	CapSourceGitBundle          apicaps.CapID = "source.git.bundle"
+	CapSourceGitCheckoutBundle  apicaps.CapID = "source.git.checkoutbundle"
 
 	CapSourceHTTP         apicaps.CapID = "source.http"
 	CapSourceHTTPAuth     apicaps.CapID = "source.http.auth"
@@ -265,6 +267,18 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceGitFetchByCommit,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceGitBundle,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceGitCheckoutBundle,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
