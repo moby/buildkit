@@ -75,6 +75,7 @@ type Solver struct {
 	history                   *history.Queue
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
 	provenanceEnv             map[string]any
+	provenanceStore           *provenanceStore
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -105,6 +106,7 @@ func New(opt Opt) (*Solver, error) {
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
 		provenanceEnv:             opt.ProvenanceEnv,
+		provenanceStore:           newProvenanceStore(),
 	}
 
 	sampler, err := resources.NewSysSampler()
@@ -138,7 +140,11 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 	}
 }
 
-func (s *Solver) bridge(b solver.Builder) *provenanceBridge {
+func (s *Solver) bridge(b solver.Builder, opts ...bridgeOpt) *provenanceBridge {
+	var cfg bridgeConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return &provenanceBridge{llbBridge: &llbBridge{
 		builder:                   b,
 		frontends:                 s.frontends,
@@ -147,14 +153,28 @@ func (s *Solver) bridge(b solver.Builder) *provenanceBridge {
 		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
 		cms:                       map[string]solver.CacheManager{},
 		sm:                        s.sm,
+		provenanceStore:           s.provenanceStore,
+		proxyNetwork:              cfg.proxyNetwork,
 	}}
+}
+
+type bridgeConfig struct {
+	proxyNetwork bool
+}
+
+type bridgeOpt func(*bridgeConfig)
+
+func withBridgeProxyNetwork(proxyNetwork bool) bridgeOpt {
+	return func(cfg *bridgeConfig) {
+		cfg.proxyNetwork = proxyNetwork
+	}
 }
 
 func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return s.bridge(b)
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, compatibilityVersion int, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string) (_ *client.SolveResponse, err error) {
+func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req frontend.SolveRequest, compatibilityVersion int, exp ExporterRequest, ent []entitlements.Entitlement, post []Processor, internal bool, srcPol *spb.Policy, policySession string, proxyNetwork bool) (_ *client.SolveResponse, err error) {
 	hasNamedDockerfileContext := false
 	for k := range req.FrontendOpt {
 		if k == "context:dockerfile.v0" || strings.HasPrefix(k, "context:dockerfile.v0::") {
@@ -224,7 +244,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
-	br := s.bridge(j)
+	br := s.bridge(j, withBridgeProxyNetwork(proxyNetwork))
+	defer br.releaseProvenanceRefs()
+	rootReq := req.Clone()
+	br.rootReq = &rootReq
 	var fwd gateway.LLBBridgeForwarder
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
 		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)

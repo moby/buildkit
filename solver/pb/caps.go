@@ -57,6 +57,7 @@ const (
 	CapExecMetaBase                      apicaps.CapID = "exec.meta.base"
 	CapExecMetaCgroupParent              apicaps.CapID = "exec.meta.cgroup.parent"
 	CapExecMetaNetwork                   apicaps.CapID = "exec.meta.network"
+	CapExecMetaNetworkProxy              apicaps.CapID = "exec.meta.network.proxy"
 	CapExecMetaProxy                     apicaps.CapID = "exec.meta.proxyenv"
 	CapExecMetaSecurity                  apicaps.CapID = "exec.meta.security"
 	CapExecMetaSecurityDeviceWhitelistV1 apicaps.CapID = "exec.meta.security.devices.v1"
@@ -363,6 +364,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaNetwork,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaNetworkProxy,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

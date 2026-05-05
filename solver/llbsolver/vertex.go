@@ -232,7 +232,7 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 }
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, polEngine, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+	return loadLLB(ctx, def, polEngine, nil, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
 		if err != nil {
 			return nil, err
@@ -241,7 +241,17 @@ func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluat
 	})
 }
 
-func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
+func loadWithProxyNetwork(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork bool, opts ...LoadOpt) (solver.Edge, error) {
+	return loadLLB(ctx, def, polEngine, &proxyNetwork, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
+		if err != nil {
+			return nil, err
+		}
+		return vtx, nil
+	})
+}
+
+func vertexOptions(opMeta *pb.OpMetadata) solver.VertexOptions {
 	opt := solver.VertexOptions{}
 	if opMeta != nil {
 		opt.IgnoreCache = opMeta.IgnoreCache
@@ -251,6 +261,11 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		}
 		opt.ProgressGroup = opMeta.ProgressGroup
 	}
+	return opt
+}
+
+func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
+	opt := vertexOptions(opMeta)
 	for _, fn := range opts {
 		if err := fn(op, opMeta, &opt); err != nil {
 			return nil, err
@@ -319,7 +334,7 @@ type op struct {
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork *bool, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
@@ -343,6 +358,14 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 			Metadata: def.Metadata[string(dgst)],
 		}
 		lastDgst = dgst
+	}
+
+	if proxyNetwork != nil {
+		for _, op := range allOps {
+			if err := setProxyNetwork(op.Op, *proxyNetwork); err != nil {
+				return solver.Edge{}, err
+			}
+		}
 	}
 
 	if polEngine != nil && len(sources) > 0 {

@@ -245,15 +245,60 @@ func TestFindMaterial(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestNewPredicatePreservesRequestSecretsSSHAndInputs(t *testing.T) {
+	t.Parallel()
+
+	c := &Capture{
+		Request: provenancetypes.Parameters{
+			Frontend: "dockerfile.v0",
+			Args: map[string]string{
+				"context":  "https://example.invalid/context.git",
+				"filename": "Dockerfile",
+			},
+			Secrets: []*provenancetypes.Secret{
+				{ID: "mysecret", Optional: true},
+			},
+			SSH: []*provenancetypes.SSH{
+				{ID: "default", Optional: true},
+			},
+			Inputs: map[string]*provenancetypes.RequestProvenance{
+				"base": {
+					Request: &provenancetypes.Parameters{
+						Frontend: "dockerfile.v0",
+						Args:     map[string]string{"target": "base"},
+					},
+				},
+			},
+		},
+	}
+
+	pr, err := NewPredicate(c)
+	require.NoError(t, err)
+
+	req := pr.BuildDefinition.ExternalParameters.Request
+	require.Equal(t, "dockerfile.v0", req.Frontend)
+	require.Nil(t, req.Args)
+	require.Len(t, req.Secrets, 1)
+	require.Equal(t, "mysecret", req.Secrets[0].ID)
+	require.True(t, req.Secrets[0].Optional)
+	require.Len(t, req.SSH, 1)
+	require.Equal(t, "default", req.SSH[0].ID)
+	require.True(t, req.SSH[0].Optional)
+	require.Contains(t, req.Inputs, "base")
+	require.Equal(t, "base", req.Inputs["base"].Request.Args["target"])
+}
+
 func TestNewPredicateGitConfigSourceSubdir(t *testing.T) {
 	t.Parallel()
 
 	commit := "abc123def456abc123def456abc123def456abcd"
 	c := &Capture{
-		Frontend: "dockerfile.v0",
-		Args: map[string]string{
-			"context":  "https://github.com/moby/buildkit.git?branch=master&subdir=src",
-			"filename": "Dockerfile",
+		Request: provenancetypes.Parameters{
+			Frontend: "dockerfile.v0",
+			Args: map[string]string{
+				"context":  "https://github.com/moby/buildkit.git?branch=master&subdir=src",
+				"filename": "Dockerfile",
+			},
 		},
 		Sources: provenancetypes.Sources{
 			Git: []provenancetypes.GitSource{
@@ -276,10 +321,12 @@ func TestNewPredicateKeepsContextSubdir(t *testing.T) {
 	t.Parallel()
 
 	c := &Capture{
-		Frontend: "dockerfile.v0",
-		Args: map[string]string{
-			"contextsubdir": "src",
-			"filename":      "Dockerfile",
+		Request: provenancetypes.Parameters{
+			Frontend: "dockerfile.v0",
+			Args: map[string]string{
+				"contextsubdir": "src",
+				"filename":      "Dockerfile",
+			},
 		},
 	}
 
@@ -288,4 +335,30 @@ func TestNewPredicateKeepsContextSubdir(t *testing.T) {
 
 	require.Equal(t, "", pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
 	require.Equal(t, "src", pr.BuildDefinition.ExternalParameters.Request.Args["contextsubdir"])
+}
+
+func TestNewPredicateProxyNetworkMetadata(t *testing.T) {
+	t.Parallel()
+
+	c := &Capture{
+		ProxyNetwork:        true,
+		IncompleteMaterials: true,
+		ProxyIncomplete: []provenancetypes.ProxyCaptureIncomplete{
+			{
+				Op:     "sha256:abc",
+				Name:   "curl -X POST https://example.com/token",
+				Method: "POST",
+				URI:    "https://example.com/token",
+				Reason: "method_not_materializable",
+			},
+		},
+	}
+	pr, err := NewPredicate(c)
+	require.NoError(t, err)
+	require.NotNil(t, pr.RunDetails.Metadata.BuildKitMetadata.Network)
+	require.Equal(t, "proxy", pr.RunDetails.Metadata.BuildKitMetadata.Network.Mode)
+	require.Len(t, pr.RunDetails.Metadata.BuildKitMetadata.Network.Proxy.Incomplete, 1)
+	require.Equal(t, "method_not_materializable", pr.RunDetails.Metadata.BuildKitMetadata.Network.Proxy.Incomplete[0].Reason)
+	require.False(t, pr.RunDetails.Metadata.Completeness.ResolvedDependencies)
+	require.False(t, pr.RunDetails.Metadata.Hermetic)
 }

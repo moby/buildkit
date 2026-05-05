@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"runtime"
@@ -24,6 +25,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/cachedigest"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
@@ -48,6 +50,7 @@ type ExecOp struct {
 	parallelism *semaphore.Weighted
 	rec         resourcestypes.Recorder
 	digest      digest.Digest
+	proxyCap    *network.ProxyCapture
 }
 
 var _ solver.Op = &ExecOp{}
@@ -495,12 +498,20 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		}
 	}()
 
+	if e.op.Network == pb.NetMode_PROXY {
+		e.proxyCap = network.NewProxyCapture()
+		meta.ProxyCapture = e.proxyCap
+	}
+
 	rec, execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
 		Meta:   meta,
 		Stdin:  nil,
 		Stdout: stdout,
 		Stderr: stderr,
 	}, nil)
+	if e.proxyCap != nil {
+		logProxyRequests(stderr, e.proxyCap.Requests())
+	}
 
 	for i, out := range p.OutputRefs {
 		if mutable, ok := out.Ref.(cache.MutableRef); ok {
@@ -517,6 +528,16 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 	}
 	e.rec = rec
 	return results, errors.Wrapf(execErr, "process %q did not complete successfully", strings.Join(e.op.Meta.Args, " "))
+}
+
+func logProxyRequests(w io.Writer, requests []network.ProxyRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "proxy network requests:")
+	for _, req := range requests {
+		_, _ = fmt.Fprintf(w, "- %s %s\n", req.Method, req.URL)
+	}
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {
@@ -588,4 +609,8 @@ func (e *ExecOp) Samples() (*resourcestypes.Samples, error) {
 		return nil, nil
 	}
 	return e.rec.Samples()
+}
+
+func (e *ExecOp) ProxyCapture() *network.ProxyCapture {
+	return e.proxyCap
 }

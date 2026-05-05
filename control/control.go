@@ -551,7 +551,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		Exporters:             expis,
 		CacheExporters:        cacheExporters,
 		EnableSessionExporter: req.EnableSessionExporter,
-	}, entitlementsFromPB(req.Entitlements), procs, req.Internal, req.SourcePolicy, req.SourcePolicySession)
+	}, entitlementsFromPB(req.Entitlements), procs, req.Internal, req.SourcePolicy, req.SourcePolicySession, req.ProxyNetwork)
 	if err != nil {
 		return nil, err
 	}
