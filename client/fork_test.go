@@ -44,6 +44,7 @@ func init() {
 		testPreferPushRegistryPartialHit,
 		testPreferPushRegistryWithEagerExport,
 		testPreferPushRegistryValidation,
+		testParallelExtractWhiteouts,
 	)
 }
 
@@ -1001,6 +1002,102 @@ func testPreferPushRegistryValidation(t *testing.T, sb integration.Sandbox) {
 			require.Contains(t, strings.ToLower(err.Error()), strings.ToLower(tc.errContains))
 		})
 	}
+}
+
+// testParallelExtractWhiteouts is the regression test for parallel-extract's
+// silent-loss-of-whiteouts bug. The scenario it guards against:
+//
+//   - A pulled image's layer chain includes a layer whose tar contains
+//     `.wh.*` whiteout entries (any `RUN rm -rf …`, `apt-get clean`,
+//     `pip cache purge`, etc. in a final-stage Dockerfile produces these).
+//   - Parallel-extract handles each layer's tar standalone. If the applier
+//     doesn't materialize whiteouts as overlay character devices, the
+//     deletions silently no-op and the lower-layer files leak through into
+//     the resulting overlay snapshot.
+//
+// The test builds a 2-layer image where the second layer deletes a file
+// from the first, pushes it to the test registry, prunes the local cache
+// to force a real pull on the next solve, then both:
+//
+//  1. Executes a child build that FROMs the pushed image and runs a
+//     shell test asserting the deleted file is absent (the cmd executes
+//     against the extracted snapshot, so a leak fails the build).
+//  2. Local-exports the pushed image and asserts the file is missing
+//     from the merged-overlay view.
+//
+// The test passes regardless of whether BUILDKIT_PARALLEL_EXTRACT is set
+// — sequential extract has always handled this correctly. With
+// parallel-extract enabled, the test's value is catching a regression in
+// the overlay-typed-mount whiteout fix in cache/refs.go.
+func testParallelExtractWhiteouts(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Step 1: build a 2-layer image. Layer 1 creates /data/keep and
+	// /data/delete; Layer 2 deletes /data/delete (producing a `.wh.delete`
+	// whiteout in layer 2's tar).
+	src := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c "mkdir -p /data && echo keep > /data/keep && echo delete > /data/delete"`)).Root().
+		Run(llb.Shlex(`sh -c "rm -f /data/delete"`)).Root()
+	def, err := src.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/parallelextract-whiteout:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Step 2: prune so the next solve has to actually pull (and re-extract)
+	// — without this, buildkit reuses the locally-built snapshot and the
+	// extract path isn't exercised at all.
+	ensurePruneAll(t, c, sb)
+
+	// Step 3a: child build that FROMs the pushed image. The pull triggers
+	// parallel-extract on the layer chain. The Run command then asserts
+	// the deletion took effect; if the whiteout was lost during extract,
+	// /data/delete would be present and the build would fail with exit 1.
+	child := llb.Image(target).
+		Run(llb.Shlex(`sh -c "test -f /data/keep && ! test -e /data/delete"`)).Root()
+	childDef, err := child.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), childDef, SolveOpt{}, nil)
+	require.NoError(t, err, "deleted file from layer 2 must not leak through to child build")
+
+	// Step 3b: also verify by local-exporting the image directly. The
+	// local exporter mounts the image's layer chain as overlay and walks
+	// the merged view; if whiteouts aren't overlay character devices,
+	// the kernel won't mask /data/delete and it will appear here.
+	ensurePruneAll(t, c, sb)
+	pullDef, err := llb.Image(target).Marshal(sb.Context())
+	require.NoError(t, err)
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), pullDef, SolveOpt{
+		Exports: []ExportEntry{
+			{Type: ExporterLocal, OutputDir: destDir},
+		},
+	}, nil)
+	require.NoError(t, err)
+	require.FileExists(t, filepath.Join(destDir, "data/keep"))
+	require.NoFileExists(t, filepath.Join(destDir, "data/delete"))
 }
 
 // --- helpers -------------------------------------------------------------
