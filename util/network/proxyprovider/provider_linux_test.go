@@ -34,6 +34,10 @@ func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.Equal(t, "proxy material", resp.Body.String())
 	require.Equal(t, http.MethodGet, <-methodCh)
+	requests := capture.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, http.MethodGet, requests[0].Method)
+	require.Equal(t, upstream.URL+"/file", requests[0].URL)
 	materials := capture.Materials()
 	require.Len(t, materials, 1)
 	require.Equal(t, upstream.URL+"/file", materials[0].URL)
@@ -103,6 +107,11 @@ func TestProxyHandlerRedactsCapturedCredentials(t *testing.T) {
 	require.NotContains(t, materials[0].URL, "user")
 	require.NotContains(t, materials[0].URL, "pass")
 	require.Contains(t, materials[0].URL, "xxxxx:xxxxx@")
+	requests := capture.Requests()
+	require.Len(t, requests, 1)
+	require.NotContains(t, requests[0].URL, "user")
+	require.NotContains(t, requests[0].URL, "pass")
+	require.Contains(t, requests[0].URL, "xxxxx:xxxxx@")
 }
 
 func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
@@ -132,6 +141,9 @@ func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.Equal(t, "mirror material", resp.Body.String())
 	require.Equal(t, http.MethodGet, <-mirrorMethodCh)
+	requests := capture.Requests()
+	require.Len(t, requests, 1)
+	require.Equal(t, mirror.URL+"/file", requests[0].URL)
 	materials := capture.Materials()
 	require.Len(t, materials, 1)
 	require.Equal(t, mirror.URL+"/file", materials[0].URL)

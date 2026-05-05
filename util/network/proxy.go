@@ -25,6 +25,11 @@ type ProxyMaterial struct {
 	Digest digest.Digest
 }
 
+type ProxyRequest struct {
+	Method string
+	URL    string
+}
+
 type ProxyIncomplete struct {
 	Method   string
 	URL      string
@@ -34,6 +39,7 @@ type ProxyIncomplete struct {
 
 type ProxyCapture struct {
 	mu         sync.Mutex
+	requests   []ProxyRequest
 	materials  []ProxyMaterial
 	incomplete []ProxyIncomplete
 }
@@ -49,6 +55,15 @@ func (c *ProxyCapture) AddMaterial(m ProxyMaterial) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.materials = append(c.materials, m)
+}
+
+func (c *ProxyCapture) AddRequest(r ProxyRequest) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.requests = append(c.requests, r)
 }
 
 func (c *ProxyCapture) AddIncomplete(in ProxyIncomplete) {
@@ -68,6 +83,17 @@ func (c *ProxyCapture) Materials() []ProxyMaterial {
 	defer c.mu.Unlock()
 	out := make([]ProxyMaterial, len(c.materials))
 	copy(out, c.materials)
+	return out
+}
+
+func (c *ProxyCapture) Requests() []ProxyRequest {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]ProxyRequest, len(c.requests))
+	copy(out, c.requests)
 	return out
 }
 

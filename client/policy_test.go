@@ -118,6 +118,18 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 		AddMount("/out", llb.Scratch())
 	def, err = withProvenance.Marshal(ctx)
 	require.NoError(t, err)
+	materialURL := httpURL + "/allowed"
+	statusCh := make(chan *SolveStatus)
+	logsCh := make(chan string, 1)
+	go func() {
+		var b strings.Builder
+		for st := range statusCh {
+			for _, l := range st.Logs {
+				b.Write(l.Data)
+			}
+		}
+		logsCh <- b.String()
+	}()
 	_, err = c.Solve(ctx, def, SolveOpt{
 		ProxyNetwork: true,
 		FrontendAttrs: map[string]string{
@@ -127,8 +139,10 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 			Type:      ExporterLocal,
 			OutputDir: destDir,
 		}},
-	}, nil)
+	}, statusCh)
 	require.NoError(t, err)
+	logOutput := <-logsCh
+	require.Contains(t, logOutput, "proxy network requests:\n- GET "+materialURL)
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "proxy-material"))
 	require.NoError(t, err)
@@ -141,7 +155,6 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
 	}
 	require.NoError(t, json.Unmarshal(provDt, &stmt))
-	materialURL := httpURL + "/allowed"
 	foundMaterial := false
 	expectedDigest := digest.FromBytes(payload)
 	for _, m := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
