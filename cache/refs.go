@@ -1099,7 +1099,7 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 	}
 
-	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
+	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" && (sr.kind() == Layer || sr.kind() == BaseLayer) {
 		chain := sr.layerChain()
 		if isLinearLayerChain(chain) {
 			var needsExtract []*immutableRef
