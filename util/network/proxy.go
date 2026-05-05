@@ -1,26 +1,15 @@
 package network
 
-import "context"
+import (
+	"context"
+	"sync"
 
-type proxyPolicyKey struct{}
+	digest "github.com/opencontainers/go-digest"
+)
 
 // ProxyPolicy authorizes requests made through a BuildKit-owned exec proxy.
 type ProxyPolicy interface {
 	CheckProxyRequest(context.Context, string) error
-}
-
-// WithProxyPolicy attaches a proxy request authorizer to ctx.
-func WithProxyPolicy(ctx context.Context, p ProxyPolicy) context.Context {
-	if p == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, proxyPolicyKey{}, p)
-}
-
-// ProxyPolicyFromContext returns the proxy request authorizer attached to ctx.
-func ProxyPolicyFromContext(ctx context.Context) ProxyPolicy {
-	p, _ := ctx.Value(proxyPolicyKey{}).(ProxyPolicy)
-	return p
 }
 
 // ProxyNamespace is implemented by network namespaces that expose an internal
@@ -28,4 +17,66 @@ func ProxyPolicyFromContext(ctx context.Context) ProxyPolicy {
 type ProxyNamespace interface {
 	ProxyEnv() []string
 	ProxyCACert() []byte
+}
+
+type ProxyMaterial struct {
+	URL    string
+	Digest digest.Digest
+}
+
+type ProxyIncomplete struct {
+	Method   string
+	URL      string
+	FinalURL string
+	Reason   string
+}
+
+type ProxyCapture struct {
+	mu         sync.Mutex
+	materials  []ProxyMaterial
+	incomplete []ProxyIncomplete
+}
+
+func NewProxyCapture() *ProxyCapture {
+	return &ProxyCapture{}
+}
+
+func (c *ProxyCapture) AddMaterial(m ProxyMaterial) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.materials = append(c.materials, m)
+}
+
+func (c *ProxyCapture) AddIncomplete(in ProxyIncomplete) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.incomplete = append(c.incomplete, in)
+}
+
+func (c *ProxyCapture) Materials() []ProxyMaterial {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]ProxyMaterial, len(c.materials))
+	copy(out, c.materials)
+	return out
+}
+
+func (c *ProxyCapture) Incomplete() []ProxyIncomplete {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]ProxyIncomplete, len(c.incomplete))
+	copy(out, c.incomplete)
+	return out
 }

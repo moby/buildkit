@@ -26,6 +26,8 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
+	solvererrdefs "github.com/moby/buildkit/solver/errdefs"
+	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	opspb "github.com/moby/buildkit/solver/pb"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
@@ -109,6 +111,74 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.Error(t, err)
 	require.Equal(t, int32(1), checked.Load())
+
+	destDir := t.TempDir()
+	withProvenance := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c 'wget -q -O /out/proxy-material %s/allowed'`, httpURL)).
+		AddMount("/out", llb.Scratch())
+	def, err = withProvenance.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max,version=v1",
+		},
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: destDir,
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "proxy-material"))
+	require.NoError(t, err)
+	require.Equal(t, payload, dt)
+
+	provDt, err := os.ReadFile(filepath.Join(destDir, "provenance.json"))
+	require.NoError(t, err)
+	var stmt struct {
+		intoto.StatementHeader
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(provDt, &stmt))
+	materialURL := httpURL + "/allowed"
+	foundMaterial := false
+	expectedDigest := digest.FromBytes(payload)
+	for _, m := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
+		if m.URI == materialURL {
+			foundMaterial = true
+			require.Equal(t, expectedDigest.Hex(), m.Digest["sha256"])
+		}
+	}
+	require.True(t, foundMaterial, "expected to find %q in %+v", materialURL, stmt.Predicate.BuildDefinition.ResolvedDependencies)
+	require.False(t, stmt.Predicate.RunDetails.Metadata.Hermetic)
+	require.True(t, stmt.Predicate.RunDetails.Metadata.Completeness.ResolvedDependencies)
+	require.NotNil(t, stmt.Predicate.RunDetails.Metadata.BuildKitMetadata.Network)
+	require.Equal(t, "proxy", stmt.Predicate.RunDetails.Metadata.BuildKitMetadata.Network.Mode)
+
+	strict := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c 'wget -q -O- %s/missing || true'`, httpURL)).
+		AddMount("/out", llb.Scratch())
+	def, err = strict.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max,version=v1,complete-materials=true",
+		},
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: t.TempDir(),
+		}},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "provenance materials are incomplete")
+	require.ErrorContains(t, err, "/missing")
+	var materialsErr *solvererrdefs.ProvenanceMaterialsIncompleteError
+	require.ErrorAs(t, err, &materialsErr)
+	require.Len(t, materialsErr.Incomplete, 1)
+	require.Equal(t, httpURL+"/missing", materialsErr.Incomplete[0].Uri)
+	require.Equal(t, "unsuccessful_response", materialsErr.Incomplete[0].Reason)
 }
 
 func newProxyReachableHTTPServer(t *testing.T, handler http.Handler) (*httptest.Server, string) {

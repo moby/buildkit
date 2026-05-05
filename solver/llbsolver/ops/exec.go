@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/cachedigest"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
@@ -49,6 +50,7 @@ type ExecOp struct {
 	rec            resourcestypes.Recorder
 	digest         digest.Digest
 	linuxResources *pb.LinuxResources
+	proxyCap       *network.ProxyCapture
 }
 
 var _ solver.Op = &ExecOp{}
@@ -499,6 +501,11 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		}
 	}()
 
+	if e.op.Network == pb.NetMode_PROXY {
+		e.proxyCap = network.NewProxyCapture()
+		meta.ProxyCapture = e.proxyCap
+	}
+
 	rec, execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
 		Meta:   meta,
 		Stdin:  nil,
@@ -599,4 +606,8 @@ func (e *ExecOp) Samples() (*resourcestypes.Samples, error) {
 		return nil, nil
 	}
 	return e.rec.Samples()
+}
+
+func (e *ExecOp) ProxyCapture() *network.ProxyCapture {
+	return e.proxyCap
 }

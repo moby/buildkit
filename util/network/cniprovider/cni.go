@@ -88,7 +88,7 @@ func (c *cniProvider) initNetwork(lock bool) error {
 		}
 		defer unlock()
 	}
-	ns, err := c.New(context.TODO(), "")
+	ns, err := c.New(context.TODO(), "", network.NamespaceOptions{})
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func newCNIPool(c *cniProvider, targetSize int) *netpool.Pool[*cniNS] {
 	return pool
 }
 
-func (c *cniProvider) New(ctx context.Context, hostname string) (network.Namespace, error) {
+func (c *cniProvider) New(ctx context.Context, hostname string, _ network.NamespaceOptions) (network.Namespace, error) {
 	// We can't use the pool for namespaces that need a custom hostname.
 	// We also avoid using it on windows because we don't have a cleanup
 	// mechanism for Windows yet.

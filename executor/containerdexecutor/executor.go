@@ -165,7 +165,10 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		return nil, err
 	}
 
-	namespace, err := provider.New(ctx, meta.Hostname)
+	namespace, err := provider.New(ctx, meta.Hostname, network.NamespaceOptions{
+		ProxyPolicy:  meta.ProxyPolicy,
+		ProxyCapture: meta.ProxyCapture,
+	})
 	if err != nil {
 		return nil, err
 	}

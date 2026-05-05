@@ -11,7 +11,12 @@ import (
 // Provider interface for Network
 type Provider interface {
 	io.Closer
-	New(ctx context.Context, hostname string) (Namespace, error)
+	New(ctx context.Context, hostname string, opt NamespaceOptions) (Namespace, error)
+}
+
+type NamespaceOptions struct {
+	ProxyPolicy  ProxyPolicy
+	ProxyCapture *ProxyCapture
 }
 
 // Namespace of network for workers
