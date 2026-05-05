@@ -51,7 +51,15 @@ var additionalAnnotations = append(append(compression.EStargzAnnotations, obdlab
 
 func parallelExtractEnabled() bool {
 	v, _ := strconv.ParseBool(os.Getenv("BUILDKIT_PARALLEL_EXTRACT"))
-	return v
+	if !v {
+		return false
+	}
+	// userns can't mknod c 0 0, so overlay whiteout conversion would no-op.
+	// Mirrors containerd's own overlay-applier short-circuit.
+	if userns.RunningInUserNS() {
+		return false
+	}
+	return true
 }
 
 // extractFSPath extracts the writable fs directory path from snapshot mounts.
@@ -1091,7 +1099,7 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		}
 	}
 
-	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" {
+	if parallelExtractEnabled() && sr.cm.Snapshotter.Name() == "overlayfs" && (sr.kind() == Layer || sr.kind() == BaseLayer) {
 		chain := sr.layerChain()
 		if isLinearLayerChain(chain) {
 			var needsExtract []*immutableRef
@@ -1580,10 +1588,14 @@ func (sr *immutableRef) parallelExtractLayers(ctx context.Context, chain []*immu
 				return err
 			}
 
+			// Type:"overlay" routes the applier through OverlayConvertWhiteout
+			// so `.wh.*` tar entries become overlay character devices. With
+			// Type:"bind" they silently no-op against our empty temp dir.
+			// No actual mount happens — apply_linux.go only reads upperdir=.
 			mounts := []mount.Mount{{
-				Source:  fsDir,
-				Type:    "bind",
-				Options: []string{"rw", "rbind"},
+				Source:  "overlay",
+				Type:    "overlay",
+				Options: []string{"upperdir=" + fsDir},
 			}}
 			if _, err := ref.cm.Applier.Apply(egctx, desc, mounts); err != nil {
 				return err
