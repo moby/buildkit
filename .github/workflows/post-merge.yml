@@ -36,6 +36,11 @@ env:
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   IMAGE_NAME: "baseten/buildkit"
+  # Drives both the bake step (rebuilds buildkitd with `-cover`) and the
+  # test run (gotestsumandcover writes coverage-report.txt and merges
+  # subprocess GOCOVERDIR data). docker-bake.hcl reads this and conditionally
+  # passes GOBUILDFLAGS=-cover to the buildkitd build stage.
+  TEST_COVERAGE: "1"
 
 jobs:
   integration-tests:
@@ -93,7 +98,6 @@ jobs:
         env:
           GOTESTSUM_FORMAT: standard-verbose
           TEST_IMAGE_BUILD: "0"
-          TEST_COVERAGE: "1"
           CACHE_FROM: type=gha,scope=integration-tests
       - name: Upload test reports
         if: always()
