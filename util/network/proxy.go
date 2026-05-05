@@ -4,12 +4,13 @@ import (
 	"context"
 	"sync"
 
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
 
 // ProxyPolicy authorizes requests made through a BuildKit-owned exec proxy.
 type ProxyPolicy interface {
-	CheckProxyRequest(context.Context, string) error
+	Evaluate(context.Context, *pb.Op) (bool, error)
 }
 
 // ProxyNamespace is implemented by network namespaces that expose an internal
