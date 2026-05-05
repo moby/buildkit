@@ -75,6 +75,7 @@ type Solver struct {
 	history                   *history.Queue
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
 	provenanceEnv             map[string]any
+	provenanceStore           *provenanceStore
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -105,6 +106,7 @@ func New(opt Opt) (*Solver, error) {
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
 		provenanceEnv:             opt.ProvenanceEnv,
+		provenanceStore:           newProvenanceStore(),
 	}
 
 	sampler, err := resources.NewSysSampler()
@@ -147,6 +149,7 @@ func (s *Solver) bridge(b solver.Builder) *provenanceBridge {
 		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
 		cms:                       map[string]solver.CacheManager{},
 		sm:                        s.sm,
+		provenanceStore:           s.provenanceStore,
 	}}
 }
 
@@ -225,6 +228,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	j.SessionID = sessionID
 
 	br := s.bridge(j)
+	defer br.releaseProvenanceRefs()
+	rootReq := req.Clone()
+	br.rootReq = &rootReq
 	var fwd gateway.LLBBridgeForwarder
 	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
 		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
