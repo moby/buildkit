@@ -1,7 +1,6 @@
 package llbsolver
 
 import (
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/sourcepolicy"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
@@ -9,28 +8,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-func WithProxyNetwork(proxyNetwork bool) LoadOpt {
-	return func(op *pb.Op, _ *pb.OpMetadata, _ *solver.VertexOptions) error {
-		exec := op.GetExec()
-		if exec == nil {
-			return nil
-		}
-		if !proxyNetwork {
-			if exec.Network == pb.NetMode_PROXY {
-				return errors.Errorf("network mode %s requires proxy network to be enabled for the build", exec.Network)
-			}
-			return nil
-		}
-		switch exec.Network {
-		case pb.NetMode_UNSET:
-			exec.Network = pb.NetMode_PROXY
-		case pb.NetMode_NONE, pb.NetMode_PROXY:
-			return nil
-		default:
-			return errors.Errorf("network mode %s is not allowed when proxy network is enabled", exec.Network)
+func setProxyNetwork(op *pb.Op, proxyNetwork bool) error {
+	exec := op.GetExec()
+	if exec == nil {
+		return nil
+	}
+	if !proxyNetwork {
+		if exec.Network == pb.NetMode_PROXY {
+			return errors.Errorf("network mode %s requires proxy network to be enabled for the build", exec.Network)
 		}
 		return nil
 	}
+	switch exec.Network {
+	case pb.NetMode_UNSET:
+		exec.Network = pb.NetMode_PROXY
+	case pb.NetMode_NONE, pb.NetMode_PROXY:
+		return nil
+	default:
+		return errors.Errorf("network mode %s is not allowed when proxy network is enabled", exec.Network)
+	}
+	return nil
 }
 
 func (b *provenanceBridge) ProxyPolicy() (network.ProxyPolicy, error) {
