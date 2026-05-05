@@ -233,10 +233,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		// s.recordBuildHistory can block for several seconds on
 		// LeaseManager calls, and there is a fixed 3s timeout in
 		// GatewayForwarder on build registration.
-		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
-			return nil, err
-		}
-		defer s.gatewayForwarder.UnregisterBuild(context.WithoutCancel(ctx), id)
+		s.gatewayForwarder.RegisterBuild(ctx, id, fwd)
+		defer s.gatewayForwarder.UnregisterBuild(context.Background(), id)
 	}
 
 	if !internal {

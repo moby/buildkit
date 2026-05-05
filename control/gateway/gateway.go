@@ -13,17 +13,45 @@ import (
 	"google.golang.org/grpc"
 )
 
+type llbBridgeForwarderRegistrar struct {
+	// notifyCh is the notification channel that gets closed when
+	// the bridge is registered.
+	notifyCh chan struct{}
+
+	bridge gateway.LLBBridgeForwarder
+	err    error
+
+	mu sync.Mutex
+}
+
+func newLLBBridgeForwarderRegistrar() *llbBridgeForwarderRegistrar {
+	return &llbBridgeForwarderRegistrar{
+		notifyCh: make(chan struct{}),
+	}
+}
+
+func (br *llbBridgeForwarderRegistrar) Register(bridge gateway.LLBBridgeForwarder, err error) {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+
+	if br.bridge != nil && br.err != nil {
+		return
+	}
+
+	br.bridge = bridge
+	br.err = err
+	close(br.notifyCh)
+}
+
 type GatewayForwarder struct {
-	mu         sync.RWMutex
-	updateCond *sync.Cond
-	builds     map[string]gateway.LLBBridgeForwarder
+	mu     sync.Mutex
+	builds map[string]*llbBridgeForwarderRegistrar
 }
 
 func NewGatewayForwarder() *GatewayForwarder {
 	gwf := &GatewayForwarder{
-		builds: map[string]gateway.LLBBridgeForwarder{},
+		builds: map[string]*llbBridgeForwarderRegistrar{},
 	}
-	gwf.updateCond = sync.NewCond(gwf.mu.RLocker())
 	return gwf
 }
 
@@ -31,18 +59,9 @@ func (gwf *GatewayForwarder) Register(server *grpc.Server) {
 	gwapi.RegisterLLBBridgeServer(server, gwf)
 }
 
-func (gwf *GatewayForwarder) RegisterBuild(ctx context.Context, id string, bridge gateway.LLBBridgeForwarder) error {
-	gwf.mu.Lock()
-	defer gwf.mu.Unlock()
-
-	if _, ok := gwf.builds[id]; ok {
-		return errors.Errorf("build ID %s exists", id)
-	}
-
-	gwf.builds[id] = bridge
-	gwf.updateCond.Broadcast()
-
-	return nil
+func (gwf *GatewayForwarder) RegisterBuild(ctx context.Context, id string, bridge gateway.LLBBridgeForwarder) {
+	fwd := gwf.getOrCreateRegistrar(id, nil)
+	fwd.Register(bridge, nil)
 }
 
 func (gwf *GatewayForwarder) UnregisterBuild(ctx context.Context, id string) {
@@ -50,7 +69,27 @@ func (gwf *GatewayForwarder) UnregisterBuild(ctx context.Context, id string) {
 	defer gwf.mu.Unlock()
 
 	delete(gwf.builds, id)
-	gwf.updateCond.Broadcast()
+}
+
+// getOrCreateRegistrar will create a registrar with the given id to be retrieved at a later time.
+// The same id will return the same registrar.
+//
+// If the registrar is newly created, the onCreate function is invoked in a separate goroutine
+// if it is present. If nil, this function is ignored.
+func (gwf *GatewayForwarder) getOrCreateRegistrar(id string, onCreate func(*llbBridgeForwarderRegistrar)) *llbBridgeForwarderRegistrar {
+	gwf.mu.Lock()
+	defer gwf.mu.Unlock()
+
+	fwd, ok := gwf.builds[id]
+	if !ok {
+		fwd = newLLBBridgeForwarderRegistrar()
+		gwf.builds[id] = fwd
+
+		if onCreate != nil {
+			go onCreate(fwd)
+		}
+	}
+	return fwd
 }
 
 func (gwf *GatewayForwarder) lookupForwarder(ctx context.Context) (gateway.LLBBridgeForwarder, error) {
@@ -59,31 +98,23 @@ func (gwf *GatewayForwarder) lookupForwarder(ctx context.Context) (gateway.LLBBr
 		return nil, errors.New("no buildid found in context")
 	}
 
-	ctx, cancel := context.WithCancelCause(ctx)
-	ctx, _ = context.WithTimeoutCause(ctx, 3*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-	defer func() { cancel(errors.WithStack(context.Canceled)) }()
-
-	go func() {
-		<-ctx.Done()
-		gwf.mu.Lock()
-		gwf.updateCond.Broadcast()
-		gwf.mu.Unlock()
-	}()
-
-	gwf.mu.RLock()
-	defer gwf.mu.RUnlock()
-	for {
+	onCreate := func(fwd *llbBridgeForwarderRegistrar) {
 		select {
-		case <-ctx.Done():
-			return nil, errdefs.NewUnknownJobError(bid)
-		default:
+		case <-fwd.notifyCh:
+			return
+		case <-time.After(3 * time.Second):
+			fwd.Register(nil, errors.WithStack(errdefs.NewUnknownJobError(bid)))
+			gwf.UnregisterBuild(context.Background(), bid)
 		}
-		fwd, ok := gwf.builds[bid]
-		if !ok {
-			gwf.updateCond.Wait()
-			continue
-		}
-		return fwd, nil
+	}
+
+	fwd := gwf.getOrCreateRegistrar(bid, onCreate)
+
+	select {
+	case <-ctx.Done():
+		return nil, context.Cause(ctx)
+	case <-fwd.notifyCh:
+		return fwd.bridge, fwd.err
 	}
 }
 
