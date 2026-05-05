@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"runtime"
@@ -508,6 +509,9 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		Stdout: stdout,
 		Stderr: stderr,
 	}, nil)
+	if e.proxyCap != nil {
+		logProxyRequests(stderr, e.proxyCap.Requests())
+	}
 
 	for i, out := range p.OutputRefs {
 		if mutable, ok := out.Ref.(cache.MutableRef); ok {
@@ -524,6 +528,16 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 	}
 	e.rec = rec
 	return results, errors.Wrapf(execErr, "process %q did not complete successfully", strings.Join(e.op.Meta.Args, " "))
+}
+
+func logProxyRequests(w io.Writer, requests []network.ProxyRequest) {
+	if len(requests) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "proxy network requests:")
+	for _, req := range requests {
+		_, _ = fmt.Fprintf(w, "- %s %s\n", req.Method, req.URL)
+	}
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {

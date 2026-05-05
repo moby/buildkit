@@ -436,6 +436,7 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL = target
 		r.Host = target.Host
 	}
+	h.recordRequest(r)
 	resp, err := h.roundTrip(r)
 	if err != nil {
 		h.recordIncomplete(r, "", "upstream_error")
@@ -494,6 +495,7 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 			req.URL = target
 			req.Host = target.Host
 		}
+		h.recordRequest(req)
 		resp, err := h.roundTrip(req)
 		if err != nil {
 			_ = req.Body.Close()
@@ -563,6 +565,16 @@ func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tr
 	h.capture.AddMaterial(network.ProxyMaterial{
 		URL:    redactURL(req.URL.String()),
 		Digest: tracker.Digest(),
+	})
+}
+
+func (h *proxyHandler) recordRequest(req *http.Request) {
+	if h.capture == nil {
+		return
+	}
+	h.capture.AddRequest(network.ProxyRequest{
+		Method: req.Method,
+		URL:    redactURL(req.URL.String()),
 	})
 }
 
