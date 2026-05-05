@@ -11,8 +11,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"hash"
 	"io"
 	"math/big"
 	"net"
@@ -32,6 +34,8 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/netpool"
+	"github.com/moby/buildkit/util/urlutil"
+	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -93,7 +97,7 @@ func (p *provider) Close() error {
 	return err
 }
 
-func (p *provider) New(ctx context.Context, hostname string) (_ network.Namespace, retErr error) {
+func (p *provider) New(ctx context.Context, hostname string, opt network.NamespaceOptions) (_ network.Namespace, retErr error) {
 	ns, err := p.pool.Get(ctx)
 	if err != nil {
 		return nil, err
@@ -103,7 +107,7 @@ func (p *provider) New(ctx context.Context, hostname string) (_ network.Namespac
 			_ = p.pool.Discard(ns)
 		}
 	}()
-	if err := ns.startProxy(ctx, network.ProxyPolicyFromContext(ctx)); err != nil {
+	if err := ns.startProxy(ctx, opt.ProxyPolicy, opt.ProxyCapture); err != nil {
 		return nil, err
 	}
 	return ns, nil
@@ -319,13 +323,17 @@ func (n *proxyNS) setupVeth() error {
 	return errors.WithStack(h.LinkSetUp(lo))
 }
 
-func (n *proxyNS) startProxy(ctx context.Context, policy network.ProxyPolicy) error {
+func (n *proxyNS) startProxy(ctx context.Context, policy network.ProxyPolicy, capture *network.ProxyCapture) error {
 	ln, err := listenInNetNS(ctx, n.proxyNSPath, "tcp4", net.JoinHostPort(n.hostIP.String(), "0"))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	n.ln = ln
-	handler := &proxyHandler{provider: n.provider, policy: policy}
+	handler := &proxyHandler{
+		provider: n.provider,
+		policy:   policy,
+		capture:  capture,
+	}
 	n.server = &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
@@ -407,6 +415,7 @@ func (n *proxyNS) deleteVeth() error {
 type proxyHandler struct {
 	provider *provider
 	policy   network.ProxyPolicy
+	capture  *network.ProxyCapture
 }
 
 func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -424,13 +433,16 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.roundTrip(r)
 	if err != nil {
+		h.recordIncomplete(r, "", "upstream_error")
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
+	tracker := newProxyBodyTracker(resp.Body)
+	_, copyErr := io.Copy(w, tracker)
+	h.recordResponse(r, resp, tracker, copyErr)
 }
 
 func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
@@ -477,18 +489,123 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 		resp, err := h.roundTrip(req)
 		if err != nil {
 			_ = req.Body.Close()
+			h.recordIncomplete(req, "", "upstream_error")
 			_, _ = fmt.Fprintf(tlsConn, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(err.Error())+1, err.Error()+"\n")
 			return
 		}
+		tracker := newProxyBodyTracker(resp.Body)
+		resp.Body = tracker
 		if err := resp.Write(tlsConn); err != nil {
+			h.recordResponse(req, resp, tracker, err)
 			resp.Body.Close()
 			return
 		}
 		resp.Body.Close()
+		h.recordResponse(req, resp, tracker, nil)
 		if resp.Close || req.Close {
 			return
 		}
 	}
+}
+
+type proxyBodyTracker struct {
+	body    io.ReadCloser
+	hash    hash.Hash
+	readErr error
+}
+
+func newProxyBodyTracker(body io.ReadCloser) *proxyBodyTracker {
+	return &proxyBodyTracker{
+		body: body,
+		hash: sha256.New(),
+	}
+}
+
+func (t *proxyBodyTracker) Read(p []byte) (int, error) {
+	n, err := t.body.Read(p)
+	if n > 0 {
+		_, _ = t.hash.Write(p[:n])
+	}
+	if err != nil && !errors.Is(err, io.EOF) && t.readErr == nil {
+		t.readErr = err
+	}
+	return n, err
+}
+
+func (t *proxyBodyTracker) Close() error {
+	return t.body.Close()
+}
+
+func (t *proxyBodyTracker) Digest() digest.Digest {
+	return digest.NewDigestFromHex(string(digest.SHA256), hex.EncodeToString(t.hash.Sum(nil)))
+}
+
+func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tracker *proxyBodyTracker, copyErr error) {
+	if h.capture == nil {
+		return
+	}
+	reason := proxyIncompleteReason(req, resp, tracker, copyErr)
+	if reason != "" {
+		h.recordIncomplete(req, finalURL(req, resp), reason)
+		return
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return
+	}
+	h.capture.AddMaterial(network.ProxyMaterial{
+		URL:    redactURL(req.URL.String()),
+		Digest: tracker.Digest(),
+	})
+}
+
+func (h *proxyHandler) recordIncomplete(req *http.Request, finalURL, reason string) {
+	if h.capture == nil {
+		return
+	}
+	h.capture.AddIncomplete(network.ProxyIncomplete{
+		Method:   req.Method,
+		URL:      redactURL(req.URL.String()),
+		FinalURL: redactURL(finalURL),
+		Reason:   reason,
+	})
+}
+
+func proxyIncompleteReason(req *http.Request, resp *http.Response, tracker *proxyBodyTracker, copyErr error) string {
+	if req.Method != http.MethodGet {
+		return "method_not_materializable"
+	}
+	if req.Header.Get("Range") != "" || resp.StatusCode == http.StatusPartialContent {
+		return "partial_response"
+	}
+	if resp.Uncompressed {
+		return "response_transformed"
+	}
+	if copyErr != nil || tracker.readErr != nil {
+		return "body_read_failed"
+	}
+	if resp.StatusCode >= 400 {
+		return "unsuccessful_response"
+	}
+	return ""
+}
+
+func finalURL(req *http.Request, resp *http.Response) string {
+	location := resp.Header.Get("Location")
+	if location == "" {
+		return ""
+	}
+	u, err := req.URL.Parse(location)
+	if err != nil {
+		return location
+	}
+	return u.String()
+}
+
+func redactURL(s string) string {
+	if s == "" {
+		return ""
+	}
+	return urlutil.RedactCredentials(s)
 }
 
 func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {

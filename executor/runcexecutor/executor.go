@@ -187,7 +187,10 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	if !ok {
 		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
 	}
-	namespace, err := provider.New(ctx, meta.Hostname)
+	namespace, err := provider.New(ctx, meta.Hostname, network.NamespaceOptions{
+		ProxyPolicy:  meta.ProxyPolicy,
+		ProxyCapture: meta.ProxyCapture,
+	})
 	if err != nil {
 		return nil, err
 	}

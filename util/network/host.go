@@ -17,7 +17,7 @@ func NewHostProvider() Provider {
 type host struct {
 }
 
-func (h *host) New(_ context.Context, hostname string) (Namespace, error) {
+func (h *host) New(_ context.Context, hostname string, _ NamespaceOptions) (Namespace, error) {
 	return &hostNS{}, nil
 }
 

@@ -366,35 +366,32 @@ type proxyPolicyExecutor struct {
 
 func (e *proxyPolicyExecutor) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (resourcestypes.Recorder, error) {
 	if process.Meta.NetMode == pb.NetMode_PROXY {
-		var err error
-		ctx, err = e.withProxyPolicy(ctx)
+		policy, err := e.proxyPolicy()
 		if err != nil {
 			return nil, err
 		}
+		process.Meta.ProxyPolicy = policy
 	}
 	return e.Executor.Run(ctx, id, rootfs, mounts, process, started)
 }
 
 func (e *proxyPolicyExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
 	if process.Meta.NetMode == pb.NetMode_PROXY {
-		var err error
-		ctx, err = e.withProxyPolicy(ctx)
+		policy, err := e.proxyPolicy()
 		if err != nil {
 			return err
 		}
+		process.Meta.ProxyPolicy = policy
 	}
 	return e.Executor.Exec(ctx, id, process)
 }
 
-func (e *proxyPolicyExecutor) withProxyPolicy(ctx context.Context) (context.Context, error) {
+func (e *proxyPolicyExecutor) proxyPolicy() (network.ProxyPolicy, error) {
 	policy, err := e.provider.ProxyPolicy()
 	if err != nil {
 		return nil, err
 	}
-	if policy == nil {
-		return ctx, nil
-	}
-	return network.WithProxyPolicy(ctx, policy), nil
+	return policy, nil
 }
 
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {

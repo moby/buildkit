@@ -336,3 +336,29 @@ func TestNewPredicateKeepsContextSubdir(t *testing.T) {
 	require.Equal(t, "", pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
 	require.Equal(t, "src", pr.BuildDefinition.ExternalParameters.Request.Args["contextsubdir"])
 }
+
+func TestNewPredicateProxyNetworkMetadata(t *testing.T) {
+	t.Parallel()
+
+	c := &Capture{
+		ProxyNetwork:        true,
+		IncompleteMaterials: true,
+		ProxyIncomplete: []provenancetypes.ProxyCaptureIncomplete{
+			{
+				Op:     "sha256:abc",
+				Name:   "curl -X POST https://example.com/token",
+				Method: "POST",
+				URI:    "https://example.com/token",
+				Reason: "method_not_materializable",
+			},
+		},
+	}
+	pr, err := NewPredicate(c)
+	require.NoError(t, err)
+	require.NotNil(t, pr.RunDetails.Metadata.BuildKitMetadata.Network)
+	require.Equal(t, "proxy", pr.RunDetails.Metadata.BuildKitMetadata.Network.Mode)
+	require.Len(t, pr.RunDetails.Metadata.BuildKitMetadata.Network.Proxy.Incomplete, 1)
+	require.Equal(t, "method_not_materializable", pr.RunDetails.Metadata.BuildKitMetadata.Network.Proxy.Incomplete[0].Reason)
+	require.False(t, pr.RunDetails.Metadata.Completeness.ResolvedDependencies)
+	require.False(t, pr.RunDetails.Metadata.Hermetic)
+}

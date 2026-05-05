@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/sys/user"
 )
 
@@ -27,6 +28,8 @@ type Meta struct {
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 	ValidExitCodes []int
+	ProxyPolicy    network.ProxyPolicy
+	ProxyCapture   *network.ProxyCapture
 
 	RemoveMountStubsRecursive bool
 }

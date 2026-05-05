@@ -23,7 +23,6 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
-	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -200,7 +199,7 @@ func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, m
 		return nil, err
 	}
 	if policy != nil {
-		ctx = network.WithProxyPolicy(ctx, policy)
+		process.Meta.ProxyPolicy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {
@@ -218,7 +217,7 @@ func (b *llbBridge) Exec(ctx context.Context, id string, process executor.Proces
 		return err
 	}
 	if policy != nil {
-		ctx = network.WithProxyPolicy(ctx, policy)
+		process.Meta.ProxyPolicy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {

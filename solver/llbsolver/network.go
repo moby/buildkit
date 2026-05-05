@@ -11,6 +11,7 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/network"
+	"github.com/moby/buildkit/util/urlutil"
 	"github.com/pkg/errors"
 )
 
@@ -76,10 +77,11 @@ type proxyPolicy struct {
 }
 
 func (p *proxyPolicy) CheckProxyRequest(ctx context.Context, url string) error {
+	redactedURL := urlutil.RedactCredentials(url)
 	op := &pb.Op{
 		Op: &pb.Op_Source{
 			Source: &pb.SourceOp{
-				Identifier: url,
+				Identifier: redactedURL,
 			},
 		},
 	}
@@ -108,17 +110,17 @@ func (p *proxyPolicy) CheckProxyRequest(ctx context.Context, url string) error {
 		return err
 	}
 	if resp.GetRequest() != nil {
-		return errors.Errorf("source policy metadata requests are not supported for proxy request %q", url)
+		return errors.Errorf("source policy metadata requests are not supported for proxy request %q", redactedURL)
 	}
 	decision := resp.GetDecision()
 	if decision == nil {
 		return errors.Errorf("no decision in policy response")
 	}
 	if decision.Action == spb.PolicyAction_DENY {
-		return errors.Wrapf(sourcepolicy.ErrSourceDenied, "source %q denied by policy", url)
+		return errors.Wrapf(sourcepolicy.ErrSourceDenied, "source %q denied by policy", redactedURL)
 	}
 	if decision.Action == spb.PolicyAction_CONVERT {
-		return errors.Errorf("source policy convert action is not supported for proxy request %q", url)
+		return errors.Errorf("source policy convert action is not supported for proxy request %q", redactedURL)
 	}
 	return nil
 }
