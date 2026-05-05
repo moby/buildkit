@@ -19,6 +19,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/oci"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/netpool"
 	"github.com/moby/buildkit/util/urlutil"
@@ -427,9 +429,12 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Scheme = "http"
 		r.URL.Host = r.Host
 	}
-	if err := h.check(r.Context(), r.URL.String()); err != nil {
+	if target, err := h.check(r.Context(), r.Method, r.URL.String()); err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
+	} else if target != nil {
+		r.URL = target
+		r.Host = target.Host
 	}
 	resp, err := h.roundTrip(r)
 	if err != nil {
@@ -481,10 +486,13 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 		req.URL.Scheme = "https"
 		req.URL.Host = r.Host
 		req.RequestURI = ""
-		if err := h.check(req.Context(), req.URL.String()); err != nil {
+		if target, err := h.check(req.Context(), req.Method, req.URL.String()); err != nil {
 			_ = req.Body.Close()
 			_, _ = io.WriteString(tlsConn, "HTTP/1.1 403 Forbidden\r\nContent-Length: 10\r\nConnection: close\r\n\r\nForbidden\n")
 			return
+		} else if target != nil {
+			req.URL = target
+			req.Host = target.Host
 		}
 		resp, err := h.roundTrip(req)
 		if err != nil {
@@ -614,11 +622,41 @@ func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {
 	return h.provider.client.RoundTrip(r)
 }
 
-func (h *proxyHandler) check(ctx context.Context, url string) error {
+func (h *proxyHandler) check(ctx context.Context, method, rawURL string) (*neturl.URL, error) {
 	if h.policy == nil {
-		return nil
+		return nil, nil
 	}
-	return h.policy.CheckProxyRequest(ctx, url)
+	redactedURL := redactURL(rawURL)
+	op := &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{
+				Identifier: redactedURL,
+			},
+		},
+	}
+	if _, err := h.policy.Evaluate(ctx, op); err != nil {
+		return nil, err
+	}
+	source := op.GetSource()
+	target := source.Identifier
+	converted := target != redactedURL || len(source.Attrs) != 0
+	if !converted {
+		return nil, nil
+	}
+	if method != http.MethodGet {
+		return nil, errors.Errorf("source policy converted proxy request %q, but conversion is only supported for GET", redactedURL)
+	}
+	if len(source.Attrs) != 0 {
+		return nil, errors.Errorf("source policy converted proxy request %q with attrs, but proxy conversion only supports URL updates", redactedURL)
+	}
+	u, err := neturl.Parse(target)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error parsing converted proxy request URL %q", redactURL(target))
+	}
+	if !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, errors.Errorf("source policy converted proxy request to unsupported URL %q", redactURL(target))
+	}
+	return u, nil
 }
 
 func newCA() ([]byte, *x509.Certificate, *rsa.PrivateKey, error) {
