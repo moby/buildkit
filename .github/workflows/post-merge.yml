@@ -41,6 +41,13 @@ env:
   # subprocess GOCOVERDIR data). docker-bake.hcl reads this and conditionally
   # passes GOBUILDFLAGS=-cover to the buildkitd build stage.
   TEST_COVERAGE: "1"
+  # Exercise the parallel-extract code path on every pull-touching
+  # integration test. hack/test forwards this env into the test container,
+  # and the per-test buildkitd subprocess inherits it via os.Environ().
+  # parallelExtractEnabled() (cache/refs.go) reads it on each layer
+  # extract; non-linear chains and non-overlay snapshotters fall back to
+  # sequential automatically, so this is safe to leave on globally.
+  BUILDKIT_PARALLEL_EXTRACT: "1"
 
 jobs:
   integration-tests:

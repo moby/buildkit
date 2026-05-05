@@ -41,6 +41,7 @@ func init() {
 		testEagerExportValidation,
 		testPreferPushRegistryHit,
 		testPreferPushRegistryMiss,
+		testPreferPushRegistryPartialHit,
 		testPreferPushRegistryWithEagerExport,
 		testPreferPushRegistryValidation,
 	)
@@ -589,12 +590,17 @@ func seedBaseImage(t *testing.T, c *Client, sb integration.Sandbox, target strin
 	require.NoError(t, err)
 }
 
-// testPreferPushRegistryHit: seed the push registry with a base image, then
-// build a child that FROMs it and exports with prefer-push-registry=true
-// back to the same registry. The wrapped provider's probe hits and the
-// real fetch flows through the push-registry code path. The test verifies
-// correctness; log lines (grep for "prefer-push-registry:") are the
-// behavioural signal observed in CI logs.
+// testPreferPushRegistryHit: seed the push registry's child repo with a
+// base image, then build a child that FROMs it and exports with
+// prefer-push-registry=true to the **same repo** (different tag). At
+// probe time, the registry already has every base layer blob in that
+// repo, so every probe hits and every layer is served via
+// pushFallbackProvider.
+//
+// Note the repo paths matter: the prober scopes `/v2/<repo>/blobs/<digest>`
+// HEADs to `cfg.TargetName`'s repo. Different-repo seeding (which we
+// originally tried) ends up exercising the miss path because the standard
+// distribution registry tracks blob membership per-repo.
 func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
@@ -609,22 +615,17 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	// Step 1: populate the registry with a base image whose rootfs is
-	// busybox + a marker file. Pushing it makes the push registry "hot"
-	// for step 2's layer fetches.
-	baseTarget := registry + "/buildkit/pushreg-base:latest"
+	// Use the same repo path on the registry for both seed and child so
+	// that pushing the base image populates the child's blob namespace.
+	baseTarget := registry + "/buildkit/pushreghit:base"
+	childTarget := registry + "/buildkit/pushreghit:child"
 	seedBaseImage(t, c, sb, baseTarget)
 
-	// Step 2: child build that FROMs baseTarget. Configure the exporter
-	// with prefer-push-registry=true and push to the same registry. On
-	// layer fetch for baseTarget's layers, the wrapper probes the push
-	// registry and succeeds.
 	child := llb.Image(baseTarget).
 		Run(llb.Shlex(`sh -c "echo child > /child-file"`)).Root()
 	childDef, err := child.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	childTarget := registry + "/buildkit/pushreg-child:latest"
 	_, err = c.Solve(sb.Context(), childDef, SolveOpt{
 		Exports: []ExportEntry{
 			{
@@ -639,9 +640,6 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	// Verify the child image is pullable and has both the base marker file
-	// and the child file — the base layer was served via the push-registry
-	// wrapper and still produced the right content.
 	destDir := t.TempDir()
 	pullDef, err := llb.Image(childTarget).Marshal(sb.Context())
 	require.NoError(t, err)
@@ -657,6 +655,151 @@ func testPreferPushRegistryHit(t *testing.T, sb integration.Sandbox) {
 	dt, err = os.ReadFile(filepath.Join(destDir, "base-file"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "baseline")
+}
+
+// testPreferPushRegistryPartialHit: pre-seed the push registry's child
+// repo with a *prefix* of the source's layer chain, so per-descriptor
+// probes split — some layers hit the push registry, others 404 and fall
+// back to origin. Exercises the per-descriptor decision logic in
+// pushFallbackProvider.ReaderAt across a real manifest.
+//
+// Layout:
+//
+//	originReg  – stable: hosts the full source image (busybox + /file-a + /file-b)
+//	pushReg    – partial: hosts only `busybox + /file-a` under the same repo
+//	             path the child will export to, so the busybox and /file-a
+//	             layer digests appear there but the /file-b layer digest does not.
+func testPreferPushRegistryPartialHit(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	originReg, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	pushReg, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Same repo path on both registries so layer digests line up across
+	// pulls/pushes; tags differentiate the partial-prefix vs. full-chain
+	// seeds.
+	const repo = "/buildkit/pushregpartial"
+	baseRefOrigin := originReg + repo + ":base"
+	baseRefPush := pushReg + repo + ":base"
+	extendedRef := originReg + repo + ":extended"
+	childRef := pushReg + repo + ":child"
+
+	// Step 1: build base = busybox + /file-a, push to BOTH origin and push
+	// registries. After this, pushReg's repo has the busybox and /file-a
+	// layer blobs (under the :base tag).
+	baseDef, err := llb.Image("busybox:latest").
+		File(llb.Mkfile("/file-a", 0644, []byte("a"))).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), baseDef, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": baseRefOrigin + "," + baseRefPush,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Step 2: build extended = base + /file-b, push to ORIGIN only. This
+	// is the source we'll FROM. Its layer chain is busybox + /file-a +
+	// /file-b — the first two have the same digests as the partial seed
+	// in pushReg; the third is unique to origin.
+	extendedDef, err := llb.Image(baseRefOrigin).
+		File(llb.Mkfile("/file-b", 0644, []byte("b"))).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), extendedDef, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{"name": extendedRef, "push": "true"},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Force the next solve to actually pull (and probe) the source layers
+	// instead of taking everything from local cache.
+	ensurePruneAll(t, c, sb)
+
+	// Step 3: child FROMs the extended image and exports to pushReg with
+	// prefer-push-registry=true. During the source pull, the per-layer
+	// probe asks pushReg's child repo for each layer digest:
+	//   - busybox layer    → HIT  (seeded under :base)
+	//   - /file-a layer    → HIT  (seeded under :base)
+	//   - /file-b layer    → MISS → fallback to origin
+	child := llb.Image(extendedRef).
+		Run(llb.Shlex(`sh -c "echo child > /child-file"`)).Root()
+	childDef, err := child.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), childDef, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":                 childRef,
+					"push":                 "true",
+					"prefer-push-registry": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err, "partial-hit must transparently fall back to origin for missing layers")
+
+	// Verify pull-back contains all three pre-existing files plus the new
+	// /child-file: every layer was sourced correctly regardless of
+	// whether it came from pushReg or originReg.
+	destDir := t.TempDir()
+	pullDef, err := llb.Image(childRef).Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), pullDef, SolveOpt{
+		Exports: []ExportEntry{
+			{Type: ExporterLocal, OutputDir: destDir},
+		},
+	}, nil)
+	require.NoError(t, err)
+	for _, f := range []struct{ path, want string }{
+		{"file-a", "a"},
+		{"file-b", "b"},
+		{"child-file", "child"},
+	} {
+		dt, err := os.ReadFile(filepath.Join(destDir, f.path))
+		require.NoError(t, err, "missing %s after partial-hit pull-back", f.path)
+		require.Contains(t, string(dt), f.want, "wrong content in %s", f.path)
+	}
+
+	// Behavioural sanity: scan buildkitd logs for the per-layer decision
+	// lines. The wrapper logs at info-level for every layer it considers,
+	// and we want both at least one hit (`pulled from push registry`) and
+	// at least one fallback (`falling back to origin`) for this test to
+	// have exercised what its name claims. Don't require strict counts —
+	// resolver caching can shift them — just non-zero on each side.
+	var hits, fallbacks int
+	for _, buf := range sb.Logs() {
+		s := buf.String()
+		hits += strings.Count(s, "pulled from push registry")
+		fallbacks += strings.Count(s, "falling back to origin")
+	}
+	require.Greater(t, hits, 0, "expected at least one push-registry hit; wrapper did not run or every probe missed")
+	require.Greater(t, fallbacks, 0, "expected at least one fallback; the missing layer probe did not 404")
 }
 
 // testPreferPushRegistryMiss: the push registry doesn't have the base

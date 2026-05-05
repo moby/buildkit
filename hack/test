@@ -134,6 +134,7 @@ baseCreateFlags="--rm --privileged $dockerConfigMount \
 -e GOTESTSUM_FORMAT \
 -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry \
 -e BUILDKIT_INTEGRATION_DOCKERD_FLAGS \
+-e BUILDKIT_PARALLEL_EXTRACT \
 -e GORACE \
 -e GO_TEST_COVERPROFILE"
 
