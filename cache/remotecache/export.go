@@ -8,6 +8,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
+	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
@@ -15,6 +16,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/resolver/limited"
@@ -214,6 +216,10 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		dgstPair := descs[desc.Digest]
 		layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", desc.Digest))
 		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, desc, ce.ref, logs.LoggerFromContext(ctx)); err != nil {
+			var statusErr remoteserrors.ErrUnexpectedStatus
+			if errors.As(err, &statusErr) {
+				err = errutil.WithDetails(err)
+			}
 			return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 		}
 		layerDone(nil)
