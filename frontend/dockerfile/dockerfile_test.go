@@ -19,12 +19,15 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	grpcgzip "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -44,6 +47,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -141,6 +145,7 @@ var allTests = integration.TestFuncs(
 	testFrontendUseForwardedSolveResults,
 	testFrontendEvaluate,
 	testFrontendInputs,
+	testFrontendInputsCompressed,
 	testErrorsSourceMap,
 	testMultiArgs,
 	testFrontendSubrequests,
@@ -7338,6 +7343,72 @@ COPY foo foo2
 	actual, err := os.ReadFile(filepath.Join(destDir, "foo2"))
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
+}
+
+type inputsCompressionInterceptor struct {
+	calls      atomic.Int64
+	compressed atomic.Bool
+}
+
+func (i *inputsCompressionInterceptor) unary(ctx context.Context, method string, req any, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	if method == gatewayapi.LLBBridge_Inputs_FullMethodName {
+		i.calls.Add(1)
+		for _, opt := range opts {
+			if compressor, ok := opt.(grpc.CompressorCallOption); ok && compressor.CompressorType == grpcgzip.Name {
+				i.compressed.Store(true)
+			}
+		}
+	}
+	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+func testFrontendInputsCompressed(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+	if _, ok := f.(*clientFrontend); !ok {
+		t.Skip("only test with client frontend")
+	}
+
+	inputsInterceptor := &inputsCompressionInterceptor{}
+	c, err := client.New(sb.Context(), sb.Address(), client.WithGRPCDialOption(grpc.WithChainUnaryInterceptor(inputsInterceptor.unary)))
+	require.NoError(t, err)
+	defer c.Close()
+
+	payload := bytes.Repeat([]byte("a"), 64<<10)
+	input := llb.Scratch().File(llb.Mkfile("/payload", 0600, payload))
+
+	destDir := t.TempDir()
+	dockerfile := []byte(`
+FROM scratch
+COPY payload payload
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+		},
+		FrontendInputs: map[string]llb.State{
+			dockerui.DefaultLocalNameContext: input,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	actual, err := os.ReadFile(filepath.Join(destDir, "payload"))
+	require.NoError(t, err)
+	require.Equal(t, payload, actual)
+
+	require.NotZero(t, inputsInterceptor.calls.Load(), "expected an Inputs request")
+	require.True(t, inputsInterceptor.compressed.Load(), "expected Inputs request to use gzip compression")
 }
 
 func testFrontendSubrequests(t *testing.T, sb integration.Sandbox) {
