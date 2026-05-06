@@ -69,6 +69,9 @@ const (
 	// CapGatewayWarnings is the capability to log warnings from frontend
 	CapGatewayWarnings apicaps.CapID = "gateway.warnings"
 
+	// CapGatewayGzip is the capability to receive gzip-compressed gateway requests.
+	CapGatewayGzip apicaps.CapID = "gateway.grpc.gzip"
+
 	// CapAttestations is the capability to indicate that attestation
 	// references will be attached to results
 	CapAttestations apicaps.CapID = "reference.attestations"
@@ -242,6 +245,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewayWarnings,
 		Name:    "logging warnings",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayGzip,
+		Name:    "gzip compressed gateway requests",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
