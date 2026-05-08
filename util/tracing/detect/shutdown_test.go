@@ -62,7 +62,7 @@ func TestShutdownRespectsDeadline(t *testing.T) {
 	tp := newTestProvider(t)
 
 	deadline := 500 * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), deadline)
+	ctx, cancel := context.WithTimeoutCause(context.Background(), deadline, nil)
 	defer cancel()
 
 	start := time.Now()
