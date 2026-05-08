@@ -316,14 +316,17 @@ func (c *klauspostGzipCompressor) WriteTOCAndFooter(w io.Writer, off int64, toc 
 
 // klauspostGzipFooterBytes mirrors estargz/gzip.go's gzipFooterBytes.
 // Uses stdlib at NoCompression to guarantee the spec-required 51-byte footer.
+// Layout per RFC 1952 subfield: 'S','G' magic + uint16 LE subfield length +
+// 16-hex-digit TOC offset + "STARGZ" magic.
 func klauspostGzipFooterBytes(tocOff int64) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, estargz.FooterSize))
 	gz, _ := stdgzip.NewWriterLevel(buf, stdgzip.NoCompression)
-	header := make([]byte, 4)
-	header[0], header[1] = 'S', 'G'
 	subfield := fmt.Sprintf("%016xSTARGZ", tocOff)
-	binary.LittleEndian.PutUint16(header[2:4], uint16(len(subfield)))
-	gz.Header.Extra = append(header, []byte(subfield)...)
+	extra := make([]byte, 0, 4+len(subfield))
+	extra = append(extra, 'S', 'G')
+	extra = binary.LittleEndian.AppendUint16(extra, uint16(len(subfield)))
+	extra = append(extra, subfield...)
+	gz.Header.Extra = extra
 	gz.Close()
 	if buf.Len() != estargz.FooterSize {
 		panic(fmt.Sprintf("footer buffer = %d, not %d", buf.Len(), estargz.FooterSize))
