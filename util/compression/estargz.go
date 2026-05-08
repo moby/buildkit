@@ -2,9 +2,13 @@ package compression
 
 import (
 	"archive/tar"
-	"compress/gzip"
+	"bytes"
+	stdgzip "compress/gzip"
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"strconv"
 	"sync"
@@ -14,6 +18,7 @@ import (
 	cdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	gzip "github.com/klauspost/compress/gzip"
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -23,6 +28,14 @@ import (
 var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation}
 
 const estargzLabel = "buildkit.io/compression/estargz"
+
+// defaultEstargzCompressionLevel is the gzip level used when comp.Level is unset.
+// L4 sits at the knee of the speed/size curve for our ML payloads: significantly
+// faster encode than L6 with a small size penalty that is near-zero on the
+// already-incompressible content (Python wheels, native libs, model weights)
+// that dominates our largest layers. Combined with the klauspost gzip
+// implementation below this is materially faster than upstream's stdlib L6.
+const defaultEstargzCompressionLevel = 4
 
 func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	var cInfo *compressionInfo
@@ -50,11 +63,11 @@ func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc 
 
 				blobInfoW, bInfoCh := calculateBlobInfo()
 				defer blobInfoW.Close()
-				level := gzip.DefaultCompression
+				level := defaultEstargzCompressionLevel
 				if comp.Level != nil {
 					level = *comp.Level
 				}
-				w := estargz.NewWriterLevel(io.MultiWriter(dest, blobInfoW), level)
+				w := estargz.NewWriterWithCompressor(io.MultiWriter(dest, blobInfoW), newKlauspostGzipCompressor(level))
 
 				// Using lossless API here to make sure that decompressEStargz provides the exact
 				// same tar as the original.
@@ -249,4 +262,71 @@ func calculateBlobInfo() (io.WriteCloser, chan blobInfo) {
 		res <- blobInfo{dgstr.Digest(), diffID.Digest(), c.Size()}
 	}()
 	return pw, res
+}
+
+// klauspostGzipCompressor is an estargz.Compressor that swaps the per-chunk gzip
+// encoder for github.com/klauspost/compress/gzip. The on-disk format is unchanged:
+// every estargz chunk is still an RFC 1952 gzip stream, so any decompressor
+// (stargz-snapshotter, containerd, plain gunzip) reads it unchanged. Encoder is
+// roughly 2x faster than stdlib at the same level on our workloads.
+type klauspostGzipCompressor struct {
+	level int
+}
+
+func newKlauspostGzipCompressor(level int) *klauspostGzipCompressor {
+	return &klauspostGzipCompressor{level: level}
+}
+
+func (c *klauspostGzipCompressor) Writer(w io.Writer) (estargz.WriteFlushCloser, error) {
+	return gzip.NewWriterLevel(w, c.level)
+}
+
+func (c *klauspostGzipCompressor) WriteTOCAndFooter(w io.Writer, off int64, toc *estargz.JTOC, diffHash hash.Hash) (digest.Digest, error) {
+	tocJSON, err := json.MarshalIndent(toc, "", "\t")
+	if err != nil {
+		return "", err
+	}
+	gz, _ := gzip.NewWriterLevel(w, c.level)
+	gw := io.Writer(gz)
+	if diffHash != nil {
+		gw = io.MultiWriter(gz, diffHash)
+	}
+	tw := tar.NewWriter(gw)
+	if err := tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     estargz.TOCTarName,
+		Size:     int64(len(tocJSON)),
+	}); err != nil {
+		return "", err
+	}
+	if _, err := tw.Write(tocJSON); err != nil {
+		return "", err
+	}
+	if err := tw.Close(); err != nil {
+		return "", err
+	}
+	if err := gz.Close(); err != nil {
+		return "", err
+	}
+	if _, err := w.Write(klauspostGzipFooterBytes(off)); err != nil {
+		return "", err
+	}
+	return digest.FromBytes(tocJSON), nil
+}
+
+// klauspostGzipFooterBytes mirrors estargz/gzip.go's gzipFooterBytes.
+// Uses stdlib at NoCompression to guarantee the spec-required 51-byte footer.
+func klauspostGzipFooterBytes(tocOff int64) []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, estargz.FooterSize))
+	gz, _ := stdgzip.NewWriterLevel(buf, stdgzip.NoCompression)
+	header := make([]byte, 4)
+	header[0], header[1] = 'S', 'G'
+	subfield := fmt.Sprintf("%016xSTARGZ", tocOff)
+	binary.LittleEndian.PutUint16(header[2:4], uint16(len(subfield)))
+	gz.Header.Extra = append(header, []byte(subfield)...)
+	gz.Close()
+	if buf.Len() != estargz.FooterSize {
+		panic(fmt.Sprintf("footer buffer = %d, not %d", buf.Len(), estargz.FooterSize))
+	}
+	return buf.Bytes()
 }
