@@ -326,7 +326,7 @@ func klauspostGzipFooterBytes(tocOff int64) []byte {
 	extra = append(extra, 'S', 'G')
 	extra = binary.LittleEndian.AppendUint16(extra, uint16(len(subfield)))
 	extra = append(extra, subfield...)
-	gz.Header.Extra = extra
+	gz.Extra = extra
 	gz.Close()
 	if buf.Len() != estargz.FooterSize {
 		panic(fmt.Sprintf("footer buffer = %d, not %d", buf.Len(), estargz.FooterSize))
