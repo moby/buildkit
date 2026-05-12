@@ -4,6 +4,7 @@ package proxyprovider
 
 import (
 	"context"
+	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -43,6 +44,29 @@ func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 	require.Equal(t, upstream.URL+"/file", materials[0].URL)
 	require.Equal(t, "sha256:e352b3ec84adb842606c6d3638ac7466f5580f8617607ae6e0955f12130dd369", materials[0].Digest.String())
 	require.Empty(t, capture.Incomplete())
+}
+
+func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	pool := x509.NewCertPool()
+	pool.AddCert(upstream.Certificate())
+	handler := newTestProxyHandler(t, nil)
+	handler.provider.client.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	handler.provider.client.TLSClientConfig.RootCAs = pool
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, upstream.URL, nil).WithContext(ctx)
+
+	resp, err := handler.roundTrip(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestProxyHandlerMarksPostIncomplete(t *testing.T) {

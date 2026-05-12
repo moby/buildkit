@@ -631,7 +631,7 @@ func redactURL(s string) string {
 func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {
 	stripProxyHeaders(r.Header)
 	r.RequestURI = ""
-	return h.provider.client.RoundTrip(r)
+	return h.provider.client.RoundTrip(r.WithContext(context.WithoutCancel(r.Context())))
 }
 
 func (h *proxyHandler) check(ctx context.Context, method, rawURL string) (*neturl.URL, error) {
