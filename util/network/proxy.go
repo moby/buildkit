@@ -26,8 +26,9 @@ type ProxyMaterial struct {
 }
 
 type ProxyRequest struct {
-	Method string
-	URL    string
+	Method     string
+	URL        string
+	StatusCode int
 }
 
 type ProxyIncomplete struct {

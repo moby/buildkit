@@ -436,14 +436,15 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL = target
 		r.Host = target.Host
 	}
-	h.recordRequest(r)
 	resp, err := h.roundTrip(r)
 	if err != nil {
+		h.recordRequest(r, http.StatusBadGateway)
 		h.recordIncomplete(r, "", "upstream_error")
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
+	h.recordRequest(r, resp.StatusCode)
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	tracker := newProxyBodyTracker(resp.Body)
@@ -495,14 +496,15 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 			req.URL = target
 			req.Host = target.Host
 		}
-		h.recordRequest(req)
 		resp, err := h.roundTrip(req)
 		if err != nil {
 			_ = req.Body.Close()
+			h.recordRequest(req, http.StatusBadGateway)
 			h.recordIncomplete(req, "", "upstream_error")
 			_, _ = fmt.Fprintf(tlsConn, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(err.Error())+1, err.Error()+"\n")
 			return
 		}
+		h.recordRequest(req, resp.StatusCode)
 		tracker := newProxyBodyTracker(resp.Body)
 		resp.Body = tracker
 		if err := resp.Write(tlsConn); err != nil {
@@ -568,13 +570,14 @@ func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tr
 	})
 }
 
-func (h *proxyHandler) recordRequest(req *http.Request) {
+func (h *proxyHandler) recordRequest(req *http.Request, statusCode int) {
 	if h.capture == nil {
 		return
 	}
 	h.capture.AddRequest(network.ProxyRequest{
-		Method: req.Method,
-		URL:    redactURL(req.URL.String()),
+		Method:     req.Method,
+		URL:        redactURL(req.URL.String()),
+		StatusCode: statusCode,
 	})
 }
 

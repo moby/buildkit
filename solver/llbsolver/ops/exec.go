@@ -547,7 +547,11 @@ func logProxyRequests(w io.Writer, requests []network.ProxyRequest) {
 	}
 	_, _ = fmt.Fprintln(w, "proxy network requests:")
 	for _, req := range requests {
-		_, _ = fmt.Fprintf(w, "- %s %s\n", req.Method, req.URL)
+		if req.StatusCode != 0 {
+			_, _ = fmt.Fprintf(w, "- %s %s -> %d\n", req.Method, req.URL, req.StatusCode)
+		} else {
+			_, _ = fmt.Fprintf(w, "- %s %s\n", req.Method, req.URL)
+		}
 	}
 }
 

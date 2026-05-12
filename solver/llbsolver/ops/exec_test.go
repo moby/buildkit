@@ -3,6 +3,7 @@ package ops
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -41,14 +42,16 @@ func TestDedupePaths(t *testing.T) {
 func TestLogProxyRequests(t *testing.T) {
 	var buf bytes.Buffer
 	logProxyRequests(&buf, []network.ProxyRequest{
-		{Method: "GET", URL: "https://example.com/file"},
-		{Method: "POST", URL: "https://xxxxx:xxxxx@example.com/token"},
+		{Method: "GET", URL: "https://example.com/file", StatusCode: http.StatusOK},
+		{Method: "POST", URL: "https://xxxxx:xxxxx@example.com/token", StatusCode: http.StatusCreated},
+		{Method: "GET", URL: "https://example.com/unknown-status"},
 	})
 
 	require.Equal(t, strings.Join([]string{
 		"proxy network requests:",
-		"- GET https://example.com/file",
-		"- POST https://xxxxx:xxxxx@example.com/token",
+		"- GET https://example.com/file -> 200",
+		"- POST https://xxxxx:xxxxx@example.com/token -> 201",
+		"- GET https://example.com/unknown-status",
 		"",
 	}, "\n"), buf.String())
 }
