@@ -14,6 +14,7 @@ root = "/foo/bar"
 debug=true
 trace=true
 insecure-entitlements = ["security.insecure"]
+proxyNetwork = true
 
 [gc]
 enabled=true
@@ -85,6 +86,7 @@ searchDomains=["example.com"]
 	require.Equal(t, true, cfg.Debug)
 	require.Equal(t, true, cfg.Trace)
 	require.Equal(t, "security.insecure", cfg.Entitlements[0])
+	require.True(t, cfg.ProxyNetwork)
 
 	require.Equal(t, "buildkit.sock", cfg.GRPC.Address[0])
 	require.Equal(t, "debug.sock", cfg.GRPC.DebugAddress)

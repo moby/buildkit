@@ -60,6 +60,7 @@ type Opt struct {
 	WorkerController *worker.Controller
 	HistoryQueue     *history.Queue
 	ResourceMonitor  *resources.Monitor
+	ProxyNetwork     bool
 	ProvenanceEnv    map[string]any
 	MeterProvider    metric.MeterProvider
 }
@@ -76,6 +77,7 @@ type Solver struct {
 	entitlements              []string
 	history                   *history.Queue
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
+	proxyNetwork              bool
 	provenanceEnv             map[string]any
 	provenanceStore           *provenanceStore
 	metrics                   *buildMetrics
@@ -113,6 +115,7 @@ func New(opt Opt) (*Solver, error) {
 		sm:                        opt.SessionManager,
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
+		proxyNetwork:              opt.ProxyNetwork,
 		provenanceEnv:             opt.ProvenanceEnv,
 		provenanceStore:           newProvenanceStore(),
 		metrics:                   bm,
@@ -150,7 +153,9 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 }
 
 func (s *Solver) bridge(b solver.Builder, opts ...bridgeOpt) *provenanceBridge {
-	var cfg bridgeConfig
+	cfg := bridgeConfig{
+		proxyNetwork: s.proxyNetwork,
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -253,7 +258,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	j.SessionID = sessionID
 
-	br := s.bridge(j, withBridgeProxyNetwork(proxyNetwork))
+	br := s.bridge(j, withBridgeProxyNetwork(proxyNetwork || s.proxyNetwork))
 	defer br.releaseProvenanceRefs()
 	rootReq := req.Clone()
 	br.rootReq = &rootReq

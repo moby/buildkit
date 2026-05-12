@@ -17,6 +17,9 @@ Note that some configuration options are only useful in edge cases.
 root = "/var/lib/buildkit"
 # insecure-entitlements allows insecure entitlements, disabled by default.
 insecure-entitlements = [ "network.host", "security.insecure", "device" ]
+# proxyNetwork enables proxy network enforcement for all builds, disabled by default.
+# It can also be enabled with buildkitd --proxy-network.
+proxyNetwork = true
 # provenanceEnvDir is the directory where extra config is loaded that is added
 # to the provenance of builds:
 # slsa v0.2: invocation.environment.*

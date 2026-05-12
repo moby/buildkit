@@ -158,6 +158,14 @@ func TestWithProxyNetworkRejectsExplicitProxyWhenDisabled(t *testing.T) {
 	require.ErrorContains(t, err, "requires proxy network to be enabled")
 }
 
+func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
+	s := &Solver{proxyNetwork: true}
+
+	br := s.bridge(nil)
+
+	require.True(t, br.llbBridge.proxyNetwork)
+}
+
 func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Definition {
 	t.Helper()
 	source := &pb.Op{

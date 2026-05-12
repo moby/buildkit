@@ -77,6 +77,7 @@ type Opt struct {
 	LeaseManager              *leaseutil.Manager
 	ContentStore              *containerdsnapshot.Store
 	HistoryConfig             *config.HistoryConfig
+	ProxyNetwork              bool
 	GarbageCollect            func(context.Context) error
 	GracefulStop              <-chan struct{}
 	ProvenanceEnv             map[string]any
@@ -119,6 +120,7 @@ func NewController(opt Opt) (*Controller, error) {
 		SessionManager:   opt.SessionManager,
 		Entitlements:     opt.Entitlements,
 		HistoryQueue:     hq,
+		ProxyNetwork:     opt.ProxyNetwork,
 		ProvenanceEnv:    opt.ProvenanceEnv,
 		MeterProvider:    opt.MeterProvider,
 	})
