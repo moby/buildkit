@@ -3,6 +3,7 @@
 package proxyprovider
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/x509"
 	"net/http"
@@ -45,6 +46,30 @@ func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 	require.Equal(t, upstream.URL+"/file", materials[0].URL)
 	require.Equal(t, "sha256:e352b3ec84adb842606c6d3638ac7466f5580f8617607ae6e0955f12130dd369", materials[0].Digest.String())
 	require.Empty(t, capture.Incomplete())
+}
+
+func TestProxyHandlerDisablesUpstreamResponseTransforms(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Empty(t, r.Header.Values("Accept-Encoding"))
+		w.Header().Set("Content-Encoding", "gzip")
+		zw := gzip.NewWriter(w)
+		_, _ = zw.Write([]byte("compressed proxy material"))
+		require.NoError(t, zw.Close())
+	}))
+	t.Cleanup(upstream.Close)
+
+	capture := network.NewProxyCapture()
+	handler := newTestProxyHandler(t, capture)
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/file", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	handler.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "gzip", resp.Header().Get("Content-Encoding"))
+	require.Empty(t, capture.Incomplete())
+	require.Len(t, capture.Materials(), 1)
 }
 
 func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
@@ -243,6 +268,7 @@ func (e enginePolicyEvaluator) Evaluate(ctx context.Context, op *pb.Op) (bool, e
 func newTestProxyHandler(t *testing.T, capture *network.ProxyCapture) *proxyHandler {
 	t.Helper()
 	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DisableCompression = true
 	t.Cleanup(tr.CloseIdleConnections)
 	return &proxyHandler{
 		provider: &provider{client: tr},

@@ -60,12 +60,15 @@ func New(opt Opt) (network.Provider, error) {
 		return nil, err
 	}
 	p := &provider{
-		root:   opt.Root,
-		caPEM:  certPEM,
-		ca:     ca,
-		caKey:  key,
-		certs:  map[string]*tls.Certificate{},
-		client: &http.Transport{Proxy: nil},
+		root:  opt.Root,
+		caPEM: certPEM,
+		ca:    ca,
+		caKey: key,
+		certs: map[string]*tls.Certificate{},
+		client: &http.Transport{
+			Proxy:              nil,
+			DisableCompression: true,
+		},
 	}
 	p.pool = netpool.New(netpool.Opt[*proxyNS]{
 		Name:       "proxy network namespace",
@@ -505,6 +508,13 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.recordRequest(req, resp.StatusCode)
+		// Response.Write uses resp.Proto for the status line. In the MITM
+		// path, resp describes the upstream fetch, so align it to the
+		// client-facing request we intercepted.
+		resp.Proto = req.Proto
+		resp.ProtoMajor = req.ProtoMajor
+		resp.ProtoMinor = req.ProtoMinor
+		resp.Close = resp.Close || req.Close || !req.ProtoAtLeast(1, 1)
 		tracker := newProxyBodyTracker(resp.Body)
 		resp.Body = tracker
 		if err := resp.Write(tlsConn); err != nil {
@@ -633,6 +643,7 @@ func redactURL(s string) string {
 
 func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {
 	stripProxyHeaders(r.Header)
+	r.Header.Del("Accept-Encoding")
 	r.RequestURI = ""
 	return h.provider.client.RoundTrip(r.WithContext(context.WithoutCancel(r.Context())))
 }
