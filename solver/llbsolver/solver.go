@@ -562,8 +562,29 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return ctx, nil
 	}
 
-	// Start eager export before the build so completed vertices can enqueue work.
-	// The lease is needed early to protect compressed blobs during the build.
+	if exp.PushRegistryConfig != nil {
+		j.SetValue(keyEagerPushConfig, exp.PushRegistryConfig)
+	}
+
+	br := s.bridge(j)
+	var fwd gateway.LLBBridgeForwarder
+	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
+		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
+		defer fwd.Discard()
+		// Register build before any potentially-blocking setup (eager export
+		// pipeline, recordBuildHistory). GatewayForwarder has a fixed 3s timeout
+		// on the gateway frontend's Ping; if the build isn't registered in time
+		// the frontend fails with "forwarding Ping: no such job".
+		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
+			return nil, err
+		}
+		defer s.gatewayForwarder.UnregisterBuild(context.WithoutCancel(ctx), id)
+	}
+
+	// Start eager export after RegisterBuild so the synchronous pusher / auth
+	// calls in newEagerPipeline can't push the build past the 3s Ping deadline.
+	// Vertex completions that fire before SetOnVertexComplete is wired are
+	// covered by the backfill in enqueueExportRefs below.
 	var eager *eagerPipeline
 	eagerWaited := false
 	if exp.EagerExport != EagerExportNone && len(exp.Exporters) > 0 {
@@ -586,25 +607,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				bklog.G(ctx).WithError(err).Warnf("eager export cleanup failed")
 			}
 		}()
-	}
-
-	if exp.PushRegistryConfig != nil {
-		j.SetValue(keyEagerPushConfig, exp.PushRegistryConfig)
-	}
-
-	br := s.bridge(j)
-	var fwd gateway.LLBBridgeForwarder
-	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
-		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
-		defer fwd.Discard()
-		// Register build before calling s.recordBuildHistory, because
-		// s.recordBuildHistory can block for several seconds on
-		// LeaseManager calls, and there is a fixed 3s timeout in
-		// GatewayForwarder on build registration.
-		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
-			return nil, err
-		}
-		defer s.gatewayForwarder.UnregisterBuild(context.WithoutCancel(ctx), id)
 	}
 
 	if !internal {
