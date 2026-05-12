@@ -60,7 +60,7 @@ func (e ResolveToNonImageError) Error() string {
 	return fmt.Sprintf("ref mutated by policy to non-image: %s://%s -> %s", srctypes.DockerImageScheme, e.Ref, e.Updated)
 }
 
-func Config(ctx context.Context, str string, resolver remotes.Resolver, cache ContentCache, leaseManager leases.Manager, p *ocispecs.Platform) (digest.Digest, []byte, error) {
+func Config(ctx context.Context, str string, resolver remotes.Resolver, cache ContentCache, leaseManager leases.Manager, gr *limited.Group, p *ocispecs.Platform) (digest.Digest, []byte, error) {
 	var platform platforms.MatchComparer
 	if p != nil {
 		platform = platforms.Only(*p)
@@ -130,7 +130,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	}
 
 	handlers := []images.Handler{
-		retryhandler.New(limited.FetchHandler(cache, fetcher, str), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(gr, cache, fetcher, str), func(_ []byte) {}),
 		dslHandler,
 		children,
 	}

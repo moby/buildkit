@@ -27,10 +27,11 @@ import (
 type SessionResolver func(g session.Group) remotes.Resolver
 
 type Puller struct {
-	ContentStore content.Store
-	Resolver     remotes.Resolver
-	Src          reference.Spec
-	Platform     ocispecs.Platform
+	ContentStore     content.Store
+	Resolver         remotes.Resolver
+	Src              reference.Spec
+	Platform         ocispecs.Platform
+	ConcurrencyGroup *limited.Group
 
 	g           flightcontrol.Group[struct{}]
 	resolveErr  error
@@ -150,7 +151,7 @@ func (p *Puller) PullManifests(ctx context.Context, getResolver SessionResolver)
 	}
 	handlers = append(handlers,
 		filterLayerBlobs(metadata, &mu),
-		retryhandler.New(limited.FetchHandler(p.ContentStore, fetcher, p.ref), logs.LoggerFromContext(ctx)),
+		retryhandler.New(limited.FetchHandler(p.ConcurrencyGroup, p.ContentStore, fetcher, p.ref), logs.LoggerFromContext(ctx)),
 		childrenHandler,
 		dslHandler,
 	)

@@ -49,6 +49,8 @@ type Config struct {
 	ProvenanceEnvDir string `toml:"provenanceEnvDir"`
 
 	Cache CacheConfig `toml:"cache"`
+
+	Concurrency ConcurrencyConfig `toml:"concurrency"`
 }
 
 type CacheConfig struct {
@@ -220,4 +222,12 @@ type DockerfileFrontendConfig struct {
 type GatewayFrontendConfig struct {
 	Enabled             *bool    `toml:"enabled"`
 	AllowedRepositories []string `toml:"allowedRepositories"`
+}
+
+type ConcurrencyConfig struct {
+	Registry RegistryConcurrencyConfig `toml:"registry"`
+}
+
+type RegistryConcurrencyConfig struct {
+	MaxConnections int `toml:"max-connections"`
 }

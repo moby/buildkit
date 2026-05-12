@@ -57,7 +57,7 @@ func TestConfigMultiplatform(t *testing.T) {
 		// Now we should be able to get the amd64 config without fetching anything from the remote
 		// If it tries to fetch from the remote this will error out.
 		const ref = "example.com/test:latest"
-		_, dt, err := Config(ctx, ref, r, cc, nil, &pAmd64)
+		_, dt, err := Config(ctx, ref, r, cc, nil, nil, &pAmd64)
 		require.NoError(t, err)
 
 		var cfg ocispecs.Image
@@ -67,7 +67,7 @@ func TestConfigMultiplatform(t *testing.T) {
 
 		// Make sure it doesn't select a non-matching platform
 		pArmv7 := platforms.MustParse("linux/arm/v7")
-		_, _, err = Config(ctx, ref, r, cc, nil, &pArmv7)
+		_, _, err = Config(ctx, ref, r, cc, nil, nil, &pArmv7)
 		require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 	}
 

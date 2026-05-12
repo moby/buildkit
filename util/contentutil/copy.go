@@ -31,8 +31,12 @@ func WithReferrers(referrers content.ReferrersProvider) CopyOption {
 }
 
 func Copy(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispecs.Descriptor, ref string, logger func([]byte)) error {
+	fetchHandler := limited.FetchHandler(
+		limited.ConcurrencyGroupFromContext(ctx),
+		ingester, &localFetcher{provider}, ref,
+	)
 	ctx = RegisterContentPayloadTypes(ctx)
-	if _, err := retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ref), logger)(ctx, desc); err != nil {
+	if _, err := retryhandler.New(fetchHandler, logger)(ctx, desc); err != nil {
 		return err
 	}
 	return nil
@@ -110,7 +114,7 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 	handlers := []images.Handler{
 		annotateDistributionSourceHandler(images.ChildrenHandler(provider), desc.Annotations),
 		filterHandler,
-		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(limited.Default, ingester, &localFetcher{provider}, ""), func(_ []byte) {}),
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

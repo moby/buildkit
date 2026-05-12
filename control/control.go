@@ -43,6 +43,7 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
@@ -76,6 +77,7 @@ type Opt struct {
 	GarbageCollect            func(context.Context) error
 	GracefulStop              <-chan struct{}
 	ProvenanceEnv             map[string]any
+	ConcurrencyGroup          *limited.Group
 }
 
 type Controller struct { // TODO: ControlService
@@ -117,6 +119,7 @@ func NewController(opt Opt) (*Controller, error) {
 		Entitlements:     opt.Entitlements,
 		HistoryQueue:     hq,
 		ProvenanceEnv:    opt.ProvenanceEnv,
+		ConcurrencyGroup: opt.ConcurrencyGroup,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")

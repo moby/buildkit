@@ -16,9 +16,12 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-type contextKeyT string
+type contextKeyT int
 
-var contextKey = contextKeyT("buildkit/util/resolver/limited")
+const (
+	contextKey contextKeyT = iota
+	groupKey
+)
 
 // DefaultMaxConcurrency is the default number of concurrent connections per registry.
 var DefaultMaxConcurrency int64 = 4
@@ -87,10 +90,17 @@ func (g *Group) req(ref string) *req {
 }
 
 func (g *Group) WrapFetcher(f remotes.Fetcher, ref string) remotes.Fetcher {
+	if g == nil {
+		g = Default
+	}
 	return &fetcher{Fetcher: f, req: g.req(ref)}
 }
 
 func (g *Group) PushHandler(pusher remotes.Pusher, provider content.Provider, ref string) images.HandlerFunc {
+	if g == nil {
+		g = Default
+	}
+
 	ph := remotes.PushHandler(pusher, provider)
 	req := g.req(ref)
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
@@ -160,12 +170,27 @@ func (r *readCloser) close() {
 	r.once.Do(r.release)
 }
 
-func FetchHandler(ingester content.Ingester, fetcher remotes.Fetcher, ref string) images.HandlerFunc {
-	return remotes.FetchHandler(ingester, Default.WrapFetcher(fetcher, ref))
+func FetchHandler(gr *Group, ingester content.Ingester, fetcher remotes.Fetcher, ref string) images.HandlerFunc {
+	return remotes.FetchHandler(ingester, gr.WrapFetcher(fetcher, ref))
 }
 
-func PushHandler(pusher remotes.Pusher, provider content.Provider, ref string) images.HandlerFunc {
-	return Default.PushHandler(pusher, provider, ref)
+func PushHandler(gr *Group, pusher remotes.Pusher, provider content.Provider, ref string) images.HandlerFunc {
+	return gr.PushHandler(pusher, provider, ref)
+}
+
+func WithConcurrencyGroup(ctx context.Context, g *Group) context.Context {
+	return context.WithValue(ctx, groupKey, g)
+}
+
+func ConcurrencyGroupFromContext(ctx context.Context) (gr *Group) {
+	if v := ctx.Value(groupKey); v != nil {
+		gr, _ = v.(*Group)
+	}
+
+	if gr == nil {
+		gr = Default
+	}
+	return gr
 }
 
 func domain(ref string) string {

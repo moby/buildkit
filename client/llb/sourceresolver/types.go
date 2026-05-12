@@ -6,6 +6,7 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util/resolver/limited"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -45,6 +46,7 @@ type ResolveImageOpt struct {
 	NoConfig            bool
 	AttestationChain    bool
 	ResolveAttestations []string
+	ConcurrencyGroup    *limited.Group
 }
 
 type ResolveImageResponse struct {

@@ -100,7 +100,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 	}
 }
 
-func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, hosts docker.RegistryHosts) remotecache.ResolveCacheImporterFunc {
+func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, gr *limited.Group, hosts docker.RegistryHosts) remotecache.ResolveCacheImporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		ref, err := canonicalizeRef(attrs[attrRef])
 		if err != nil {
@@ -127,7 +127,7 @@ func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, hosts docke
 			return nil, ocispecs.Descriptor{}, err
 		}
 		src := &withDistributionSourceLabel{
-			Provider: contentutil.FromFetcher(limited.Default.WrapFetcher(fetcher, refString)),
+			Provider: contentutil.FromFetcher(gr.WrapFetcher(fetcher, refString)),
 			ref:      refString,
 			source:   cs,
 		}

@@ -30,6 +30,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/pull"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/tracing"
 	policyimage "github.com/moby/policy-helpers/image"
 	digest "github.com/opencontainers/go-digest"
@@ -55,7 +56,8 @@ type SourceOpt struct {
 	ImageStore    images.Store // optional
 	RegistryHosts docker.RegistryHosts
 	ResolverType
-	LeaseManager leases.Manager
+	LeaseManager     leases.Manager
+	ConcurrencyGroup *limited.Group
 }
 
 type Source struct {
@@ -135,9 +137,10 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		return nil, errors.Errorf("unknown resolver type: %v", is.ResolverType)
 	}
 	pullerUtil = &pull.Puller{
-		ContentStore: is.ContentStore,
-		Platform:     platform,
-		Src:          ref,
+		ContentStore:     is.ContentStore,
+		Platform:         platform,
+		ConcurrencyGroup: is.ConcurrencyGroup,
+		Src:              ref,
 	}
 	p = &puller{
 		CacheAccessor:  is.CacheAccessor,
@@ -187,7 +190,7 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 	ret := &sourceresolver.ResolveImageResponse{}
 	if !opt.NoConfig {
 		res, err := is.gImageRes.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
-			dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+			dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, is.ConcurrencyGroup, opt.Platform)
 			if err != nil {
 				return nil, err
 			}
@@ -312,7 +315,7 @@ func (is *Source) ResolveOCILayoutMetadata(ctx context.Context, id *OCIIdentifie
 	key += resolver.ResolveModeForcePull.String()
 
 	res, err := is.gImageRes.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, is.ConcurrencyGroup, opt.Platform)
 		if err != nil {
 			return nil, err
 		}

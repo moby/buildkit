@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/locker"
@@ -27,7 +28,8 @@ var WithDefault = imageOptionFunc(func(ii *llb.ImageInfo) {
 })
 
 type imageMetaResolverOpts struct {
-	platform *ocispecs.Platform
+	platform         *ocispecs.Platform
+	concurrencyGroup *limited.Group
 }
 
 type ImageMetaResolverOpt func(o *imageMetaResolverOpts)
@@ -35,6 +37,12 @@ type ImageMetaResolverOpt func(o *imageMetaResolverOpts)
 func WithDefaultPlatform(p *ocispecs.Platform) ImageMetaResolverOpt {
 	return func(o *imageMetaResolverOpts) {
 		o.platform = p
+	}
+}
+
+func WithDefaultConcurrencyGroup(gr *limited.Group) ImageMetaResolverOpt {
+	return func(o *imageMetaResolverOpts) {
+		o.concurrencyGroup = gr
 	}
 }
 
@@ -49,10 +57,11 @@ func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
 		resolver: docker.NewResolver(docker.ResolverOptions{
 			Headers: headers,
 		}),
-		platform: opts.platform,
-		buffer:   contentutil.NewBuffer(),
-		cache:    map[string]resolveResult{},
-		locker:   locker.New(),
+		platform:         opts.platform,
+		concurrencyGroup: opts.concurrencyGroup,
+		buffer:           contentutil.NewBuffer(),
+		cache:            map[string]resolveResult{},
+		locker:           locker.New(),
 	}
 }
 
@@ -64,11 +73,12 @@ func Default() llb.ImageMetaResolver {
 }
 
 type imageMetaResolver struct {
-	resolver remotes.Resolver
-	buffer   contentutil.Buffer
-	platform *ocispecs.Platform
-	locker   *locker.Locker
-	cache    map[string]resolveResult
+	resolver         remotes.Resolver
+	buffer           contentutil.Buffer
+	platform         *ocispecs.Platform
+	concurrencyGroup *limited.Group
+	locker           *locker.Locker
+	cache            map[string]resolveResult
 }
 
 type resolveResult struct {
@@ -86,8 +96,14 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 	defer imr.locker.Unlock(ref)
 
 	platform := imr.platform
-	if imgOpt := opt.ImageOpt; imgOpt != nil && imgOpt.Platform != nil {
-		platform = imgOpt.Platform
+	concurrencyGroup := imr.concurrencyGroup
+	if imgOpt := opt.ImageOpt; imgOpt != nil {
+		if imgOpt.Platform != nil {
+			platform = imgOpt.Platform
+		}
+		if imgOpt.ConcurrencyGroup != nil {
+			concurrencyGroup = imgOpt.ConcurrencyGroup
+		}
 	}
 
 	k := imr.key(ref, platform)
@@ -96,7 +112,7 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 		return ref, res.dgst, res.config, nil
 	}
 
-	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, nil, platform)
+	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, nil, concurrencyGroup, platform)
 	if err != nil {
 		return "", "", nil, err
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -59,6 +60,7 @@ type Opt struct {
 	HistoryQueue     *history.Queue
 	ResourceMonitor  *resources.Monitor
 	ProvenanceEnv    map[string]any
+	ConcurrencyGroup *limited.Group
 }
 
 type Solver struct {
@@ -74,6 +76,7 @@ type Solver struct {
 	history                   *history.Queue
 	sysSampler                *resources.Sampler[*resourcestypes.SysSample]
 	provenanceEnv             map[string]any
+	concurrencyGroup          *limited.Group
 }
 
 // Processor defines a processing function to be applied after solving, but
@@ -104,6 +107,7 @@ func New(opt Opt) (*Solver, error) {
 		entitlements:              opt.Entitlements,
 		history:                   opt.HistoryQueue,
 		provenanceEnv:             opt.ProvenanceEnv,
+		concurrencyGroup:          opt.ConcurrencyGroup,
 	}
 
 	sampler, err := resources.NewSysSampler()
@@ -347,6 +351,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			return nil, err
 		}
 		exp.Exporters = append(exp.Exporters, exporters...)
+	}
+
+	if s.concurrencyGroup != nil {
+		ctx = limited.WithConcurrencyGroup(ctx, s.concurrencyGroup)
 	}
 
 	var exporterResponse map[string]string

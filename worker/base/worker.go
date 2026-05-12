@@ -49,6 +49,7 @@ import (
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -86,6 +87,7 @@ type WorkerOpt struct {
 	MountPoolRoot    string
 	ResourceMonitor  *resources.Monitor
 	CDIManager       *cdidevices.Manager
+	ConcurrencyGroup *limited.Group
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -130,14 +132,15 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	}
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:   opt.Snapshotter,
-		ContentStore:  opt.ContentStore,
-		Applier:       opt.Applier,
-		ImageStore:    opt.ImageStore,
-		CacheAccessor: cm,
-		RegistryHosts: opt.RegistryHosts,
-		ResolverType:  containerimage.ResolverTypeRegistry,
-		LeaseManager:  opt.LeaseManager,
+		Snapshotter:      opt.Snapshotter,
+		ContentStore:     opt.ContentStore,
+		Applier:          opt.Applier,
+		ImageStore:       opt.ImageStore,
+		CacheAccessor:    cm,
+		RegistryHosts:    opt.RegistryHosts,
+		ResolverType:     containerimage.ResolverTypeRegistry,
+		LeaseManager:     opt.LeaseManager,
+		ConcurrencyGroup: opt.ConcurrencyGroup,
 	})
 	if err != nil {
 		return nil, err
@@ -187,13 +190,14 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	sm.Register(ss)
 
 	os, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:   opt.Snapshotter,
-		ContentStore:  opt.ContentStore,
-		Applier:       opt.Applier,
-		ImageStore:    opt.ImageStore,
-		CacheAccessor: cm,
-		ResolverType:  containerimage.ResolverTypeOCILayout,
-		LeaseManager:  opt.LeaseManager,
+		Snapshotter:      opt.Snapshotter,
+		ContentStore:     opt.ContentStore,
+		Applier:          opt.Applier,
+		ImageStore:       opt.ImageStore,
+		CacheAccessor:    cm,
+		ResolverType:     containerimage.ResolverTypeOCILayout,
+		LeaseManager:     opt.LeaseManager,
+		ConcurrencyGroup: opt.ConcurrencyGroup,
 	})
 	if err != nil {
 		return nil, err

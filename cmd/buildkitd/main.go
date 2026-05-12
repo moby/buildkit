@@ -53,6 +53,7 @@ import (
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	_ "github.com/moby/buildkit/util/tracing/childprocess"
@@ -92,9 +93,10 @@ func init() {
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 
 type workerInitializerOpt struct {
-	config         *config.Config
-	sessionManager *session.Manager
-	traceSocket    string
+	config           *config.Config
+	sessionManager   *session.Manager
+	traceSocket      string
+	concurrencyGroup *limited.Group
 }
 
 type workerInitializer struct {
@@ -804,10 +806,12 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		}
 	}
 
+	concurrencyGroup := newConcurrencyGroup(cfg.Concurrency)
 	wc, err := newWorkerController(c, workerInitializerOpt{
-		config:         cfg,
-		sessionManager: sessionManager,
-		traceSocket:    traceSocket,
+		config:           cfg,
+		sessionManager:   sessionManager,
+		traceSocket:      traceSocket,
+		concurrencyGroup: concurrencyGroup,
 	})
 	if err != nil {
 		return nil, err
@@ -857,7 +861,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		"azblob":   azblob.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
-		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
+		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), concurrencyGroup, resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 		"gha":      gha.ResolveCacheImporterFunc(cfg.Cache.GHA, verifierProvider),
 		"s3":       s3remotecache.ResolveCacheImporterFunc(),
@@ -890,11 +894,21 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config) (*co
 		GarbageCollect:            w.GarbageCollect,
 		GracefulStop:              ctx.Done(),
 		ProvenanceEnv:             provenanceEnv,
+		ConcurrencyGroup:          concurrencyGroup,
 	})
 }
 
 func resolverFunc(cfg *config.Config) docker.RegistryHosts {
 	return resolver.NewRegistryConfig(cfg.Registries)
+}
+
+// newConcurrencyGroup returns a limited.Group configured according to cfg.
+// If no value is configured, limited.Default is returned.
+func newConcurrencyGroup(cfg config.ConcurrencyConfig) *limited.Group {
+	if cfg.Registry.MaxConnections <= 0 {
+		return limited.Default
+	}
+	return limited.New(cfg.Registry.MaxConnections)
 }
 
 func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {
