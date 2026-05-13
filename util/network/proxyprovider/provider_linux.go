@@ -575,7 +575,7 @@ func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tr
 		return
 	}
 	h.capture.AddMaterial(network.ProxyMaterial{
-		URL:    redactURL(req.URL.String()),
+		URL:    captureURL(req.URL.String()),
 		Digest: tracker.Digest(),
 	})
 }
@@ -586,7 +586,7 @@ func (h *proxyHandler) recordRequest(req *http.Request, statusCode int) {
 	}
 	h.capture.AddRequest(network.ProxyRequest{
 		Method:     req.Method,
-		URL:        redactURL(req.URL.String()),
+		URL:        captureURL(req.URL.String()),
 		StatusCode: statusCode,
 	})
 }
@@ -597,8 +597,8 @@ func (h *proxyHandler) recordIncomplete(req *http.Request, finalURL, reason stri
 	}
 	h.capture.AddIncomplete(network.ProxyIncomplete{
 		Method:   req.Method,
-		URL:      redactURL(req.URL.String()),
-		FinalURL: redactURL(finalURL),
+		URL:      captureURL(req.URL.String()),
+		FinalURL: captureURL(finalURL),
 		Reason:   reason,
 	})
 }
@@ -639,6 +639,25 @@ func redactURL(s string) string {
 		return ""
 	}
 	return urlutil.RedactCredentials(s)
+}
+
+func captureURL(s string) string {
+	if s == "" {
+		return ""
+	}
+	u, err := neturl.Parse(s)
+	if err == nil && u.IsAbs() {
+		port := u.Port()
+		if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
+			host := u.Hostname()
+			if strings.Contains(host, ":") {
+				host = "[" + host + "]"
+			}
+			u.Host = host
+		}
+		return redactURL(u.String())
+	}
+	return redactURL(s)
 }
 
 func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {

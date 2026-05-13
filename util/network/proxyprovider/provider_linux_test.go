@@ -165,6 +165,33 @@ func TestProxyHandlerRedactsCapturedCredentials(t *testing.T) {
 	require.Equal(t, http.StatusOK, requests[0].StatusCode)
 }
 
+func TestCaptureURLNormalizesDefaultPort(t *testing.T) {
+	require.Equal(t,
+		"https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/APKINDEX.tar.gz",
+		captureURL("https://dl-cdn.alpinelinux.org:443/alpine/v3.23/main/aarch64/APKINDEX.tar.gz"),
+	)
+	require.Equal(t,
+		"http://example.com/file",
+		captureURL("http://example.com:80/file"),
+	)
+	require.Equal(t,
+		"https://example.com:8443/file",
+		captureURL("https://example.com:8443/file"),
+	)
+	require.Equal(t,
+		"https://xxxxx:xxxxx@example.com/file",
+		captureURL("https://user:pass@example.com:443/file"),
+	)
+	require.Equal(t,
+		"https://[2001:db8::1]/file",
+		captureURL("https://[2001:db8::1]:443/file"),
+	)
+	require.Equal(t,
+		"https://[2001:db8::1]:8443/file",
+		captureURL("https://[2001:db8::1]:8443/file"),
+	)
+}
+
 func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
 	original := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("original upstream should not receive converted request")
