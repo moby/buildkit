@@ -8702,11 +8702,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
-	if workers.IsTestDockerdMoby(sb) {
-		// do image export but use a fake url as the image should just end up in moby's
-		// local store
-		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
-	} else if registry != "" {
+	if registry != "" {
 		imageTarget = registry + "/buildkit/testmergeop:latest"
 	}
 
@@ -9193,25 +9189,17 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 	require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
 
 	if imageTarget != "" {
-		var exports []ExportEntry
-		if workers.IsTestDockerdMoby(sb) {
-			exports = []ExportEntry{{
-				Type: "moby",
-				Attrs: map[string]string{
-					"name": imageTarget,
-				},
-			}}
-		} else {
-			exports = []ExportEntry{{
+		_, err = c.Solve(ctx, def, SolveOpt{
+			Exports: []ExportEntry{{
 				Type: ExporterImage,
 				Attrs: map[string]string{
 					"name": imageTarget,
 					"push": "true",
 				},
-			}}
-		}
-
-		_, err = c.Solve(ctx, def, SolveOpt{Exports: exports, CacheImports: cacheImports, CacheExports: cacheExports}, nil)
+			}},
+			CacheImports: cacheImports,
+			CacheExports: cacheExports,
+		}, nil)
 		require.NoError(t, err)
 		resetState(t, c, sb)
 		requireContents(ctx, t, c, sb, llb.Image(imageTarget, llb.ResolveModePreferLocal), cacheImports, nil, "", files...)
