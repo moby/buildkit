@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -66,6 +67,7 @@ func init() {
 // custom buildkitd build or env-var instrumentation is needed.
 func testPinRaceIgnoreCacheShift(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
 
 	const fetchDelay = 1500 * time.Millisecond
 	const headStart = 400 * time.Millisecond
