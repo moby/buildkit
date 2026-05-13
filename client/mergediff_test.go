@@ -1220,13 +1220,6 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 		t.Skip("rootless")
 	}
 
-	switch tc.name {
-	case "TestDiffUpperScratch":
-		if workers.IsTestDockerdMoby(sb) {
-			t.Skip("failed to handle changes: lstat ... no such file or directory: https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499")
-		}
-	}
-
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 
