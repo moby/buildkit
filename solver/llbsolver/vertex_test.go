@@ -163,7 +163,7 @@ func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
 
 	br := s.bridge(nil)
 
-	require.True(t, br.llbBridge.proxyNetwork)
+	require.True(t, br.proxyNetwork)
 }
 
 func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Definition {

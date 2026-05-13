@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/sourcepolicy"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/network"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,11 +51,11 @@ func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 
 func TestProxyHandlerDisablesUpstreamResponseTransforms(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Empty(t, r.Header.Values("Accept-Encoding"))
+		assert.Empty(t, r.Header.Values("Accept-Encoding"))
 		w.Header().Set("Content-Encoding", "gzip")
 		zw := gzip.NewWriter(w)
 		_, _ = zw.Write([]byte("compressed proxy material"))
-		require.NoError(t, zw.Close())
+		assert.NoError(t, zw.Close())
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -74,7 +75,7 @@ func TestProxyHandlerDisablesUpstreamResponseTransforms(t *testing.T) {
 
 func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, http.MethodGet, r.Method)
 		_, _ = w.Write([]byte("ok"))
 	}))
 	t.Cleanup(upstream.Close)
@@ -85,8 +86,8 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	handler.provider.client.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
 	handler.provider.client.TLSClientConfig.RootCAs = pool
 
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(context.Canceled)
 	req := httptest.NewRequest(http.MethodGet, upstream.URL, nil).WithContext(ctx)
 
 	resp, err := handler.roundTrip(req)
@@ -120,9 +121,16 @@ func TestProxyHandlerMarksPostIncomplete(t *testing.T) {
 	require.Equal(t, "method_not_materializable", incomplete[0].Reason)
 }
 
-func TestProxyHandlerSkipsRedirectMaterial(t *testing.T) {
+func TestProxyHandlerCapturesRedirectMaterialAlias(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/next", http.StatusFound)
+		switch r.URL.Path {
+		case "/redirect":
+			http.Redirect(w, r, "/next", http.StatusFound)
+		case "/next":
+			_, _ = w.Write([]byte("redirect material"))
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -135,6 +143,27 @@ func TestProxyHandlerSkipsRedirectMaterial(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, resp.Code)
 	require.Empty(t, capture.Materials())
+	resp = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, upstream.URL+"/next", nil)
+
+	handler.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	expectedDigest := "sha256:230b890186495c4878036c4393de6137ca1a3d0e51899ea6402eaef3320a9e9b"
+	requests := capture.Requests()
+	require.Len(t, requests, 2)
+	require.Equal(t, upstream.URL+"/redirect", requests[0].URL)
+	require.Equal(t, upstream.URL+"/next", requests[0].RedirectTarget)
+	require.Equal(t, http.StatusFound, requests[0].StatusCode)
+	require.Equal(t, upstream.URL+"/next", requests[1].URL)
+	require.Empty(t, requests[1].RedirectTarget)
+	require.Equal(t, http.StatusOK, requests[1].StatusCode)
+	materials := capture.Materials()
+	require.Len(t, materials, 2)
+	require.Equal(t, upstream.URL+"/next", materials[0].URL)
+	require.Equal(t, expectedDigest, materials[0].Digest.String())
+	require.Equal(t, upstream.URL+"/redirect", materials[1].URL)
+	require.Equal(t, expectedDigest, materials[1].Digest.String())
 	require.Empty(t, capture.Incomplete())
 }
 

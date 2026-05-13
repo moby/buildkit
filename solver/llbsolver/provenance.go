@@ -356,12 +356,11 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 					for _, in := range proxyCap.Incomplete() {
 						c.IncompleteMaterials = true
 						c.ProxyIncomplete = append(c.ProxyIncomplete, provenancetypes.ProxyCaptureIncomplete{
-							Op:       op.Digest().String(),
-							Name:     strings.Join(pr.Meta.Args, " "),
-							Method:   in.Method,
-							URI:      in.URL,
-							FinalURI: in.FinalURL,
-							Reason:   in.Reason,
+							Op:     op.Digest().String(),
+							Name:   strings.Join(pr.Meta.Args, " "),
+							Method: in.Method,
+							URI:    in.URL,
+							Reason: in.Reason,
 						})
 					}
 				}

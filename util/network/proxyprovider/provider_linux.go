@@ -441,13 +441,13 @@ func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := h.roundTrip(r)
 	if err != nil {
-		h.recordRequest(r, http.StatusBadGateway)
-		h.recordIncomplete(r, "", "upstream_error")
+		h.recordRequest(r, http.StatusBadGateway, "")
+		h.recordIncomplete(r, "upstream_error")
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
-	h.recordRequest(r, resp.StatusCode)
+	h.recordRequest(r, resp.StatusCode, finalURL(r, resp))
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	tracker := newProxyBodyTracker(resp.Body)
@@ -502,12 +502,12 @@ func (h *proxyHandler) handleConnect(w http.ResponseWriter, r *http.Request) {
 		resp, err := h.roundTrip(req)
 		if err != nil {
 			_ = req.Body.Close()
-			h.recordRequest(req, http.StatusBadGateway)
-			h.recordIncomplete(req, "", "upstream_error")
+			h.recordRequest(req, http.StatusBadGateway, "")
+			h.recordIncomplete(req, "upstream_error")
 			_, _ = fmt.Fprintf(tlsConn, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(err.Error())+1, err.Error()+"\n")
 			return
 		}
-		h.recordRequest(req, resp.StatusCode)
+		h.recordRequest(req, resp.StatusCode, finalURL(req, resp))
 		// Response.Write uses resp.Proto for the status line. In the MITM
 		// path, resp describes the upstream fetch, so align it to the
 		// client-facing request we intercepted.
@@ -568,7 +568,7 @@ func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tr
 	}
 	reason := proxyIncompleteReason(req, resp, tracker, copyErr)
 	if reason != "" {
-		h.recordIncomplete(req, finalURL(req, resp), reason)
+		h.recordIncomplete(req, reason)
 		return
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -580,26 +580,26 @@ func (h *proxyHandler) recordResponse(req *http.Request, resp *http.Response, tr
 	})
 }
 
-func (h *proxyHandler) recordRequest(req *http.Request, statusCode int) {
+func (h *proxyHandler) recordRequest(req *http.Request, statusCode int, redirectTarget string) {
 	if h.capture == nil {
 		return
 	}
 	h.capture.AddRequest(network.ProxyRequest{
-		Method:     req.Method,
-		URL:        captureURL(req.URL.String()),
-		StatusCode: statusCode,
+		Method:         req.Method,
+		URL:            captureURL(req.URL.String()),
+		RedirectTarget: captureURL(redirectTarget),
+		StatusCode:     statusCode,
 	})
 }
 
-func (h *proxyHandler) recordIncomplete(req *http.Request, finalURL, reason string) {
+func (h *proxyHandler) recordIncomplete(req *http.Request, reason string) {
 	if h.capture == nil {
 		return
 	}
 	h.capture.AddIncomplete(network.ProxyIncomplete{
-		Method:   req.Method,
-		URL:      captureURL(req.URL.String()),
-		FinalURL: captureURL(finalURL),
-		Reason:   reason,
+		Method: req.Method,
+		URL:    captureURL(req.URL.String()),
+		Reason: reason,
 	})
 }
 

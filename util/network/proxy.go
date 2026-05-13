@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -26,16 +27,16 @@ type ProxyMaterial struct {
 }
 
 type ProxyRequest struct {
-	Method     string
-	URL        string
-	StatusCode int
+	Method         string
+	URL            string
+	RedirectTarget string
+	StatusCode     int
 }
 
 type ProxyIncomplete struct {
-	Method   string
-	URL      string
-	FinalURL string
-	Reason   string
+	Method string
+	URL    string
+	Reason string
 }
 
 type ProxyCapture struct {
@@ -82,8 +83,38 @@ func (c *ProxyCapture) Materials() []ProxyMaterial {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]ProxyMaterial, len(c.materials))
-	copy(out, c.materials)
+	out := slices.Clone(c.materials)
+	redirects := map[string]string{}
+	digests := map[string]digest.Digest{}
+	for _, m := range out {
+		digests[m.URL] = m.Digest
+	}
+	for _, r := range c.requests {
+		if r.RedirectTarget != "" && r.URL != r.RedirectTarget {
+			redirects[r.URL] = r.RedirectTarget
+		}
+	}
+	for {
+		added := false
+		for from, to := range redirects {
+			if _, ok := digests[from]; ok {
+				continue
+			}
+			dgst, ok := digests[to]
+			if !ok {
+				continue
+			}
+			digests[from] = dgst
+			out = append(out, ProxyMaterial{
+				URL:    from,
+				Digest: dgst,
+			})
+			added = true
+		}
+		if !added {
+			break
+		}
+	}
 	return out
 }
 
