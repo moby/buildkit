@@ -30,7 +30,7 @@ func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 	capture := network.NewProxyCapture()
 	handler := newTestProxyHandler(t, capture)
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/file", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL+"/file", nil)
 
 	handler.ServeHTTP(resp, req)
 
@@ -62,7 +62,7 @@ func TestProxyHandlerDisablesUpstreamResponseTransforms(t *testing.T) {
 	capture := network.NewProxyCapture()
 	handler := newTestProxyHandler(t, capture)
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/file", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL+"/file", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 
 	handler.ServeHTTP(resp, req)
@@ -88,7 +88,7 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cancel(context.Canceled)
-	req := httptest.NewRequest(http.MethodGet, upstream.URL, nil).WithContext(ctx)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, upstream.URL, nil)
 
 	resp, err := handler.roundTrip(req)
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestProxyHandlerMarksPostIncomplete(t *testing.T) {
 	capture := network.NewProxyCapture()
 	handler := newTestProxyHandler(t, capture)
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, upstream.URL+"/token", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, upstream.URL+"/token", nil)
 
 	handler.ServeHTTP(resp, req)
 
@@ -137,14 +137,14 @@ func TestProxyHandlerCapturesRedirectMaterialAlias(t *testing.T) {
 	capture := network.NewProxyCapture()
 	handler := newTestProxyHandler(t, capture)
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, upstream.URL+"/redirect", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL+"/redirect", nil)
 
 	handler.ServeHTTP(resp, req)
 
 	require.Equal(t, http.StatusFound, resp.Code)
 	require.Empty(t, capture.Materials())
 	resp = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, upstream.URL+"/next", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL+"/next", nil)
 
 	handler.ServeHTTP(resp, req)
 
@@ -176,7 +176,7 @@ func TestProxyHandlerRedactsCapturedCredentials(t *testing.T) {
 	capture := network.NewProxyCapture()
 	handler := newTestProxyHandler(t, capture)
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, strings.Replace(upstream.URL, "http://", "http://user:pass@", 1)+"/file", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, strings.Replace(upstream.URL, "http://", "http://user:pass@", 1)+"/file", nil)
 
 	handler.ServeHTTP(resp, req)
 
@@ -241,7 +241,7 @@ func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
 		return true, nil
 	})
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, original.URL+"/file", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, original.URL+"/file", nil)
 
 	handler.ServeHTTP(resp, req)
 

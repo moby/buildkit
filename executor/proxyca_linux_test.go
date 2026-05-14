@@ -19,23 +19,28 @@ import (
 
 func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
 	rootfs := t.TempDir()
-	bundle := filepath.Join(rootfs, "etc/ssl/certs/ca-certificates.crt")
-	require.NoError(t, os.MkdirAll(filepath.Dir(bundle), 0o755))
+	root, err := os.OpenRoot(rootfs)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, root.Close())
+	})
+	const bundle = "etc/ssl/certs/ca-certificates.crt"
+	require.NoError(t, root.MkdirAll(filepath.Dir(bundle), 0o755))
 	original := []byte("original bundle\n")
-	require.NoError(t, os.WriteFile(bundle, original, 0o644))
+	require.NoError(t, root.WriteFile(bundle, original, 0o644))
 
 	caPEM := testCertPEM(t)
 	cleanup, err := InjectProxyCA(rootfs, caPEM)
 	require.NoError(t, err)
 
-	dt, err := os.ReadFile(bundle)
+	dt, err := root.ReadFile(bundle)
 	require.NoError(t, err)
 	require.Contains(t, string(dt), string(caPEM))
 
-	require.NoError(t, os.WriteFile(bundle, append(dt, []byte("container change\n")...), 0o644))
+	require.NoError(t, root.WriteFile(bundle, append(dt, []byte("container change\n")...), 0o644))
 	require.NoError(t, cleanup())
 
-	dt, err = os.ReadFile(bundle)
+	dt, err = root.ReadFile(bundle)
 	require.NoError(t, err)
 	require.NotContains(t, string(dt), string(caPEM))
 	require.Contains(t, string(dt), string(original))

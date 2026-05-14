@@ -50,12 +50,17 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	payload := []byte("buildkit proxy ok\n")
+	convertedPayload := []byte("buildkit proxy converted ok\n")
 	httpSrv, httpURL := newProxyReachableHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/allowed" {
+		switch r.URL.Path {
+		case "/allowed":
+			_, _ = w.Write(payload)
+		case "/bar":
+			_, _ = w.Write(convertedPayload)
+		default:
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write(payload)
 	}))
 	defer httpSrv.Close()
 	var leakHit atomic.Int32
@@ -168,6 +173,57 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	require.True(t, stmt.Predicate.RunDetails.Metadata.Completeness.ResolvedDependencies)
 	require.NotNil(t, stmt.Predicate.RunDetails.Metadata.BuildKitMetadata.Network)
 	require.Equal(t, "proxy", stmt.Predicate.RunDetails.Metadata.BuildKitMetadata.Network.Mode)
+
+	convertDestDir := t.TempDir()
+	convertFooURL := httpURL + "/foo"
+	convertBarURL := httpURL + "/bar"
+	convert := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c 'wget -q -O /out/proxy-material %s'`, convertFooURL)).
+		AddMount("/out", llb.Scratch())
+	def, err = convert.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+		SourcePolicy: &sourcepolicypb.Policy{
+			Rules: []*sourcepolicypb.Rule{
+				{
+					Action: sourcepolicypb.PolicyAction_CONVERT,
+					Selector: &sourcepolicypb.Selector{
+						Identifier: convertFooURL,
+					},
+					Updates: &sourcepolicypb.Update{
+						Identifier: convertBarURL,
+					},
+				},
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max,version=v1",
+		},
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: convertDestDir,
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(convertDestDir, "proxy-material"))
+	require.NoError(t, err)
+	require.Equal(t, convertedPayload, dt)
+
+	provDt, err = os.ReadFile(filepath.Join(convertDestDir, "provenance.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(provDt, &stmt))
+	foundMaterial = false
+	expectedDigest = digest.FromBytes(convertedPayload)
+	for _, m := range stmt.Predicate.BuildDefinition.ResolvedDependencies {
+		require.NotEqual(t, convertFooURL, m.URI)
+		if m.URI == convertBarURL {
+			foundMaterial = true
+			require.Equal(t, expectedDigest.Hex(), m.Digest["sha256"])
+		}
+	}
+	require.True(t, foundMaterial, "expected to find %q in %+v", convertBarURL, stmt.Predicate.BuildDefinition.ResolvedDependencies)
 
 	strict := llb.Image("alpine:latest").
 		Run(llb.Shlexf(`sh -c 'wget -q -O- %s/missing || true'`, httpURL)).
