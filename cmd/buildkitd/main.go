@@ -399,7 +399,8 @@ func main() {
 		}
 		defer controller.Close()
 
-		healthv1.RegisterHealthServer(server, health.NewServer())
+		healthServer := health.NewServer()
+		healthv1.RegisterHealthServer(server, healthServer)
 		controller.Register(server)
 		reflection.Register(server)
 
@@ -430,11 +431,13 @@ func main() {
 			return err
 		}
 
+		shutdownRequested := false
 		select {
 		case serverErr := <-errCh:
 			err = serverErr
 			cancel(err)
 		case <-ctx.Done():
+			shutdownRequested = true
 			err = context.Cause(ctx)
 		}
 
@@ -442,6 +445,10 @@ func main() {
 		if os.Getenv("NOTIFY_SOCKET") != "" {
 			notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyStopping)
 			bklog.G(ctx).Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
+		}
+		if shutdownRequested {
+			healthServer.SetServingStatus("", healthv1.HealthCheckResponse_NOT_SERVING)
+			controller.GracefulStop()
 		}
 		server.GracefulStop()
 
