@@ -10,10 +10,11 @@ import (
 )
 
 var enabledCaps = map[string]struct{}{
-	"moby.buildkit.frontend.inputs":         {},
-	"moby.buildkit.frontend.subrequests":    {},
-	"moby.buildkit.frontend.contexts":       {},
-	"moby.buildkit.frontend.gitquerystring": {},
+	"moby.buildkit.frontend.inputs":           {},
+	"moby.buildkit.frontend.subrequests":      {},
+	"moby.buildkit.frontend.contexts":         {},
+	"moby.buildkit.frontend.gitquerystring":   {},
+	"moby.buildkit.frontend.gitfetchbycommit": {},
 }
 
 func validateCaps(req string) (forward bool, err error) {
