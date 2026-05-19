@@ -1502,6 +1502,12 @@ If your URL files are protected using authentication, you need to use `RUN wget`
 `RUN curl` or use another tool from within the container as the `ADD` instruction
 doesn't support authentication.
 
+##### Secrets
+
+You can use the `HTTP_AUTH_HEADER_<host>` and `HTTP_AUTH_TOKEN_<host>` secrets
+to set credentials for remote sources. For more information, see
+[Build secrets](https://docs.docker.com/build/building/secrets/#http-authentication-for-add).
+
 #### Adding files from a Git repository
 
 To use a Git repository as the source for `ADD`, you can reference the
