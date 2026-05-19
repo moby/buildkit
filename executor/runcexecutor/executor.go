@@ -643,28 +643,12 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 			}
 		}
 
-		for {
-			select {
-			case <-ctx.Done():
-				killCtx, timeout := context.WithCancelCause(context.WithoutCancel(ctx))                                   //nolint:govet
-				killCtx, _ = context.WithTimeoutCause(killCtx, 7*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
-				if err := p.killer.Kill(killCtx); err != nil {
-					select {
-					case <-killCtx.Done():
-						cancel(errors.WithStack(context.Cause(ctx)))
-						return //nolint:govet
-					default:
-					}
-				}
-				timeout(errors.WithStack(context.Canceled))
-				select {
-				case <-time.After(50 * time.Millisecond):
-				case <-p.ended:
-					return
-				}
-			case <-p.ended:
-				return
+		select {
+		case <-ctx.Done():
+			if err := doKillProc(ctx, p); err != nil {
+				cancel(err)
 			}
+		case <-p.ended:
 		}
 	}()
 
@@ -758,4 +742,50 @@ func handleSignals(ctx context.Context, runcProcess *procHandle, signals <-chan 
 			}
 		}
 	}
+}
+
+const killWaitDelay = 50 * time.Millisecond
+
+func doKillProc(ctx context.Context, p *procHandle) error {
+	// Attempt to kill the process normally.
+	for {
+		didSucceed := true
+
+		killCtx, timeout := context.WithTimeoutCause(context.WithoutCancel(ctx), 7*time.Second, errors.WithStack(context.DeadlineExceeded))
+		if err := p.killer.Kill(killCtx); err != nil {
+			if contextErr := context.Cause(ctx); contextErr != nil {
+				timeout()
+				return contextErr
+			}
+			didSucceed = false
+		}
+		timeout()
+
+		if didSucceed {
+			// The kill was successful so exit this for loop.
+			break
+		}
+
+		// The kill did not succeed and the context wasn't canceled.
+		// Either wait for the ended signal or try again in 50 milliseconds.
+		select {
+		case <-p.ended:
+			return nil
+		case <-time.After(killWaitDelay):
+		}
+	}
+
+	// Wait for the process to end. Track how long it takes.
+	start := time.Now()
+	select {
+	case <-p.ended:
+		return nil
+	case <-time.After(killWaitDelay):
+		bklog.G(ctx).Warnf("container id %s is taking a long time to exit after kill", p.killer.id)
+	}
+
+	// We have warned about the slow exit. Just wait for it to exit instead of spamming the logs.
+	<-p.ended
+	bklog.G(ctx).Warnf("container id %s took %s to exit", p.killer.id, time.Since(start))
+	return nil
 }
