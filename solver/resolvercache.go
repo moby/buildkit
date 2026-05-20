@@ -61,7 +61,7 @@ func (r *resolverCache) Lock(key any) (values []any, release func(any) error, er
 	defer r.mu.Unlock()
 	e2, ok := r.locks[key]
 	if !ok {
-		return nil, nil, nil // key deleted
+		return nil, func(any) error { return nil }, nil // key deleted
 	}
 	values = slices.Clone(e2.values)
 	if e2.locked {
