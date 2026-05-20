@@ -323,9 +323,9 @@ func (hs *httpSourceHandler) resolveMetadataRef(ctx context.Context, jobCtx solv
 			}
 			saveResolved := true
 			defer func() {
-				ret := hs.resolved
-				if retErr != nil || !saveResolved {
-					ret = nil
+				var ret any
+				if retErr == nil && saveResolved && hs.resolved != nil {
+					ret = hs.resolved
 				}
 				if err := release(ret); err != nil {
 					bklog.G(ctx).WithError(err).Warn("failed to release resolver cache lock")
