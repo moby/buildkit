@@ -866,8 +866,8 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 			}
 			for _, v := range vals {
 				v2, ok := v.(*metadataWithRef)
-				if !ok {
-					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", vals[0])
+				if !ok || v2 == nil {
+					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", v)
 				}
 				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
 					continue

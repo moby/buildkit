@@ -116,6 +116,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCallDiskUsage,
 	testBuildMultiMount,
 	testBuildHTTPSource,
+	testBuildHTTPSourceUnauthorizedChecksumRace,
 	testBuildHTTPSourceEtagScope,
 	testBuildHTTPSourceAuthHeaderSecret,
 	testBuildHTTPSourceHostTokenSecret,
@@ -3783,6 +3784,50 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 
 	// TODO: check that second request was marked as cached
+}
+
+func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			time.Sleep(200 * time.Millisecond)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	url := server.URL + "/test.txt"
+	lower := llb.Scratch()
+	// Reproduce the race between same-URL HTTP sources with and without
+	// checksum sharing the resolver cache while the server returns 401.
+	withoutChecksum := lower.File(llb.Copy(llb.HTTP(url), "test.txt", "/a.txt"))
+	withChecksum := lower.File(llb.Copy(llb.HTTP(url, llb.Checksum(digest.FromBytes(nil))), "test.txt", "/b.txt"))
+	st := llb.Merge([]llb.State{
+		llb.Diff(lower, withoutChecksum),
+		llb.Diff(lower, withChecksum),
+	})
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	for range 10 {
+		_, err := c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				},
+			},
+		}, nil)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "invalid response status 401")
+	}
 }
 
 // docker/buildx#2803

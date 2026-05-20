@@ -127,7 +127,9 @@ func (c *combinedCache) Lock(key any) (values []any, release func(any) error, er
 
 			mu.Lock()
 			valuesAll = append(valuesAll, vals...)
-			releasers = append(releasers, rel)
+			if rel != nil {
+				releasers = append(releasers, rel)
+			}
 			mu.Unlock()
 		}(rc)
 	}
