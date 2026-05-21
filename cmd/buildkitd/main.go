@@ -54,6 +54,7 @@ import (
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	_ "github.com/moby/buildkit/util/tracing/childprocess"
@@ -308,6 +309,12 @@ func main() {
 		if sc := cfg.System; sc != nil {
 			if v := sc.PlatformsCacheMaxAge; v != nil {
 				archutil.CacheMaxAge = v.Duration
+			}
+			if v := sc.MaxRegistryConcurrency; v != nil {
+				if *v <= 0 {
+					return errors.Errorf("maxRegistryConcurrency must be greater than zero; set to %d in the configuration file", *v)
+				}
+				limited.SetMaxConcurrency(*v)
 			}
 		}
 

@@ -212,6 +212,9 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
 [system]
   # how often buildkit scans for changes in the supported emulated platforms
   platformsCacheMaxAge = "1h"
+  # maxRegistryConcurrency sets the maximum number of concurrent connections
+  # per registry. If unset, the default concurrency limit is used.
+  maxRegistryConcurrency = 4
 
 
 # optional signed cache configuration for GitHub Actions backend
