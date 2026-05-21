@@ -62,6 +62,10 @@ type SystemConfig struct {
 	// PlatformCacheMaxAge controls how often supported platforms
 	// are refreshed by rescanning the system.
 	PlatformsCacheMaxAge *Duration `toml:"platformsCacheMaxAge"`
+
+	// MaxRegistryConcurrency sets the maximum number of concurrent
+	// connections per registry.
+	MaxRegistryConcurrency *int `toml:"maxRegistryConcurrency"`
 }
 
 type LogConfig struct {
