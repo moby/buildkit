@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -528,6 +529,19 @@ func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
 	}, nil
 }
 
+// isContainerNotRunning checks whether a kill error indicates the container
+// has already stopped. The go-runc library shells out to the runc binary and
+// surfaces errors as unstructured stderr text (see containerd/go-runc
+// runOrError), so string matching is the only option here. We match several
+// known patterns to account for different runc versions and alternative OCI
+// runtimes
+func isContainerNotRunning(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "container not running") ||
+		strings.Contains(msg, "container does not exist") ||
+		strings.Contains(msg, "no such process")
+}
+
 type procKiller struct {
 	runC    *runc.Runc
 	id      string
@@ -651,9 +665,20 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 				if err := p.killer.Kill(killCtx); err != nil {
 					select {
 					case <-killCtx.Done():
+						// kill timed out, so cancel runcCtx to unblock w.runc.Run
 						cancel(errors.WithStack(context.Cause(ctx)))
 						return //nolint:govet
 					default:
+						// If kill fails because the container is already gone,
+						// there is nothing left to kill.
+						// Unblock w.runc.Run and stop instead of repeatedly trying to kill it.
+						if isContainerNotRunning(err) {
+							// The container stopped,
+							// so cancel runcCtx to unblock w.runc.Run
+							cancel(errors.WithStack(err))
+							// Exit this goroutine, there is nothing left to kill.
+							return
+						}
 					}
 				}
 				timeout(errors.WithStack(context.Canceled))
