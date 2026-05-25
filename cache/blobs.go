@@ -61,6 +61,8 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 
 	if isTypeWindows(sr) {
 		ctx = winlayers.UseWindowsLayerMode(ctx)
+	} else if isCrossPlatformLayer(sr) {
+		ctx = winlayers.SetLayerOS(ctx, sr.GetLayerType())
 	}
 
 	// filter keeps track of which layers should actually be included in the blob chain.
@@ -171,7 +173,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						return nil, errors.Wrapf(err, "invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF")
 					}
 					fallback = false // prohibit fallback on debug
-				} else if !isTypeWindows(sr) {
+				} else if !isCrossPlatformLayer(sr) {
 					enableOverlay, fallback = true, true
 					switch sr.cm.Snapshotter.Name() {
 					case "overlayfs", "stargz":
@@ -220,7 +222,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 				}
 
-				if desc.Digest == "" && !isTypeWindows(sr) && comp.Type.NeedsComputeDiffBySelf(comp) {
+				if desc.Digest == "" && !isCrossPlatformLayer(sr) && comp.Type.NeedsComputeDiffBySelf(comp) {
 					// These compression types aren't supported by containerd differ. So try to compute diff on buildkit side.
 					// This case can be happen on containerd worker + non-overlayfs snapshotter (e.g. native).
 					// See also: https://github.com/containerd/containerd/issues/4263
@@ -443,6 +445,26 @@ func isTypeWindows(sr *immutableRef) bool {
 		}
 	case Layer:
 		return isTypeWindows(sr.layerParent)
+	}
+	return false
+}
+
+// isCrossPlatformLayer returns true if the layer has a non-empty type that
+// indicates it was pulled for a different OS than the host.
+func isCrossPlatformLayer(sr *immutableRef) bool {
+	lt := sr.GetLayerType()
+	if lt != "" {
+		return true
+	}
+	switch sr.kind() {
+	case Merge:
+		if slices.ContainsFunc(sr.mergeParents, isCrossPlatformLayer) {
+			return true
+		}
+	case Layer:
+		if sr.layerParent != nil {
+			return isCrossPlatformLayer(sr.layerParent)
+		}
 	}
 	return false
 }

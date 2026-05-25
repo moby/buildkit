@@ -45,10 +45,18 @@ type winDiffer struct {
 // Compare creates a diff between the given mounts and uploads the result
 // to the content store.
 func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispecs.Descriptor, err error) {
-	if !hasWindowsLayerMode(ctx) {
-		return s.d.Compare(ctx, lower, upper, opts...)
+	if hasWindowsLayerMode(ctx) {
+		return s.compareWindowsLayer(ctx, lower, upper, opts...)
 	}
+	if hasLinuxLayerMode(ctx) {
+		return s.compareLinuxLayer(ctx, lower, upper, opts...)
+	}
+	return s.d.Compare(ctx, lower, upper, opts...)
+}
 
+// compareWindowsLayer generates a Windows-format tarball from a Linux filesystem diff.
+// Used when a Windows layer is stored on a Linux host.
+func (s *winDiffer) compareWindowsLayer(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispecs.Descriptor, err error) {
 	var config diff.Config
 	for _, opt := range opts {
 		if err := opt(&config); err != nil {
@@ -161,6 +169,13 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 	return ocidesc, nil
 }
 
+// compareLinuxLayer produces a Linux-format diff on a Windows host. The HCS
+// import stores the Linux content under Files/, which the snapshotter maps to
+// the mount root, so the standard differ already yields Linux-format paths.
+func (s *winDiffer) compareLinuxLayer(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispecs.Descriptor, err error) {
+	return s.d.Compare(ctx, lower, upper, opts...)
+}
+
 func uniqueRef() string {
 	t := time.Now()
 	var b [3]byte
@@ -202,61 +217,15 @@ func addSecurityDescriptor(h *tar.Header) {
 	}
 }
 
+// makeWindowsLayer transforms a Linux-format tar stream into a Windows-format
+// tar stream (see writeWrappedWindowsLayer). It returns a Writer the caller
+// writes the Linux-format tar into; the result is written to w.
 func makeWindowsLayer(ctx context.Context, w io.Writer) (io.Writer, func(error), chan error) {
 	pr, pw := io.Pipe()
-	done := make(chan error)
+	done := make(chan error, 1)
 
 	go func() {
-		tarReader := tar.NewReader(pr)
-		tarWriter := tar.NewWriter(w)
-
-		err := func() error {
-			h := &tar.Header{
-				Name:     "Hives",
-				Typeflag: tar.TypeDir,
-				ModTime:  time.Now(),
-			}
-			prepareWinHeader(h)
-			if err := tarWriter.WriteHeader(h); err != nil {
-				return err
-			}
-
-			h = &tar.Header{
-				Name:     "Files",
-				Typeflag: tar.TypeDir,
-				ModTime:  time.Now(),
-			}
-			prepareWinHeader(h)
-			if err := tarWriter.WriteHeader(h); err != nil {
-				return err
-			}
-
-			for {
-				h, err := tarReader.Next()
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					return err
-				}
-				h.Name = "Files/" + h.Name
-				if h.Linkname != "" {
-					h.Linkname = "Files/" + h.Linkname
-				}
-				prepareWinHeader(h)
-				addSecurityDescriptor(h)
-				if err := tarWriter.WriteHeader(h); err != nil {
-					return err
-				}
-				if h.Size > 0 {
-					//nolint:gosec // never read into memory
-					if _, err := io.Copy(tarWriter, tarReader); err != nil {
-						return err
-					}
-				}
-			}
-			return tarWriter.Close()
-		}()
+		err := writeWrappedWindowsLayer(pr, w)
 		if err != nil {
 			bklog.G(ctx).Errorf("makeWindowsLayer %+v", err)
 		}
@@ -269,4 +238,55 @@ func makeWindowsLayer(ctx context.Context, w io.Writer) (io.Writer, func(error),
 	}
 
 	return pw, discard, done
+}
+
+func writeWrappedWindowsLayer(r io.Reader, w io.Writer) error {
+	tarReader := tar.NewReader(r)
+	tarWriter := tar.NewWriter(w)
+
+	h := &tar.Header{
+		Name:     "Hives",
+		Typeflag: tar.TypeDir,
+		ModTime:  time.Now(),
+	}
+	prepareWinHeader(h)
+	if err := tarWriter.WriteHeader(h); err != nil {
+		return err
+	}
+
+	h = &tar.Header{
+		Name:     "Files",
+		Typeflag: tar.TypeDir,
+		ModTime:  time.Now(),
+	}
+	prepareWinHeader(h)
+	if err := tarWriter.WriteHeader(h); err != nil {
+		return err
+	}
+
+	for {
+		h, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		h.Name = "Files/" + h.Name
+		if h.Linkname != "" {
+			h.Linkname = "Files/" + h.Linkname
+		}
+		prepareWinHeader(h)
+		addSecurityDescriptor(h)
+		if err := tarWriter.WriteHeader(h); err != nil {
+			return err
+		}
+		if h.Size > 0 {
+			//nolint:gosec // never read into memory
+			if _, err := io.Copy(tarWriter, tarReader); err != nil {
+				return err
+			}
+		}
+	}
+	return tarWriter.Close()
 }

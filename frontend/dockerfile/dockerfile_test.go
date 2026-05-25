@@ -216,6 +216,7 @@ var allTests = integration.TestFuncs(
 	testPlatformWithOSVersion,
 	testMaintainBaseOSVersion,
 	testTargetMistype,
+	testCopyCrossPlatformMultiStage,
 )
 
 // Tests that depend on the `security.*` entitlements
@@ -11461,6 +11462,68 @@ COPY --from=build C:\out C:\
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "target stage \"bulid\" could not be found (did you mean build?)")
+}
+
+func testCopyCrossPlatformMultiStage(t *testing.T, sb integration.Sandbox) {
+	// Cross-platform COPY exercises bidirectional layer support (#4537):
+	// on Linux the source stage is windows/amd64; on Windows it is
+	// linux/amd64 (the new applyLinuxLayer path).
+	//
+	// The source stage must not RUN — the worker can't execute the other
+	// OS. COPY --from reads files straight out of the transformed layer.
+	// Image refs are fully qualified: the test mirror map is OS-specific.
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		// Linux host: windows/amd64 source -> linux final.
+		`
+FROM --platform=windows/amd64 mcr.microsoft.com/windows/nanoserver:ltsc2022 AS winsource
+
+FROM busybox
+COPY --from=winsource /Windows/System32/cmd.exe /from-win/cmd.exe
+RUN test -s /from-win/cmd.exe && echo -n cross-platform-data > /result.txt
+`,
+		// Windows host: linux/amd64 source -> windows final.
+		// Doubled backslashes: the Dockerfile escape token is "\", so the
+		// parser sees C:\from-linux\alpine-release. RUN bodies aren't expanded.
+		`
+FROM --platform=linux/amd64 docker.io/library/alpine:3.20 AS linuxsource
+
+FROM nanoserver
+USER ContainerAdministrator
+COPY --from=linuxsource /etc/alpine-release C:\\from-linux\\alpine-release
+RUN cmd /c "(if not exist C:\from-linux\alpine-release exit /b 1) && echo cross-platform-data> C:\result.txt"
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir := t.TempDir()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "result.txt"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "cross-platform-data")
 }
 
 func runShell(dir string, cmds ...string) error {
