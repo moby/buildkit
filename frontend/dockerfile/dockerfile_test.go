@@ -9018,21 +9018,37 @@ func testNamedFilteredContext(t *testing.T, sb integration.Sandbox) {
 			})
 
 			eg.Go(func() error {
-				transferred := make(map[string]int64)
-				re := regexp.MustCompile(`transferring (.+):`)
+				type transferStatus struct {
+					name        string
+					transferred int64
+				}
+				transfers := make(map[digest.Digest]transferStatus)
 				for ss := range ch {
+					for _, v := range ss.Vertexes {
+						transfer := transfers[v.Digest]
+						transfer.name = v.Name
+						transfers[v.Digest] = transfer
+					}
 					for _, status := range ss.Statuses {
-						m := re.FindStringSubmatch(status.ID)
-						if m == nil {
+						if status.Name != "transferring" {
 							continue
 						}
 
-						ctxName := m[1]
-						transferred[ctxName] = status.Current
+						transfer := transfers[status.Vertex]
+						if status.Current > transfer.transferred {
+							transfer.transferred = status.Current
+							transfers[status.Vertex] = transfer
+						}
 					}
 				}
 
-				if foo := transferred["foo"]; foo < min {
+				var foo int64
+				for _, transfer := range transfers {
+					if transfer.name == "[context foo] load from client" && transfer.transferred > foo {
+						foo = transfer.transferred
+					}
+				}
+				if foo < min {
 					return errors.Errorf("not enough data was transferred, %d < %d", foo, min)
 				} else if foo > max {
 					return errors.Errorf("too much data was transferred, %d > %d", foo, max)
