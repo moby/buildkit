@@ -125,7 +125,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder/.github/workflows/bake.yml@c2782c55efa56a01b9c30021db8f5ec3993228a3 # v1.8.0
+    uses: docker/github-builder/.github/workflows/bake.yml@073833262a23a17675c95c4541ab063b7646756b # v1.9.0
     needs:
       - prepare
       - test
