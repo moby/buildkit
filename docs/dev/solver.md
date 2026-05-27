@@ -85,9 +85,10 @@ should never have the same digest.
 
 Options contain extra information that can be associated with the vertex but
 what doesn't change the definition(or equality check) of it. Normally this is
-either a hint to the solver, for example, to ignore cache when executing. It
-can also be used for associating messages with the vertex that can be helpful
-for tracing purposes.
+either a hint to the solver, for example, to ignore cache when executing, or
+runtime parameters like Linux resource limits (memory, CPU) that affect
+execution but not the cache key. It can also be used for associating messages
+with the vertex that can be helpful for tracing purposes.
 
 ## Operation interface
 
@@ -150,13 +151,13 @@ for its inputs.
 - A content-based cache function allows computing a new cache key for an input
   after it has completed. In LLB this is used for calculating a cache key based
   on the checksum of file contents of the input snapshots.
-  
+
 > [!NOTE]
 > For example, in the case of LLB, if a vertex is a FileOp that copies a file
 > from one snapshot to another, the selector can be set to the path of the
 > source file in the input snapshot, while the content-based cache function can
 > be used to calculate the checksum of the file contents.
-> 
+>
 > If the source path changes, we need to invalidate the cache (which we do by
 > changing the selector). However, if we do a content-based cache lookup for
 > the input, then the file content may not have changed (which we can detect by
@@ -182,6 +183,37 @@ released if no more references remain.
 
 Loading a vertex also creates a progress writer associated with it and sets up
 the cache sources associated with the specific vertex.
+
+### Linux resource limits
+
+Linux resource limits (memory, CPU, cpuset) attached to a vertex via
+`VertexOptions` get merged into the shared state using a "most relaxed wins"
+policy. The merge is per resource. Scalar limits like `memory` and `cpu-shares`
+take the larger value (with `0` treated as unlimited where the field's
+semantics call for it). `cpu-period` and `cpu-quota` are picked as a pair
+representing the higher effective CPU cap. `cpuset-cpus` and `cpuset-mems` are
+unioned. Concurrent builds that share an op but specify different limits can
+dedup safely this way. The merged value is snapshotted when the shared op is
+first resolved (via `ResolveOp`) and passed straight to the op constructor.
+Jobs that join after that reuse the already-resolved op and don't change its
+effective limits.
+
+#### Caveats
+
+- **Merging is best-effort.** When two jobs share a vertex with different
+  limits, what actually applies depends on whether both loads finish before
+  the scheduler resolves the shared op. If they do, the merged value wins.
+  If one job races ahead and triggers `ResolveOp` first, only that job's
+  metadata is used; later joiners still merge into shared state, but nothing
+  reads it after `ResolveOp` has run. Because of that, every `Merge`
+  implementation must return a value that is safe for any participating job
+  on its own. "Most relaxed" satisfies this since every job ends up with at
+  least the limits it asked for.
+- **No effect on the cache key.** `LinuxResources` sits in `OpMetadata`, not
+  in the op protobuf, so it doesn't enter the vertex digest. Two jobs that
+  differ only in resource limits dedup to the same vertex and share cache
+  entries.
+- **Needs write access to cgroups.** When buildkitd doesn't have write access to cgroups, it cannot set the limits. This means the limits won't work in rootless mode.
 
 After vertexes have been loaded to the job, it is safe to request a result from
 an edge pointing to a previously loaded vertex. To do this `build(ctx, Edge)

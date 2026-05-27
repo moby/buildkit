@@ -1604,11 +1604,12 @@ type OpMetadata struct {
 	Description map[string]string `protobuf:"bytes,2,rep,name=description,proto3" json:"description,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// index 3 reserved for WorkerConstraint in previous versions
 	// WorkerConstraint worker_constraint = 3;
-	ExportCache   *ExportCache    `protobuf:"bytes,4,opt,name=export_cache,json=exportCache,proto3" json:"export_cache,omitempty"`
-	Caps          map[string]bool `protobuf:"bytes,5,rep,name=caps,proto3" json:"caps,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	ProgressGroup *ProgressGroup  `protobuf:"bytes,6,opt,name=progress_group,json=progressGroup,proto3" json:"progress_group,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ExportCache    *ExportCache    `protobuf:"bytes,4,opt,name=export_cache,json=exportCache,proto3" json:"export_cache,omitempty"`
+	Caps           map[string]bool `protobuf:"bytes,5,rep,name=caps,proto3" json:"caps,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	ProgressGroup  *ProgressGroup  `protobuf:"bytes,6,opt,name=progress_group,json=progressGroup,proto3" json:"progress_group,omitempty"`
+	LinuxResources *LinuxResources `protobuf:"bytes,7,opt,name=linux_resources,json=linuxResources,proto3" json:"linux_resources,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OpMetadata) Reset() {
@@ -1672,6 +1673,13 @@ func (x *OpMetadata) GetCaps() map[string]bool {
 func (x *OpMetadata) GetProgressGroup() *ProgressGroup {
 	if x != nil {
 		return x.ProgressGroup
+	}
+	return nil
+}
+
+func (x *OpMetadata) GetLinuxResources() *LinuxResources {
+	if x != nil {
+		return x.LinuxResources
 	}
 	return nil
 }
@@ -2106,6 +2114,101 @@ func (x *ProgressGroup) GetWeak() bool {
 	return false
 }
 
+// LinuxResources specifies cgroup resource limits for containers.
+// Used in OpMetadata to set per-step resource constraints without
+// affecting the cache key.
+type LinuxResources struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Memory        int64                  `protobuf:"varint,1,opt,name=memory,proto3" json:"memory,omitempty"`         // memory limit in bytes
+	MemorySwap    int64                  `protobuf:"varint,2,opt,name=memorySwap,proto3" json:"memorySwap,omitempty"` // memory+swap limit in bytes
+	CpuShares     uint64                 `protobuf:"varint,3,opt,name=cpuShares,proto3" json:"cpuShares,omitempty"`   // relative CPU weight
+	CpuPeriod     uint64                 `protobuf:"varint,4,opt,name=cpuPeriod,proto3" json:"cpuPeriod,omitempty"`   // CFS period in microseconds
+	CpuQuota      int64                  `protobuf:"varint,5,opt,name=cpuQuota,proto3" json:"cpuQuota,omitempty"`     // CFS quota in microseconds
+	CpusetCpus    string                 `protobuf:"bytes,6,opt,name=cpusetCpus,proto3" json:"cpusetCpus,omitempty"`  // CPU affinity (e.g., "0-3")
+	CpusetMems    string                 `protobuf:"bytes,7,opt,name=cpusetMems,proto3" json:"cpusetMems,omitempty"`  // memory node affinity (e.g., "0,1")
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinuxResources) Reset() {
+	*x = LinuxResources{}
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinuxResources) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinuxResources) ProtoMessage() {}
+
+func (x *LinuxResources) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinuxResources.ProtoReflect.Descriptor instead.
+func (*LinuxResources) Descriptor() ([]byte, []int) {
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *LinuxResources) GetMemory() int64 {
+	if x != nil {
+		return x.Memory
+	}
+	return 0
+}
+
+func (x *LinuxResources) GetMemorySwap() int64 {
+	if x != nil {
+		return x.MemorySwap
+	}
+	return 0
+}
+
+func (x *LinuxResources) GetCpuShares() uint64 {
+	if x != nil {
+		return x.CpuShares
+	}
+	return 0
+}
+
+func (x *LinuxResources) GetCpuPeriod() uint64 {
+	if x != nil {
+		return x.CpuPeriod
+	}
+	return 0
+}
+
+func (x *LinuxResources) GetCpuQuota() int64 {
+	if x != nil {
+		return x.CpuQuota
+	}
+	return 0
+}
+
+func (x *LinuxResources) GetCpusetCpus() string {
+	if x != nil {
+		return x.CpusetCpus
+	}
+	return ""
+}
+
+func (x *LinuxResources) GetCpusetMems() string {
+	if x != nil {
+		return x.CpusetMems
+	}
+	return ""
+}
+
 type ProxyEnv struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	HttpProxy     string                 `protobuf:"bytes,1,opt,name=http_proxy,json=httpProxy,proto3" json:"http_proxy,omitempty"`
@@ -2119,7 +2222,7 @@ type ProxyEnv struct {
 
 func (x *ProxyEnv) Reset() {
 	*x = ProxyEnv{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[26]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2131,7 +2234,7 @@ func (x *ProxyEnv) String() string {
 func (*ProxyEnv) ProtoMessage() {}
 
 func (x *ProxyEnv) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[26]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2144,7 +2247,7 @@ func (x *ProxyEnv) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyEnv.ProtoReflect.Descriptor instead.
 func (*ProxyEnv) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{26}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ProxyEnv) GetHttpProxy() string {
@@ -2192,7 +2295,7 @@ type WorkerConstraints struct {
 
 func (x *WorkerConstraints) Reset() {
 	*x = WorkerConstraints{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[27]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2204,7 +2307,7 @@ func (x *WorkerConstraints) String() string {
 func (*WorkerConstraints) ProtoMessage() {}
 
 func (x *WorkerConstraints) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[27]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2217,7 +2320,7 @@ func (x *WorkerConstraints) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkerConstraints.ProtoReflect.Descriptor instead.
 func (*WorkerConstraints) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{27}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *WorkerConstraints) GetFilter() []string {
@@ -2243,7 +2346,7 @@ type Definition struct {
 
 func (x *Definition) Reset() {
 	*x = Definition{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[28]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2255,7 +2358,7 @@ func (x *Definition) String() string {
 func (*Definition) ProtoMessage() {}
 
 func (x *Definition) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[28]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2268,7 +2371,7 @@ func (x *Definition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Definition.ProtoReflect.Descriptor instead.
 func (*Definition) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{28}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Definition) GetDef() [][]byte {
@@ -2301,7 +2404,7 @@ type FileOp struct {
 
 func (x *FileOp) Reset() {
 	*x = FileOp{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[29]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2313,7 +2416,7 @@ func (x *FileOp) String() string {
 func (*FileOp) ProtoMessage() {}
 
 func (x *FileOp) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[29]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2326,7 +2429,7 @@ func (x *FileOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileOp.ProtoReflect.Descriptor instead.
 func (*FileOp) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{29}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *FileOp) GetActions() []*FileAction {
@@ -2356,7 +2459,7 @@ type FileAction struct {
 
 func (x *FileAction) Reset() {
 	*x = FileAction{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[30]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2368,7 +2471,7 @@ func (x *FileAction) String() string {
 func (*FileAction) ProtoMessage() {}
 
 func (x *FileAction) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[30]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2381,7 +2484,7 @@ func (x *FileAction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileAction.ProtoReflect.Descriptor instead.
 func (*FileAction) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{30}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *FileAction) GetInput() int64 {
@@ -2537,7 +2640,7 @@ type FileActionCopy struct {
 
 func (x *FileActionCopy) Reset() {
 	*x = FileActionCopy{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2549,7 +2652,7 @@ func (x *FileActionCopy) String() string {
 func (*FileActionCopy) ProtoMessage() {}
 
 func (x *FileActionCopy) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2562,7 +2665,7 @@ func (x *FileActionCopy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileActionCopy.ProtoReflect.Descriptor instead.
 func (*FileActionCopy) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{31}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *FileActionCopy) GetSrc() string {
@@ -2695,7 +2798,7 @@ type FileActionMkFile struct {
 
 func (x *FileActionMkFile) Reset() {
 	*x = FileActionMkFile{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[32]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2707,7 +2810,7 @@ func (x *FileActionMkFile) String() string {
 func (*FileActionMkFile) ProtoMessage() {}
 
 func (x *FileActionMkFile) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[32]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2720,7 +2823,7 @@ func (x *FileActionMkFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileActionMkFile.ProtoReflect.Descriptor instead.
 func (*FileActionMkFile) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{32}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *FileActionMkFile) GetPath() string {
@@ -2774,7 +2877,7 @@ type FileActionSymlink struct {
 
 func (x *FileActionSymlink) Reset() {
 	*x = FileActionSymlink{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[33]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2786,7 +2889,7 @@ func (x *FileActionSymlink) String() string {
 func (*FileActionSymlink) ProtoMessage() {}
 
 func (x *FileActionSymlink) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[33]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2799,7 +2902,7 @@ func (x *FileActionSymlink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileActionSymlink.ProtoReflect.Descriptor instead.
 func (*FileActionSymlink) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{33}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *FileActionSymlink) GetOldpath() string {
@@ -2848,7 +2951,7 @@ type FileActionMkDir struct {
 
 func (x *FileActionMkDir) Reset() {
 	*x = FileActionMkDir{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[34]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2860,7 +2963,7 @@ func (x *FileActionMkDir) String() string {
 func (*FileActionMkDir) ProtoMessage() {}
 
 func (x *FileActionMkDir) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[34]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2873,7 +2976,7 @@ func (x *FileActionMkDir) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileActionMkDir.ProtoReflect.Descriptor instead.
 func (*FileActionMkDir) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{34}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *FileActionMkDir) GetPath() string {
@@ -2925,7 +3028,7 @@ type FileActionRm struct {
 
 func (x *FileActionRm) Reset() {
 	*x = FileActionRm{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[35]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2937,7 +3040,7 @@ func (x *FileActionRm) String() string {
 func (*FileActionRm) ProtoMessage() {}
 
 func (x *FileActionRm) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[35]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2950,7 +3053,7 @@ func (x *FileActionRm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileActionRm.ProtoReflect.Descriptor instead.
 func (*FileActionRm) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{35}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *FileActionRm) GetPath() string {
@@ -2984,7 +3087,7 @@ type ChownOpt struct {
 
 func (x *ChownOpt) Reset() {
 	*x = ChownOpt{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[36]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2996,7 +3099,7 @@ func (x *ChownOpt) String() string {
 func (*ChownOpt) ProtoMessage() {}
 
 func (x *ChownOpt) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[36]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3009,7 +3112,7 @@ func (x *ChownOpt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChownOpt.ProtoReflect.Descriptor instead.
 func (*ChownOpt) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{36}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ChownOpt) GetUser() *UserOpt {
@@ -3041,7 +3144,7 @@ type UserOpt struct {
 
 func (x *UserOpt) Reset() {
 	*x = UserOpt{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[37]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3053,7 +3156,7 @@ func (x *UserOpt) String() string {
 func (*UserOpt) ProtoMessage() {}
 
 func (x *UserOpt) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[37]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3066,7 +3169,7 @@ func (x *UserOpt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserOpt.ProtoReflect.Descriptor instead.
 func (*UserOpt) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{37}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *UserOpt) GetUser() isUserOpt_User {
@@ -3120,7 +3223,7 @@ type NamedUserOpt struct {
 
 func (x *NamedUserOpt) Reset() {
 	*x = NamedUserOpt{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[38]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3132,7 +3235,7 @@ func (x *NamedUserOpt) String() string {
 func (*NamedUserOpt) ProtoMessage() {}
 
 func (x *NamedUserOpt) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[38]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3145,7 +3248,7 @@ func (x *NamedUserOpt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NamedUserOpt.ProtoReflect.Descriptor instead.
 func (*NamedUserOpt) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{38}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *NamedUserOpt) GetName() string {
@@ -3171,7 +3274,7 @@ type MergeInput struct {
 
 func (x *MergeInput) Reset() {
 	*x = MergeInput{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[39]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3183,7 +3286,7 @@ func (x *MergeInput) String() string {
 func (*MergeInput) ProtoMessage() {}
 
 func (x *MergeInput) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[39]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3196,7 +3299,7 @@ func (x *MergeInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeInput.ProtoReflect.Descriptor instead.
 func (*MergeInput) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{39}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *MergeInput) GetInput() int64 {
@@ -3215,7 +3318,7 @@ type MergeOp struct {
 
 func (x *MergeOp) Reset() {
 	*x = MergeOp{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[40]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3227,7 +3330,7 @@ func (x *MergeOp) String() string {
 func (*MergeOp) ProtoMessage() {}
 
 func (x *MergeOp) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[40]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3240,7 +3343,7 @@ func (x *MergeOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeOp.ProtoReflect.Descriptor instead.
 func (*MergeOp) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{40}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MergeOp) GetInputs() []*MergeInput {
@@ -3259,7 +3362,7 @@ type LowerDiffInput struct {
 
 func (x *LowerDiffInput) Reset() {
 	*x = LowerDiffInput{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[41]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3271,7 +3374,7 @@ func (x *LowerDiffInput) String() string {
 func (*LowerDiffInput) ProtoMessage() {}
 
 func (x *LowerDiffInput) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[41]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3284,7 +3387,7 @@ func (x *LowerDiffInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LowerDiffInput.ProtoReflect.Descriptor instead.
 func (*LowerDiffInput) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{41}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *LowerDiffInput) GetInput() int64 {
@@ -3303,7 +3406,7 @@ type UpperDiffInput struct {
 
 func (x *UpperDiffInput) Reset() {
 	*x = UpperDiffInput{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[42]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3315,7 +3418,7 @@ func (x *UpperDiffInput) String() string {
 func (*UpperDiffInput) ProtoMessage() {}
 
 func (x *UpperDiffInput) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[42]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3328,7 +3431,7 @@ func (x *UpperDiffInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpperDiffInput.ProtoReflect.Descriptor instead.
 func (*UpperDiffInput) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{42}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *UpperDiffInput) GetInput() int64 {
@@ -3348,7 +3451,7 @@ type DiffOp struct {
 
 func (x *DiffOp) Reset() {
 	*x = DiffOp{}
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[43]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3360,7 +3463,7 @@ func (x *DiffOp) String() string {
 func (*DiffOp) ProtoMessage() {}
 
 func (x *DiffOp) ProtoReflect() protoreflect.Message {
-	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[43]
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3373,7 +3476,7 @@ func (x *DiffOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffOp.ProtoReflect.Descriptor instead.
 func (*DiffOp) Descriptor() ([]byte, []int) {
-	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{43}
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *DiffOp) GetLower() *LowerDiffInput {
@@ -3515,14 +3618,15 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\"\n" +
 	"\n" +
 	"BuildInput\x12\x14\n" +
-	"\x05input\x18\x01 \x01(\x03R\x05input\"\x87\x03\n" +
+	"\x05input\x18\x01 \x01(\x03R\x05input\"\xc4\x03\n" +
 	"\n" +
 	"OpMetadata\x12!\n" +
 	"\fignore_cache\x18\x01 \x01(\bR\vignoreCache\x12A\n" +
 	"\vdescription\x18\x02 \x03(\v2\x1f.pb.OpMetadata.DescriptionEntryR\vdescription\x122\n" +
 	"\fexport_cache\x18\x04 \x01(\v2\x0f.pb.ExportCacheR\vexportCache\x12,\n" +
 	"\x04caps\x18\x05 \x03(\v2\x18.pb.OpMetadata.CapsEntryR\x04caps\x128\n" +
-	"\x0eprogress_group\x18\x06 \x01(\v2\x11.pb.ProgressGroupR\rprogressGroup\x1a>\n" +
+	"\x0eprogress_group\x18\x06 \x01(\v2\x11.pb.ProgressGroupR\rprogressGroup\x12;\n" +
+	"\x0flinux_resources\x18\a \x01(\v2\x12.pb.LinuxResourcesR\x0elinuxResources\x1a>\n" +
 	"\x10DescriptionEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a7\n" +
@@ -3559,7 +3663,21 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\rProgressGroup\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04weak\x18\x03 \x01(\bR\x04weak\"\x9f\x01\n" +
+	"\x04weak\x18\x03 \x01(\bR\x04weak\"\xe0\x01\n" +
+	"\x0eLinuxResources\x12\x16\n" +
+	"\x06memory\x18\x01 \x01(\x03R\x06memory\x12\x1e\n" +
+	"\n" +
+	"memorySwap\x18\x02 \x01(\x03R\n" +
+	"memorySwap\x12\x1c\n" +
+	"\tcpuShares\x18\x03 \x01(\x04R\tcpuShares\x12\x1c\n" +
+	"\tcpuPeriod\x18\x04 \x01(\x04R\tcpuPeriod\x12\x1a\n" +
+	"\bcpuQuota\x18\x05 \x01(\x03R\bcpuQuota\x12\x1e\n" +
+	"\n" +
+	"cpusetCpus\x18\x06 \x01(\tR\n" +
+	"cpusetCpus\x12\x1e\n" +
+	"\n" +
+	"cpusetMems\x18\a \x01(\tR\n" +
+	"cpusetMems\"\x9f\x01\n" +
 	"\bProxyEnv\x12\x1d\n" +
 	"\n" +
 	"http_proxy\x18\x01 \x01(\tR\thttpProxy\x12\x1f\n" +
@@ -3691,7 +3809,7 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP() []byte {
 }
 
 var file_github_com_moby_buildkit_solver_pb_ops_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
 var file_github_com_moby_buildkit_solver_pb_ops_proto_goTypes = []any{
 	(NetMode)(0),              // 0: pb.NetMode
 	(SecurityMode)(0),         // 1: pb.SecurityMode
@@ -3724,49 +3842,50 @@ var file_github_com_moby_buildkit_solver_pb_ops_proto_goTypes = []any{
 	(*Position)(nil),          // 28: pb.Position
 	(*ExportCache)(nil),       // 29: pb.ExportCache
 	(*ProgressGroup)(nil),     // 30: pb.ProgressGroup
-	(*ProxyEnv)(nil),          // 31: pb.ProxyEnv
-	(*WorkerConstraints)(nil), // 32: pb.WorkerConstraints
-	(*Definition)(nil),        // 33: pb.Definition
-	(*FileOp)(nil),            // 34: pb.FileOp
-	(*FileAction)(nil),        // 35: pb.FileAction
-	(*FileActionCopy)(nil),    // 36: pb.FileActionCopy
-	(*FileActionMkFile)(nil),  // 37: pb.FileActionMkFile
-	(*FileActionSymlink)(nil), // 38: pb.FileActionSymlink
-	(*FileActionMkDir)(nil),   // 39: pb.FileActionMkDir
-	(*FileActionRm)(nil),      // 40: pb.FileActionRm
-	(*ChownOpt)(nil),          // 41: pb.ChownOpt
-	(*UserOpt)(nil),           // 42: pb.UserOpt
-	(*NamedUserOpt)(nil),      // 43: pb.NamedUserOpt
-	(*MergeInput)(nil),        // 44: pb.MergeInput
-	(*MergeOp)(nil),           // 45: pb.MergeOp
-	(*LowerDiffInput)(nil),    // 46: pb.LowerDiffInput
-	(*UpperDiffInput)(nil),    // 47: pb.UpperDiffInput
-	(*DiffOp)(nil),            // 48: pb.DiffOp
-	nil,                       // 49: pb.SourceOp.AttrsEntry
-	nil,                       // 50: pb.BuildOp.InputsEntry
-	nil,                       // 51: pb.BuildOp.AttrsEntry
-	nil,                       // 52: pb.OpMetadata.DescriptionEntry
-	nil,                       // 53: pb.OpMetadata.CapsEntry
-	nil,                       // 54: pb.Source.LocationsEntry
-	nil,                       // 55: pb.Definition.MetadataEntry
+	(*LinuxResources)(nil),    // 31: pb.LinuxResources
+	(*ProxyEnv)(nil),          // 32: pb.ProxyEnv
+	(*WorkerConstraints)(nil), // 33: pb.WorkerConstraints
+	(*Definition)(nil),        // 34: pb.Definition
+	(*FileOp)(nil),            // 35: pb.FileOp
+	(*FileAction)(nil),        // 36: pb.FileAction
+	(*FileActionCopy)(nil),    // 37: pb.FileActionCopy
+	(*FileActionMkFile)(nil),  // 38: pb.FileActionMkFile
+	(*FileActionSymlink)(nil), // 39: pb.FileActionSymlink
+	(*FileActionMkDir)(nil),   // 40: pb.FileActionMkDir
+	(*FileActionRm)(nil),      // 41: pb.FileActionRm
+	(*ChownOpt)(nil),          // 42: pb.ChownOpt
+	(*UserOpt)(nil),           // 43: pb.UserOpt
+	(*NamedUserOpt)(nil),      // 44: pb.NamedUserOpt
+	(*MergeInput)(nil),        // 45: pb.MergeInput
+	(*MergeOp)(nil),           // 46: pb.MergeOp
+	(*LowerDiffInput)(nil),    // 47: pb.LowerDiffInput
+	(*UpperDiffInput)(nil),    // 48: pb.UpperDiffInput
+	(*DiffOp)(nil),            // 49: pb.DiffOp
+	nil,                       // 50: pb.SourceOp.AttrsEntry
+	nil,                       // 51: pb.BuildOp.InputsEntry
+	nil,                       // 52: pb.BuildOp.AttrsEntry
+	nil,                       // 53: pb.OpMetadata.DescriptionEntry
+	nil,                       // 54: pb.OpMetadata.CapsEntry
+	nil,                       // 55: pb.Source.LocationsEntry
+	nil,                       // 56: pb.Definition.MetadataEntry
 }
 var file_github_com_moby_buildkit_solver_pb_ops_proto_depIdxs = []int32{
 	7,  // 0: pb.Op.inputs:type_name -> pb.Input
 	8,  // 1: pb.Op.exec:type_name -> pb.ExecOp
 	19, // 2: pb.Op.source:type_name -> pb.SourceOp
-	34, // 3: pb.Op.file:type_name -> pb.FileOp
+	35, // 3: pb.Op.file:type_name -> pb.FileOp
 	20, // 4: pb.Op.build:type_name -> pb.BuildOp
-	45, // 5: pb.Op.merge:type_name -> pb.MergeOp
-	48, // 6: pb.Op.diff:type_name -> pb.DiffOp
+	46, // 5: pb.Op.merge:type_name -> pb.MergeOp
+	49, // 6: pb.Op.diff:type_name -> pb.DiffOp
 	6,  // 7: pb.Op.platform:type_name -> pb.Platform
-	32, // 8: pb.Op.constraints:type_name -> pb.WorkerConstraints
+	33, // 8: pb.Op.constraints:type_name -> pb.WorkerConstraints
 	9,  // 9: pb.ExecOp.meta:type_name -> pb.Meta
 	14, // 10: pb.ExecOp.mounts:type_name -> pb.Mount
 	0,  // 11: pb.ExecOp.network:type_name -> pb.NetMode
 	1,  // 12: pb.ExecOp.security:type_name -> pb.SecurityMode
 	12, // 13: pb.ExecOp.secretenv:type_name -> pb.SecretEnv
 	13, // 14: pb.ExecOp.cdiDevices:type_name -> pb.CDIDevice
-	31, // 15: pb.Meta.proxy_env:type_name -> pb.ProxyEnv
+	32, // 15: pb.Meta.proxy_env:type_name -> pb.ProxyEnv
 	10, // 16: pb.Meta.extraHosts:type_name -> pb.HostIP
 	11, // 17: pb.Meta.ulimit:type_name -> pb.Ulimit
 	2,  // 18: pb.Mount.mountType:type_name -> pb.MountType
@@ -3776,47 +3895,48 @@ var file_github_com_moby_buildkit_solver_pb_ops_proto_depIdxs = []int32{
 	18, // 22: pb.Mount.SSHOpt:type_name -> pb.SSHOpt
 	3,  // 23: pb.Mount.contentCache:type_name -> pb.MountContentCache
 	4,  // 24: pb.CacheOpt.sharing:type_name -> pb.CacheSharingOpt
-	49, // 25: pb.SourceOp.attrs:type_name -> pb.SourceOp.AttrsEntry
-	50, // 26: pb.BuildOp.inputs:type_name -> pb.BuildOp.InputsEntry
-	33, // 27: pb.BuildOp.def:type_name -> pb.Definition
-	51, // 28: pb.BuildOp.attrs:type_name -> pb.BuildOp.AttrsEntry
-	52, // 29: pb.OpMetadata.description:type_name -> pb.OpMetadata.DescriptionEntry
+	50, // 25: pb.SourceOp.attrs:type_name -> pb.SourceOp.AttrsEntry
+	51, // 26: pb.BuildOp.inputs:type_name -> pb.BuildOp.InputsEntry
+	34, // 27: pb.BuildOp.def:type_name -> pb.Definition
+	52, // 28: pb.BuildOp.attrs:type_name -> pb.BuildOp.AttrsEntry
+	53, // 29: pb.OpMetadata.description:type_name -> pb.OpMetadata.DescriptionEntry
 	29, // 30: pb.OpMetadata.export_cache:type_name -> pb.ExportCache
-	53, // 31: pb.OpMetadata.caps:type_name -> pb.OpMetadata.CapsEntry
+	54, // 31: pb.OpMetadata.caps:type_name -> pb.OpMetadata.CapsEntry
 	30, // 32: pb.OpMetadata.progress_group:type_name -> pb.ProgressGroup
-	54, // 33: pb.Source.locations:type_name -> pb.Source.LocationsEntry
-	25, // 34: pb.Source.infos:type_name -> pb.SourceInfo
-	26, // 35: pb.Locations.locations:type_name -> pb.Location
-	33, // 36: pb.SourceInfo.definition:type_name -> pb.Definition
-	27, // 37: pb.Location.ranges:type_name -> pb.Range
-	28, // 38: pb.Range.start:type_name -> pb.Position
-	28, // 39: pb.Range.end:type_name -> pb.Position
-	55, // 40: pb.Definition.metadata:type_name -> pb.Definition.MetadataEntry
-	23, // 41: pb.Definition.Source:type_name -> pb.Source
-	35, // 42: pb.FileOp.actions:type_name -> pb.FileAction
-	36, // 43: pb.FileAction.copy:type_name -> pb.FileActionCopy
-	37, // 44: pb.FileAction.mkfile:type_name -> pb.FileActionMkFile
-	39, // 45: pb.FileAction.mkdir:type_name -> pb.FileActionMkDir
-	40, // 46: pb.FileAction.rm:type_name -> pb.FileActionRm
-	38, // 47: pb.FileAction.symlink:type_name -> pb.FileActionSymlink
-	41, // 48: pb.FileActionCopy.owner:type_name -> pb.ChownOpt
-	41, // 49: pb.FileActionMkFile.owner:type_name -> pb.ChownOpt
-	41, // 50: pb.FileActionSymlink.owner:type_name -> pb.ChownOpt
-	41, // 51: pb.FileActionMkDir.owner:type_name -> pb.ChownOpt
-	42, // 52: pb.ChownOpt.user:type_name -> pb.UserOpt
-	42, // 53: pb.ChownOpt.group:type_name -> pb.UserOpt
-	43, // 54: pb.UserOpt.byName:type_name -> pb.NamedUserOpt
-	44, // 55: pb.MergeOp.inputs:type_name -> pb.MergeInput
-	46, // 56: pb.DiffOp.lower:type_name -> pb.LowerDiffInput
-	47, // 57: pb.DiffOp.upper:type_name -> pb.UpperDiffInput
-	21, // 58: pb.BuildOp.InputsEntry.value:type_name -> pb.BuildInput
-	24, // 59: pb.Source.LocationsEntry.value:type_name -> pb.Locations
-	22, // 60: pb.Definition.MetadataEntry.value:type_name -> pb.OpMetadata
-	61, // [61:61] is the sub-list for method output_type
-	61, // [61:61] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	31, // 33: pb.OpMetadata.linux_resources:type_name -> pb.LinuxResources
+	55, // 34: pb.Source.locations:type_name -> pb.Source.LocationsEntry
+	25, // 35: pb.Source.infos:type_name -> pb.SourceInfo
+	26, // 36: pb.Locations.locations:type_name -> pb.Location
+	34, // 37: pb.SourceInfo.definition:type_name -> pb.Definition
+	27, // 38: pb.Location.ranges:type_name -> pb.Range
+	28, // 39: pb.Range.start:type_name -> pb.Position
+	28, // 40: pb.Range.end:type_name -> pb.Position
+	56, // 41: pb.Definition.metadata:type_name -> pb.Definition.MetadataEntry
+	23, // 42: pb.Definition.Source:type_name -> pb.Source
+	36, // 43: pb.FileOp.actions:type_name -> pb.FileAction
+	37, // 44: pb.FileAction.copy:type_name -> pb.FileActionCopy
+	38, // 45: pb.FileAction.mkfile:type_name -> pb.FileActionMkFile
+	40, // 46: pb.FileAction.mkdir:type_name -> pb.FileActionMkDir
+	41, // 47: pb.FileAction.rm:type_name -> pb.FileActionRm
+	39, // 48: pb.FileAction.symlink:type_name -> pb.FileActionSymlink
+	42, // 49: pb.FileActionCopy.owner:type_name -> pb.ChownOpt
+	42, // 50: pb.FileActionMkFile.owner:type_name -> pb.ChownOpt
+	42, // 51: pb.FileActionSymlink.owner:type_name -> pb.ChownOpt
+	42, // 52: pb.FileActionMkDir.owner:type_name -> pb.ChownOpt
+	43, // 53: pb.ChownOpt.user:type_name -> pb.UserOpt
+	43, // 54: pb.ChownOpt.group:type_name -> pb.UserOpt
+	44, // 55: pb.UserOpt.byName:type_name -> pb.NamedUserOpt
+	45, // 56: pb.MergeOp.inputs:type_name -> pb.MergeInput
+	47, // 57: pb.DiffOp.lower:type_name -> pb.LowerDiffInput
+	48, // 58: pb.DiffOp.upper:type_name -> pb.UpperDiffInput
+	21, // 59: pb.BuildOp.InputsEntry.value:type_name -> pb.BuildInput
+	24, // 60: pb.Source.LocationsEntry.value:type_name -> pb.Locations
+	22, // 61: pb.Definition.MetadataEntry.value:type_name -> pb.OpMetadata
+	62, // [62:62] is the sub-list for method output_type
+	62, // [62:62] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_github_com_moby_buildkit_solver_pb_ops_proto_init() }
@@ -3832,14 +3952,14 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_init() {
 		(*Op_Merge)(nil),
 		(*Op_Diff)(nil),
 	}
-	file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[30].OneofWrappers = []any{
+	file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31].OneofWrappers = []any{
 		(*FileAction_Copy)(nil),
 		(*FileAction_Mkfile)(nil),
 		(*FileAction_Mkdir)(nil),
 		(*FileAction_Rm)(nil),
 		(*FileAction_Symlink)(nil),
 	}
-	file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[37].OneofWrappers = []any{
+	file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[38].OneofWrappers = []any{
 		(*UserOpt_ByName)(nil),
 		(*UserOpt_ByID)(nil),
 	}
@@ -3849,7 +3969,7 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc), len(file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   51,
+			NumMessages:   52,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -37,37 +37,39 @@ import (
 const execCacheType = "buildkit.exec.v0"
 
 type ExecOp struct {
-	op          *pb.ExecOp
-	cm          cache.Manager
-	mm          *mounts.MountManager
-	sm          *session.Manager
-	exec        executor.Executor
-	w           worker.Worker
-	platform    *pb.Platform
-	numInputs   int
-	parallelism *semaphore.Weighted
-	rec         resourcestypes.Recorder
-	digest      digest.Digest
+	op             *pb.ExecOp
+	cm             cache.Manager
+	mm             *mounts.MountManager
+	sm             *session.Manager
+	exec           executor.Executor
+	w              worker.Worker
+	platform       *pb.Platform
+	numInputs      int
+	parallelism    *semaphore.Weighted
+	rec            resourcestypes.Recorder
+	digest         digest.Digest
+	linuxResources *pb.LinuxResources
 }
 
 var _ solver.Op = &ExecOp{}
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker) (*ExecOp, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker, linuxResources *pb.LinuxResources) (*ExecOp, error) {
 	if err := opsutils.Validate(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	name := fmt.Sprintf("exec %s", strings.Join(op.Exec.Meta.Args, " "))
 	return &ExecOp{
-		op:          op.Exec,
-		mm:          mounts.NewMountManager(name, cm, sm),
-		cm:          cm,
-		sm:          sm,
-		exec:        exec,
-		numInputs:   len(v.Inputs()),
-		w:           w,
-		platform:    platform,
-		parallelism: parallelism,
-		digest:      v.Digest(),
+		op:             op.Exec,
+		mm:             mounts.NewMountManager(name, cm, sm),
+		cm:             cm,
+		sm:             sm,
+		exec:           exec,
+		numInputs:      len(v.Inputs()),
+		w:              w,
+		platform:       platform,
+		parallelism:    parallelism,
+		digest:         v.Digest(),
+		linuxResources: linuxResources,
 	}, nil
 }
 
@@ -456,6 +458,7 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		Ulimit:                    e.op.Meta.Ulimit,
 		CDIDevices:                e.op.CdiDevices,
 		CgroupParent:              e.op.Meta.CgroupParent,
+		LinuxResources:            e.linuxResources,
 		NetMode:                   e.op.Network,
 		SecurityMode:              e.op.Security,
 		RemoveMountStubsRecursive: e.op.Meta.RemoveMountStubsRecursive,

@@ -73,6 +73,7 @@ type state struct {
 
 	cache     map[string]CacheManager
 	mainCache CacheManager
+	metadata  VertexMetadata
 	solver    *Solver
 }
 
@@ -620,6 +621,13 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 			if _, ok := st.cache[cache.ID()]; !ok {
 				st.cache[cache.ID()] = cache
 			}
+		}
+	}
+	if md := v.Options().Metadata; md != nil {
+		if st.metadata == nil {
+			st.metadata = md
+		} else {
+			st.metadata = st.metadata.Merge(md)
 		}
 	}
 
@@ -1272,12 +1280,30 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 func (s *sharedOp) getOp() (Op, error) {
 	s.opOnce.Do(func() {
 		s.subBuilder = s.st.builder()
-		s.op, s.err = s.resolver(s.st.vtx, s.subBuilder)
+		s.st.mu.Lock()
+		metadata := s.st.metadata
+		s.st.mu.Unlock()
+		v := s.st.vtx
+		if metadata != nil {
+			v = &vertexWithMetadata{Vertex: v, metadata: metadata}
+		}
+		s.op, s.err = s.resolver(v, s.subBuilder)
 	})
 	if s.err != nil {
 		return nil, s.err
 	}
 	return s.op, nil
+}
+
+type vertexWithMetadata struct {
+	Vertex
+	metadata VertexMetadata
+}
+
+func (v *vertexWithMetadata) Options() VertexOptions {
+	opts := v.Vertex.Options()
+	opts.Metadata = v.metadata
+	return opts
 }
 
 func (s *sharedOp) release() {
