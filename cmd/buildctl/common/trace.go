@@ -3,16 +3,20 @@ package common
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/tracing/delegated"
 	"github.com/moby/buildkit/util/tracing/detect"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const exportTimeout = 50 * time.Millisecond
 
 func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
@@ -69,7 +73,14 @@ func AttachAppContext(app *cli.App) error {
 		if span != nil {
 			span.End()
 		}
-		return tp.Shutdown(context.TODO())
+
+		// Set a rather aggressive timeout for shutting down the tracer provider
+		// to ensure we don't stall on a non-responsive tracing endpoint for too long
+		// on shutdown.
+		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), exportTimeout, errors.WithStack(context.DeadlineExceeded))
+		defer cancel()
+
+		return tp.Shutdown(ctx)
 	}
 	return nil
 }
