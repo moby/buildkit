@@ -1967,6 +1967,13 @@ path, using `--link` is always recommended. The performance of `--link` is
 equivalent or better than the default behavior and, it creates much better
 conditions for cache reuse.
 
+When copying a path into a subdirectory, `--link` will always copy from the
+root of the filesystem. When copying a directory, the existing mode is
+overridden with the new mode from the copied path. If you need a specific mode
+for a directory, such as the more permissive `/tmp` directory, you may need to
+either avoid using `--link`, unroll the copy into its base components, or use
+`--chmod` to ensure the overwriting directory contains the same permissions.
+
 ### COPY --parents
 
 ```dockerfile
