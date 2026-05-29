@@ -395,7 +395,16 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 			execMounts := make([]solver.Result, len(e.op.Mounts))
 			copy(execMounts, execInputs)
 			for i, res := range results {
-				execMounts[p.OutputRefs[i].MountIndex] = res
+				// res.Clone() (not res) is required: results[i] is owned by
+				// the caller (and ultimately released via the gateway / job
+				// path), while execMounts[i] is embedded in the ExecError
+				// returned below and released independently by the error
+				// owner. Sharing the same *workerRefResult here would mean
+				// two independent owners holding the same *WorkerRef, so a
+				// Release on one would also free the cache ref held by the
+				// other. See worker/result_test.go for the underlying
+				// ownership invariant.
+				execMounts[p.OutputRefs[i].MountIndex] = res.Clone()
 			}
 			for _, active := range p.Actives {
 				if active.NoCommit {
