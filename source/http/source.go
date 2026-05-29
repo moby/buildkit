@@ -860,26 +860,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 			if err != nil {
 				return nil, err
 			}
-			vals, release, err := rc.Lock(uh)
+			refID, err = hs.snapshotRefIDFromResolverCache(rc, uh)
 			if err != nil {
 				return nil, err
-			}
-			for _, v := range vals {
-				v2, ok := v.(*metadataWithRef)
-				if !ok || v2 == nil {
-					return nil, errors.Errorf("invalid HTTP resolver cache value: %T", v)
-				}
-				if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
-					continue
-				}
-				if v2.refID != "" {
-					hs.resolved = v2
-					refID = v2.refID
-				}
-			}
-			release(nil)
-			if hs.src.Checksum != "" && len(vals) > 0 && refID == "" {
-				return nil, errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
 			}
 		}
 	}
@@ -923,6 +906,33 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 	}
 
 	return ref, nil
+}
+
+func (hs *httpSourceHandler) snapshotRefIDFromResolverCache(rc solver.ResolverCache, uh digest.Digest) (string, error) {
+	vals, release, err := rc.Lock(uh)
+	if err != nil {
+		return "", err
+	}
+	defer release(nil)
+
+	refID := ""
+	for _, v := range vals {
+		v2, ok := v.(*metadataWithRef)
+		if !ok || v2 == nil {
+			return "", errors.Errorf("invalid HTTP resolver cache value: %T", v)
+		}
+		if hs.src.Checksum != "" && v2.Digest != hs.src.Checksum {
+			continue
+		}
+		if v2.refID != "" {
+			hs.resolved = v2
+			refID = v2.refID
+		}
+	}
+	if hs.src.Checksum != "" && len(vals) > 0 && refID == "" {
+		return "", errors.Errorf("digest mismatch for %s: %s (expected: %s)", hs.src.URL, vals[0], hs.src.Checksum)
+	}
+	return refID, nil
 }
 
 func (hs *httpSourceHandler) newHTTPRequest(ctx context.Context, g session.Group) (*http.Request, error) {
