@@ -1808,6 +1808,8 @@ func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr er
 				return nil, nil, err
 			}
 		}
+
+		mounts = mount.RemoveVolatileOption(mounts)
 		if err := mount.All(mounts, dir); err != nil {
 			return nil, nil, err
 		}
