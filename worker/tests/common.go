@@ -65,6 +65,7 @@ func NewCtx(s string) context.Context {
 func TestWorkerExec(t *testing.T, w *base.Worker) {
 	ctx := NewCtx("buildkit-test")
 	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(errors.WithStack(context.Canceled))
 	sm, err := session.NewManager()
 	require.NoError(t, err)
 
@@ -110,13 +111,16 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	execID := identity.NewID()
 	eg := errgroup.Group{}
 	started = make(chan struct{})
+	pid1StdinR, pid1StdinW := io.Pipe()
+	defer pid1StdinW.Close()
 	eg.Go(func() error {
 		_, err := w.WorkerOpt.Executor.Run(ctx, execID, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
-				Args: []string{"sleep", "10"},
+				Args: []string{"cat"},
 				Cwd:  "/",
 				Env:  []string{"PATH=/bin:/usr/bin:/sbin:/usr/sbin"},
 			},
+			Stdin: pid1StdinR,
 		}, started)
 		return err
 	})
@@ -130,7 +134,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	stdout.Reset()
 	stderr.Reset()
 
-	// verify pid1 is the sleep command via Exec
+	// verify pid1 is the cat command via Exec
 	err = w.WorkerOpt.Executor.Exec(ctx, execID, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"ps", "-o", "pid,comm"},
@@ -141,8 +145,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	t.Logf("Stdout: %s", stdout.String())
 	t.Logf("Stderr: %s", stderr.String())
 	require.NoError(t, err)
-	// verify pid1 is sleep
-	require.Contains(t, stdout.String(), "1 sleep")
+	// verify pid1 is cat
+	require.Contains(t, stdout.String(), "1 cat")
 	require.Empty(t, stderr.String())
 
 	// simulate: echo -n "hello" | cat > /tmp/msg
@@ -178,11 +182,24 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	require.Empty(t, stderr.String())
 
 	// stop pid1
-	cancel(errors.WithStack(context.Canceled))
+	require.NoError(t, pid1StdinW.Close())
 
-	err = eg.Wait()
-	// we expect pid1 to get canceled after we test the exec
-	require.True(t, errors.Is(err, context.Canceled))
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- eg.Wait()
+	}()
+	select {
+	case err = <-waitCh:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		cancel(errors.WithStack(context.Canceled))
+		select {
+		case err = <-waitCh:
+			require.Failf(t, "timed out waiting for pid1 to exit", "pid1 returned after cancellation: %+v", err)
+		case <-time.After(5 * time.Second):
+			require.FailNow(t, "timed out waiting for pid1 to exit after cancellation")
+		}
+	}
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
