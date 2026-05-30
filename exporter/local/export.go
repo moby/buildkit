@@ -161,7 +161,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 				}
 			}
 
-			progress := NewProgressHandler(ctx, lbl)
+			progress, closeProgress := NewProgressHandler(ctx, lbl)
+			defer closeProgress()
 			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
 				return err
 			}
@@ -197,7 +198,12 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	return nil, nil, nil, nil
 }
 
-func NewProgressHandler(ctx context.Context, id string) func(int, bool) {
+// NewProgressHandler returns a callback for reporting transfer progress and a
+// cleanup function that ensures the underlying progress writer is closed.
+// The cleanup function must be called by the caller (typically via defer), so
+// the writer is released even when the callback is never invoked with
+// last=true (for example when an early error short-circuits the transfer).
+func NewProgressHandler(ctx context.Context, id string) (func(int, bool), func()) {
 	limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
 	pw, _, _ := progress.NewFromContext(ctx)
 	now := time.Now()
@@ -206,7 +212,7 @@ func NewProgressHandler(ctx context.Context, id string) func(int, bool) {
 		Action:  "transferring",
 	}
 	pw.Write(id, st)
-	return func(s int, last bool) {
+	cb := func(s int, last bool) {
 		if last || limiter.Allow() {
 			st.Current = s
 			if last {
@@ -214,9 +220,7 @@ func NewProgressHandler(ctx context.Context, id string) func(int, bool) {
 				st.Completed = &now
 			}
 			pw.Write(id, st)
-			if last {
-				pw.Close()
-			}
 		}
 	}
+	return cb, func() { pw.Close() }
 }
