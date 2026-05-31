@@ -814,6 +814,37 @@ export JAEGER_TRACE=0.0.0.0:6831
 > set the environment variable `setx -m JAEGER_TRACE "0.0.0.0:6831"`,
 > restart `buildkitd` in a new terminal and the traces will be collected automatically.
 
+### OTLP Exporter
+
+BuildKit also supports exporting traces via the [OpenTelemetry Protocol (OTLP)](https://opentelemetry.io/docs/specs/otlp/).
+To use OTLP instead of Jaeger, set `OTEL_TRACES_EXPORTER` to `otlp` and configure the OTLP endpoint:
+
+#### Using gRPC protocol (default)
+
+```bash
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# restart buildkitd and buildctl
+```
+
+#### Using HTTP/protobuf protocol
+
+```bash
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+# restart buildkitd and buildctl
+```
+
+The OTLP exporter can send traces to any OTLP-compatible backend such as
+[Jaeger](https://www.jaegertracing.io/),
+[Grafana Tempo](https://grafana.com/oss/tempo/),
+[Datadog](https://www.datadoghq.com/), or
+[AWS X-Ray](https://aws.amazon.com/xray/).
+
+For a full list of supported environment variables, see the
+[OpenTelemetry Environment Variable Specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
+
 ## Running BuildKit without root privileges
 
 Please refer to [`docs/rootless.md`](docs/rootless.md).
