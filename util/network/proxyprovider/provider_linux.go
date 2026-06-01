@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"maps"
 	"math/big"
 	"net"
 	"net/http"
@@ -24,7 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -55,28 +56,32 @@ const (
 )
 
 type Opt struct {
-	Root     string
-	PoolSize int
+	Root                 string
+	PoolSize             int
+	EgressProviders      map[pb.NetMode]network.Provider
+	OwnedEgressProviders []network.Provider
 }
 
 func Supported() bool {
 	return true
 }
 
-func New(opt Opt) (network.Provider, error) {
+func New(opt Opt) (network.ProxyProvider, error) {
 	cleanOldNamespaces(opt.Root)
 	certPEM, ca, key, err := newCA()
 	if err != nil {
 		return nil, err
 	}
 	p := &provider{
-		root:  opt.Root,
-		caPEM: certPEM,
-		ca:    ca,
-		caKey: key,
-		certs: map[string]*certCacheEntry{},
-		lru:   list.New(),
-		client: &http.Transport{
+		root:                 opt.Root,
+		caPEM:                certPEM,
+		ca:                   ca,
+		caKey:                key,
+		certs:                map[string]*certCacheEntry{},
+		lru:                  list.New(),
+		egressProviders:      maps.Clone(opt.EgressProviders),
+		ownedEgressProviders: slices.Clone(opt.OwnedEgressProviders),
+		transport: &http.Transport{
 			Proxy:              nil,
 			DisableCompression: true,
 		},
@@ -105,7 +110,10 @@ type provider struct {
 	certsMu sync.Mutex
 	certs   map[string]*certCacheEntry
 	lru     *list.List
-	client  *http.Transport
+
+	egressProviders      map[pb.NetMode]network.Provider
+	ownedEgressProviders []network.Provider
+	transport            *http.Transport
 }
 
 type certCacheEntry struct {
@@ -117,11 +125,16 @@ type certCacheEntry struct {
 
 func (p *provider) Close() error {
 	err := p.pool.Close()
-	p.client.CloseIdleConnections()
+	p.transport.CloseIdleConnections()
+	for _, provider := range p.ownedEgressProviders {
+		if e := provider.Close(); e != nil && err == nil {
+			err = e
+		}
+	}
 	return err
 }
 
-func (p *provider) New(ctx context.Context, hostname string, opt network.NamespaceOptions) (_ network.Namespace, retErr error) {
+func (p *provider) NewProxy(ctx context.Context, proxy *network.ProxyConfig) (_ network.ProxyNamespace, retErr error) {
 	ns, err := p.pool.Get(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +144,7 @@ func (p *provider) New(ctx context.Context, hostname string, opt network.Namespa
 			_ = p.pool.Discard(ns)
 		}
 	}()
-	if err := ns.startProxy(ctx, opt.ProxyPolicy, opt.ProxyCapture); err != nil {
+	if err := ns.startProxy(ctx, proxy); err != nil {
 		return nil, err
 	}
 	return ns, nil
@@ -154,8 +167,8 @@ func (p *provider) newNS(ctx context.Context) (_ *proxyNS, retErr error) {
 		provider:    p,
 		nsPath:      nsPath,
 		proxyNSPath: proxyNSPath,
-		hostName:    ifName("bkpxh", n),
-		ctrName:     ifName("bkpxc", n),
+		hostName:    ifName("bkpxh", id),
+		ctrName:     ifName("bkpxc", id),
 		hostIP:      proxyHostIP(n),
 		ctrIP:       proxyContainerIP(n),
 		prefix:      proxyPrefix(),
@@ -181,8 +194,10 @@ type proxyNS struct {
 	ctrIP       net.IP
 	prefix      int
 
-	server *http.Server
-	ln     net.Listener
+	server    *http.Server
+	ln        net.Listener
+	egressNS  network.Namespace
+	transport *http.Transport
 }
 
 func (n *proxyNS) Set(s *specs.Spec) error {
@@ -215,6 +230,16 @@ func (n *proxyNS) stopProxy() error {
 	}
 	n.server = nil
 	n.ln = nil
+	if n.transport != nil {
+		n.transport.CloseIdleConnections()
+		n.transport = nil
+	}
+	if n.egressNS != nil {
+		if e := n.egressNS.Close(); e != nil && err == nil {
+			err = e
+		}
+		n.egressNS = nil
+	}
 	return err
 }
 
@@ -347,16 +372,37 @@ func (n *proxyNS) setupVeth() error {
 	return errors.WithStack(h.LinkSetUp(lo))
 }
 
-func (n *proxyNS) startProxy(ctx context.Context, policy network.ProxyPolicy, capture *network.ProxyCapture) error {
+func (n *proxyNS) startProxy(ctx context.Context, proxy *network.ProxyConfig) error {
+	if proxy == nil {
+		return errors.New("proxy network config is required")
+	}
 	ln, err := listenInNetNS(ctx, n.proxyNSPath, "tcp4", net.JoinHostPort(n.hostIP.String(), "0"))
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	n.ln = ln
+	egressNS, err := n.egressNamespace(ctx, proxy.EgressMode)
+	if err != nil {
+		_ = ln.Close()
+		n.ln = nil
+		return err
+	}
+	dialer, ok := egressNS.(network.Dialer)
+	if !ok {
+		_ = egressNS.Close()
+		_ = ln.Close()
+		n.ln = nil
+		return errors.Errorf("proxy egress network mode %s does not support dialing", proxy.EgressMode)
+	}
+	n.egressNS = egressNS
+	transport := n.provider.transport.Clone()
+	transport.DialContext = dialer.DialContext
+	n.transport = transport
 	handler := &proxyHandler{
-		provider: n.provider,
-		policy:   policy,
-		capture:  capture,
+		provider:  n.provider,
+		policy:    proxy.Policy,
+		capture:   proxy.Capture,
+		transport: transport,
 	}
 	n.server = &http.Server{
 		Handler:           handler,
@@ -366,6 +412,18 @@ func (n *proxyNS) startProxy(ctx context.Context, policy network.ProxyPolicy, ca
 		_ = n.server.Serve(ln)
 	}()
 	return nil
+}
+
+func (n *proxyNS) egressNamespace(ctx context.Context, mode pb.NetMode) (network.Namespace, error) {
+	provider, ok := n.provider.egressProviders[mode]
+	if !ok {
+		return nil, errors.Errorf("unknown proxy egress network mode %s", mode)
+	}
+	ns, err := provider.New(ctx, "", network.NamespaceOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return ns, nil
 }
 
 func listenInNetNS(ctx context.Context, nsPath, networkName, address string) (net.Listener, error) {
@@ -437,9 +495,10 @@ func (n *proxyNS) deleteVeth() error {
 }
 
 type proxyHandler struct {
-	provider *provider
-	policy   network.ProxyPolicy
-	capture  *network.ProxyCapture
+	provider  *provider
+	policy    network.ProxyPolicy
+	capture   *network.ProxyCapture
+	transport *http.Transport
 }
 
 func (h *proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -683,7 +742,7 @@ func (h *proxyHandler) roundTrip(r *http.Request) (*http.Response, error) {
 	stripProxyHeaders(r.Header)
 	r.Header.Del("Accept-Encoding")
 	r.RequestURI = ""
-	return h.provider.client.RoundTrip(r.WithContext(context.WithoutCancel(r.Context())))
+	return h.transport.RoundTrip(r.WithContext(context.WithoutCancel(r.Context())))
 }
 
 func (h *proxyHandler) check(ctx context.Context, method, rawURL string) (*neturl.URL, error) {
@@ -913,8 +972,13 @@ func proxyIP(n uint32, offset byte) net.IP {
 	return net.IPv4(10, 89, byte(block/64), byte((block%64)*4)+offset)
 }
 
-func ifName(prefix string, n uint32) string {
-	return prefix + strconv.FormatUint(uint64(n%1000000000), 10)
+func ifName(prefix, id string) string {
+	const ifNameMaxLen = 15
+	maxIDLen := ifNameMaxLen - len(prefix)
+	if len(id) > maxIDLen {
+		id = id[:maxIDLen]
+	}
+	return prefix + id
 }
 
 func stripPort(hostport string) string {

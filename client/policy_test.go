@@ -31,6 +31,7 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/pgpsign"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
@@ -51,7 +52,7 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 
 	payload := []byte("buildkit proxy ok\n")
 	convertedPayload := []byte("buildkit proxy converted ok\n")
-	httpSrv, httpURL := newProxyReachableHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	httpSrv, httpURL := newProxyHTTPServer(t, "0.0.0.0", testHostIP(t), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/allowed":
 			_, _ = w.Write(payload)
@@ -64,7 +65,7 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	}))
 	defer httpSrv.Close()
 	var leakHit atomic.Int32
-	leakSrv, leakURL := newProxyReachableHTTPServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	leakSrv, leakURL := newProxyHTTPServer(t, "0.0.0.0", testHostIP(t), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		leakHit.Add(1)
 		_, _ = w.Write([]byte("host namespace leak\n"))
 	}))
@@ -250,17 +251,126 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "unsuccessful_response", materialsErr.Incomplete[0].Reason)
 }
 
-func newProxyReachableHTTPServer(t *testing.T, handler http.Handler) (*httptest.Server, string) {
+func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCNINetwork)
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	hostPayload := []byte("proxy host ok\n")
+	var hostHit atomic.Int32
+	hostSrv, hostURL := newProxyHTTPServer(t, "127.0.0.1", "127.0.0.1", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hostHit.Add(1)
+		if r.URL.Path != "/host" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(hostPayload)
+	}))
+	defer hostSrv.Close()
+	hostPath := hostURL + "/host"
+
+	internetURL := "http://example.com/"
+	allowedHost := []string{entitlements.EntitlementNetworkHost.String()}
+
+	// Host mode without the network.host entitlement should be rejected before exec starts.
+	hostWithoutEntitlement := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`wget -q -O- %s`, hostPath), llb.Network(llb.NetModeHost), llb.IgnoreCache).
+		Root()
+	def, err := hostWithoutEntitlement.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "network.host is not allowed")
+	require.Equal(t, int32(0), hostHit.Load())
+
+	runProxySolve := func(name string, st llb.State, allowedEntitlements []string) (string, error) {
+		t.Helper()
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err, name)
+
+		statusCh := make(chan *SolveStatus)
+		logsCh := make(chan string, 1)
+		go func() {
+			var b strings.Builder
+			for st := range statusCh {
+				for _, l := range st.Logs {
+					b.Write(l.Data)
+				}
+			}
+			logsCh <- b.String()
+		}()
+
+		_, err = c.Solve(ctx, def, SolveOpt{
+			ProxyNetwork:        true,
+			AllowedEntitlements: allowedEntitlements,
+		}, statusCh)
+		return <-logsCh, err
+	}
+
+	// Bridge proxy egress should allow normal external network access.
+	logOutput, err := runProxySolve("bridge internet", llb.Image("alpine:latest").
+		Run(llb.Shlexf(`wget -q -O /tmp/internet %s`, internetURL), llb.IgnoreCache).
+		Root(), nil)
+	require.NoError(t, err)
+	require.Contains(t, logOutput, "proxy network requests:\n- GET "+internetURL+" -> 200")
+	require.Equal(t, int32(0), hostHit.Load())
+
+	// Bridge proxy egress should not reach services bound to buildkitd host loopback.
+	logOutput, err = runProxySolve("bridge host", llb.Image("alpine:latest").
+		// Clear NO_PROXY so the localhost URL is forced through the BuildKit proxy.
+		Run(llb.Shlexf(`sh -c '! env NO_PROXY= no_proxy= wget -T 2 -q -O- %s'`, hostPath), llb.IgnoreCache).
+		Root(), nil)
+	require.NoError(t, err)
+	require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 502")
+	require.Equal(t, int32(0), hostHit.Load())
+
+	// Host proxy egress is allowed only with the network.host entitlement.
+	logOutput, err = runProxySolve("host allowed", llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c 'env NO_PROXY= no_proxy= wget -q -O- %s | grep "proxy host ok"'`, hostPath), llb.Network(llb.NetModeHost), llb.IgnoreCache).
+		Root(), allowedHost)
+	require.NoError(t, err)
+	require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 200")
+	require.Equal(t, int32(1), hostHit.Load())
+
+	// None mode should not inject proxy env or allow external network access.
+	logOutput, err = runProxySolve("none internet", llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c '! env | grep -i "^HTTP_PROXY="; ! wget -T 2 -q -O- %s'`, internetURL), llb.Network(llb.NetModeNone), llb.IgnoreCache).
+		Root(), nil)
+	require.NoError(t, err)
+	require.NotContains(t, logOutput, internetURL)
+
+	// None mode should also be unable to reach buildkitd host loopback.
+	logOutput, err = runProxySolve("none host", llb.Image("alpine:latest").
+		Run(llb.Shlexf(`sh -c '! env | grep -i "^HTTP_PROXY="; ! wget -T 2 -q -O- %s'`, hostPath), llb.Network(llb.NetModeNone), llb.IgnoreCache).
+		Root(), nil)
+	require.NoError(t, err)
+	require.NotContains(t, logOutput, hostPath)
+	require.Equal(t, int32(1), hostHit.Load())
+}
+
+func newProxyHTTPServer(t *testing.T, listenHost, urlHost string, handler http.Handler) (*httptest.Server, string) {
 	t.Helper()
 	var lc net.ListenConfig
-	ln, err := lc.Listen(t.Context(), "tcp4", "0.0.0.0:0")
+	ln, err := lc.Listen(t.Context(), "tcp4", net.JoinHostPort(listenHost, "0"))
 	require.NoError(t, err)
 	srv := httptest.NewUnstartedServer(handler)
 	srv.Listener = ln
 	srv.Start()
 	_, port, err := net.SplitHostPort(ln.Addr().String())
 	require.NoError(t, err)
-	return srv, "http://" + net.JoinHostPort(testHostIP(t), port)
+	return srv, "http://" + net.JoinHostPort(urlHost, port)
 }
 
 func testHostIP(t *testing.T) string {

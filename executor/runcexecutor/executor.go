@@ -59,6 +59,7 @@ type Opt struct {
 	TracingSocket   string
 	ResourceMonitor *resources.Monitor
 	CDIManager      *cdidevices.Manager
+	ProxyProvider   network.ProxyProvider
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -69,6 +70,7 @@ type runcExecutor struct {
 	cgroupParent     string
 	rootless         bool
 	networkProviders map[pb.NetMode]network.Provider
+	proxyProvider    network.ProxyProvider
 	processMode      oci.ProcessMode
 	idmap            *user.IdentityMapping
 	noPivot          bool
@@ -137,6 +139,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		cgroupParent:     opt.DefaultCgroupParent,
 		rootless:         opt.Rootless,
 		networkProviders: networkProviders,
+		proxyProvider:    opt.ProxyProvider,
 		processMode:      opt.ProcessMode,
 		idmap:            opt.IdentityMapping,
 		noPivot:          opt.NoPivot,
@@ -183,14 +186,29 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		bklog.G(ctx).Info("enabling HostNetworking")
 	}
 
-	provider, ok := w.networkProviders[meta.NetMode]
-	if !ok {
-		return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
+	proxyConfig := meta.Proxy
+	var provider network.Provider
+	if proxyConfig == nil {
+		var ok bool
+		provider, ok = w.networkProviders[meta.NetMode]
+		if !ok {
+			return nil, errors.Errorf("unknown network mode %s", meta.NetMode)
+		}
+	} else if w.proxyProvider == nil {
+		return nil, errors.New("proxy network provider is not available")
+	} else {
+		proxyConfig = &network.ProxyConfig{
+			Policy:     proxyConfig.Policy,
+			Capture:    proxyConfig.Capture,
+			EgressMode: meta.NetMode,
+		}
 	}
-	namespace, err := provider.New(ctx, meta.Hostname, network.NamespaceOptions{
-		ProxyPolicy:  meta.ProxyPolicy,
-		ProxyCapture: meta.ProxyCapture,
-	})
+	var namespace network.Namespace
+	if proxyConfig != nil {
+		namespace, err = w.proxyProvider.NewProxy(ctx, proxyConfig)
+	} else {
+		namespace, err = provider.New(ctx, meta.Hostname, network.NamespaceOptions{})
+	}
 	if err != nil {
 		return nil, err
 	}

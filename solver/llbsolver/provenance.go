@@ -343,7 +343,7 @@ func captureProvenance(ctx context.Context, res solver.CachedResultWithProvenanc
 			if pr.Network != pb.NetMode_NONE {
 				c.NetworkAccess = true
 			}
-			if pr.Network == pb.NetMode_PROXY {
+			if op.ProxyNetwork() {
 				c.ProxyNetwork = true
 				proxyCap := op.ProxyCapture()
 				if proxyCap != nil {

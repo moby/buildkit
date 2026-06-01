@@ -47,7 +47,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	np, npResolvedMode, err := netproviders.Providers(nopt)
+	np, proxyProvider, npResolvedMode, err := netproviders.Providers(nopt)
 	if err != nil {
 		return opt, err
 	}
@@ -80,6 +80,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		DefaultCgroupParent: defaultCgroupParent,
 		ResourceMonitor:     rm,
 		CDIManager:          cdiManager,
+		ProxyProvider:       proxyProvider,
 	}, np)
 	if err != nil {
 		return opt, err
@@ -141,6 +142,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Labels:           xlabels,
 		MetadataStore:    md,
 		NetworkProviders: np,
+		ProxyProvider:    proxyProvider,
 		Executor:         exe,
 		Snapshotter:      containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap),
 		ContentStore:     c,

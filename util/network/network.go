@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"io"
+	"net"
 
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -14,10 +15,7 @@ type Provider interface {
 	New(ctx context.Context, hostname string, opt NamespaceOptions) (Namespace, error)
 }
 
-type NamespaceOptions struct {
-	ProxyPolicy  ProxyPolicy
-	ProxyCapture *ProxyCapture
-}
+type NamespaceOptions struct{}
 
 // Namespace of network for workers
 type Namespace interface {
@@ -26,4 +24,8 @@ type Namespace interface {
 	Set(*specs.Spec) error
 
 	Sample() (*resourcestypes.NetworkSample, error)
+}
+
+type Dialer interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }

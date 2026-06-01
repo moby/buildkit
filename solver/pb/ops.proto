@@ -83,7 +83,6 @@ enum NetMode {
 	UNSET = 0; // sandbox
 	HOST = 1;
 	NONE = 2;
-	PROXY = 3;
 }
 
 enum SecurityMode {

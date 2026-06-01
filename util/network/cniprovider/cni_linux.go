@@ -2,13 +2,14 @@ package cniprovider
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 
-	"github.com/containernetworking/plugins/pkg/ns"
+	netns "github.com/containernetworking/plugins/pkg/ns"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
@@ -90,7 +91,7 @@ func withDetachedNetNSIfAny(ctx context.Context, fn func(context.Context) error)
 		defer root.Close()
 		if _, err := root.Lstat("netns"); err == nil {
 			detachedNetNS := filepath.Join(stateDir, "netns")
-			return ns.WithNetNSPath(detachedNetNS, func(_ ns.NetNS) error {
+			return netns.WithNetNSPath(detachedNetNS, func(_ netns.NetNS) error {
 				ctx := context.WithValue(ctx, contextKeyDetachedNetNS, detachedNetNS)
 				bklog.G(ctx).Debugf("Entering RootlessKit's detached netns %q", detachedNetNS)
 				err2 := fn(ctx)
@@ -102,4 +103,17 @@ func withDetachedNetNSIfAny(ctx context.Context, fn func(context.Context) error)
 		}
 	}
 	return fn(ctx)
+}
+
+func (ns *cniNS) DialContext(ctx context.Context, networkName, address string) (net.Conn, error) {
+	var conn net.Conn
+	err := netns.WithNetNSPath(ns.nativeID, func(_ netns.NetNS) error {
+		var err error
+		conn, err = (&net.Dialer{}).DialContext(ctx, networkName, address)
+		return err
+	})
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return conn, nil
 }

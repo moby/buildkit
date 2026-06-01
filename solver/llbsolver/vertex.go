@@ -247,7 +247,7 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
 	return loadLLB(ctx, def, polEngine, nil, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
-		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
+		vtx, err := newVertex(dgst, op, load, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -257,7 +257,7 @@ func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluat
 
 func loadWithProxyNetwork(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork bool, opts ...LoadOpt) (solver.Edge, error) {
 	return loadLLB(ctx, def, polEngine, &proxyNetwork, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
-		vtx, err := newVertex(dgst, op.Op, op.Metadata, load, opts...)
+		vtx, err := newVertex(dgst, op, load, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -278,21 +278,21 @@ func vertexOptions(opMeta *pb.OpMetadata) solver.VertexOptions {
 	return opt
 }
 
-func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
-	opt := vertexOptions(opMeta)
+func newVertex(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
+	opt := vertexOptions(op.Metadata)
 	for _, fn := range opts {
-		if err := fn(op, opMeta, &opt); err != nil {
+		if err := fn(op.Op, op.Metadata, &opt); err != nil {
 			return nil, err
 		}
 	}
 
-	name, err := llbOpName(op, func(dgst string) (solver.Vertex, error) {
+	name, err := llbOpName(op.Op, func(dgst string) (solver.Vertex, error) {
 		return load(digest.Digest(dgst))
 	})
 	if err != nil {
 		return nil, err
 	}
-	vtx := &vertex{sys: op, options: opt, digest: dgst, name: name}
+	vtx := &vertex{sys: op.Op, options: opt, digest: dgst, name: name}
 	for _, in := range op.Inputs {
 		sub, err := load(digest.Digest(in.Digest))
 		if err != nil {
@@ -330,6 +330,9 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 	if err != nil {
 		return "", err
 	}
+	if op.ProxyNetwork {
+		dt = append(dt, []byte("\x00buildkit.proxy-network.v0")...)
+	}
 
 	newDgst := digest.FromBytes(dt)
 	if newDgst != dgst {
@@ -343,7 +346,8 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 // op is a private wrapper around pb.Op that includes its metadata.
 type op struct {
 	*pb.Op
-	Metadata *pb.OpMetadata
+	Metadata     *pb.OpMetadata
+	ProxyNetwork bool
 }
 
 // loadLLB loads LLB.
@@ -376,7 +380,9 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 
 	if proxyNetwork != nil {
 		for _, op := range allOps {
-			if err := setProxyNetwork(op.Op, *proxyNetwork); err != nil {
+			var err error
+			op.ProxyNetwork, err = proxyNetworkForOp(op.Op, *proxyNetwork)
+			if err != nil {
 				return solver.Edge{}, err
 			}
 		}

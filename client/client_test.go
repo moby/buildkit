@@ -319,6 +319,15 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 		}),
 	)
 
+	integration.Run(t, integration.TestFuncs(
+		testProxyNetworkModesNoRootless,
+	),
+		mirrors,
+		integration.WithMatrix("netmode", map[string]any{
+			"bridge": proxyBridgeNetwork,
+		}),
+	)
+
 	integration.Run(
 		t,
 		integration.TestFuncs(testBridgeNetworkingDNSNoRootless),
@@ -12740,6 +12749,21 @@ func (*netModeHost) UpdateConfigFile(in string) (string, func() error) {
 	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n", nil
 }
 
+type netModeProxyBridge struct{}
+
+func (*netModeProxyBridge) UpdateConfigFile(in string) (string, func() error) {
+	return in + `
+
+insecure-entitlements = ["network.host"]
+
+[worker.oci]
+networkMode = "bridge"
+
+[worker.containerd]
+networkMode = "bridge"
+`, nil
+}
+
 type netModeDefault struct{}
 
 func (*netModeDefault) UpdateConfigFile(in string) (string, func() error) {
@@ -12765,9 +12789,10 @@ nameservers = ["10.11.0.1"]
 }
 
 var (
-	hostNetwork      integration.ConfigUpdater = &netModeHost{}
-	defaultNetwork   integration.ConfigUpdater = &netModeDefault{}
-	bridgeDNSNetwork integration.ConfigUpdater = &netModeBridgeDNS{}
+	hostNetwork        integration.ConfigUpdater = &netModeHost{}
+	defaultNetwork     integration.ConfigUpdater = &netModeDefault{}
+	proxyBridgeNetwork integration.ConfigUpdater = &netModeProxyBridge{}
+	bridgeDNSNetwork   integration.ConfigUpdater = &netModeBridgeDNS{}
 )
 
 func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
