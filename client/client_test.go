@@ -9499,19 +9499,29 @@ loop0:
 		snapshotterName := sb.Snapshotter()
 		snapshotService := client.SnapshotService(snapshotterName)
 
-		leases, err := client.LeasesService().List(ctx)
-		require.NoError(t, err)
-		count := 0
-		for _, l := range leases {
-			_, isTemp := l.Labels["buildkit/lease.temporary"]
-			_, isExpire := l.Labels["containerd.io/gc.expire"]
-			if isTemp && isExpire {
-				continue
+		checkLeases := func() {
+			leases, err := client.LeasesService().List(ctx)
+			require.NoError(t, err)
+			count := 0
+			for _, l := range leases {
+				_, isTemp := l.Labels["buildkit/lease.temporary"]
+				_, isExpire := l.Labels["containerd.io/gc.expire"]
+				if isTemp && isExpire {
+					continue
+				}
+				resources, err := client.LeasesService().ListResources(ctx, l)
+				require.NoError(t, err)
+				if len(resources) == 0 {
+					continue
+				}
+				count++
+				t.Logf("lease: %v", l)
+				for _, r := range resources {
+					t.Logf("lease resource: %v", r)
+				}
 			}
-			count++
-			t.Logf("lease: %v", l)
+			require.Equal(t, 0, count)
 		}
-		require.Equal(t, 0, count)
 
 		if checkContent {
 			images, err := client.ImageService().List(ctx)
@@ -9539,6 +9549,7 @@ loop0:
 		}
 
 		if !checkContent {
+			checkLeases()
 			return
 		}
 
@@ -9573,6 +9584,8 @@ loop0:
 			retries++
 			time.Sleep(500 * time.Millisecond)
 		}
+
+		checkLeases()
 	}
 }
 
