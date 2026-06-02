@@ -406,6 +406,7 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 					ref, cerr := active.Ref.Commit(ctx)
 					if cerr != nil {
 						err = errors.Wrapf(err, "error committing %s: %s", active.Ref.ID(), cerr)
+						active.Ref.Release(context.TODO())
 						continue
 					}
 					execMounts[active.MountIndex] = worker.NewWorkerRefResult(ref, e.w)
