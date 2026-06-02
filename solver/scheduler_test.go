@@ -1108,6 +1108,71 @@ func TestSlowCache(t *testing.T) {
 	j1 = nil
 }
 
+func TestSlowCacheErrorResultCloneRelease(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j, err := l.NewJob("j0")
+	require.NoError(t, err)
+	defer func() {
+		if j != nil {
+			require.NoError(t, j.Discard())
+		}
+	}()
+
+	var releaseCount atomic.Int64
+
+	inputRes := &countedResult{
+		id:           identity.NewID(),
+		value:        "input",
+		releaseCount: &releaseCount,
+	}
+
+	g := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					result:       inputRes,
+				})},
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: func(context.Context, Result, session.Group) (digest.Digest, error) {
+					return "", errors.Errorf("slow cache error")
+				},
+			},
+		}),
+	}
+
+	_, err = j.Build(ctx, g)
+	require.Error(t, err)
+
+	var sce *SlowCacheError
+	require.ErrorAs(t, err, &sce)
+	require.NotNil(t, sce.Result)
+
+	require.NoError(t, j.Discard())
+	j = nil
+
+	require.Never(t, func() bool {
+		return releaseCount.Load() != 0
+	}, 100*time.Millisecond, 10*time.Millisecond)
+
+	require.NoError(t, sce.Result.Release(ctx))
+	require.Eventually(t, func() bool {
+		return releaseCount.Load() == 1
+	}, time.Second, 10*time.Millisecond)
+}
+
 // TestParallelInputs validates that inputs are processed in parallel
 func TestParallelInputs(t *testing.T) {
 	t.Parallel()
@@ -3655,6 +3720,7 @@ type vtxOpt struct {
 	execPreFunc      func(context.Context) error
 	inputs           []Edge
 	value            string
+	result           Result
 	slowCacheCompute map[int]ResultBasedCacheFunc
 	selectors        map[int]digest.Digest
 	cacheSource      CacheManager
@@ -3794,6 +3860,9 @@ func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 func (v *vertex) Exec(ctx context.Context, job JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
+	}
+	if v.opt.result != nil {
+		return []Result{v.opt.result}, nil
 	}
 	return []Result{&dummyResult{id: identity.NewID(), value: v.opt.value}}, nil
 }
@@ -3989,6 +4058,28 @@ func (r *dummyResult) ID() string                    { return r.id }
 func (r *dummyResult) Release(context.Context) error { return nil }
 func (r *dummyResult) Sys() any                      { return r }
 func (r *dummyResult) Clone() Result                 { return r }
+
+type countedResult struct {
+	id           string
+	value        string
+	releaseCount *atomic.Int64
+}
+
+func (r *countedResult) ID() string { return r.id }
+func (r *countedResult) Release(context.Context) error {
+	if r.releaseCount != nil {
+		r.releaseCount.Add(1)
+	}
+	return nil
+}
+func (r *countedResult) Sys() any { return &dummyResult{id: r.id, value: r.value} }
+func (r *countedResult) Clone() Result {
+	return &countedResult{
+		id:           r.id,
+		value:        r.value,
+		releaseCount: r.releaseCount,
+	}
+}
 
 func testOpResolver(v Vertex, b Builder) (Op, error) {
 	if op, ok := v.Sys().(Op); ok {

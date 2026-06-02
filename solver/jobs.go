@@ -1048,7 +1048,9 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, fun
 // evaluated, hence "slow" cache.
 func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessFunc, f ResultBasedCacheFunc, res Result) (dgst digest.Digest, err error) {
 	defer func() {
-		err = WrapSlowCache(err, index, NewSharedResult(res).Clone())
+		if err != nil {
+			err = WrapSlowCache(err, index, res.Clone())
+		}
 		err = errdefs.WithOp(err, s.st.vtx.Sys(), s.st.vtx.Options().Description)
 		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
