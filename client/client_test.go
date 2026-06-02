@@ -3817,6 +3817,7 @@ func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sa
 	require.NoError(t, err)
 
 	for range 10 {
+		requests.Store(0)
 		_, err := c.Solve(sb.Context(), def, SolveOpt{
 			Exports: []ExportEntry{
 				{

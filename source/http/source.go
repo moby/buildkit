@@ -868,9 +868,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 	}
 
 	if refID != "" {
-		ref, err := hs.cache.Get(ctx, hs.resolved.refID, nil)
+		ref, err := hs.cache.Get(ctx, refID, nil)
 		if err != nil {
-			bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", hs.resolved.refID, hs.src.URL)
+			bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", refID, hs.src.URL)
 		} else {
 			return ref, nil
 		}
