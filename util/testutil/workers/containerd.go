@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -102,6 +103,7 @@ func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
+	extraEnv := slices.Clone(c.ExtraEnv)
 
 	deferF := &integration.MultiCloser{}
 	cl = deferF.F()
@@ -188,11 +190,11 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_NET=host",
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=none",
 			"CONTAINERD_ROOTLESS_ROOTLESSKIT_FLAGS=--mtu=0",
-		}, c.ExtraEnv...), "containerd-rootless.sh", "-c", configFile)
+		}, extraEnv...), "containerd-rootless.sh", "-c", configFile)
 	}
 
 	cmd := exec.CommandContext(context.TODO(), containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
-	cmd.Env = append(os.Environ(), c.ExtraEnv...)
+	cmd.Env = append(os.Environ(), extraEnv...)
 
 	ctdStop, err := integration.StartCmd(cmd, cfg.Logs)
 	if err != nil {
@@ -217,7 +219,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 	buildkitdArgs = append(buildkitdArgs, snBuildkitdArgs...)
 
 	if runtime.GOOS != "windows" && c.Snapshotter != "native" {
-		c.ExtraEnv = append(c.ExtraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+		extraEnv = append(extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
 	}
 	if rootless {
 		pidStr, err := os.ReadFile(filepath.Join(rootlessKitState, "child_pid"))
@@ -232,7 +234,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 			"nsenter", "-U", "--preserve-credentials", "-m", "-t", fmt.Sprintf("%d", pid)},
 			append(buildkitdArgs, "--containerd-worker-snapshotter=native")...)
 	}
-	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, c.ExtraEnv)
+	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, c.UID, c.GID, extraEnv)
 	if err != nil {
 		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
@@ -246,7 +248,7 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 		rootless:          rootless,
 		netnsDetached:     false,
 		snapshotter:       c.Snapshotter,
-		extraEnv:          c.ExtraEnv,
+		extraEnv:          extraEnv,
 	}, cl, nil
 }
 
