@@ -406,6 +406,7 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 					ref, cerr := active.Ref.Commit(ctx)
 					if cerr != nil {
 						err = errors.Wrapf(err, "error committing %s: %s", active.Ref.ID(), cerr)
+						active.Ref.Release(context.TODO())
 						continue
 					}
 					execMounts[active.MountIndex] = worker.NewWorkerRefResult(ref, e.w)
@@ -509,6 +510,13 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		if mutable, ok := out.Ref.(cache.MutableRef); ok {
 			ref, err := mutable.Commit(ctx)
 			if err != nil {
+				// Release the outputs already committed in earlier
+				// iterations; an internal commit failure is not a
+				// user-facing exec error so they don't belong in
+				// ExecError.Mounts.
+				for _, r := range results {
+					r.Release(context.TODO())
+				}
 				return nil, errors.Wrapf(err, "error committing %s", mutable.ID())
 			}
 			results = append(results, worker.NewWorkerRefResult(ref, e.w))
