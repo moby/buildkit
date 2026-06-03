@@ -50,6 +50,10 @@ func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 	return i, nil
 }
 
+func (e *localExporter) Config() *exporter.Config {
+	return exporter.NewConfig()
+}
+
 type localExporterInstance struct {
 	*localExporter
 	id    int
@@ -72,10 +76,6 @@ func (e *localExporterInstance) Type() string {
 
 func (e *localExporterInstance) Attrs() map[string]string {
 	return e.attrs
-}
-
-func (e *localExporter) Config() *exporter.Config {
-	return exporter.NewConfig()
 }
 
 func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source, buildInfo exporter.ExportBuildInfo) (map[string]string, exporter.FinalizeFunc, exporter.DescriptorReference, error) {
