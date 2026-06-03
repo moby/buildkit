@@ -9950,7 +9950,7 @@ COPY <<-"EOF" /scan.sh
 	set -e
 	cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/spdx.json
 	{
-	  "_type": "https://in-toto.io/Statement/v0.1",
+	  "_type": "https://in-toto.io/Statement/v1",
 	  "predicateType": "https://spdx.dev/Document",
 	  "predicate": {"name": "sbom-scan"}
 	}
@@ -10027,7 +10027,7 @@ EOF
 	require.Equal(t, 1, len(att.LayersRaw))
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{"name": "sbom-scan"})
 }
@@ -10055,7 +10055,7 @@ COPY <<-"EOF" /scan.sh
 	set -e
 	cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/spdx.json
 	{
-	  "_type": "https://in-toto.io/Statement/v0.1",
+	  "_type": "https://in-toto.io/Statement/v1",
 	  "predicateType": "https://spdx.dev/Document",
 	  "predicate": {"name": "core"}
 	}
@@ -10064,7 +10064,7 @@ COPY <<-"EOF" /scan.sh
 		for src in "${BUILDKIT_SCAN_SOURCE_EXTRAS}"/*; do
 			cat <<BUNDLE > $BUILDKIT_SCAN_DESTINATION/$(basename $src).spdx.json
 			{
-			  "_type": "https://in-toto.io/Statement/v0.1",
+			  "_type": "https://in-toto.io/Statement/v1",
 			  "predicateType": "https://spdx.dev/Document",
 			  "predicate": {"name": "extra"}
 			}

@@ -10672,7 +10672,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 				purls[k] = p
 			}
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 			subjects := []intoto.Subject{
@@ -10694,7 +10694,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			var attest2 intoto.Statement
 			require.NoError(t, json.Unmarshal(att.LayersRaw[1], &attest2))
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
 			subjects = []intoto.Subject{{
@@ -10743,7 +10743,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(dt, &attest))
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
@@ -10757,7 +10757,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(dt, &attest2))
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
 			subjects := []intoto.Subject{{
@@ -10801,7 +10801,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NotNil(t, item)
 			require.NoError(t, json.Unmarshal(item.Data, &attest))
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 			require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 			require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
@@ -10815,7 +10815,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.NotNil(t, item)
 			require.NoError(t, json.Unmarshal(item.Data, &attest2))
 
-			require.Equal(t, "https://in-toto.io/Statement/v0.1", attest2.Type)
+			require.Equal(t, intoto.StatementInTotoV1, attest2.Type)
 			require.Equal(t, "https://example.com/attestations2/v1.0", attest2.PredicateType)
 			require.Nil(t, attest2.Predicate)
 			subjects := []intoto.Subject{{
@@ -10954,7 +10954,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+		require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
@@ -11023,7 +11023,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 
 			stmt := intoto.Statement{
 				StatementHeader: intoto.StatementHeader{
-					Type:          intoto.StatementInTotoV01,
+					Type:          intoto.StatementInTotoV1,
 					PredicateType: "https://example.com/attestations/v1.0",
 				},
 				Predicate: map[string]any{
@@ -11174,7 +11174,7 @@ func testSBOMScan(t *testing.T, sb integration.Sandbox) {
 		cmd := `
 cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://spdx.dev/Document",
   "predicate": {
 	"name": "fallback",
@@ -11338,7 +11338,7 @@ EOF
 	att := imgs.Find("unknown/unknown")
 	attest := intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
@@ -11370,7 +11370,7 @@ EOF
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 
@@ -11402,7 +11402,7 @@ EOF
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{"name": "frontend"})
 
@@ -11434,7 +11434,7 @@ EOF
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{
 		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "bar"},
@@ -11468,7 +11468,7 @@ EOF
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{
 		"extraParams": map[string]any{"ARG1": "foo", "ARG2": "hello,world"},
@@ -11527,7 +11527,7 @@ func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
 		cmd := `
 cat <<EOF > $BUILDKIT_SCAN_DESTINATION/spdx.json
 {
-  "_type": "https://in-toto.io/Statement/v0.1",
+  "_type": "https://in-toto.io/Statement/v1",
   "predicateType": "https://spdx.dev/Document",
   "predicate": {"name": "fallback"}
 }
@@ -11638,7 +11638,7 @@ EOF
 	require.NotNil(t, att)
 	attest := intoto.Statement{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 	require.Subset(t, attest.Predicate, map[string]any{"name": "fallback"})
 }
@@ -11783,7 +11783,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 		Predicate spdx.Document
 	}{}
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
-	require.Equal(t, "https://in-toto.io/Statement/v0.1", attest.Type)
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
 	require.Equal(t, intoto.PredicateSPDX, attest.PredicateType)
 
 	require.Equal(t, "DOCUMENT", string(attest.Predicate.SPDXIdentifier))
@@ -13390,7 +13390,7 @@ func testImageResolveProvenanceAttestation(t *testing.T, sb integration.Sandbox)
 
 		var stmt intoto.Statement
 		require.NoError(t, json.Unmarshal(stmtBytes, &stmt))
-		require.Equal(t, "https://in-toto.io/Statement/v0.1", stmt.Type)
+		require.Equal(t, intoto.StatementInTotoV1, stmt.Type)
 		require.Contains(t, []string{
 			policyimage.SLSAProvenancePredicateType02,
 			policyimage.SLSAProvenancePredicateType1,
