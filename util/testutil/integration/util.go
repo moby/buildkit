@@ -68,18 +68,20 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 		setCmdLogs(cmd, logs)
 	}
 
-	fmt.Fprintf(cmd.Stderr, "> StartCmd %v %+v\n", time.Now(), cmd.String())
+	started := time.Now()
+	fmt.Fprintf(cmd.Stderr, "> StartCmd %v %+v\n", started, cmd.String())
 
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	fmt.Fprintf(cmd.Stderr, "> started pid=%d %v %+v\n", cmd.Process.Pid, time.Now(), cmd.String())
 	eg, ctx := errgroup.WithContext(context.TODO())
 
 	stopped := make(chan struct{})
 	stop := make(chan struct{})
 	eg.Go(func() error {
 		err := cmd.Wait()
-		fmt.Fprintf(cmd.Stderr, "> stopped %v %+v %v\n", time.Now(), cmd.ProcessState, cmd.ProcessState.ExitCode())
+		fmt.Fprintf(cmd.Stderr, "> stopped %v runtime=%s %+v %v\n", time.Now(), time.Since(started), cmd.ProcessState, cmd.ProcessState.ExitCode())
 		close(stopped)
 		select {
 		case <-stop:
@@ -97,6 +99,7 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 			// windows processes not responding to SIGTERM
 			signal := UnixOrWindows(syscall.SIGTERM, syscall.SIGKILL)
 			signalStr := UnixOrWindows("SIGTERM", "SIGKILL")
+			fmt.Fprintf(cmd.Stderr, "> stop requested %v runtime=%s %+v\n", time.Now(), time.Since(started), cmd.String())
 			fmt.Fprintf(cmd.Stderr, "> sending sigterm %v\n", time.Now())
 			fmt.Fprintf(cmd.Stderr, "> sending %s %v\n", signalStr, time.Now())
 			cmd.Process.Signal(signal)
@@ -104,6 +107,7 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 				select {
 				case <-stopped:
 				case <-time.After(20 * time.Second):
+					fmt.Fprintf(cmd.Stderr, "> sending SIGKILL %v runtime=%s %+v\n", time.Now(), time.Since(started), cmd.String())
 					cmd.Process.Kill()
 				}
 			}()
@@ -123,19 +127,29 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 	address = strings.TrimPrefix(address, socketScheme)
 	step := 50 * time.Millisecond
+	started := time.Now()
+	if cmd != nil {
+		fmt.Fprintf(cmd.Stderr, "> waiting for socket %s timeout=%s %v %+v\n", address, d, started, cmd.String())
+	}
 	i := 0
+	var lastErr error
 	for {
 		if cmd != nil && cmd.ProcessState != nil {
-			return errors.Errorf("process exited: %s", cmd.String())
+			return errors.Errorf("process exited while waiting for socket %s after %s: %s", address, time.Since(started), cmd.String())
 		}
 
 		if conn, err := dialPipe(address); err == nil {
 			conn.Close()
+			if cmd != nil {
+				fmt.Fprintf(cmd.Stderr, "> socket ready %s after=%s %v %+v\n", address, time.Since(started), time.Now(), cmd.String())
+			}
 			break
+		} else {
+			lastErr = err
 		}
 		i++
 		if time.Duration(i)*step > d {
-			return errors.Errorf("failed dialing: %s", address)
+			return errors.Errorf("failed dialing socket %s after %s: %v", address, time.Since(started), lastErr)
 		}
 		time.Sleep(step)
 	}
