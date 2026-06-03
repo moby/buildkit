@@ -187,8 +187,8 @@ var toDockerLayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerForeignGzip:    images.MediaTypeDockerSchema2LayerForeignGzip,
 	ocispecs.MediaTypeImageLayerNonDistributable:     images.MediaTypeDockerSchema2LayerForeign,     //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
 	ocispecs.MediaTypeImageLayerNonDistributableGzip: images.MediaTypeDockerSchema2LayerForeignGzip, //nolint:staticcheck // ignore SA1019: Non-distributable layers are deprecated, and not recommended for future use.
-	ocispecs.MediaTypeImageLayerZstd:                 images.MediaTypeDockerSchema2LayerZstd:,
-	images.MediaTypeDockerSchema2LayerZstd:           images.MediaTypeDockerSchema2LayerZstd:,
+	ocispecs.MediaTypeImageLayerZstd:                 images.MediaTypeDockerSchema2LayerZstd,
+	images.MediaTypeDockerSchema2LayerZstd:           images.MediaTypeDockerSchema2LayerZstd,
 }
 
 var toOCILayerType = map[string]string{

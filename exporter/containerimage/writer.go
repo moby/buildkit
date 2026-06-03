@@ -113,7 +113,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 				return nil, errors.Errorf("invalid annotation: no platform %s found in source", pk)
 			}
 		}
-		if len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
+		if !opts.OCITypes && len(a.Index)+len(a.IndexDescriptor)+len(a.ManifestDescriptor) > 0 {
 			return nil, errors.New("cannot export annotations with \"oci-mediatypes=false\"")
 		}
 	}
@@ -201,7 +201,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 		return mfstDesc, nil
 	}
 
-	if len(inp.Attestations) > 0 {
+	if !opts.OCITypes && len(inp.Attestations) > 0 {
 		return nil, errors.New("cannot export attestations with \"oci-mediatypes=false\"")
 	}
 

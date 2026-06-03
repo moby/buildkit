@@ -1464,7 +1464,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
-	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageManifest, desc.MediaType)
 	require.Greater(t, desc.Size, int64(0))
 }
 
@@ -3676,9 +3676,9 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 	require.Len(t, imgs.Images, 1)
-	img := imgs.Find(platforms.Format(platforms.DefaultSpec()))
+	img := imgs.Images[0]
 	require.Empty(t, img.Layers)
-	require.Equal(t, platforms.DefaultSpec(), img.Img.Platform)
+	require.True(t, platforms.Only(platforms.DefaultSpec()).Match(img.Img.Platform))
 
 	desc, provider, err = contentutil.ProviderFromRef(targetMulti)
 	require.NoError(t, err)
@@ -4426,8 +4426,8 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 		} else {
 			require.Len(t, ev.Record.Result.Results, 2)
 			require.Len(t, ev.Record.Exporters, 6)
-			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
-			require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[1].MediaType)
+			require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[0].MediaType)
+			require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[1].MediaType)
 		}
 		require.Equal(t, ev.Record.Result.Results[0], ev.Record.Result.ResultDeprecated)
 	}
@@ -5435,6 +5435,7 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 					Attrs: map[string]string{
 						"name":                  target,
 						"push":                  "true",
+						"oci-mediatypes":        "false",
 						"prefer-nondist-layers": "true",
 					},
 				},
@@ -5480,8 +5481,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 				{
 					Type: ExporterImage,
 					Attrs: map[string]string{
-						"name": target,
-						"push": "true",
+						"name":           target,
+						"push":           "true",
+						"oci-mediatypes": "false",
 					},
 				},
 			},
@@ -5568,7 +5570,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(mfst.Layers))
-		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 	}
 
 	// new layer with gzip compression
@@ -5637,8 +5639,8 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -5682,8 +5684,8 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -6058,10 +6060,10 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 
-	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageManifest, mfst.MediaType)
 	require.Equal(t, 3, len(mfst.Layers))
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
-	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
@@ -10467,7 +10469,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "b", imgs.Images[0].Manifest.Annotations["a"])
 	require.Equal(t, "d", imgs2.Index.Annotations["c"])
 
-	require.Equal(t, images.MediaTypeDockerSchema2ManifestList, imgs.Index.MediaType)
+	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs.Index.MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
@@ -11140,7 +11142,7 @@ func testSBOMScan(t *testing.T, sb integration.Sandbox) {
 	scannerFrontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 
-		st := llb.Image("busybox")
+		st := llb.Image("busybox", llb.Platform(p))
 		def, err := st.Marshal(sb.Context())
 		require.NoError(t, err)
 
@@ -11158,16 +11160,7 @@ func testSBOMScan(t *testing.T, sb integration.Sandbox) {
 		if err != nil {
 			return nil, err
 		}
-		res.AddRef(pk, ref)
-
-		expPlatforms := &exptypes.Platforms{
-			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
-		}
-		dt, err := json.Marshal(expPlatforms)
-		if err != nil {
-			return nil, err
-		}
-		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+		res.SetRef(ref)
 
 		var img ocispecs.Image
 		cmd := `
@@ -11191,7 +11184,7 @@ EOF
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal image config")
 		}
-		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
+		res.AddMeta(exptypes.ExporterImageConfigKey, config)
 
 		return res, nil
 	}
@@ -11202,8 +11195,9 @@ EOF
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": scannerTarget,
-					"push": "true",
+					"name":           scannerTarget,
+					"push":           "true",
+					"oci-mediatypes": "false",
 				},
 			},
 		},
@@ -11493,7 +11487,7 @@ func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
 	scannerFrontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 
-		st := llb.Image("busybox")
+		st := llb.Image("busybox", llb.Platform(p))
 		def, err := st.Marshal(sb.Context())
 		require.NoError(t, err)
 
@@ -11511,16 +11505,7 @@ func testSBOMScanSingleRef(t *testing.T, sb integration.Sandbox) {
 		if err != nil {
 			return nil, err
 		}
-		res.AddRef(pk, ref)
-
-		expPlatforms := &exptypes.Platforms{
-			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
-		}
-		dt, err := json.Marshal(expPlatforms)
-		if err != nil {
-			return nil, err
-		}
-		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+		res.SetRef(ref)
 
 		var img ocispecs.Image
 		cmd := `
@@ -11538,7 +11523,7 @@ EOF
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal image config")
 		}
-		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
+		res.AddMeta(exptypes.ExporterImageConfigKey, config)
 
 		return res, nil
 	}
@@ -11549,8 +11534,9 @@ EOF
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": scannerTarget,
-					"push": "true",
+					"name":           scannerTarget,
+					"push":           "true",
+					"oci-mediatypes": "false",
 				},
 			},
 		},
@@ -11629,7 +11615,14 @@ EOF
 	require.NoError(t, err)
 	require.Equal(t, 2, len(imgs.Images))
 
-	img := imgs.Find(pk)
+	var img *testutil.ImageInfo
+	for _, candidate := range imgs.Images {
+		if candidate.Desc.Platform != nil && platforms.Format(*candidate.Desc.Platform) == "unknown/unknown" {
+			continue
+		}
+		img = candidate
+		break
+	}
 	require.NotNil(t, img)
 	require.Equal(t, []string{"/bin/sh", "-c", "cat /greeting"}, img.Img.Config.Cmd)
 
