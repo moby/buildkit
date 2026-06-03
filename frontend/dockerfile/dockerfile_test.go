@@ -4470,6 +4470,8 @@ RUN mkdir -m 0777 /out
 COPY --chmod=0644 foo /
 COPY --chmod=777 bar /baz
 COPY --chmod=0 foo /foobis
+COPY --chmod=777 foo /parent/foo
+COPY --chmod=770 foo /parent/sub/foo
 
 ARG mode
 COPY --chmod=${mode} foo /footer
@@ -4477,6 +4479,8 @@ COPY --chmod=${mode} foo /footer
 RUN stat -c "%04a" /foo  > /out/fooperm
 RUN stat -c "%04a" /baz  > /out/barperm
 RUN stat -c "%04a" /foobis  > /out/foobisperm
+RUN stat -c "%04a" /parent  > /out/parentperm
+RUN stat -c "%04a" /parent/sub  > /out/subparentperm
 RUN stat -c "%04a" /footer  > /out/footerperm
 FROM scratch
 COPY --from=base /out /
@@ -4524,6 +4528,14 @@ COPY --from=base /out /
 	dt, err = os.ReadFile(filepath.Join(destDir, "foobisperm"))
 	require.NoError(t, err)
 	require.Equal(t, "0000\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "parentperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0777\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "subparentperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0770\n", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "footerperm"))
 	require.NoError(t, err)
