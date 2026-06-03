@@ -257,6 +257,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testHTTPPruneAfterResolveMeta,
 	testHTTPResolveMetaReuse,
 	testHTTPResolveMultiBuild,
+	testImageResolveConfigDefaultLocalFallback,
 	testGitResolveMutatedSource,
 	testGitBundleRoundTrip,
 	testGitBundleRoundTripRegistry,
@@ -13164,6 +13165,80 @@ func testHTTPResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testImageResolveConfigDefaultLocalFallback(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
+	}
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	cdClient, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer cdClient.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/default-local-fallback:" + identity.NewID()
+	st := integration.UnixOrWindows(
+		llb.Scratch(),
+		llb.Image("nanoserver:latest"),
+	)
+	def, err := st.File(llb.Mkfile("/fallback", 0600, []byte("local"))).Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":  target,
+					"store": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	imageService := cdClient.ImageService()
+	imageStoreCtx := namespaces.WithNamespace(ctx, "buildkit")
+	img, err := imageService.Get(imageStoreCtx, target)
+	require.NoError(t, err)
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		ref, dgst, config, err := c.ResolveImageConfig(ctx, target, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				ResolveMode: pb.AttrImageResolveModeDefault,
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		require.Equal(t, target, ref)
+		require.Equal(t, img.Target.Digest, dgst)
+		require.NotEmpty(t, config)
+
+		var ociimg ocispecs.Image
+		require.NoError(t, json.Unmarshal(config, &ociimg))
+		require.NotEmpty(t, ociimg.OS)
+		require.NotEmpty(t, ociimg.Architecture)
+
+		return gateway.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integration.Sandbox) {
