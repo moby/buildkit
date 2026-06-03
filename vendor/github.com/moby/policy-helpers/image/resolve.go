@@ -237,3 +237,53 @@ func ReadBlob(ctx context.Context, provider content.Provider, desc ocispecs.Desc
 	}
 	return dt, nil
 }
+
+// Blob holds the raw content of a single OCI blob together with its descriptor.
+type Blob struct {
+	Descriptor ocispecs.Descriptor
+	Data       []byte
+}
+
+// ResolveAttestationStatements reads the in-toto statement layers from
+// sc.AttestationManifest, filtered by predicateTypes, and returns each
+// matching layer's descriptor and raw content.
+//
+// If predicateTypes is empty all statement layers are returned.
+// Layers without an "in-toto.io/predicate-type" annotation are always skipped.
+// Returns nil without error if sc has no AttestationManifest.
+func ResolveAttestationStatements(ctx context.Context, sc *SignatureChain, predicateTypes []string) ([]Blob, error) {
+	if sc == nil || sc.AttestationManifest == nil {
+		return nil, nil
+	}
+
+	mfst, err := sc.OCIManifest(ctx, sc.AttestationManifest)
+	if err != nil {
+		return nil, errors.Wrapf(err, "reading attestation manifest %s", sc.AttestationManifest.Digest)
+	}
+
+	filter := make(map[string]struct{}, len(predicateTypes))
+	for _, p := range predicateTypes {
+		if p != "" {
+			filter[p] = struct{}{}
+		}
+	}
+
+	blobs := make([]Blob, 0, len(mfst.Layers))
+	for _, layer := range mfst.Layers {
+		predicateType := layer.Annotations["in-toto.io/predicate-type"]
+		if predicateType == "" {
+			continue
+		}
+		if len(filter) > 0 {
+			if _, ok := filter[predicateType]; !ok {
+				continue
+			}
+		}
+		dt, err := ReadBlob(ctx, sc.Provider, layer)
+		if err != nil {
+			return nil, errors.Wrapf(err, "reading attestation statement %s", layer.Digest)
+		}
+		blobs = append(blobs, Blob{Descriptor: layer, Data: dt})
+	}
+	return blobs, nil
+}

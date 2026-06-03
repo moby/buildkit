@@ -810,7 +810,7 @@ github.com/moby/locker
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 github.com/moby/patternmatcher/ignorefile
-# github.com/moby/policy-helpers v0.0.0-20260507153417-a39d60132186
+# github.com/moby/policy-helpers v0.0.0-20260507153417-a39d60132186 => github.com/smerkviladze/policy-helpers v0.0.0-20260603124614-a22db872ec6f
 ## explicit; go 1.25.5
 github.com/moby/policy-helpers
 github.com/moby/policy-helpers/image
@@ -1451,3 +1451,4 @@ tags.cncf.io/container-device-interface/pkg/parser
 # tags.cncf.io/container-device-interface/specs-go v1.1.0
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
+# github.com/moby/policy-helpers => github.com/smerkviladze/policy-helpers v0.0.0-20260603124614-a22db872ec6f
