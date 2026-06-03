@@ -88,13 +88,24 @@ See also the [documentation](/frontend/dockerfile/docs/reference.md#buildkit-bui
 BuildKit currently supports these values:
 
 - `10` for the `v0.13.0` and `v0.14.0` historical path
-- `20` for the `v0.15.0+` path and current behavior
+- `20` for the `v0.15.0` through `v0.31.x` path
+- `30` for the current path
+
+### `30`
+
+`30` is the current compatibility version.
+
+Compared to `20`, `30` changes the default image exporter media type behavior:
+
+- when `oci-mediatypes` is not set, image exports default to OCI media types
 
 ### `20`
 
-`20` is the current compatibility version.
+`20` represents the historical `v0.15.0` through `v0.31.x` path.
 
-It matches released BuildKit output from `v0.15.0` and newer for the compatibility test matrix in `client/compatibility_test.go`.
+It matches the `v0.15.0` through `v0.31.x` output covered by the compatibility test matrix in `client/compatibility_test.go`.
+
+Compared to `30`, image exports that do not set `oci-mediatypes` keep the historical `20` media type behavior. Image exports without attestations default to Docker media types. Image exports with attestations use OCI media types because attestations require them.
 
 ### `10`
 

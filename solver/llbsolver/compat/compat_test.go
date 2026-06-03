@@ -7,13 +7,13 @@ import (
 )
 
 func TestSupportedCompatibilityVersions(t *testing.T) {
-	require.Equal(t, []int{10, 20}, SupportedCompatibilityVersions())
-	require.Equal(t, 20, CompatibilityVersionCurrent)
+	require.Equal(t, []int{10, 20, 30}, SupportedCompatibilityVersions())
+	require.Equal(t, 30, CompatibilityVersionCurrent)
 }
 
 func TestValidateCompatibilityVersion(t *testing.T) {
 	require.NoError(t, ValidateCompatibilityVersion(CompatibilityVersion013))
 	require.NoError(t, ValidateCompatibilityVersion(CompatibilityVersionCurrent))
 	require.ErrorContains(t, ValidateCompatibilityVersion(11), "unsupported compatibility-version 11")
-	require.ErrorContains(t, ValidateCompatibilityVersion(30), "upgrade buildkit")
+	require.ErrorContains(t, ValidateCompatibilityVersion(40), "upgrade buildkit")
 }
