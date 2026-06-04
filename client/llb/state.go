@@ -385,6 +385,18 @@ func (s State) Reset(s2 State) State {
 	return Reset(s2)(s)
 }
 
+func (s State) Requires(id string, deps ...State) State {
+	if len(deps) == 0 {
+		return s
+	}
+	inputs := make([]PassthroughInput, 0, len(deps)+1)
+	inputs = append(inputs, PassthroughInput{State: s, Output: true})
+	for _, dep := range deps {
+		inputs = append(inputs, PassthroughInput{State: dep})
+	}
+	return s.WithOutput(NewPassthroughOp(id, inputs).Output())
+}
+
 // User sets the user for this state.
 // See [User] for more details.
 func (s State) User(v string) State {

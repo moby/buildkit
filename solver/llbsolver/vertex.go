@@ -497,6 +497,8 @@ func llbOpName(pbOp *pb.Op, load func(string) (solver.Vertex, error)) (string, e
 			upperName = fmt.Sprintf("(%s)", upperVtx.Name())
 		}
 		return "diff " + lowerName + " -> " + upperName, nil
+	case *pb.Op_Passthrough:
+		return "passthrough " + op.Passthrough.Id, nil
 	default:
 		return "unknown", nil
 	}

@@ -295,6 +295,7 @@ type Op struct {
 	//	*Op_Build
 	//	*Op_Merge
 	//	*Op_Diff
+	//	*Op_Passthrough
 	Op            isOp_Op            `protobuf_oneof:"op"`
 	Platform      *Platform          `protobuf:"bytes,10,opt,name=platform,proto3" json:"platform,omitempty"`
 	Constraints   *WorkerConstraints `protobuf:"bytes,11,opt,name=constraints,proto3" json:"constraints,omitempty"`
@@ -400,6 +401,15 @@ func (x *Op) GetDiff() *DiffOp {
 	return nil
 }
 
+func (x *Op) GetPassthrough() *PassthroughOp {
+	if x != nil {
+		if x, ok := x.Op.(*Op_Passthrough); ok {
+			return x.Passthrough
+		}
+	}
+	return nil
+}
+
 func (x *Op) GetPlatform() *Platform {
 	if x != nil {
 		return x.Platform
@@ -442,6 +452,10 @@ type Op_Diff struct {
 	Diff *DiffOp `protobuf:"bytes,7,opt,name=diff,proto3,oneof"`
 }
 
+type Op_Passthrough struct {
+	Passthrough *PassthroughOp `protobuf:"bytes,8,opt,name=passthrough,proto3,oneof"`
+}
+
 func (*Op_Exec) isOp_Op() {}
 
 func (*Op_Source) isOp_Op() {}
@@ -453,6 +467,8 @@ func (*Op_Build) isOp_Op() {}
 func (*Op_Merge) isOp_Op() {}
 
 func (*Op_Diff) isOp_Op() {}
+
+func (*Op_Passthrough) isOp_Op() {}
 
 // Platform is github.com/opencontainers/image-spec/specs-go/v1.Platform
 type Platform struct {
@@ -3496,11 +3512,63 @@ func (x *DiffOp) GetUpper() *UpperDiffInput {
 	return nil
 }
 
+type PassthroughOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Outputs       []int64                `protobuf:"varint,2,rep,packed,name=outputs,proto3" json:"outputs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PassthroughOp) Reset() {
+	*x = PassthroughOp{}
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PassthroughOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PassthroughOp) ProtoMessage() {}
+
+func (x *PassthroughOp) ProtoReflect() protoreflect.Message {
+	mi := &file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PassthroughOp.ProtoReflect.Descriptor instead.
+func (*PassthroughOp) Descriptor() ([]byte, []int) {
+	return file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *PassthroughOp) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PassthroughOp) GetOutputs() []int64 {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
 var File_github_com_moby_buildkit_solver_pb_ops_proto protoreflect.FileDescriptor
 
 const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\n" +
-	",github.com/moby/buildkit/solver/pb/ops.proto\x12\x02pb\"\xe8\x02\n" +
+	",github.com/moby/buildkit/solver/pb/ops.proto\x12\x02pb\"\x9f\x03\n" +
 	"\x02Op\x12!\n" +
 	"\x06inputs\x18\x01 \x03(\v2\t.pb.InputR\x06inputs\x12 \n" +
 	"\x04exec\x18\x02 \x01(\v2\n" +
@@ -3511,7 +3579,8 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05build\x18\x05 \x01(\v2\v.pb.BuildOpH\x00R\x05build\x12#\n" +
 	"\x05merge\x18\x06 \x01(\v2\v.pb.MergeOpH\x00R\x05merge\x12 \n" +
 	"\x04diff\x18\a \x01(\v2\n" +
-	".pb.DiffOpH\x00R\x04diff\x12(\n" +
+	".pb.DiffOpH\x00R\x04diff\x125\n" +
+	"\vpassthrough\x18\b \x01(\v2\x11.pb.PassthroughOpH\x00R\vpassthrough\x12(\n" +
 	"\bplatform\x18\n" +
 	" \x01(\v2\f.pb.PlatformR\bplatform\x127\n" +
 	"\vconstraints\x18\v \x01(\v2\x15.pb.WorkerConstraintsR\vconstraintsB\x04\n" +
@@ -3773,7 +3842,10 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05input\x18\x01 \x01(\x03R\x05input\"\\\n" +
 	"\x06DiffOp\x12(\n" +
 	"\x05lower\x18\x01 \x01(\v2\x12.pb.LowerDiffInputR\x05lower\x12(\n" +
-	"\x05upper\x18\x02 \x01(\v2\x12.pb.UpperDiffInputR\x05upper*3\n" +
+	"\x05upper\x18\x02 \x01(\v2\x12.pb.UpperDiffInputR\x05upper\"9\n" +
+	"\rPassthroughOp\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\aoutputs\x18\x02 \x03(\x03R\aoutputs*3\n" +
 	"\aNetMode\x12\t\n" +
 	"\x05UNSET\x10\x00\x12\b\n" +
 	"\x04HOST\x10\x01\x12\b\n" +
@@ -3813,7 +3885,7 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_rawDescGZIP() []byte {
 }
 
 var file_github_com_moby_buildkit_solver_pb_ops_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_github_com_moby_buildkit_solver_pb_ops_proto_goTypes = []any{
 	(NetMode)(0),              // 0: pb.NetMode
 	(SecurityMode)(0),         // 1: pb.SecurityMode
@@ -3865,13 +3937,14 @@ var file_github_com_moby_buildkit_solver_pb_ops_proto_goTypes = []any{
 	(*LowerDiffInput)(nil),    // 47: pb.LowerDiffInput
 	(*UpperDiffInput)(nil),    // 48: pb.UpperDiffInput
 	(*DiffOp)(nil),            // 49: pb.DiffOp
-	nil,                       // 50: pb.SourceOp.AttrsEntry
-	nil,                       // 51: pb.BuildOp.InputsEntry
-	nil,                       // 52: pb.BuildOp.AttrsEntry
-	nil,                       // 53: pb.OpMetadata.DescriptionEntry
-	nil,                       // 54: pb.OpMetadata.CapsEntry
-	nil,                       // 55: pb.Source.LocationsEntry
-	nil,                       // 56: pb.Definition.MetadataEntry
+	(*PassthroughOp)(nil),     // 50: pb.PassthroughOp
+	nil,                       // 51: pb.SourceOp.AttrsEntry
+	nil,                       // 52: pb.BuildOp.InputsEntry
+	nil,                       // 53: pb.BuildOp.AttrsEntry
+	nil,                       // 54: pb.OpMetadata.DescriptionEntry
+	nil,                       // 55: pb.OpMetadata.CapsEntry
+	nil,                       // 56: pb.Source.LocationsEntry
+	nil,                       // 57: pb.Definition.MetadataEntry
 }
 var file_github_com_moby_buildkit_solver_pb_ops_proto_depIdxs = []int32{
 	7,  // 0: pb.Op.inputs:type_name -> pb.Input
@@ -3881,66 +3954,67 @@ var file_github_com_moby_buildkit_solver_pb_ops_proto_depIdxs = []int32{
 	20, // 4: pb.Op.build:type_name -> pb.BuildOp
 	46, // 5: pb.Op.merge:type_name -> pb.MergeOp
 	49, // 6: pb.Op.diff:type_name -> pb.DiffOp
-	6,  // 7: pb.Op.platform:type_name -> pb.Platform
-	33, // 8: pb.Op.constraints:type_name -> pb.WorkerConstraints
-	9,  // 9: pb.ExecOp.meta:type_name -> pb.Meta
-	14, // 10: pb.ExecOp.mounts:type_name -> pb.Mount
-	0,  // 11: pb.ExecOp.network:type_name -> pb.NetMode
-	1,  // 12: pb.ExecOp.security:type_name -> pb.SecurityMode
-	12, // 13: pb.ExecOp.secretenv:type_name -> pb.SecretEnv
-	13, // 14: pb.ExecOp.cdiDevices:type_name -> pb.CDIDevice
-	32, // 15: pb.Meta.proxy_env:type_name -> pb.ProxyEnv
-	10, // 16: pb.Meta.extraHosts:type_name -> pb.HostIP
-	11, // 17: pb.Meta.ulimit:type_name -> pb.Ulimit
-	2,  // 18: pb.Mount.mountType:type_name -> pb.MountType
-	15, // 19: pb.Mount.TmpfsOpt:type_name -> pb.TmpfsOpt
-	16, // 20: pb.Mount.cacheOpt:type_name -> pb.CacheOpt
-	17, // 21: pb.Mount.secretOpt:type_name -> pb.SecretOpt
-	18, // 22: pb.Mount.SSHOpt:type_name -> pb.SSHOpt
-	3,  // 23: pb.Mount.contentCache:type_name -> pb.MountContentCache
-	4,  // 24: pb.CacheOpt.sharing:type_name -> pb.CacheSharingOpt
-	50, // 25: pb.SourceOp.attrs:type_name -> pb.SourceOp.AttrsEntry
-	51, // 26: pb.BuildOp.inputs:type_name -> pb.BuildOp.InputsEntry
-	34, // 27: pb.BuildOp.def:type_name -> pb.Definition
-	52, // 28: pb.BuildOp.attrs:type_name -> pb.BuildOp.AttrsEntry
-	53, // 29: pb.OpMetadata.description:type_name -> pb.OpMetadata.DescriptionEntry
-	29, // 30: pb.OpMetadata.export_cache:type_name -> pb.ExportCache
-	54, // 31: pb.OpMetadata.caps:type_name -> pb.OpMetadata.CapsEntry
-	30, // 32: pb.OpMetadata.progress_group:type_name -> pb.ProgressGroup
-	31, // 33: pb.OpMetadata.linux_resources:type_name -> pb.LinuxResources
-	55, // 34: pb.Source.locations:type_name -> pb.Source.LocationsEntry
-	25, // 35: pb.Source.infos:type_name -> pb.SourceInfo
-	26, // 36: pb.Locations.locations:type_name -> pb.Location
-	34, // 37: pb.SourceInfo.definition:type_name -> pb.Definition
-	27, // 38: pb.Location.ranges:type_name -> pb.Range
-	28, // 39: pb.Range.start:type_name -> pb.Position
-	28, // 40: pb.Range.end:type_name -> pb.Position
-	56, // 41: pb.Definition.metadata:type_name -> pb.Definition.MetadataEntry
-	23, // 42: pb.Definition.Source:type_name -> pb.Source
-	36, // 43: pb.FileOp.actions:type_name -> pb.FileAction
-	37, // 44: pb.FileAction.copy:type_name -> pb.FileActionCopy
-	38, // 45: pb.FileAction.mkfile:type_name -> pb.FileActionMkFile
-	40, // 46: pb.FileAction.mkdir:type_name -> pb.FileActionMkDir
-	41, // 47: pb.FileAction.rm:type_name -> pb.FileActionRm
-	39, // 48: pb.FileAction.symlink:type_name -> pb.FileActionSymlink
-	42, // 49: pb.FileActionCopy.owner:type_name -> pb.ChownOpt
-	42, // 50: pb.FileActionMkFile.owner:type_name -> pb.ChownOpt
-	42, // 51: pb.FileActionSymlink.owner:type_name -> pb.ChownOpt
-	42, // 52: pb.FileActionMkDir.owner:type_name -> pb.ChownOpt
-	43, // 53: pb.ChownOpt.user:type_name -> pb.UserOpt
-	43, // 54: pb.ChownOpt.group:type_name -> pb.UserOpt
-	44, // 55: pb.UserOpt.byName:type_name -> pb.NamedUserOpt
-	45, // 56: pb.MergeOp.inputs:type_name -> pb.MergeInput
-	47, // 57: pb.DiffOp.lower:type_name -> pb.LowerDiffInput
-	48, // 58: pb.DiffOp.upper:type_name -> pb.UpperDiffInput
-	21, // 59: pb.BuildOp.InputsEntry.value:type_name -> pb.BuildInput
-	24, // 60: pb.Source.LocationsEntry.value:type_name -> pb.Locations
-	22, // 61: pb.Definition.MetadataEntry.value:type_name -> pb.OpMetadata
-	62, // [62:62] is the sub-list for method output_type
-	62, // [62:62] is the sub-list for method input_type
-	62, // [62:62] is the sub-list for extension type_name
-	62, // [62:62] is the sub-list for extension extendee
-	0,  // [0:62] is the sub-list for field type_name
+	50, // 7: pb.Op.passthrough:type_name -> pb.PassthroughOp
+	6,  // 8: pb.Op.platform:type_name -> pb.Platform
+	33, // 9: pb.Op.constraints:type_name -> pb.WorkerConstraints
+	9,  // 10: pb.ExecOp.meta:type_name -> pb.Meta
+	14, // 11: pb.ExecOp.mounts:type_name -> pb.Mount
+	0,  // 12: pb.ExecOp.network:type_name -> pb.NetMode
+	1,  // 13: pb.ExecOp.security:type_name -> pb.SecurityMode
+	12, // 14: pb.ExecOp.secretenv:type_name -> pb.SecretEnv
+	13, // 15: pb.ExecOp.cdiDevices:type_name -> pb.CDIDevice
+	32, // 16: pb.Meta.proxy_env:type_name -> pb.ProxyEnv
+	10, // 17: pb.Meta.extraHosts:type_name -> pb.HostIP
+	11, // 18: pb.Meta.ulimit:type_name -> pb.Ulimit
+	2,  // 19: pb.Mount.mountType:type_name -> pb.MountType
+	15, // 20: pb.Mount.TmpfsOpt:type_name -> pb.TmpfsOpt
+	16, // 21: pb.Mount.cacheOpt:type_name -> pb.CacheOpt
+	17, // 22: pb.Mount.secretOpt:type_name -> pb.SecretOpt
+	18, // 23: pb.Mount.SSHOpt:type_name -> pb.SSHOpt
+	3,  // 24: pb.Mount.contentCache:type_name -> pb.MountContentCache
+	4,  // 25: pb.CacheOpt.sharing:type_name -> pb.CacheSharingOpt
+	51, // 26: pb.SourceOp.attrs:type_name -> pb.SourceOp.AttrsEntry
+	52, // 27: pb.BuildOp.inputs:type_name -> pb.BuildOp.InputsEntry
+	34, // 28: pb.BuildOp.def:type_name -> pb.Definition
+	53, // 29: pb.BuildOp.attrs:type_name -> pb.BuildOp.AttrsEntry
+	54, // 30: pb.OpMetadata.description:type_name -> pb.OpMetadata.DescriptionEntry
+	29, // 31: pb.OpMetadata.export_cache:type_name -> pb.ExportCache
+	55, // 32: pb.OpMetadata.caps:type_name -> pb.OpMetadata.CapsEntry
+	30, // 33: pb.OpMetadata.progress_group:type_name -> pb.ProgressGroup
+	31, // 34: pb.OpMetadata.linux_resources:type_name -> pb.LinuxResources
+	56, // 35: pb.Source.locations:type_name -> pb.Source.LocationsEntry
+	25, // 36: pb.Source.infos:type_name -> pb.SourceInfo
+	26, // 37: pb.Locations.locations:type_name -> pb.Location
+	34, // 38: pb.SourceInfo.definition:type_name -> pb.Definition
+	27, // 39: pb.Location.ranges:type_name -> pb.Range
+	28, // 40: pb.Range.start:type_name -> pb.Position
+	28, // 41: pb.Range.end:type_name -> pb.Position
+	57, // 42: pb.Definition.metadata:type_name -> pb.Definition.MetadataEntry
+	23, // 43: pb.Definition.Source:type_name -> pb.Source
+	36, // 44: pb.FileOp.actions:type_name -> pb.FileAction
+	37, // 45: pb.FileAction.copy:type_name -> pb.FileActionCopy
+	38, // 46: pb.FileAction.mkfile:type_name -> pb.FileActionMkFile
+	40, // 47: pb.FileAction.mkdir:type_name -> pb.FileActionMkDir
+	41, // 48: pb.FileAction.rm:type_name -> pb.FileActionRm
+	39, // 49: pb.FileAction.symlink:type_name -> pb.FileActionSymlink
+	42, // 50: pb.FileActionCopy.owner:type_name -> pb.ChownOpt
+	42, // 51: pb.FileActionMkFile.owner:type_name -> pb.ChownOpt
+	42, // 52: pb.FileActionSymlink.owner:type_name -> pb.ChownOpt
+	42, // 53: pb.FileActionMkDir.owner:type_name -> pb.ChownOpt
+	43, // 54: pb.ChownOpt.user:type_name -> pb.UserOpt
+	43, // 55: pb.ChownOpt.group:type_name -> pb.UserOpt
+	44, // 56: pb.UserOpt.byName:type_name -> pb.NamedUserOpt
+	45, // 57: pb.MergeOp.inputs:type_name -> pb.MergeInput
+	47, // 58: pb.DiffOp.lower:type_name -> pb.LowerDiffInput
+	48, // 59: pb.DiffOp.upper:type_name -> pb.UpperDiffInput
+	21, // 60: pb.BuildOp.InputsEntry.value:type_name -> pb.BuildInput
+	24, // 61: pb.Source.LocationsEntry.value:type_name -> pb.Locations
+	22, // 62: pb.Definition.MetadataEntry.value:type_name -> pb.OpMetadata
+	63, // [63:63] is the sub-list for method output_type
+	63, // [63:63] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_github_com_moby_buildkit_solver_pb_ops_proto_init() }
@@ -3955,6 +4029,7 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_init() {
 		(*Op_Build)(nil),
 		(*Op_Merge)(nil),
 		(*Op_Diff)(nil),
+		(*Op_Passthrough)(nil),
 	}
 	file_github_com_moby_buildkit_solver_pb_ops_proto_msgTypes[31].OneofWrappers = []any{
 		(*FileAction_Copy)(nil),
@@ -3973,7 +4048,7 @@ func file_github_com_moby_buildkit_solver_pb_ops_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc), len(file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   52,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
