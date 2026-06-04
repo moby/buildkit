@@ -2919,6 +2919,9 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), dt)
 
+	// Give some extra time to ensure the resources from first solve are released
+	time.Sleep(500 * time.Millisecond)
+
 	err = os.WriteFile(filepath.Join(dir.Name, "foo"), []byte("bar"), 0600)
 	require.NoError(t, err)
 
