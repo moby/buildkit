@@ -1750,7 +1750,7 @@ func TestGetRemotes(t *testing.T) {
 					case compression.EStargz:
 						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
 					case compression.Zstd:
-						require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", desc.MediaType)
+						require.Equal(t, ocispecs.MediaTypeImageLayerZstd, desc.MediaType)
 					default:
 						require.Fail(t, "unhandled media type", compressionType)
 					}

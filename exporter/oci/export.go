@@ -61,6 +61,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+	ociTypes := e.opt.Variant == VariantOCI
 	i := &imageExporterInstance{
 		imageExporter: e,
 		id:            id,
@@ -70,7 +71,7 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			OCITypes: e.opt.Variant == VariantOCI,
+			OCITypes: &ociTypes,
 		},
 	}
 
