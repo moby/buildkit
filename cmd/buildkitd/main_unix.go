@@ -11,12 +11,14 @@ import (
 	"github.com/containerd/containerd/v2/pkg/sys"
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/pkg/errors"
+	copy "github.com/tonistiigi/fsutil/copy"
 )
 
 const socketScheme = "unix://"
 
 func init() {
 	syscall.Umask(0)
+	copy.UmaskIsZero = true
 }
 
 func listenFD(addr string, tlsConfig *tls.Config) (net.Listener, error) {
