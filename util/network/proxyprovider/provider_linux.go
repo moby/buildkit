@@ -4,6 +4,7 @@ package proxyprovider
 
 import (
 	"bufio"
+	"container/list"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -34,6 +35,7 @@ import (
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/netpool"
 	"github.com/moby/buildkit/util/urlutil"
@@ -43,6 +45,13 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+)
+
+const (
+	proxyCACertLifetime        = 10 * 365 * 24 * time.Hour
+	proxyLeafCertLifetime      = 24 * time.Hour
+	proxyLeafCertRefreshBefore = time.Hour
+	proxyCertCacheMaxEntries   = 1024
 )
 
 type Opt struct {
@@ -55,6 +64,7 @@ func Supported() bool {
 }
 
 func New(opt Opt) (network.Provider, error) {
+	cleanOldNamespaces(opt.Root)
 	certPEM, ca, key, err := newCA()
 	if err != nil {
 		return nil, err
@@ -64,7 +74,8 @@ func New(opt Opt) (network.Provider, error) {
 		caPEM: certPEM,
 		ca:    ca,
 		caKey: key,
-		certs: map[string]*tls.Certificate{},
+		certs: map[string]*certCacheEntry{},
+		lru:   list.New(),
 		client: &http.Transport{
 			Proxy:              nil,
 			DisableCompression: true,
@@ -92,8 +103,16 @@ type provider struct {
 	caKey *rsa.PrivateKey
 
 	certsMu sync.Mutex
-	certs   map[string]*tls.Certificate
+	certs   map[string]*certCacheEntry
+	lru     *list.List
 	client  *http.Transport
+}
+
+type certCacheEntry struct {
+	host    string
+	cert    *tls.Certificate
+	expires time.Time
+	elem    *list.Element
 }
 
 func (p *provider) Close() error {
@@ -714,7 +733,7 @@ func newCA() ([]byte, *x509.Certificate, *rsa.PrivateKey, error) {
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "BuildKit exec proxy"},
 		NotBefore:             now.Add(-time.Hour),
-		NotAfter:              now.Add(24 * time.Hour),
+		NotAfter:              now.Add(proxyCACertLifetime),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
@@ -734,8 +753,20 @@ func newCA() ([]byte, *x509.Certificate, *rsa.PrivateKey, error) {
 func (p *provider) certForHost(host string) (*tls.Certificate, error) {
 	p.certsMu.Lock()
 	defer p.certsMu.Unlock()
-	if cert, ok := p.certs[host]; ok {
-		return cert, nil
+
+	if p.certs == nil {
+		p.certs = map[string]*certCacheEntry{}
+	}
+	if p.lru == nil {
+		p.lru = list.New()
+	}
+	now := time.Now()
+	if ent, ok := p.certs[host]; ok {
+		if now.Before(ent.expires) {
+			p.lru.MoveToFront(ent.elem)
+			return ent.cert, nil
+		}
+		p.removeCertEntry(ent)
 	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -746,8 +777,8 @@ func (p *provider) certForHost(host string) (*tls.Certificate, error) {
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: host},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.Add(proxyLeafCertLifetime),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
@@ -766,8 +797,47 @@ func (p *provider) certForHost(host string) (*tls.Certificate, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	p.certs[host] = &cert
+	ent := &certCacheEntry{
+		host:    host,
+		cert:    &cert,
+		expires: tmpl.NotAfter.Add(-proxyLeafCertRefreshBefore),
+	}
+	ent.elem = p.lru.PushFront(ent)
+	p.certs[host] = ent
+	for len(p.certs) > proxyCertCacheMaxEntries {
+		oldest := p.lru.Back()
+		if oldest == nil {
+			break
+		}
+		p.removeCertEntry(oldest.Value.(*certCacheEntry))
+	}
 	return &cert, nil
+}
+
+func (p *provider) removeCertEntry(ent *certCacheEntry) {
+	delete(p.certs, ent.host)
+	p.lru.Remove(ent.elem)
+}
+
+func cleanOldNamespaces(root string) {
+	nsDir := filepath.Join(root, "net/proxy")
+	dirEntries, err := os.ReadDir(nsDir)
+	if err != nil {
+		bklog.L.Debugf("could not read %q for cleanup: %s", nsDir, err)
+		return
+	}
+	go func() {
+		for _, d := range dirEntries {
+			nsPath := filepath.Join(nsDir, d.Name())
+			if err := unmountNetNS(nsPath); err != nil {
+				bklog.L.Warningf("failed to unmount proxy network namespace %q left over from previous run: %s", d.Name(), err)
+				continue
+			}
+			if err := deleteNetNS(nsPath); err != nil {
+				bklog.L.Warningf("failed to remove proxy network namespace %q left over from previous run: %s", d.Name(), err)
+			}
+		}
+	}()
 }
 
 func createNetNS(root, id string) (_ string, err error) {

@@ -4,12 +4,14 @@ package proxyprovider
 
 import (
 	"compress/gzip"
+	"container/list"
 	"context"
 	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/sourcepolicy"
@@ -307,6 +309,35 @@ func TestProxyHandlerRejectsConvertedAttrs(t *testing.T) {
 	require.Contains(t, err.Error(), "proxy conversion only supports URL updates")
 }
 
+func TestCertForHostUsesCachedValidCertificate(t *testing.T) {
+	p := newTestCertProvider(t)
+
+	cert, err := p.certForHost("example.com")
+	require.NoError(t, err)
+	cached, err := p.certForHost("example.com")
+	require.NoError(t, err)
+
+	require.Same(t, cert, cached)
+	require.Len(t, p.certs, 1)
+}
+
+func TestCertForHostRefreshesExpiredCertificate(t *testing.T) {
+	p := newTestCertProvider(t)
+
+	cert, err := p.certForHost("example.com")
+	require.NoError(t, err)
+	p.certsMu.Lock()
+	p.certs["example.com"].expires = time.Now().Add(-time.Second)
+	p.certsMu.Unlock()
+
+	refreshed, err := p.certForHost("example.com")
+	require.NoError(t, err)
+
+	require.NotSame(t, cert, refreshed)
+	require.NotEqual(t, cert.Certificate[0], refreshed.Certificate[0])
+	require.Len(t, p.certs, 1)
+}
+
 type proxyPolicyFunc func(context.Context, *pb.Op) (bool, error)
 
 func (f proxyPolicyFunc) Evaluate(ctx context.Context, op *pb.Op) (bool, error) {
@@ -329,5 +360,19 @@ func newTestProxyHandler(t *testing.T, capture *network.ProxyCapture) *proxyHand
 	return &proxyHandler{
 		provider: &provider{client: tr},
 		capture:  capture,
+	}
+}
+
+func newTestCertProvider(t *testing.T) *provider {
+	t.Helper()
+	certPEM, ca, key, err := newCA()
+	require.NoError(t, err)
+	require.NotEmpty(t, certPEM)
+	return &provider{
+		caPEM: certPEM,
+		ca:    ca,
+		caKey: key,
+		certs: map[string]*certCacheEntry{},
+		lru:   list.New(),
 	}
 }
