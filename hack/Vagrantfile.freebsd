@@ -2,19 +2,19 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "generic/freebsd14"
+  config.vm.box = "bento/freebsd-14"
+  config.vm.box_version = "202508.03.0"
   config.vm.boot_timeout = 900
   config.vm.synced_folder ".", "/vagrant", type: "rsync"
   config.ssh.keep_alive = true
 
   config.vm.provision "init", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       freebsd-version -kru
-      kldload nullfs
-      # switching to "release_2" ensures compatibility with the current Vagrant box
-      sed -i '' 's/latest/release_2/' /usr/local/etc/pkg/repos/FreeBSD.conf
+      kldstat -m nullfs >/dev/null 2>&1 || kldload nullfs
+      pkg bootstrap
       pkg install -y git runj
       mkdir -p /vagrant/coverage /vagrant/.tmp/logs
     SHELL
@@ -22,29 +22,29 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "install-buildkitd", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       cd /vagrant
       install -m 755 bin/buildkitd /usr/local/bin/buildkitd
-      type /usr/local/bin/buildkitd
+      test -x /usr/local/bin/buildkitd
       buildkitd --version
     SHELL
   end
 
   config.vm.provision "install-buildctl", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       cd /vagrant
       install -m 755 bin/buildctl /usr/local/bin/buildctl
-      type /usr/local/bin/buildctl
+      test -x /usr/local/bin/buildctl
     SHELL
   end
 
   config.vm.provision "run-containerd", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       cd /vagrant
       install -m 755 bin/containerd /bin/containerd
       containerd --version
@@ -54,8 +54,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "run-buildkitd", type: "shell", run: "once" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       mkdir -p /run/buildkit
       daemon -o /vagrant/.tmp/logs/buildkitd /usr/local/bin/buildkitd
       sleep 3
@@ -64,8 +64,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "test-smoke", type: "shell", run: "never" do |sh|
     sh.inline = <<~SHELL
-      #!/usr/bin/env bash
-      set -eux -o pipefail
+      #!/bin/sh
+      set -eux
       mkdir -p /vagrant/.tmp/freebsd-smoke
       cd /vagrant/.tmp/freebsd-smoke
       cat > Dockerfile <<EOF
