@@ -689,12 +689,6 @@ github.com/golang-jwt/jwt/v5
 # github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 ## explicit; go 1.20
 github.com/golang/groupcache/lru
-# github.com/golang/protobuf v1.5.4
-## explicit; go 1.17
-github.com/golang/protobuf/jsonpb
-github.com/golang/protobuf/proto
-github.com/golang/protobuf/ptypes/any
-github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/certificate-transparency-go v1.3.2
 ## explicit; go 1.23.0
 github.com/google/certificate-transparency-go
