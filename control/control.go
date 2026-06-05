@@ -46,6 +46,7 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/throttle"
+	"github.com/moby/buildkit/util/tracing/forwarder"
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
@@ -61,6 +62,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const traceShutdownTimeout = 5 * time.Second
 
 type Opt struct {
 	SessionManager            *session.Manager
@@ -89,6 +92,7 @@ type Controller struct { // TODO: ControlService
 	history                      *history.Queue
 	cache                        solver.CacheManager
 	gatewayForwarder             *controlgateway.GatewayForwarder
+	traceForwarder               *forwarder.Exporter
 	throttledGC                  func()
 	throttledReleaseUnreferenced func()
 	gcmu                         sync.Mutex
@@ -137,6 +141,14 @@ func NewController(opt Opt) (*Controller, error) {
 	// use longer interval for releaseUnreferencedCache deleting links quickly is less important
 	c.throttledReleaseUnreferenced = throttle.After(5*time.Minute, func() { c.releaseUnreferencedCache(context.TODO()) })
 
+	if opt.TraceCollector != nil {
+		fwd, err := forwarder.New(context.Background(), opt.TraceCollector)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to start trace forwarder")
+		}
+		c.traceForwarder = fwd
+	}
+
 	defer func() {
 		time.AfterFunc(time.Second, c.throttledGC)
 	}()
@@ -148,6 +160,15 @@ func (c *Controller) Close() error {
 	var errs []error
 	if err := c.opt.HistoryDB.Close(); err != nil {
 		errs = append(errs, err)
+	}
+	if c.traceForwarder != nil {
+		func() {
+			ctx, cancel := context.WithTimeoutCause(context.Background(), traceShutdownTimeout, errors.WithStack(context.DeadlineExceeded))
+			defer cancel()
+			if err := c.traceForwarder.Shutdown(ctx); err != nil {
+				errs = append(errs, err)
+			}
+		}()
 	}
 	if err := c.opt.WorkerController.Close(); err != nil {
 		errs = append(errs, err)
@@ -299,11 +320,11 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 }
 
 func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
-	if c.opt.TraceCollector == nil {
+	if c.traceForwarder == nil {
 		return nil, status.Errorf(codes.Unavailable, "trace collector not configured")
 	}
-	err := c.opt.TraceCollector.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
-	if err != nil {
+
+	if err := c.traceForwarder.ExportSpans(ctx, transform.Spans(req.GetResourceSpans())); err != nil {
 		return nil, err
 	}
 	return &tracev1.ExportTraceServiceResponse{}, nil

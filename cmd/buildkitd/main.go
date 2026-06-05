@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
@@ -94,6 +95,8 @@ func init() {
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+
+const telemetryShutdownTimeout = 5 * time.Second
 
 type workerInitializerOpt struct {
 	config         *config.Config
@@ -458,10 +461,16 @@ func main() {
 	}
 
 	app.After = func(_ *cli.Context) (err error) {
+		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), telemetryShutdownTimeout, errors.WithStack(context.DeadlineExceeded))
+		defer cancel()
+
 		var errs []error
 		for _, c := range closers {
-			if e := c(context.TODO()); e != nil {
+			if e := c(ctx); e != nil {
 				errs = append(errs, e)
+			}
+			if context.Cause(ctx) != nil {
+				break
 			}
 		}
 		return stderrors.Join(errs...)
