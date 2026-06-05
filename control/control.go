@@ -63,6 +63,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const traceShutdownTimeout = 5 * time.Second
+
 type Opt struct {
 	SessionManager            *session.Manager
 	WorkerController          *worker.Controller
@@ -160,9 +162,13 @@ func (c *Controller) Close() error {
 		errs = append(errs, err)
 	}
 	if c.traceForwarder != nil {
-		if err := c.traceForwarder.Shutdown(context.TODO()); err != nil {
-			errs = append(errs, err)
-		}
+		func() {
+			ctx, cancel := context.WithTimeoutCause(context.Background(), traceShutdownTimeout, errors.WithStack(context.DeadlineExceeded))
+			defer cancel()
+			if err := c.traceForwarder.Shutdown(ctx); err != nil {
+				errs = append(errs, err)
+			}
+		}()
 	}
 	if err := c.opt.WorkerController.Close(); err != nil {
 		errs = append(errs, err)

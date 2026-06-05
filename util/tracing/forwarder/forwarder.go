@@ -32,7 +32,7 @@ type Exporter struct {
 
 	ctx      context.Context
 	cancel   context.CancelCauseFunc
-	wg       sync.WaitGroup
+	done     <-chan struct{}
 	ch       chan<- exportRequest
 	shutdown bool
 	mu       sync.RWMutex
@@ -64,10 +64,13 @@ func (e *Exporter) Start(ctx context.Context) error {
 
 		e.ctx, e.cancel = context.WithCancelCause(context.Background())
 		ch := make(chan exportRequest, pendingBufferSize)
+		done := make(chan struct{})
 		e.ch = ch
-		e.wg.Go(func() {
+		e.done = done
+		go func() {
+			defer close(done)
 			e.exportLoop(e.ctx, ch)
-		})
+		}()
 		err = nil
 	})
 	return err
@@ -117,6 +120,7 @@ func (e *Exporter) exportLoop(ctx context.Context, ch <-chan exportRequest) {
 func (e *Exporter) exportSpans(ctx context.Context, req exportRequest) {
 	if time.Since(req.deadline) >= 0 {
 		bklog.G(ctx).Warnf("dropped %d spans: export deadline missed", len(req.spans))
+		return
 	}
 
 	ctx, cancel := context.WithDeadlineCause(ctx, req.deadline, errors.WithStack(context.DeadlineExceeded))
@@ -131,6 +135,7 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 	e.mu.Lock()
 	e.shutdown = true
 	cancel := e.cancel
+	done := e.done
 	e.mu.Unlock()
 
 	if cancel == nil {
@@ -144,37 +149,19 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 
 		// Wait for the spans to drain or the shutdown context to have
 		// been canceled. Whichever occurs first.
-		var wg sync.WaitGroup
-		done := make(chan struct{})
-		wg.Go(func() {
-			select {
-			// All pending exports have finished.
-			case <-done:
-				// The shutdown deadline has been reached.
-			case <-ctx.Done():
-			}
-
-			// Either all exports have completed or we've hit
-			// our limit for the shutdown context. Cancel the
-			// context either way.
+		select {
+		// All pending exports have finished.
+		case <-done:
+			cancel(errors.WithStack(context.Canceled))
+		case <-ctx.Done():
+			// The shutdown deadline has been reached.
 			cause := context.Cause(ctx)
-			if cause == nil {
-				cause = context.Canceled
-			}
 			cancel(cause)
-		})
-
-		// Wait for the run goroutine (and any in-flight export) to
-		// finish and then mark the exporter as done when it is.
-		e.wg.Wait()
-		close(done)
-
-		// Ensure we don't leave orphaned goroutines.
-		wg.Wait()
+			err = cause
+			return
+		}
 
 		// Finally finish by calling shutdown on the underlying exporter.
-		// If the context already got canceled, this will probably
-		// do nothing but just going with it anyway.
 		err = e.exp.Shutdown(ctx)
 	})
 	return err
