@@ -2,7 +2,7 @@
 
 ARG GO_VERSION=1.26
 ARG DEBIAN_VERSION=trixie
-ARG PROTOC_VERSION=3.11.4
+ARG PROTOC_VERSION=3.14.0
 ARG PROTOC_GOOGLEAPIS_VERSION=2af421884dd468d565137215c946ebe4e245ae26
 
 # protoc is dynamically linked to glibc so can't use alpine base
