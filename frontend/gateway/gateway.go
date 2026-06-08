@@ -707,8 +707,17 @@ func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids 
 		if !ok {
 			return ids, errors.Errorf("unexpected type for result, got %T", res.Sys())
 		}
-		ids[i] = workerRef.ID()
-		lbf.workerRefByID[workerRef.ID()] = workerRef
+		id := workerRef.ID()
+		ids[i] = id
+		if existing, ok := lbf.workerRefByID[id]; ok {
+			if existing != workerRef {
+				if err := workerRef.Release(context.TODO()); err != nil {
+					return ids, errors.WithStack(err)
+				}
+			}
+			continue
+		}
+		lbf.workerRefByID[id] = workerRef
 	}
 	return ids, nil
 }
