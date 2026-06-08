@@ -196,6 +196,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBuildExportZstd,
 	testPullZstdImage,
 	testMergeOp,
+	testPassthroughOp,
 	testMergeOpCacheInline,
 	testMergeOpCacheMin,
 	testMergeOpCacheMax,
@@ -8979,6 +8980,101 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		File(llb.Mkfile("qaz", 0644, nil)),
 	)
 	// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
+}
+
+func testPassthroughOp(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	ctx := sb.Context()
+	busybox := llb.Image("busybox:latest")
+	base := llb.Scratch().File(llb.Mkfile("/base", 0644, []byte("base")))
+
+	t.Run("requires returns receiver and builds non-output dependency", func(t *testing.T) {
+		cacheID := "passthrough-requires-" + identity.NewID()
+		nonOutputDep := busybox.Run(llb.Shlex(`sh -e -c "echo requires-dep-built > /cache/marker; echo should-not-export > /not-output"`))
+		nonOutputDep.AddMount("/cache", llb.Scratch(), llb.AsPersistentCacheDir(cacheID, llb.CacheMountShared))
+
+		outDir := solveStateToLocalDir(ctx, t, c, base.Requires("test.passthrough.requires", nonOutputDep.Root()))
+		requireLocalFile(t, outDir, "base", "base")
+		require.NoFileExists(t, filepath.Join(outDir, "not-output"))
+
+		markerDir := solveStateToLocalDir(ctx, t, c, cacheMountFile(busybox, cacheID, "marker"))
+		requireLocalFile(t, markerDir, "marker", "requires-dep-built\n")
+	})
+
+	t.Run("direct passthrough returns selected outputs and builds non-output input", func(t *testing.T) {
+		cacheID := "passthrough-direct-" + identity.NewID()
+		nonOutputInput := busybox.Run(llb.Shlex(`sh -e -c "echo direct-input-built > /cache/marker; echo should-not-export > /not-output"`))
+		nonOutputInput.AddMount("/cache", llb.Scratch(), llb.AsPersistentCacheDir(cacheID, llb.CacheMountShared))
+
+		pass := llb.NewPassthroughOp("test.passthrough.direct", []llb.PassthroughInput{
+			{State: llb.Scratch().File(llb.Mkfile("/a", 0644, []byte("a"))), Output: true},
+			{State: nonOutputInput.Root()},
+			{State: llb.Scratch().File(llb.Mkfile("/c", 0644, []byte("c"))), Output: true},
+		})
+
+		outA := llb.NewState(pass.Output())
+		outC := llb.NewState(pass.OutputAt(1))
+		out := llb.Scratch().
+			File(llb.Copy(outA, "/a", "/a")).
+			File(llb.Copy(outC, "/c", "/c"))
+
+		outDir := solveStateToLocalDir(ctx, t, c, out)
+		requireLocalFile(t, outDir, "a", "a")
+		requireLocalFile(t, outDir, "c", "c")
+		require.NoFileExists(t, filepath.Join(outDir, "not-output"))
+
+		markerDir := solveStateToLocalDir(ctx, t, c, cacheMountFile(busybox, cacheID, "marker"))
+		requireLocalFile(t, markerDir, "marker", "direct-input-built\n")
+	})
+
+	t.Run("failing non-output dependency fails solve", func(t *testing.T) {
+		fail := busybox.Run(llb.Shlex(`sh -e -c "exit 42"`)).Root()
+		def, err := base.Requires("test.passthrough.fail", fail).Marshal(ctx)
+		require.NoError(t, err)
+		_, err = c.Solve(ctx, def, SolveOpt{
+			Exports: []ExportEntry{{
+				Type:      ExporterLocal,
+				OutputDir: t.TempDir(),
+			}},
+		}, nil)
+		require.Error(t, err)
+	})
+}
+
+func solveStateToLocalDir(ctx context.Context, t *testing.T, c *Client, st llb.State) string {
+	t.Helper()
+
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+
+	outDir := t.TempDir()
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: outDir,
+		}},
+	}, nil)
+	require.NoError(t, err)
+	return outDir
+}
+
+func cacheMountFile(base llb.State, cacheID, name string) llb.State {
+	check := base.Run(llb.Shlexf(`sh -e -c "echo %s >/dev/null; cp /cache/%s /out/%s"`, cacheID, name, name))
+	check.AddMount("/cache", llb.Scratch(), llb.AsPersistentCacheDir(cacheID, llb.CacheMountShared))
+	return check.AddMount("/out", llb.Scratch())
+}
+
+func requireLocalFile(t *testing.T, dir, name, expected string) {
+	t.Helper()
+
+	dt, err := os.ReadFile(filepath.Join(dir, name))
+	require.NoError(t, err)
+	require.Equal(t, expected, string(dt))
 }
 
 func testMergeOpCacheInline(t *testing.T, sb integration.Sandbox) {

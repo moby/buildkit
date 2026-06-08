@@ -100,8 +100,9 @@ const (
 	CapRemoteCacheS3     apicaps.CapID = "cache.s3"
 	CapRemoteCacheAzBlob apicaps.CapID = "cache.azblob"
 
-	CapMergeOp apicaps.CapID = "mergeop"
-	CapDiffOp  apicaps.CapID = "diffop"
+	CapMergeOp       apicaps.CapID = "mergeop"
+	CapDiffOp        apicaps.CapID = "diffop"
+	CapPassthroughOp apicaps.CapID = "passthroughop"
 
 	CapAnnotations  apicaps.CapID = "exporter.image.annotations"
 	CapAttestations apicaps.CapID = "exporter.image.attestations"
@@ -591,6 +592,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapDiffOp,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapPassthroughOp,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
