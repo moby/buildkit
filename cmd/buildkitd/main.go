@@ -230,6 +230,10 @@ func main() {
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure, device",
 		},
+		cli.BoolFlag{
+			Name:  "proxy-network",
+			Usage: "enable proxy network enforcement for all builds",
+		},
 		cli.StringFlag{
 			Name:  "otel-socket-path",
 			Usage: "OTEL collector trace socket path",
@@ -665,6 +669,9 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, warnings *[]string) erro
 		// override values from config
 		cfg.Entitlements = c.StringSlice("allow-insecure-entitlement")
 	}
+	if c.IsSet("proxy-network") {
+		cfg.ProxyNetwork = c.Bool("proxy-network")
+	}
 
 	if c.IsSet("debugaddr") {
 		cfg.GRPC.DebugAddress = c.String("debugaddr")
@@ -947,6 +954,7 @@ func newController(ctx context.Context, c *cli.Context, cfg *config.Config, mp m
 		LeaseManager:              w.LeaseManager(),
 		ContentStore:              w.ContentStore(),
 		HistoryConfig:             cfg.History,
+		ProxyNetwork:              cfg.ProxyNetwork,
 		GarbageCollect:            w.GarbageCollect,
 		GracefulStop:              ctx.Done(),
 		ProvenanceEnv:             provenanceEnv,

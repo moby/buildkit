@@ -165,11 +165,22 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		return nil, err
 	}
 
-	namespace, err := provider.New(ctx, meta.Hostname)
+	namespace, err := provider.New(ctx, meta.Hostname, network.NamespaceOptions{
+		ProxyPolicy:  meta.ProxyPolicy,
+		ProxyCapture: meta.ProxyCapture,
+	})
 	if err != nil {
 		return nil, err
 	}
 	defer namespace.Close()
+	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
+		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+		cleanProxyCA, err := executor.InjectProxyCA(details.rootfsPath, proxyNS.ProxyCACert())
+		if err != nil {
+			return nil, err
+		}
+		defer cleanProxyCA()
+	}
 
 	spec, releaseSpec, err := w.createOCISpec(ctx, id, resolvConf, hostsFile, namespace, mounts, meta, details)
 	if err != nil {

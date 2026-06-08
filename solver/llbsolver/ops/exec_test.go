@@ -1,13 +1,17 @@
 package ops
 
 import (
+	"bytes"
 	"context"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/network"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +37,29 @@ func TestDedupePaths(t *testing.T) {
 
 	res = dedupePaths([]string{"/", "/foo"})
 	require.Equal(t, []string{"/"}, res)
+}
+
+func TestLogProxyRequests(t *testing.T) {
+	var buf bytes.Buffer
+	logProxyRequests(&buf, []network.ProxyRequest{
+		{Method: "GET", URL: "https://example.com/file", StatusCode: http.StatusOK},
+		{Method: "POST", URL: "https://xxxxx:xxxxx@example.com/token", StatusCode: http.StatusCreated},
+		{Method: "GET", URL: "https://example.com/unknown-status"},
+	})
+
+	require.Equal(t, strings.Join([]string{
+		"proxy network requests:",
+		"- GET https://example.com/file -> 200",
+		"- POST https://xxxxx:xxxxx@example.com/token -> 201",
+		"- GET https://example.com/unknown-status",
+		"",
+	}, "\n"), buf.String())
+}
+
+func TestLogProxyRequestsEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	logProxyRequests(&buf, nil)
+	require.Empty(t, buf.String())
 }
 
 func TestExecOpCacheMap(t *testing.T) {

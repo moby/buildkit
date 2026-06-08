@@ -144,6 +144,7 @@ func (m *SolveRequest) CloneVT() *SolveRequest {
 	r.EnableSessionExporter = m.EnableSessionExporter
 	r.SourcePolicySession = m.SourcePolicySession
 	r.CompatibilityVersion = m.CompatibilityVersion
+	r.ProxyNetwork = m.ProxyNetwork
 	if rhs := m.ExporterAttrsDeprecated; rhs != nil {
 		tmpContainer := make(map[string]string, len(rhs))
 		for k, v := range rhs {
@@ -1045,6 +1046,9 @@ func (this *SolveRequest) EqualVT(that *SolveRequest) bool {
 		return false
 	}
 	if this.CompatibilityVersion != that.CompatibilityVersion {
+		return false
+	}
+	if this.ProxyNetwork != that.ProxyNetwork {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -2252,6 +2256,18 @@ func (m *SolveRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 	if m.unknownFields != nil {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
+	}
+	if m.ProxyNetwork {
+		i--
+		if m.ProxyNetwork {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x88
 	}
 	if m.CompatibilityVersion != 0 {
 		i = protohelpers.EncodeVarint(dAtA, i, uint64(m.CompatibilityVersion))
@@ -4187,6 +4203,9 @@ func (m *SolveRequest) SizeVT() (n int) {
 	}
 	if m.CompatibilityVersion != 0 {
 		n += 2 + protohelpers.SizeOfVarint(uint64(m.CompatibilityVersion))
+	}
+	if m.ProxyNetwork {
+		n += 3
 	}
 	n += len(m.unknownFields)
 	return n
@@ -6359,6 +6378,26 @@ func (m *SolveRequest) UnmarshalVT(dAtA []byte) error {
 					break
 				}
 			}
+		case 17:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProxyNetwork", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ProxyNetwork = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

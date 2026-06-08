@@ -40,6 +40,7 @@ type llbBridge struct {
 	cmsMu                     sync.Mutex
 	sm                        *session.Manager
 	provenanceStore           *provenanceStore
+	proxyNetwork              bool
 
 	executorOnce sync.Once
 	executorErr  error
@@ -140,7 +141,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	}
 	dpc := &detectPrunedCacheID{}
 
-	edge, err := Load(ctx, def, b.policy(polEngine), dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps(), WithLinuxResourcesMetadata())
+	edge, err := loadWithProxyNetwork(ctx, def, b.policy(polEngine), b.proxyNetwork, dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps(), WithLinuxResourcesMetadata())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load LLB")
 	}
@@ -167,10 +168,21 @@ func (b *llbBridge) policy(engine *sourcepolicy.Engine) SourcePolicyEvaluator {
 	}
 }
 
-func (b *llbBridge) validateEntitlements(p executor.ProcessInfo) error {
+func (b *llbBridge) validateEntitlements(p *executor.ProcessInfo) error {
 	ent, err := loadEntitlements(b.builder)
 	if err != nil {
 		return err
+	}
+	if b.proxyNetwork {
+		switch p.Meta.NetMode {
+		case pb.NetMode_UNSET:
+			p.Meta.NetMode = pb.NetMode_PROXY
+		case pb.NetMode_NONE, pb.NetMode_PROXY:
+		default:
+			return errors.Errorf("network mode %s is not allowed when proxy network is enabled", p.Meta.NetMode)
+		}
+	} else if p.Meta.NetMode == pb.NetMode_PROXY {
+		return errors.Errorf("network mode %s requires proxy network to be enabled for the build", p.Meta.NetMode)
 	}
 	v := entitlements.Values{
 		NetworkHost:      p.Meta.NetMode == pb.NetMode_HOST,
@@ -180,8 +192,15 @@ func (b *llbBridge) validateEntitlements(p executor.ProcessInfo) error {
 }
 
 func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (resourcestypes.Recorder, error) {
-	if err := b.validateEntitlements(process); err != nil {
+	if err := b.validateEntitlements(&process); err != nil {
 		return nil, err
+	}
+	policy, err := b.ProxyPolicy()
+	if err != nil {
+		return nil, err
+	}
+	if policy != nil {
+		process.Meta.ProxyPolicy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {
@@ -191,8 +210,15 @@ func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, m
 }
 
 func (b *llbBridge) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
-	if err := b.validateEntitlements(process); err != nil {
+	if err := b.validateEntitlements(&process); err != nil {
 		return err
+	}
+	policy, err := b.ProxyPolicy()
+	if err != nil {
+		return err
+	}
+	if policy != nil {
+		process.Meta.ProxyPolicy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {

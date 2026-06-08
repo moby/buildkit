@@ -56,6 +56,7 @@ type SolveOpt struct {
 	Internal              bool
 	SourcePolicy          *spb.Policy
 	SourcePolicyProvider  session.Attachable
+	ProxyNetwork          bool
 	Ref                   string
 }
 
@@ -312,6 +313,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Internal:                opt.Internal,
 			CompatibilityVersion:    int64(opt.CompatibilityVersion),
 			SourcePolicy:            opt.SourcePolicy,
+			ProxyNetwork:            opt.ProxyNetwork,
 		}
 		if opt.SourcePolicyProvider != nil {
 			sopt.SourcePolicySession = s.ID()
