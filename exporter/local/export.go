@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/staticfs"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -101,12 +102,12 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
 		return nil, nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
 	}
-	p, err := exptypes.ParsePlatforms(inp.Metadata)
+	platforms, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	if !isMap && len(p.Platforms) > 1 {
+	if !isMap && len(platforms.Platforms) > 1 {
 		return nil, nil, nil, errors.Errorf("unable to export multiple platforms without map")
 	}
 
@@ -115,50 +116,80 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	visitedPath := map[string]string{}
 	var visitedMu sync.Mutex
 
+	mode := client.LocalExporterModeCopy
+	if e.attrs != nil {
+		mode, err = client.ParseLocalExporterMode(e.attrs[keyMode])
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	platformDirStat := func(k string, opt CreateFSOpts) *fstypes.Stat {
+		st := &fstypes.Stat{
+			Mode: uint32(os.ModeDir | 0755),
+			Path: strings.ReplaceAll(k, "/", "_"),
+		}
+		if opt.Epoch != nil && opt.Epoch.Value != nil {
+			st.ModTime = opt.Epoch.Value.UnixNano()
+		}
+		return st
+	}
+
+	buildFS := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, opt CreateFSOpts, wrapPlatformSplit bool) (fsutil.FS, func() error, string, error) {
+		outputFS, cleanup, err := CreateFS(ctx, buildInfo.SessionID, k, ref, attestations, now, isMap, opt)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		releaseOnError := true
+		defer func() {
+			if releaseOnError && cleanup != nil {
+				_ = cleanup()
+			}
+		}()
+
+		lbl := "copying files"
+		if !e.opts.UsePlatformSplit(isMap) {
+			// check for duplicate paths
+			err = fsWalk(ctx, outputFS, "", func(p string, entry os.DirEntry, err error) error {
+				if entry.IsDir() {
+					return nil
+				}
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				visitedMu.Lock()
+				defer visitedMu.Unlock()
+				if vp, ok := visitedPath[p]; ok {
+					return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
+				}
+				visitedPath[p] = k
+				return nil
+			})
+			if err != nil {
+				return nil, nil, "", err
+			}
+		} else {
+			lbl += " " + k
+			if wrapPlatformSplit {
+				outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: platformDirStat(k, opt)}})
+				if err != nil {
+					return nil, nil, "", err
+				}
+			}
+		}
+
+		releaseOnError = false
+		return outputFS, cleanup, lbl, nil
+	}
+
 	export := func(ctx context.Context, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, opt CreateFSOpts) func() error {
 		return func() error {
-			outputFS, cleanup, err := CreateFS(ctx, buildInfo.SessionID, k, ref, attestations, now, isMap, opt)
+			outputFS, cleanup, lbl, err := buildFS(ctx, k, ref, attestations, opt, true)
 			if err != nil {
 				return err
 			}
 			if cleanup != nil {
 				defer cleanup()
-			}
-
-			lbl := "copying files"
-			if !e.opts.UsePlatformSplit(isMap) {
-				// check for duplicate paths
-				err = fsWalk(ctx, outputFS, "", func(p string, entry os.DirEntry, err error) error {
-					if entry.IsDir() {
-						return nil
-					}
-					if err != nil && !errors.Is(err, os.ErrNotExist) {
-						return err
-					}
-					visitedMu.Lock()
-					defer visitedMu.Unlock()
-					if vp, ok := visitedPath[p]; ok {
-						return errors.Errorf("cannot overwrite %s from %s with %s when split option is disabled", p, vp, k)
-					}
-					visitedPath[p] = k
-					return nil
-				})
-				if err != nil {
-					return err
-				}
-			} else {
-				lbl += " " + k
-				st := &fstypes.Stat{
-					Mode: uint32(os.ModeDir | 0755),
-					Path: strings.ReplaceAll(k, "/", "_"),
-				}
-				if opt.Epoch != nil && opt.Epoch.Value != nil {
-					st.ModTime = opt.Epoch.Value.UnixNano()
-				}
-				outputFS, err = fsutil.SubDirFS([]fsutil.Dir{{FS: outputFS, Stat: st}})
-				if err != nil {
-					return err
-				}
 			}
 
 			progress, closeProgress := NewProgressHandler(ctx, lbl)
@@ -172,8 +203,77 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 	eg, ctx := errgroup.WithContext(ctx)
 
-	if len(p.Platforms) > 0 {
-		for _, p := range p.Platforms {
+	if mode == client.LocalExporterModeDelete {
+		eg.Go(func() error {
+			var outputFS fsutil.FS
+			var platformDirs []fsutil.Dir
+			var cleanups []func() error
+			split := e.opts.UsePlatformSplit(isMap)
+			defer func() {
+				for i := len(cleanups) - 1; i >= 0; i-- {
+					_ = cleanups[i]()
+				}
+			}()
+
+			addFS := func(fs fsutil.FS) {
+				if outputFS == nil {
+					outputFS = fs
+				} else {
+					outputFS = staticfs.NewMergeFS(outputFS, fs)
+				}
+			}
+
+			if len(platforms.Platforms) > 0 {
+				for _, p := range platforms.Platforms {
+					r, ok := inp.FindRef(p.ID)
+					if !ok {
+						return errors.Errorf("failed to find ref for ID %s", p.ID)
+					}
+					opt := e.opts
+					if e.opts.Epoch == nil {
+						tm, err := epoch.ParseSource(inp, &p)
+						if err != nil {
+							return err
+						}
+						opt.Epoch = &epoch.Epoch{Value: tm}
+					}
+					fs, cleanup, _, err := buildFS(ctx, p.ID, r, inp.Attestations[p.ID], opt, !split)
+					if err != nil {
+						return err
+					}
+					if cleanup != nil {
+						cleanups = append(cleanups, cleanup)
+					}
+					if split {
+						platformDirs = append(platformDirs, fsutil.Dir{FS: fs, Stat: platformDirStat(p.ID, opt)})
+					} else {
+						addFS(fs)
+					}
+				}
+				if len(platformDirs) > 0 {
+					fs, err := fsutil.SubDirFS(platformDirs)
+					if err != nil {
+						return err
+					}
+					addFS(fs)
+				}
+			} else {
+				fs, cleanup, _, err := buildFS(ctx, "", inp.Ref, nil, e.opts, true)
+				if err != nil {
+					return err
+				}
+				if cleanup != nil {
+					cleanups = append(cleanups, cleanup)
+				}
+				addFS(fs)
+			}
+
+			progress, closeProgress := NewProgressHandler(ctx, "copying files")
+			defer closeProgress()
+			return filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress)
+		})
+	} else if len(platforms.Platforms) > 0 {
+		for _, p := range platforms.Platforms {
 			r, ok := inp.FindRef(p.ID)
 			if !ok {
 				return nil, nil, nil, errors.Errorf("failed to find ref for ID %s", p.ID)

@@ -8192,12 +8192,8 @@ func testExportLocalModeMultiPlatformKeepsAllPlatforms(t *testing.T, sb integrat
 	destDir := t.TempDir()
 
 	// Pre-populate dest with directories matching the platform-split naming
-	// convention. This is critical for exposing the race in delete mode:
-	// each platform's fsutil.Receive does a dest-walk at the start and, with
-	// Merge=false (mode=delete), flags everything not in its own stream for
-	// deletion — including other platforms' pre-existing directories. Without
-	// pre-population the dest starts empty and the concurrent dest-walks all
-	// see nothing to delete, hiding the cross-platform deletion race.
+	// convention. Delete mode must remove stale files from all platform
+	// directories while preserving every platform's fresh output.
 	err = os.WriteFile(filepath.Join(destDir, "stale.txt"), []byte("stale"), 0600)
 	require.NoError(t, err)
 	for _, platform := range platformsToTest {
