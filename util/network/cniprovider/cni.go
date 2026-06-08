@@ -169,6 +169,22 @@ func (pool *cniPool) get(ctx context.Context) (*cniNS, error) {
 		pool.mu.Unlock()
 		trace.SpanFromContext(ctx).AddEvent("returning network namespace from pool")
 		bklog.G(ctx).Debugf("returning network namespace %s from pool", ns.id)
+
+		// windows only: see issue #5668
+		if runtime.GOOS == "windows" && pool.targetSize < 0 {
+			// for cases where targetSize is set to < 0
+			// no re-use of namespaces, use current one now
+			// and replace with a new one.
+			// the current one will be released after use.
+			newNs, err := pool.getNew(ctx)
+			if err != nil {
+				bklog.G(ctx).Errorf("failed to create new network namespace: %s", err)
+				return nil, err
+			}
+			pool.mu.Lock()
+			pool.available = append(pool.available, newNs)
+			pool.mu.Unlock()
+		}
 		return ns, nil
 	}
 	pool.mu.Unlock()
@@ -208,13 +224,25 @@ func (pool *cniPool) put(ns *cniNS) {
 		_ = ns.release()
 		return
 	}
+
+	// windows only: see issue #5668
+	if runtime.GOOS == "windows" && pool.targetSize < 0 && len(pool.available) > 0 {
+		// release ns if being returned back to the pool
+		// if a new one is already in the pool.
+		_ = ns.release()
+		return
+	}
 	pool.available = append(pool.available, ns)
 	actualSize := pool.actualSize
 
 	if actualSize > pool.targetSize {
 		// We have more network namespaces than our target number, so
 		// schedule a shrinking pass.
-		time.AfterFunc(aboveTargetGracePeriod, pool.cleanupToTargetSize)
+		// on windows, if targetSize < 0, no shrinking needed
+		// since reuse is off -- see issue #5668.
+		if !(runtime.GOOS == "windows" && pool.targetSize < 0) {
+			time.AfterFunc(aboveTargetGracePeriod, pool.cleanupToTargetSize)
+		}
 	}
 }
 
