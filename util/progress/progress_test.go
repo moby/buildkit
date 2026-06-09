@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -63,8 +65,19 @@ func TestProgressNested(t *testing.T) {
 	err = eg.Wait()
 	require.NoError(t, err)
 
-	assert.Greater(t, len(trace.items), 9) // usually 14
-	assert.LessOrEqual(t, len(trace.items), 15)
+	last := map[string]*Progress{}
+	for _, p := range trace.items {
+		prev, ok := last[p.ID]
+		if !ok || p.Timestamp.After(prev.Timestamp) {
+			last[p.ID] = p
+		}
+	}
+
+	require.ElementsMatch(t, []string{"reduce", "synccalc", "calc-0", "calc-1"}, slices.Collect(maps.Keys(last)))
+	assert.Equal(t, Status{Action: "starting"}, last["reduce"].Sys)
+	for _, id := range []string{"synccalc", "calc-0", "calc-1"} {
+		assert.Equal(t, Status{Action: "done", Current: 3, Total: 3}, last[id].Sys)
+	}
 }
 
 func calc(ctx context.Context, total int, name string) (int, error) {
