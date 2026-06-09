@@ -61,7 +61,6 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
-	ociTypes := e.opt.Variant == VariantOCI
 	i := &imageExporterInstance{
 		imageExporter: e,
 		id:            id,
@@ -71,7 +70,6 @@ func (e *imageExporter) Resolve(ctx context.Context, id int, opt map[string]stri
 			RefCfg: cacheconfig.RefConfig{
 				Compression: compression.New(compression.Default),
 			},
-			OCITypes: &ociTypes,
 		},
 	}
 
@@ -149,6 +147,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
+	opts.SetOCITypesDefault(e.defaultOCITypes(buildInfo.CompatibilityVersion, src))
+	if err := opts.Validate(); err != nil {
+		return nil, nil, nil, err
+	}
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -294,6 +296,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	return resp, nil, nil, nil
+}
+
+func (e *imageExporterInstance) defaultOCITypes(compatibilityVersion int, src *exporter.Source) bool {
+	if e.opt.Variant == VariantOCI {
+		return true
+	}
+	return containerimage.DefaultOCITypes(compatibilityVersion, src)
 }
 
 func normalizedNames(name string) ([]string, error) {
