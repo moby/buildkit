@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	aws_config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go/middleware"
@@ -438,7 +438,7 @@ func (r *readerAt) Size() int64 {
 
 type s3Client struct {
 	*s3.Client
-	*manager.Uploader
+	transferManager *transfermanager.Client
 	bucket          string
 	prefix          string
 	blobsPrefix     string
@@ -482,7 +482,7 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 
 	return &s3Client{
 		Client:          client,
-		Uploader:        manager.NewUploader(client),
+		transferManager: transfermanager.New(client),
 		bucket:          config.Bucket,
 		prefix:          config.Prefix,
 		blobsPrefix:     config.BlobsPrefix,
@@ -533,12 +533,12 @@ func (s3Client *s3Client) getReader(ctx context.Context, key string, offset int6
 }
 
 func (s3Client *s3Client) saveMutableAt(ctx context.Context, key string, body io.Reader) error {
-	input := &s3.PutObjectInput{
+	input := &transfermanager.UploadObjectInput{
 		Bucket: &s3Client.bucket,
 		Key:    &key,
 		Body:   body,
 	}
-	_, err := s3Client.Upload(ctx, input)
+	_, err := s3Client.transferManager.UploadObject(ctx, input)
 	return err
 }
 

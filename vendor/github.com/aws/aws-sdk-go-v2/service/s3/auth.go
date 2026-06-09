@@ -16,12 +16,14 @@ import (
 	"strings"
 )
 
-func bindAuthParamsRegion(_ interface{}, params *AuthResolverParameters, _ interface{}, options Options) {
+func bindAuthParamsRegion(_ interface{}, params *AuthResolverParameters, _ interface{}, options Options) error {
 	params.Region = options.Region
+	return nil
 }
 
-func bindAuthEndpointParams(ctx context.Context, params *AuthResolverParameters, input interface{}, options Options) {
-	params.endpointParams = bindEndpointParams(ctx, input, options)
+func bindAuthEndpointParams(ctx context.Context, params *AuthResolverParameters, input interface{}, options Options) (err error) {
+	params.endpointParams, err = bindEndpointParams(ctx, input, options)
+	return
 }
 
 type setLegacyContextSigningOptionsMiddleware struct {
@@ -102,15 +104,20 @@ type AuthResolverParameters struct {
 	Region string
 }
 
-func bindAuthResolverParams(ctx context.Context, operation string, input interface{}, options Options) *AuthResolverParameters {
+func bindAuthResolverParams(ctx context.Context, operation string, input interface{}, options Options) (*AuthResolverParameters, error) {
 	params := &AuthResolverParameters{
 		Operation: operation,
 	}
 
-	bindAuthEndpointParams(ctx, params, input, options)
-	bindAuthParamsRegion(ctx, params, input, options)
+	if err := bindAuthEndpointParams(ctx, params, input, options); err != nil {
+		return nil, err
+	}
 
-	return params
+	if err := bindAuthParamsRegion(ctx, params, input, options); err != nil {
+		return nil, err
+	}
+
+	return params, nil
 }
 
 // AuthSchemeResolver returns a set of possible authentication options for an
@@ -186,7 +193,10 @@ func (m *resolveAuthSchemeMiddleware) HandleFinalize(ctx context.Context, in mid
 	_, span := tracing.StartSpan(ctx, "ResolveAuthScheme")
 	defer span.End()
 
-	params := bindAuthResolverParams(ctx, m.operation, getOperationInput(ctx), m.options)
+	params, err := bindAuthResolverParams(ctx, m.operation, getOperationInput(ctx), m.options)
+	if err != nil {
+		return out, metadata, fmt.Errorf("bind auth scheme params: %w", err)
+	}
 	options, err := m.options.AuthSchemeResolver.ResolveAuthSchemes(ctx, params)
 	if err != nil {
 		return out, metadata, fmt.Errorf("resolve auth scheme: %w", err)
@@ -212,7 +222,7 @@ func (m *resolveAuthSchemeMiddleware) selectScheme(options []*smithyauth.Option)
 		}
 
 		for _, scheme := range m.options.AuthSchemes {
-			if scheme.SchemeID() != option.SchemeID {
+			if !matchSchemeID(scheme.SchemeID(), option.SchemeID) {
 				continue
 			}
 
@@ -223,6 +233,16 @@ func (m *resolveAuthSchemeMiddleware) selectScheme(options []*smithyauth.Option)
 	}
 
 	return nil, false
+}
+
+func matchSchemeID(registered, option string) bool {
+	if registered == option {
+		return true
+	}
+	if i := strings.LastIndex(registered, "#"); i != -1 {
+		return registered[i+1:] == option
+	}
+	return false
 }
 
 func sortAuthOptions(options []*smithyauth.Option, preferred []string) []*smithyauth.Option {

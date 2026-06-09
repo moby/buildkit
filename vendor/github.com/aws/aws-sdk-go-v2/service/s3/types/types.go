@@ -7,6 +7,21 @@ import (
 	"time"
 )
 
+// The ABAC status of the general purpose bucket. When ABAC is enabled for the
+// general purpose bucket, you can use tags to manage access to the general purpose
+// buckets as well as for cost tracking purposes. When ABAC is disabled for the
+// general purpose buckets, you can only use tags for cost tracking purposes. For
+// more information, see [Using tags with S3 general purpose buckets].
+//
+// [Using tags with S3 general purpose buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging.html
+type AbacStatus struct {
+
+	// The ABAC status of the general purpose bucket.
+	Status BucketAbacStatus
+
+	noSmithyDocumentSerde
+}
+
 // Specifies the days since the initiation of an incomplete multipart upload that
 // Amazon S3 will wait before permanently removing all parts of the upload. For
 // more information, see [Aborting Incomplete Multipart Uploads Using a Bucket Lifecycle Configuration]in the Amazon S3 User Guide.
@@ -176,6 +191,47 @@ type AnalyticsS3BucketDestination struct {
 	noSmithyDocumentSerde
 }
 
+// A bucket-level setting for Amazon S3 general purpose buckets used to prevent
+// the upload of new objects encrypted with the specified server-side encryption
+// type. For example, blocking an encryption type will block PutObject , CopyObject
+// , PostObject , multipart upload, and replication requests to the bucket for
+// objects with the specified encryption type. However, you can continue to read
+// and list any pre-existing objects already encrypted with the specified
+// encryption type. For more information, see [Blocking or unblocking SSE-C for a general purpose bucket].
+//
+// This data type is used with the following actions:
+//
+// [PutBucketEncryption]
+//
+// [GetBucketEncryption]
+//
+// [DeleteBucketEncryption]
+//
+// Permissions You must have the s3:PutEncryptionConfiguration permission to block
+// or unblock an encryption type for a bucket.
+//
+// You must have the s3:GetEncryptionConfiguration permission to view a bucket's
+// encryption type.
+//
+// [GetBucketEncryption]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
+// [DeleteBucketEncryption]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html
+// [PutBucketEncryption]: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
+// [Blocking or unblocking SSE-C for a general purpose bucket]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html
+type BlockedEncryptionTypes struct {
+
+	// The object encryption type that you want to block or unblock for an Amazon S3
+	// general purpose bucket.
+	//
+	// Currently, this parameter only supports blocking or unblocking server side
+	// encryption with customer-provided keys (SSE-C). For more information about
+	// SSE-C, see [Using server-side encryption with customer-provided keys (SSE-C)].
+	//
+	// [Using server-side encryption with customer-provided keys (SSE-C)]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html
+	EncryptionType []EncryptionType
+
+	noSmithyDocumentSerde
+}
+
 // In terms of implementation, a Bucket is a resource.
 type Bucket struct {
 
@@ -282,6 +338,13 @@ type Checksum struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
 
+	// The Base64 encoded, 128-bit MD5 digest of the object. This checksum is present
+	// if the object was uploaded with the MD5 checksum algorithm. For more
+	// information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
+
 	// The Base64 encoded, 160-bit SHA1 digest of the object. This checksum is only
 	// present if the checksum was uploaded with the object. When you use the API
 	// operation on an object that was uploaded using multipart uploads, this value may
@@ -304,11 +367,39 @@ type Checksum struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums
 	ChecksumSHA256 *string
 
+	// The Base64 encoded, 512-bit SHA512 digest of the object. This checksum is
+	// present if the object was uploaded with the SHA512 checksum algorithm. For more
+	// information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
 	// The checksum type that is used to calculate the object’s checksum value. For
 	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumType ChecksumType
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the object. This checksum is
+	// present if the object was uploaded with the XXHASH128 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the object. This checksum is
+	// present if the object was uploaded with the XXHASH3 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the object. This checksum is
+	// present if the object was uploaded with the XXHASH64 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	noSmithyDocumentSerde
 }
@@ -357,11 +448,17 @@ type CompletedPart struct {
 
 	// The Base64 encoded, 64-bit CRC64NVME checksum of the part. This checksum is
 	// present if the multipart upload request was created with the CRC64NVME checksum
-	// algorithm to the uploaded object). For more information, see [Checking object integrity]in the Amazon S3
-	// User Guide.
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
+
+	// The Base64 encoded, 128-bit MD5 digest of the part. This checksum is present if
+	// the multipart upload request was created with the MD5 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
 
 	// The Base64 encoded, 160-bit SHA1 checksum of the part. This checksum is present
 	// if the multipart upload request was created with the SHA1 checksum algorithm.
@@ -376,6 +473,34 @@ type CompletedPart struct {
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA256 *string
+
+	// The Base64 encoded, 512-bit SHA512 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA512 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH128 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH3 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH64 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	// Entity tag returned when the part was uploaded.
 	ETag *string
@@ -457,6 +582,13 @@ type CopyObjectResult struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
 
+	// The Base64 encoded, 128-bit MD5 digest of the object. This checksum is only
+	// present if the object was uploaded with the MD5 checksum algorithm. For more
+	// information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
+
 	// The Base64 encoded, 160-bit SHA1 digest of the object. This checksum is only
 	// present if the checksum was uploaded with the object. For more information, see [Checking object integrity]
 	// in the Amazon S3 User Guide.
@@ -471,11 +603,39 @@ type CopyObjectResult struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA256 *string
 
+	// The Base64 encoded, 512-bit SHA512 digest of the object. This checksum is only
+	// present if the object was uploaded with the SHA512 checksum algorithm. For more
+	// information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
 	// The checksum type that is used to calculate the object’s checksum value. For
 	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumType ChecksumType
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the object. This checksum is
+	// only present if the object was uploaded with the XXHASH128 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the object. This checksum is
+	// only present if the object was uploaded with the XXHASH3 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the object. This checksum is
+	// only present if the object was uploaded with the XXHASH64 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	// Returns the ETag of the new object. The ETag reflects only changes to the
 	// contents of an object, not its metadata.
@@ -490,45 +650,75 @@ type CopyObjectResult struct {
 // Container for all response elements.
 type CopyPartResult struct {
 
-	// This header can be used as a data integrity check to verify that the data
-	// received is the same data that was originally sent. This header specifies the
-	// Base64 encoded, 32-bit CRC32 checksum of the part. For more information, see [Checking object integrity]
-	// in the Amazon S3 User Guide.
+	// The Base64 encoded, 32-bit CRC32 checksum of the part. This checksum is present
+	// if the multipart upload request was created with the CRC32 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC32 *string
 
-	// This header can be used as a data integrity check to verify that the data
-	// received is the same data that was originally sent. This header specifies the
-	// Base64 encoded, 32-bit CRC32C checksum of the part. For more information, see [Checking object integrity]
-	// in the Amazon S3 User Guide.
+	// The Base64 encoded, 32-bit CRC32C checksum of the part. This checksum is
+	// present if the multipart upload request was created with the CRC32C checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC32C *string
 
 	// The Base64 encoded, 64-bit CRC64NVME checksum of the part. This checksum is
 	// present if the multipart upload request was created with the CRC64NVME checksum
-	// algorithm to the uploaded object). For more information, see [Checking object integrity]in the Amazon S3
-	// User Guide.
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
 
-	// This header can be used as a data integrity check to verify that the data
-	// received is the same data that was originally sent. This header specifies the
-	// Base64 encoded, 160-bit SHA1 checksum of the part. For more information, see [Checking object integrity]
-	// in the Amazon S3 User Guide.
+	// The Base64 encoded, 128-bit MD5 digest of the part. This checksum is present if
+	// the multipart upload request was created with the MD5 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
+
+	// The Base64 encoded, 160-bit SHA1 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA1 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA1 *string
 
-	// This header can be used as a data integrity check to verify that the data
-	// received is the same data that was originally sent. This header specifies the
-	// Base64 encoded, 256-bit SHA256 checksum of the part. For more information, see [Checking object integrity]
-	// in the Amazon S3 User Guide.
+	// The Base64 encoded, 256-bit SHA256 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA256 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA256 *string
+
+	// The Base64 encoded, 512-bit SHA512 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA512 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH128 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH3 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH64 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	// Entity tag of the object.
 	ETag *string
@@ -628,13 +818,15 @@ type CreateBucketConfiguration struct {
 	// are key-value pairs of metadata used to categorize and organize your buckets,
 	// track costs, and control access.
 	//
-	//   - This parameter is only supported for S3 directory buckets. For more
-	//   information, see [Using tags with directory buckets].
+	// You must have the s3:TagResource permission to create a general purpose bucket
+	// with tags or the s3express:TagResource permission to create a directory bucket
+	// with tags.
 	//
-	//   - You must have the s3express:TagResource permission to create a directory
-	//   bucket with tags.
+	// When creating buckets with tags, note that tag-based conditions using
+	// aws:ResourceTag and s3:BucketTag condition keys are applicable only after ABAC
+	// is enabled on the bucket. To learn more, see [Enabling ABAC in general purpose buckets].
 	//
-	// [Using tags with directory buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/directory-buckets-tagging.html
+	// [Enabling ABAC in general purpose buckets]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/buckets-tagging-enable-abac.html
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -2115,17 +2307,6 @@ type Grant struct {
 	noSmithyDocumentSerde
 }
 
-// End of support notice: Beginning November 21, 2025, Amazon S3 will stop
-// returning DisplayName . Update your applications to use canonical IDs (unique
-// identifier for Amazon Web Services accounts), Amazon Web Services account ID (12
-// digit identifier) or IAM ARNs (full resource naming) as a direct replacement of
-// DisplayName .
-//
-// This change affects the following Amazon Web Services Regions: US East (N.
-// Virginia) Region, US West (N. California) Region, US West (Oregon) Region, Asia
-// Pacific (Singapore) Region, Asia Pacific (Sydney) Region, Asia Pacific (Tokyo)
-// Region, Europe (Ireland) Region, and South America (São Paulo) Region.
-//
 // Container for the person being granted permissions.
 type Grantee struct {
 
@@ -2134,34 +2315,10 @@ type Grantee struct {
 	// This member is required.
 	Type Type
 
-	// Screen name of the grantee.
+	//
 	DisplayName *string
 
-	// Email address of the grantee.
 	//
-	// Using email addresses to specify a grantee is only supported in the following
-	// Amazon Web Services Regions:
-	//
-	//   - US East (N. Virginia)
-	//
-	//   - US West (N. California)
-	//
-	//   - US West (Oregon)
-	//
-	//   - Asia Pacific (Singapore)
-	//
-	//   - Asia Pacific (Sydney)
-	//
-	//   - Asia Pacific (Tokyo)
-	//
-	//   - Europe (Ireland)
-	//
-	//   - South America (São Paulo)
-	//
-	// For a list of all the Amazon S3 supported Regions and endpoints, see [Regions and Endpoints] in the
-	// Amazon Web Services General Reference.
-	//
-	// [Regions and Endpoints]: https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region
 	EmailAddress *string
 
 	// The canonical user ID of the grantee.
@@ -2196,8 +2353,6 @@ type IndexDocument struct {
 // Container element that identifies who initiated the multipart upload.
 type Initiator struct {
 
-	// Name of the Principal.
-	//
 	// This functionality is not supported for directory buckets.
 	DisplayName *string
 
@@ -2339,6 +2494,11 @@ type InventoryConfiguration struct {
 	Filter *InventoryFilter
 
 	// Contains the optional fields that are included in the inventory results.
+	//
+	// The following optional fields are supported for directory buckets Size |
+	// LastModifiedDate | StorageClass | ETag | IsMultipartUploaded | EncryptionStatus
+	// | BucketKeyStatus | ChecksumAlgorithm | LifecycleExpirationDate. Throws
+	// MalformedXML error if unsupported optional field is provided.
 	OptionalFields []InventoryOptionalField
 
 	noSmithyDocumentSerde
@@ -2988,6 +3148,8 @@ type MetricsAndOperator struct {
 	Prefix *string
 
 	// The list of tags used when evaluating an AND predicate.
+	//
+	// Tag filters are not supported for directory buckets.
 	Tags []Tag
 
 	noSmithyDocumentSerde
@@ -3011,6 +3173,8 @@ type MetricsConfiguration struct {
 	// Specifies a metrics configuration filter. The metrics configuration will only
 	// include objects that meet the filter's criteria. A filter must be a prefix, an
 	// object tag, an access point ARN, or a conjunction (MetricsAndOperator).
+	//
+	// Metrics configurations for directory buckets do not support tag filters.
 	Filter MetricsFilter
 
 	noSmithyDocumentSerde
@@ -3063,6 +3227,8 @@ type MetricsFilterMemberPrefix struct {
 func (*MetricsFilterMemberPrefix) isMetricsFilter() {}
 
 // The tag used when evaluating a metrics filter.
+//
+// Tag filters are not supported for directory buckets.
 type MetricsFilterMemberTag struct {
 	Value Tag
 
@@ -3283,6 +3449,31 @@ type Object struct {
 	noSmithyDocumentSerde
 }
 
+//	The updated server-side encryption type for this object. The
+//
+// UpdateObjectEncryption operation supports the SSE-S3 and SSE-KMS encryption
+// types.
+//
+// Valid Values: SSES3 | SSEKMS
+//
+// The following types satisfy this interface:
+//
+//	ObjectEncryptionMemberSSEKMS
+type ObjectEncryption interface {
+	isObjectEncryption()
+}
+
+//	Specifies to update the object encryption type to server-side encryption with
+//
+// Key Management Service (KMS) keys (SSE-KMS).
+type ObjectEncryptionMemberSSEKMS struct {
+	Value SSEKMSEncryption
+
+	noSmithyDocumentSerde
+}
+
+func (*ObjectEncryptionMemberSSEKMS) isObjectEncryption() {}
+
 // Object Identifier is unique value to identify objects.
 type ObjectIdentifier struct {
 
@@ -3399,6 +3590,13 @@ type ObjectPart struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
 
+	// The Base64 encoded, 128-bit MD5 digest of the part. This checksum is present if
+	// the multipart upload request was created with the MD5 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
+
 	// The Base64 encoded, 160-bit SHA1 checksum of the part. This checksum is present
 	// if the multipart upload request was created with the SHA1 checksum algorithm.
 	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
@@ -3412,6 +3610,34 @@ type ObjectPart struct {
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA256 *string
+
+	// The Base64 encoded, 512-bit SHA512 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA512 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH128 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH3 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH64 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	// The part number identifying the part. This value is a positive integer between
 	// 1 and 10,000.
@@ -3492,40 +3718,10 @@ type OutputSerialization struct {
 	noSmithyDocumentSerde
 }
 
-// End of support notice: Beginning November 21, 2025, Amazon S3 will stop
-// returning DisplayName . Update your applications to use canonical IDs (unique
-// identifier for Amazon Web Services accounts), Amazon Web Services account ID (12
-// digit identifier) or IAM ARNs (full resource naming) as a direct replacement of
-// DisplayName .
-//
-// This change affects the following Amazon Web Services Regions: US East (N.
-// Virginia) Region, US West (N. California) Region, US West (Oregon) Region, Asia
-// Pacific (Singapore) Region, Asia Pacific (Sydney) Region, Asia Pacific (Tokyo)
-// Region, Europe (Ireland) Region, and South America (São Paulo) Region.
-//
 // Container for the owner's display name and ID.
 type Owner struct {
 
-	// Container for the display name of the owner. This value is only supported in
-	// the following Amazon Web Services Regions:
 	//
-	//   - US East (N. Virginia)
-	//
-	//   - US West (N. California)
-	//
-	//   - US West (Oregon)
-	//
-	//   - Asia Pacific (Singapore)
-	//
-	//   - Asia Pacific (Sydney)
-	//
-	//   - Asia Pacific (Tokyo)
-	//
-	//   - Europe (Ireland)
-	//
-	//   - South America (São Paulo)
-	//
-	// This functionality is not supported for directory buckets.
 	DisplayName *string
 
 	// Container for the ID of the owner.
@@ -3611,6 +3807,13 @@ type Part struct {
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumCRC64NVME *string
 
+	// The Base64 encoded, 128-bit MD5 digest of the part. This checksum is present if
+	// the multipart upload request was created with the MD5 checksum algorithm. For
+	// more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumMD5 *string
+
 	// The Base64 encoded, 160-bit SHA1 checksum of the part. This checksum is present
 	// if the object was uploaded with the SHA1 checksum algorithm. For more
 	// information, see [Checking object integrity]in the Amazon S3 User Guide.
@@ -3624,6 +3827,34 @@ type Part struct {
 	//
 	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
 	ChecksumSHA256 *string
+
+	// The Base64 encoded, 512-bit SHA512 digest of the part. This checksum is present
+	// if the multipart upload request was created with the SHA512 checksum algorithm.
+	// For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumSHA512 *string
+
+	// The Base64 encoded, 128-bit XXHASH128 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH128 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH128 *string
+
+	// The Base64 encoded, 64-bit XXHASH3 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH3 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH3 *string
+
+	// The Base64 encoded, 64-bit XXHASH64 checksum of the part. This checksum is
+	// present if the multipart upload request was created with the XXHASH64 checksum
+	// algorithm. For more information, see [Checking object integrity]in the Amazon S3 User Guide.
+	//
+	// [Checking object integrity]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html
+	ChecksumXXHASH64 *string
 
 	// Entity tag returned when the part was uploaded.
 	ETag *string
@@ -3698,9 +3929,10 @@ type ProgressEvent struct {
 }
 
 // The PublicAccessBlock configuration that you want to apply to this Amazon S3
-// bucket. You can enable the configuration options in any combination. For more
-// information about when Amazon S3 considers a bucket or object public, see [The Meaning of "Public"]in
-// the Amazon S3 User Guide.
+// bucket. You can enable the configuration options in any combination.
+// Bucket-level settings work alongside account-level settings (which may inherit
+// from organization-level policies). For more information about when Amazon S3
+// considers a bucket or object public, see [The Meaning of "Public"]in the Amazon S3 User Guide.
 //
 // [The Meaning of "Public"]: https://docs.aws.amazon.com/AmazonS3/latest/dev/access-control-block-public-access.html#access-control-block-public-access-policy-status
 type PublicAccessBlockConfiguration struct {
@@ -3801,7 +4033,7 @@ type RecordsEvent struct {
 	// guarantee that a record will be self-contained in one record frame. To ensure
 	// continuous streaming of data, S3 Select might split the same record across
 	// multiple record frames instead of aggregating the results in memory. Some S3
-	// clients (for example, the SDKforJava) handle this behavior by creating a
+	// clients (for example, the SDK for Java) handle this behavior by creating a
 	// ByteStream out of the response by default. Other clients might not handle this
 	// behavior by default. In those cases, you must aggregate the results on the
 	// client side and parse the response.
@@ -4545,6 +4777,22 @@ type ServerSideEncryptionRule struct {
 	// default encryption will be applied.
 	ApplyServerSideEncryptionByDefault *ServerSideEncryptionByDefault
 
+	// A bucket-level setting for Amazon S3 general purpose buckets used to prevent
+	// the upload of new objects encrypted with the specified server-side encryption
+	// type. For example, blocking an encryption type will block PutObject , CopyObject
+	// , PostObject , multipart upload, and replication requests to the bucket for
+	// objects with the specified encryption type. However, you can continue to read
+	// and list any pre-existing objects already encrypted with the specified
+	// encryption type. For more information, see [Blocking or unblocking SSE-C for a general purpose bucket].
+	//
+	// Currently, this parameter only supports blocking or unblocking server-side
+	// encryption with customer-provided keys (SSE-C). For more information about
+	// SSE-C, see [Using server-side encryption with customer-provided keys (SSE-C)].
+	//
+	// [Blocking or unblocking SSE-C for a general purpose bucket]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html
+	// [Using server-side encryption with customer-provided keys (SSE-C)]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html
+	BlockedEncryptionTypes *BlockedEncryptionTypes
+
 	// Specifies whether Amazon S3 should use an S3 Bucket Key with server-side
 	// encryption using KMS (SSE-KMS) for new objects in the bucket. Existing objects
 	// are not affected. Setting the BucketKeyEnabled element to true causes Amazon S3
@@ -4665,6 +4913,39 @@ type SseKmsEncryptedObjects struct {
 	//
 	// This member is required.
 	Status SseKmsEncryptedObjectsStatus
+
+	noSmithyDocumentSerde
+}
+
+//	If SSEKMS is specified for ObjectEncryption , this data type specifies the
+//
+// Amazon Web Services KMS key Amazon Resource Name (ARN) to use and whether to use
+// an S3 Bucket Key for server-side encryption using Key Management Service (KMS)
+// keys (SSE-KMS).
+type SSEKMSEncryption struct {
+
+	//  Specifies the Amazon Web Services KMS key Amazon Resource Name (ARN) to use
+	// for the updated server-side encryption type. Required if ObjectEncryption
+	// specifies SSEKMS .
+	//
+	// You must specify the full Amazon Web Services KMS key ARN. The KMS key ID and
+	// KMS key alias aren't supported.
+	//
+	// Pattern: ( arn:aws[-a-z0-9]*:kms:[-a-z0-9]*:[0-9]{12}:key/.+ )
+	//
+	// This member is required.
+	KMSKeyArn *string
+
+	//  Specifies whether Amazon S3 should use an S3 Bucket Key for object encryption
+	// with server-side encryption using Key Management Service (KMS) keys (SSE-KMS).
+	// If this value isn't specified, it defaults to false . Setting this value to true
+	// causes Amazon S3 to use an S3 Bucket Key for object encryption with SSE-KMS. For
+	// more information, see [Using Amazon S3 Bucket Keys]in the Amazon S3 User Guide.
+	//
+	// Valid Values: true | false
+	//
+	// [Using Amazon S3 Bucket Keys]: https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucket-key.html
+	BucketKeyEnabled *bool
 
 	noSmithyDocumentSerde
 }
@@ -4920,4 +5201,5 @@ type UnknownUnionMember struct {
 
 func (*UnknownUnionMember) isAnalyticsFilter()                {}
 func (*UnknownUnionMember) isMetricsFilter()                  {}
+func (*UnknownUnionMember) isObjectEncryption()               {}
 func (*UnknownUnionMember) isSelectObjectContentEventStream() {}
