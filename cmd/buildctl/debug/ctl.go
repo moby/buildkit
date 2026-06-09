@@ -5,35 +5,35 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var CtlCommand = cli.Command{
+var CtlCommand = &cli.Command{
 	Name:   "ctl",
 	Usage:  "control build records",
-	Action: ctl,
+	Action: commandAction(ctl),
 	Flags: []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "pin",
 			Usage: "Pin build so it will not be garbage collected",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "unpin",
 			Usage: "Unpin build so it will be garbage collected",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "delete",
 			Usage: "Delete build record",
 		},
 	},
 }
 
-func ctl(clicontext *cli.Context) error {
+func ctl(clicontext *cli.Command) error {
 	args := clicontext.Args()
-	if len(args) == 0 {
+	if args.Len() == 0 {
 		return errors.Errorf("build ref must be specified")
 	}
-	ref := args[0]
+	ref := args.First()
 
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {

@@ -11,30 +11,32 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/tonistiigi/units"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var diskUsageCommand = cli.Command{
+var diskUsageCommand = &cli.Command{
 	Name:   "du",
 	Usage:  "disk usage",
-	Action: diskUsage,
+	Action: commandAction(diskUsage),
 	Flags: []cli.Flag{
-		cli.StringSliceFlag{
-			Name:  "filter, f",
-			Usage: "Filter records",
+		&cli.StringSliceFlag{
+			Name:    "filter",
+			Aliases: []string{"f"},
+			Usage:   "Filter records",
 		},
-		cli.BoolFlag{
-			Name:  "verbose, v",
-			Usage: "Verbose output",
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Aliases: []string{"v"},
+			Usage:   "Verbose output",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},
 	},
 }
 
-func diskUsage(clicontext *cli.Context) error {
+func diskUsage(clicontext *cli.Command) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -53,10 +55,10 @@ func diskUsage(clicontext *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := tmpl.Execute(clicontext.App.Writer, du); err != nil {
+		if err := tmpl.Execute(clicontext.Root().Writer, du); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(clicontext.App.Writer, "\n")
+		_, err = fmt.Fprintf(clicontext.Root().Writer, "\n")
 		return err
 	}
 

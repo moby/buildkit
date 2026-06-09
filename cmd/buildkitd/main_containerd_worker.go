@@ -22,7 +22,7 @@ import (
 	"github.com/moby/sys/userns"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -58,73 +58,73 @@ func init() {
 	}
 
 	flags := []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-worker",
 			Usage: "enable containerd workers (true/false/auto)",
 			Value: enabledValue(defaultConf.Workers.Containerd.Enabled),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-worker-addr",
 			Usage: "containerd socket",
 			Value: defaultConf.Workers.Containerd.Address,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "containerd-worker-labels",
 			Usage: "user-specific annotation labels (com.example.foo=bar)",
 		},
 		// TODO: containerd-worker-platform should be replaced by ability
 		// to set these from containerd configuration
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:   "containerd-worker-platform",
 			Usage:  "override supported platforms for worker",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "containerd-worker-namespace",
 			Usage:  "override containerd namespace",
 			Value:  defaultConf.Workers.Containerd.Namespace,
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "containerd-worker-runtime",
 			Usage:  "override containerd runtime",
 			Value:  defaultConf.Workers.Containerd.Runtime.Name,
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-worker-net",
 			Usage: "worker network type (auto, bridge, cni or host)",
 			Value: defaultConf.Workers.Containerd.Mode,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-cni-config-path",
 			Usage: "path of cni config file",
 			Value: defaultConf.Workers.Containerd.CNIConfigPath,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-cni-binary-dir",
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.Containerd.CNIBinaryPath,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "containerd-cni-pool-size",
 			Usage: "size of cni network namespace pool",
 			Value: defaultConf.Workers.Containerd.CNIPoolSize,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-worker-snapshotter",
 			Usage: "snapshotter name to use",
 			Value: defaults.DefaultSnapshotter,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "containerd-worker-apparmor-profile",
 			Usage: "set the name of the apparmor profile applied to containers",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "containerd-worker-selinux",
 			Usage: "apply SELinux labels",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "containerd-max-parallelism",
 			Usage: "limit the number of parallel build steps that can run at the same time",
 			Value: defaultConf.Workers.Containerd.MaxParallelism,
@@ -133,29 +133,31 @@ func init() {
 	n := "containerd-worker-rootless"
 	u := "enable rootless mode"
 	if userns.RunningInUserNS() {
-		flags = append(flags, cli.BoolTFlag{
+		flags = append(flags, &cli.BoolFlag{
 			Name:  n,
 			Usage: u,
+			Value: true,
 		})
 	} else {
-		flags = append(flags, cli.BoolFlag{
+		flags = append(flags, &cli.BoolFlag{
 			Name:  n,
 			Usage: u,
 		})
 	}
 
 	if defaultConf.Workers.Containerd.GC == nil || *defaultConf.Workers.Containerd.GC {
-		flags = append(flags, cli.BoolTFlag{
+		flags = append(flags, &cli.BoolFlag{
 			Name:  "containerd-worker-gc",
 			Usage: "Enable automatic garbage collection on worker",
+			Value: true,
 		})
 	} else {
-		flags = append(flags, cli.BoolFlag{
+		flags = append(flags, &cli.BoolFlag{
 			Name:  "containerd-worker-gc",
 			Usage: "Enable automatic garbage collection on worker",
 		})
 	}
-	flags = append(flags, cli.StringFlag{
+	flags = append(flags, &cli.StringFlag{
 		Name:  "containerd-worker-gc-keepstorage",
 		Usage: "Amount of storage GC keep locally, format \"Reserved[,Free[,Maximum]]\" (MB)",
 		Value: func() string {
@@ -177,30 +179,30 @@ func init() {
 	// TODO(AkihiroSuda): allow using multiple snapshotters. should be useful for some applications that does not work with the default overlay snapshotter. e.g. mysql (docker/for-linux#72)",
 }
 
-func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
+func applyContainerdFlags(c *cli.Command, cfg *config.Config) error {
 	if cfg.Workers.Containerd.Address == "" {
 		cfg.Workers.Containerd.Address = defaults.DefaultAddress
 	}
 
-	if c.GlobalIsSet("containerd-worker") {
-		boolOrAuto, err := parseBoolOrAuto(c.GlobalString("containerd-worker"))
+	if c.IsSet("containerd-worker") {
+		boolOrAuto, err := parseBoolOrAuto(c.String("containerd-worker"))
 		if err != nil {
 			return err
 		}
 		cfg.Workers.Containerd.Enabled = boolOrAuto
 	}
 
-	if c.GlobalIsSet("rootless") || c.GlobalBool("rootless") {
-		cfg.Workers.Containerd.Rootless = c.GlobalBool("rootless")
+	if c.IsSet("rootless") || c.Bool("rootless") {
+		cfg.Workers.Containerd.Rootless = c.Bool("rootless")
 	}
-	if c.GlobalIsSet("containerd-worker-rootless") {
+	if c.IsSet("containerd-worker-rootless") {
 		if !userns.RunningInUserNS() || os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
-		cfg.Workers.Containerd.Rootless = c.GlobalBool("containerd-worker-rootless")
+		cfg.Workers.Containerd.Rootless = c.Bool("containerd-worker-rootless")
 	}
 
-	labels, err := attrMap(c.GlobalStringSlice("containerd-worker-labels"))
+	labels, err := attrMap(c.StringSlice("containerd-worker-labels"))
 	if err != nil {
 		return err
 	}
@@ -209,31 +211,31 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	}
 	maps.Copy(cfg.Workers.Containerd.Labels, labels)
 
-	if c.GlobalIsSet("containerd-worker-addr") {
-		cfg.Workers.Containerd.Address = c.GlobalString("containerd-worker-addr")
+	if c.IsSet("containerd-worker-addr") {
+		cfg.Workers.Containerd.Address = c.String("containerd-worker-addr")
 	}
 
-	if platforms := c.GlobalStringSlice("containerd-worker-platform"); len(platforms) != 0 {
+	if platforms := c.StringSlice("containerd-worker-platform"); len(platforms) != 0 {
 		cfg.Workers.Containerd.Platforms = platforms
 	}
 
-	if c.GlobalIsSet("containerd-worker-namespace") || cfg.Workers.Containerd.Namespace == "" {
-		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
+	if c.IsSet("containerd-worker-namespace") || cfg.Workers.Containerd.Namespace == "" {
+		cfg.Workers.Containerd.Namespace = c.String("containerd-worker-namespace")
 	}
 
-	if c.GlobalIsSet("containerd-worker-runtime") || cfg.Workers.Containerd.Runtime.Name == "" {
+	if c.IsSet("containerd-worker-runtime") || cfg.Workers.Containerd.Runtime.Name == "" {
 		cfg.Workers.Containerd.Runtime = config.ContainerdRuntime{
-			Name: c.GlobalString("containerd-worker-runtime"),
+			Name: c.String("containerd-worker-runtime"),
 		}
 	}
 
-	if c.GlobalIsSet("containerd-worker-gc") {
-		v := c.GlobalBool("containerd-worker-gc")
+	if c.IsSet("containerd-worker-gc") {
+		v := c.Bool("containerd-worker-gc")
 		cfg.Workers.Containerd.GC = &v
 	}
 
-	if c.GlobalIsSet("containerd-worker-gc-keepstorage") {
-		gc, err := stringToGCConfig(c.GlobalString("containerd-worker-gc-keepstorage"))
+	if c.IsSet("containerd-worker-gc-keepstorage") {
+		gc, err := stringToGCConfig(c.String("containerd-worker-gc-keepstorage"))
 		if err != nil {
 			return err
 		}
@@ -242,35 +244,35 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.GCMaxUsedSpace = gc.GCMaxUsedSpace
 	}
 
-	if c.GlobalIsSet("containerd-worker-net") {
-		cfg.Workers.Containerd.Mode = c.GlobalString("containerd-worker-net")
+	if c.IsSet("containerd-worker-net") {
+		cfg.Workers.Containerd.Mode = c.String("containerd-worker-net")
 	}
-	if c.GlobalIsSet("containerd-cni-config-path") {
-		cfg.Workers.Containerd.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
+	if c.IsSet("containerd-cni-config-path") {
+		cfg.Workers.Containerd.CNIConfigPath = c.String("containerd-cni-config-path")
 	}
-	if c.GlobalIsSet("containerd-cni-pool-size") {
-		cfg.Workers.Containerd.CNIPoolSize = c.GlobalInt("containerd-cni-pool-size")
+	if c.IsSet("containerd-cni-pool-size") {
+		cfg.Workers.Containerd.CNIPoolSize = c.Int("containerd-cni-pool-size")
 	}
-	if c.GlobalIsSet("containerd-cni-binary-dir") {
-		cfg.Workers.Containerd.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
+	if c.IsSet("containerd-cni-binary-dir") {
+		cfg.Workers.Containerd.CNIBinaryPath = c.String("containerd-cni-binary-dir")
 	}
-	if c.GlobalIsSet("containerd-worker-snapshotter") {
-		cfg.Workers.Containerd.Snapshotter = c.GlobalString("containerd-worker-snapshotter")
+	if c.IsSet("containerd-worker-snapshotter") {
+		cfg.Workers.Containerd.Snapshotter = c.String("containerd-worker-snapshotter")
 	}
-	if c.GlobalIsSet("containerd-worker-apparmor-profile") {
-		cfg.Workers.Containerd.ApparmorProfile = c.GlobalString("containerd-worker-apparmor-profile")
+	if c.IsSet("containerd-worker-apparmor-profile") {
+		cfg.Workers.Containerd.ApparmorProfile = c.String("containerd-worker-apparmor-profile")
 	}
-	if c.GlobalIsSet("containerd-worker-selinux") {
-		cfg.Workers.Containerd.SELinux = c.GlobalBool("containerd-worker-selinux")
+	if c.IsSet("containerd-worker-selinux") {
+		cfg.Workers.Containerd.SELinux = c.Bool("containerd-worker-selinux")
 	}
-	if c.GlobalIsSet("containerd-max-parallelism") {
-		cfg.Workers.Containerd.MaxParallelism = c.GlobalInt("containerd-max-parallelism")
+	if c.IsSet("containerd-max-parallelism") {
+		cfg.Workers.Containerd.MaxParallelism = c.Int("containerd-max-parallelism")
 	}
 
 	return nil
 }
 
-func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
+func containerdWorkerInitializer(c *cli.Command, common workerInitializerOpt) ([]worker.Worker, error) {
 	if err := applyContainerdFlags(c, common.config); err != nil {
 		return nil, err
 	}

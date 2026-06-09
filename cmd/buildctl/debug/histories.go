@@ -10,22 +10,22 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var HistoriesCommand = cli.Command{
+var HistoriesCommand = &cli.Command{
 	Name:   "histories",
 	Usage:  "list build records",
-	Action: histories,
+	Action: commandAction(histories),
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},
 	},
 }
 
-func histories(clicontext *cli.Context) error {
+func histories(clicontext *cli.Command) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -51,16 +51,16 @@ func histories(clicontext *cli.Context) error {
 			} else if err != nil {
 				return err
 			}
-			if err := tmpl.Execute(clicontext.App.Writer, ev); err != nil {
+			if err := tmpl.Execute(clicontext.Root().Writer, ev); err != nil {
 				return err
 			}
-			if _, err = fmt.Fprintf(clicontext.App.Writer, "\n"); err != nil {
+			if _, err = fmt.Fprintf(clicontext.Root().Writer, "\n"); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	return printRecordsTable(clicontext.App.Writer, resp)
+	return printRecordsTable(clicontext.Root().Writer, resp)
 }
 
 func printRecordsTable(w io.Writer, eventReceiver controlapi.Control_ListenBuildHistoryClient) error {

@@ -14,32 +14,32 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var LogsCommand = cli.Command{
+var LogsCommand = &cli.Command{
 	Name:   "logs",
 	Usage:  "display build logs",
-	Action: logs,
+	Action: commandAction(logs),
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "progress",
 			Usage: "progress output type",
 			Value: "auto",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "trace",
 			Usage: "show opentelemetry trace",
 		},
 	},
 }
 
-func logs(clicontext *cli.Context) error {
+func logs(clicontext *cli.Command) error {
 	args := clicontext.Args()
-	if len(args) == 0 {
+	if args.Len() == 0 {
 		return errors.Errorf("build ref must be specified")
 	}
-	ref := args[0]
+	ref := args.First()
 
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {

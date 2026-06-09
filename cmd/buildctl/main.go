@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -23,7 +24,7 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	"go.opentelemetry.io/otel"
 )
 
@@ -37,14 +38,14 @@ func init() {
 }
 
 func main() {
-	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
+	cli.VersionPrinter = func(c *cli.Command) {
+		fmt.Println(c.Name, version.Package, c.Version, version.Revision)
 	}
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Name = "buildctl"
 	app.Usage = "build utility"
 	app.Version = version.Version
-	app.EnableBashCompletion = true
+	app.EnableShellCompletion = true
 
 	defaultAddress := os.Getenv("BUILDKIT_HOST")
 	if defaultAddress == "" {
@@ -52,58 +53,58 @@ func main() {
 	}
 
 	app.Flags = []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "addr",
 			Usage: "buildkitd address",
 			Value: defaultAddress,
 		},
 		// Add format flag to control log formatter
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "log-format",
 			Usage: "log formatter: json or text",
 			Value: "text",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlsservername",
 			Usage: "buildkitd server name for certificate validation",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscacert",
 			Usage: "CA certificate for validation",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscert",
 			Usage: "client certificate",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlskey",
 			Usage: "client key",
 			Value: "",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlsdir",
 			Usage: "directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)",
 			Value: "",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  "timeout",
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "wait",
 			Usage: "block RPCs until the connection becomes available",
 		},
 	}
 
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		diskUsageCommand,
 		pruneCommand,
 		pruneHistoriesCommand,
@@ -111,25 +112,26 @@ func main() {
 		debugCommand,
 		dialStdioCommand,
 	}
+	disableSliceFlagSeparator(app)
 
 	var debugEnabled bool
 
-	app.Before = func(context *cli.Context) error {
-		debugEnabled = context.GlobalBool("debug")
+	app.Before = func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+		debugEnabled = cmd.Bool("debug")
 		// Use Format flag to control log formatter
-		logFormat := context.GlobalString("log-format")
+		logFormat := cmd.String("log-format")
 		switch logFormat {
 		case "json":
 			logrus.SetFormatter(&logrus.JSONFormatter{})
 		case "text", "":
 			logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		default:
-			return errors.Errorf("unsupported log type %q", logFormat)
+			return ctx, errors.Errorf("unsupported log type %q", logFormat)
 		}
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
-		return nil
+		return ctx, nil
 	}
 
 	if err := bccommon.AttachAppContext(app); err != nil {
@@ -138,7 +140,7 @@ func main() {
 
 	profiler.Attach(app)
 
-	handleErr(debugEnabled, app.Run(os.Args))
+	handleErr(debugEnabled, app.Run(context.Background(), os.Args))
 }
 
 func handleErr(debug bool, err error) {
@@ -164,3 +166,16 @@ func handleErr(debug bool, err error) {
 type skipErrors struct{}
 
 func (skipErrors) Handle(err error) {}
+
+func commandAction(fn func(*cli.Command) error) cli.ActionFunc {
+	return func(_ context.Context, cmd *cli.Command) error {
+		return fn(cmd)
+	}
+}
+
+func disableSliceFlagSeparator(cmd *cli.Command) {
+	cmd.DisableSliceFlagSeparator = true
+	for _, subcmd := range cmd.Commands {
+		disableSliceFlagSeparator(subcmd)
+	}
+}

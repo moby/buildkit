@@ -9,50 +9,52 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/tonistiigi/units"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var pruneCommand = cli.Command{
+var pruneCommand = &cli.Command{
 	Name:   "prune",
 	Usage:  "clean up build cache",
-	Action: prune,
+	Action: commandAction(prune),
 	Flags: []cli.Flag{
-		cli.DurationFlag{
+		&cli.DurationFlag{
 			Name:  "keep-duration",
 			Usage: "Keep data newer than this limit",
 		},
-		cli.Float64Flag{
+		&cli.Float64Flag{
 			Name:  "keep-storage",
 			Usage: "Keep data below this limit (in MB)",
 		},
-		cli.Float64Flag{
+		&cli.Float64Flag{
 			Name:  "keep-storage-min",
 			Usage: "Always allow data above this limit (in MB)",
 		},
-		cli.Float64Flag{
+		&cli.Float64Flag{
 			Name:  "free-storage",
 			Usage: "Keep free data below this limit (in MB)",
 		},
-		cli.StringSliceFlag{
-			Name:  "filter, f",
-			Usage: "Filter records",
+		&cli.StringSliceFlag{
+			Name:    "filter",
+			Aliases: []string{"f"},
+			Usage:   "Filter records",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "all",
 			Usage: "Include internal/frontend references",
 		},
-		cli.BoolFlag{
-			Name:  "verbose, v",
-			Usage: "Verbose output",
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Aliases: []string{"v"},
+			Usage:   "Verbose output",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},
 	},
 }
 
-func prune(clicontext *cli.Context) error {
+func prune(clicontext *cli.Command) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -88,10 +90,10 @@ func prune(clicontext *cli.Context) error {
 			defer close(printed)
 			for du := range ch {
 				// Unlike `buildctl du`, the template is applied to a UsageInfo, not to a slice of UsageInfo
-				if err := tmpl.Execute(clicontext.App.Writer, du); err != nil {
+				if err := tmpl.Execute(clicontext.Root().Writer, du); err != nil {
 					panic(err)
 				}
-				if _, err = fmt.Fprintf(clicontext.App.Writer, "\n"); err != nil {
+				if _, err = fmt.Fprintf(clicontext.Root().Writer, "\n"); err != nil {
 					panic(err)
 				}
 			}

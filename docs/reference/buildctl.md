@@ -8,7 +8,7 @@ NAME:
    buildctl - build utility
 
 USAGE:
-   buildctl [global options] command [command options] [arguments...]
+   buildctl [global options] [command [command options]]
 
 VERSION:
    v0.0.0+unknown
@@ -22,18 +22,18 @@ COMMANDS:
    help, h          Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --debug                enable debug output in logs
-   --addr value           buildkitd address (default: "unix:///run/buildkit/buildkitd.sock")
-   --log-format value     log formatter: json or text (default: "text")
-   --tlsservername value  buildkitd server name for certificate validation
-   --tlscacert value      CA certificate for validation
-   --tlscert value        client certificate
-   --tlskey value         client key
-   --tlsdir value         directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)
-   --timeout value        timeout backend connection after value seconds (default: 5)
-   --wait                 block RPCs until the connection becomes available
-   --help, -h             show help
-   --version, -v          print the version
+   --debug                 enable debug output in logs
+   --addr string           buildkitd address (default: "unix:///run/buildkit/buildkitd.sock")
+   --log-format string     log formatter: json or text (default: "text")
+   --tlsservername string  buildkitd server name for certificate validation
+   --tlscacert string      CA certificate for validation
+   --tlscert string        client certificate
+   --tlskey string         client key
+   --tlsdir string         directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)
+   --timeout int           timeout backend connection after value seconds (default: 5)
+   --wait                  block RPCs until the connection becomes available
+   --help, -h              show help
+   --version, -v           print the version
 ```
 <!---GENERATE_END-->
 
@@ -57,31 +57,43 @@ NAME:
 
 USAGE:
    
-  To build and push an image using Dockerfile:
-    $ buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
-  
+     To build and push an image using Dockerfile:
+       $ buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
+     
 
 OPTIONS:
-   --output value, -o value          Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
-   --progress value                  Set type of progress (auto, plain, tty, rawjson). Use plain to show container output (default: "auto")
-   --trace value                     Path to trace file. Defaults to no tracing.
-   --local value                     Allow build access to the local directory
-   --oci-layout value                Allow build access to the local OCI layout
-   --frontend value                  Define frontend used for build
-   --opt value                       Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar
-   --no-cache                        Disable cache for all the vertices
-   --export-cache value              Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
-   --import-cache value              Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
-   --secret value                    Secret value exposed to the build. Format id=secretname,src=filepath
-   --allow value                     Allow extra privileged entitlement, e.g. network.host, security.insecure, device
-   --ssh value                       Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]
-   --metadata-file value             Output build metadata (e.g., image digest) to a file as JSON
-   --source-policy-file value        Read source policy file from a JSON file
-   --proxy-network                   Run build with proxy network enforcement
-   --ref-file value                  Write build ref to a file
-   --registry-auth-tlscontext value  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
-   --debug-json-cache-metrics value  Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.
-   
+   --output string, -o string [ --output string, -o string ]                Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true
+   --progress string                                                        Set type of progress (auto, plain, tty, rawjson). Use plain to show container output (default: "auto")
+   --trace string                                                           Path to trace file. Defaults to no tracing.
+   --local string [ --local string ]                                        Allow build access to the local directory
+   --oci-layout string [ --oci-layout string ]                              Allow build access to the local OCI layout
+   --frontend string                                                        Define frontend used for build
+   --opt string [ --opt string ]                                            Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar
+   --no-cache                                                               Disable cache for all the vertices
+   --export-cache string [ --export-cache string ]                          Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir
+   --import-cache string [ --import-cache string ]                          Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir
+   --secret string [ --secret string ]                                      Secret value exposed to the build. Format id=secretname,src=filepath
+   --allow string [ --allow string ]                                        Allow extra privileged entitlement, e.g. network.host, security.insecure, device
+   --ssh string [ --ssh string ]                                            Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]
+   --metadata-file string                                                   Output build metadata (e.g., image digest) to a file as JSON
+   --source-policy-file string                                              Read source policy file from a JSON file
+   --proxy-network                                                          Run build with proxy network enforcement
+   --ref-file string                                                        Write build ref to a file
+   --registry-auth-tlscontext string [ --registry-auth-tlscontext string ]  Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt
+   --debug-json-cache-metrics string                                        Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.
+   --help, -h                                                               show help
+
+GLOBAL OPTIONS:
+   --debug                 enable debug output in logs
+   --addr string           buildkitd address (default: "unix:///run/buildkit/buildkitd.sock")
+   --log-format string     log formatter: json or text (default: "text")
+   --tlsservername string  buildkitd server name for certificate validation
+   --tlscacert string      CA certificate for validation
+   --tlscert string        client certificate
+   --tlskey string         client key
+   --tlsdir string         directory containing CA certificate, client certificate, and client key. Supported file names are (ca.pem, cert.pem, key.pem) or (ca.crt, tls.crt, tls.key)
+   --timeout int           timeout backend connection after value seconds (default: 5)
+   --wait                  block RPCs until the connection becomes available
 ```
 <!---GENERATE_END-->
 

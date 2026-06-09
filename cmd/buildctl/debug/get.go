@@ -11,22 +11,22 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var GetCommand = cli.Command{
+var GetCommand = &cli.Command{
 	Name:   "get",
 	Usage:  "retrieve a blob from contentstore",
-	Action: get,
+	Action: commandAction(get),
 }
 
-func get(clicontext *cli.Context) error {
+func get(clicontext *cli.Command) error {
 	args := clicontext.Args()
-	if len(args) == 0 {
+	if args.Len() == 0 {
 		return errors.Errorf("blob digest must be specified")
 	}
 
-	dgst, err := digest.Parse(args[0])
+	dgst, err := digest.Parse(args.First())
 	if err != nil {
 		return err
 	}
