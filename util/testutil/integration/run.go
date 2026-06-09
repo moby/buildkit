@@ -344,7 +344,7 @@ func resolveDefaultPlatform(ctx context.Context, provider content.Provider, desc
 	if err != nil {
 		return ocispecs.Descriptor{}, err
 	}
-	matcher := platforms.Default()
+	matcher := platforms.OnlyStrict(platforms.DefaultSpec())
 	for _, c := range children {
 		if c.Platform != nil && matcher.Match(*c.Platform) {
 			return c, nil
