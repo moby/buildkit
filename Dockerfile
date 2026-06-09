@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.3.6
-ARG CONTAINERD_VERSION=v2.2.5
+ARG RUNC_VERSION=v1.4.3
+ARG CONTAINERD_VERSION=v2.3.2
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
-ARG CONTAINERD_ALT_VERSION_21=v2.1.9
+ARG CONTAINERD_ALT_VERSION_22=v2.2.5
 ARG CONTAINERD_ALT_VERSION_17=v1.7.33
 ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v3.0.1
@@ -281,8 +281,8 @@ RUN /build.sh
 # containerd-alt-21 builds containerd v2.1 for integration tests
 FROM containerd-build AS containerd-alt-21
 WORKDIR /go/src/github.com/containerd/containerd
-ARG CONTAINERD_ALT_VERSION_21
-ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_21" .
+ARG CONTAINERD_ALT_VERSION_22
+ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_22" .
 RUN /build.sh
 
 # containerd-alt-17 builds containerd v1.7 for integration tests
