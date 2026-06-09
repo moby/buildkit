@@ -233,7 +233,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		return nil, nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
-	opts.SetOCITypesDefault(defaultImageOCITypes(buildInfo.CompatibilityVersion, src))
+	opts.SetOCITypesDefault(DefaultOCITypes(buildInfo.CompatibilityVersion, src))
+	if err := opts.Validate(); err != nil {
+		return nil, nil, nil, err
+	}
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -579,7 +582,8 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descrip
 	maps.Copy(a, desc.Annotations)
 }
 
-func defaultImageOCITypes(compatibilityVersion int, src *exporter.Source) bool {
+// DefaultOCITypes returns the default media type behavior for image exports.
+func DefaultOCITypes(compatibilityVersion int, src *exporter.Source) bool {
 	if compatibilityVersion >= compat.CompatibilityVersion031 {
 		return true
 	}

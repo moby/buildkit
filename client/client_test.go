@@ -4459,82 +4459,128 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		destDir := t.TempDir()
-
-		out := filepath.Join(destDir, "out.tar")
-		outW, err := os.Create(out)
-		require.NoError(t, err)
-		target := "example.com/buildkit/testoci:latest"
-		attrs := map[string]string{}
-		if exp == ExporterDocker {
-			attrs["name"] = target
-		}
-		_, err = c.Solve(sb.Context(), def, SolveOpt{
-			Exports: []ExportEntry{
-				{
-					Type:   exp,
-					Attrs:  attrs,
-					Output: fixedWriteCloser(outW),
-				},
+	target := "example.com/buildkit/testoci:latest"
+	for _, tc := range []struct {
+		name              string
+		exporter          string
+		attrs             map[string]string
+		indexMediaType    string
+		manifestMediaType string
+		configMediaType   string
+		layerMediaType    string
+	}{
+		{
+			name:              ExporterOCI,
+			exporter:          ExporterOCI,
+			attrs:             map[string]string{},
+			indexMediaType:    ocispecs.MediaTypeImageIndex,
+			manifestMediaType: ocispecs.MediaTypeImageManifest,
+			configMediaType:   ocispecs.MediaTypeImageConfig,
+			layerMediaType:    ocispecs.MediaTypeImageLayerGzip,
+		},
+		{
+			name:     ExporterDocker,
+			exporter: ExporterDocker,
+			attrs: map[string]string{
+				"name": target,
 			},
-		}, nil)
-		require.NoError(t, err)
+			indexMediaType:    ocispecs.MediaTypeImageIndex,
+			manifestMediaType: ocispecs.MediaTypeImageManifest,
+			configMediaType:   ocispecs.MediaTypeImageConfig,
+			layerMediaType:    ocispecs.MediaTypeImageLayerGzip,
+		},
+		{
+			name:     "docker-oci-mediatypes-false",
+			exporter: ExporterDocker,
+			attrs: map[string]string{
+				"name":           target,
+				"oci-mediatypes": "false",
+			},
+			indexMediaType:    ocispecs.MediaTypeImageIndex,
+			manifestMediaType: images.MediaTypeDockerSchema2Manifest,
+			configMediaType:   images.MediaTypeDockerSchema2Config,
+			layerMediaType:    images.MediaTypeDockerSchema2LayerGzip,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			destDir := t.TempDir()
 
-		dt, err := os.ReadFile(out)
-		require.NoError(t, err)
+			out := filepath.Join(destDir, "out.tar")
+			outW, err := os.Create(out)
+			require.NoError(t, err)
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type:   tc.exporter,
+						Attrs:  tc.attrs,
+						Output: fixedWriteCloser(outW),
+					},
+				},
+			}, nil)
+			require.NoError(t, err)
 
-		m, err := testutil.ReadTarToMap(dt, false)
-		require.NoError(t, err)
+			dt, err := os.ReadFile(out)
+			require.NoError(t, err)
 
-		_, ok := m["oci-layout"]
-		require.True(t, ok)
+			m, err := testutil.ReadTarToMap(dt, false)
+			require.NoError(t, err)
 
-		var index ocispecs.Index
-		err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
-		require.NoError(t, err)
-		require.Equal(t, 2, index.SchemaVersion)
-		require.Equal(t, 1, len(index.Manifests))
-
-		var mfst ocispecs.Manifest
-		err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
-		require.NoError(t, err)
-		require.Equal(t, 2, len(mfst.Layers))
-
-		var ociimg ocispecs.Image
-		err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &ociimg)
-		require.NoError(t, err)
-		require.Equal(t, "layers", ociimg.RootFS.Type)
-		require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
-
-		_, ok = m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[0].Digest.Hex()]
-		require.True(t, ok)
-		_, ok = m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[1].Digest.Hex()]
-		require.True(t, ok)
-
-		if exp != ExporterDocker {
-			continue
-		}
-
-		var dockerMfst []struct {
-			Config   string
-			RepoTags []string
-			Layers   []string
-		}
-		err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
-		require.NoError(t, err)
-		require.Equal(t, 1, len(dockerMfst))
-
-		_, ok = m[dockerMfst[0].Config]
-		require.True(t, ok)
-		require.Equal(t, 2, len(dockerMfst[0].Layers))
-		require.Equal(t, 1, len(dockerMfst[0].RepoTags))
-		require.Equal(t, target, dockerMfst[0].RepoTags[0])
-
-		for _, l := range dockerMfst[0].Layers {
-			_, ok := m[l]
+			_, ok := m["oci-layout"]
 			require.True(t, ok)
-		}
+
+			var index ocispecs.Index
+			err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+			require.NoError(t, err)
+			require.Equal(t, 2, index.SchemaVersion)
+			require.Equal(t, tc.indexMediaType, index.MediaType)
+			require.Equal(t, 1, len(index.Manifests))
+			require.Equal(t, tc.manifestMediaType, index.Manifests[0].MediaType)
+
+			var mfst ocispecs.Manifest
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+			require.NoError(t, err)
+			require.Equal(t, tc.manifestMediaType, mfst.MediaType)
+			require.Equal(t, tc.configMediaType, mfst.Config.MediaType)
+			require.Equal(t, 2, len(mfst.Layers))
+			for _, layer := range mfst.Layers {
+				require.Equal(t, tc.layerMediaType, layer.MediaType)
+			}
+
+			var ociimg ocispecs.Image
+			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &ociimg)
+			require.NoError(t, err)
+			require.Equal(t, "layers", ociimg.RootFS.Type)
+			require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+
+			_, ok = m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[0].Digest.Hex()]
+			require.True(t, ok)
+			_, ok = m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[1].Digest.Hex()]
+			require.True(t, ok)
+
+			if tc.exporter != ExporterDocker {
+				return
+			}
+
+			var dockerMfst []struct {
+				Config   string
+				RepoTags []string
+				Layers   []string
+			}
+			err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(dockerMfst))
+
+			_, ok = m[dockerMfst[0].Config]
+			require.True(t, ok)
+			require.Equal(t, 2, len(dockerMfst[0].Layers))
+			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
+			require.Equal(t, target, dockerMfst[0].RepoTags[0])
+
+			for _, l := range dockerMfst[0].Layers {
+				_, ok := m[l]
+				require.True(t, ok)
+			}
+		})
 	}
 
 	checkAllReleasable(t, c, sb, true)
