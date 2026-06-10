@@ -5,7 +5,7 @@
 //go:build go1.22
 
 /*
-Package trace provides a mechanism to collect and retrive
+Package trace provides a mechanism to collect and retrieve
 the most recent execution data without keeping the complete
 execution tracing history.
 
