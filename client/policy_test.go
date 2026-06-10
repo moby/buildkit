@@ -281,6 +281,7 @@ func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
 
 	internetURL := "http://example.com/"
 	allowedHost := []string{entitlements.EntitlementNetworkHost.String()}
+	defaultHasHostLoopback := proxyNetModeDefaultHasHostLoopback(sb)
 
 	// Host mode without the network.host entitlement should be rejected before exec starts.
 	hostWithoutEntitlement := llb.Image("alpine:latest").
@@ -319,22 +320,34 @@ func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
 		return <-logsCh, err
 	}
 
-	// Bridge proxy egress should allow normal external network access.
-	logOutput, err := runProxySolve("bridge internet", llb.Image("alpine:latest").
+	// Default proxy egress should allow normal external network access.
+	logOutput, err := runProxySolve("default internet", llb.Image("alpine:latest").
 		Run(llb.Shlexf(`wget -q -O /tmp/internet %s`, internetURL), llb.IgnoreCache).
 		Root(), nil)
 	require.NoError(t, err)
 	require.Contains(t, logOutput, "proxy network requests:\n- GET "+internetURL+" -> 200")
 	require.Equal(t, int32(0), hostHit.Load())
 
-	// Bridge proxy egress should not reach services bound to buildkitd host loopback.
-	logOutput, err = runProxySolve("bridge host", llb.Image("alpine:latest").
-		// Clear NO_PROXY so the localhost URL is forced through the BuildKit proxy.
-		Run(llb.Shlexf(`sh -c '! env NO_PROXY= no_proxy= wget -T 2 -q -O- %s'`, hostPath), llb.IgnoreCache).
-		Root(), nil)
-	require.NoError(t, err)
-	require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 502")
-	require.Equal(t, int32(0), hostHit.Load())
+	expectedHostHits := int32(0)
+	if defaultHasHostLoopback {
+		// Proxy UNSET should follow the worker default provider, including host fallback/default.
+		logOutput, err = runProxySolve("default host fallback", llb.Image("alpine:latest").
+			Run(llb.Shlexf(`sh -c 'env NO_PROXY= no_proxy= wget -q -O- %s | grep "proxy host ok"'`, hostPath), llb.IgnoreCache).
+			Root(), nil)
+		require.NoError(t, err)
+		require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 200")
+		expectedHostHits = 1
+		require.Equal(t, expectedHostHits, hostHit.Load())
+	} else {
+		// Bridge proxy egress should not reach services bound to buildkitd host loopback.
+		logOutput, err = runProxySolve("bridge host", llb.Image("alpine:latest").
+			// Clear NO_PROXY so the localhost URL is forced through the BuildKit proxy.
+			Run(llb.Shlexf(`sh -c '! env NO_PROXY= no_proxy= wget -T 2 -q -O- %s'`, hostPath), llb.IgnoreCache).
+			Root(), nil)
+		require.NoError(t, err)
+		require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 502")
+		require.Equal(t, expectedHostHits, hostHit.Load())
+	}
 
 	// Host proxy egress is allowed only with the network.host entitlement.
 	logOutput, err = runProxySolve("host allowed", llb.Image("alpine:latest").
@@ -342,7 +355,8 @@ func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
 		Root(), allowedHost)
 	require.NoError(t, err)
 	require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostPath+" -> 200")
-	require.Equal(t, int32(1), hostHit.Load())
+	expectedHostHits++
+	require.Equal(t, expectedHostHits, hostHit.Load())
 
 	// None mode should not inject proxy env or allow external network access.
 	logOutput, err = runProxySolve("none internet", llb.Image("alpine:latest").
@@ -357,7 +371,104 @@ func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
 		Root(), nil)
 	require.NoError(t, err)
 	require.NotContains(t, logOutput, hostPath)
-	require.Equal(t, int32(1), hostHit.Load())
+	require.Equal(t, expectedHostHits, hostHit.Load())
+}
+
+func testProxyNetworkDefaultEgressNoRootless(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	hostSrv, hostURL := newProxyHTTPServer(t, "127.0.0.1", "127.0.0.1", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/host-default", "/denied":
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte("proxy host default ok\n"))
+	}))
+	defer hostSrv.Close()
+
+	runProxySolve := func(st llb.State, opt SolveOpt) (string, error) {
+		t.Helper()
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err)
+
+		statusCh := make(chan *SolveStatus)
+		logsCh := make(chan string, 1)
+		go func() {
+			var b strings.Builder
+			for st := range statusCh {
+				for _, l := range st.Logs {
+					b.Write(l.Data)
+				}
+			}
+			logsCh <- b.String()
+		}()
+
+		_, err = c.Solve(ctx, def, opt, statusCh)
+		return <-logsCh, err
+	}
+
+	defaultHasHostLoopback := proxyNetModeDefaultHasHostLoopback(sb)
+	hostDefaultCmd := llb.Shlexf(`sh -c 'env NO_PROXY= no_proxy= wget -q -O- %s/host-default | grep "proxy host default ok"'`, hostURL)
+	if !defaultHasHostLoopback {
+		hostDefaultCmd = llb.Shlexf(`sh -c '! env NO_PROXY= no_proxy= wget -T 2 -q -O- %s/host-default'`, hostURL)
+	}
+	st := llb.Image("alpine:latest").
+		Run(hostDefaultCmd, llb.IgnoreCache).
+		Root()
+	logOutput, err := runProxySolve(st, SolveOpt{
+		ProxyNetwork: true,
+	})
+	require.NoError(t, err)
+	if defaultHasHostLoopback {
+		require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostURL+"/host-default -> 200")
+	} else {
+		require.Contains(t, logOutput, "proxy network requests:\n- GET "+hostURL+"/host-default -> 502")
+	}
+
+	var checked atomic.Int32
+	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		if req.Source.Source.Identifier == hostURL+"/denied" {
+			checked.Add(1)
+			return &policysession.DecisionResponse{
+				Action: sourcepolicypb.PolicyAction_DENY,
+			}, nil, nil
+		}
+		return &policysession.DecisionResponse{
+			Action: sourcepolicypb.PolicyAction_ALLOW,
+		}, nil, nil
+	})
+
+	deny := llb.Image("alpine:latest").
+		Run(llb.Shlexf(`env NO_PROXY= no_proxy= wget -S -O- %s/denied`, hostURL), llb.IgnoreCache).
+		Root()
+	logOutput, err = runProxySolve(deny, SolveOpt{
+		ProxyNetwork:         true,
+		SourcePolicyProvider: denyProvider,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exit code: 1")
+	require.Contains(t, logOutput, "HTTP/1.1 403 Forbidden")
+	require.Equal(t, int32(1), checked.Load())
+	require.NotContains(t, err.Error(), "unknown proxy egress network mode UNSET")
+}
+
+func proxyNetModeDefaultHasHostLoopback(sb integration.Sandbox) bool {
+	switch sb.Value("netmode").(type) {
+	case *netModeProxyDefaultNoCNI, *netModeProxyHost:
+		return true
+	default:
+		return false
+	}
 }
 
 func newProxyHTTPServer(t *testing.T, listenHost, urlHost string, handler http.Handler) (*httptest.Server, string) {
