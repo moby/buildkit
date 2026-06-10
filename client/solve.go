@@ -189,7 +189,22 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if ex.OutputDir == "" {
 					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
 				}
-				syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+				if ex.Type == ExporterLocal {
+					mode := LocalExporterModeCopy
+					if ex.Attrs != nil {
+						mode, err = ParseLocalExporterMode(ex.Attrs["mode"])
+						if err != nil {
+							return nil, err
+						}
+					}
+					if mode == LocalExporterModeDelete {
+						syncTargets = append(syncTargets, filesync.WithFSSyncDirDelete(exID, ex.OutputDir))
+					} else {
+						syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+					}
+				} else {
+					syncTargets = append(syncTargets, filesync.WithFSSyncDir(exID, ex.OutputDir))
+				}
 			}
 			if supportStore {
 				store := ex.OutputStore
