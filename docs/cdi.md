@@ -57,7 +57,7 @@ Devices:
 
 GC Policy rule#0:
         All:                    false
-        Filters:                type==source.local,type==exec.cachemount,type==source.git.checkout
+        Filters:                type==source.local type==exec.cachemount type==source.git.checkout
         Keep duration:          48h0m0s
         Maximum used space:     512MB
 GC Policy rule#1:
