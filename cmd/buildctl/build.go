@@ -28,11 +28,11 @@ import (
 	"github.com/moby/buildkit/util/progress/progresswriter"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/sync/errgroup"
 )
 
-var buildCommand = cli.Command{
+var buildCommand = &cli.Command{
 	Name:    "build",
 	Aliases: []string{"b"},
 	Usage:   "build",
@@ -40,89 +40,90 @@ var buildCommand = cli.Command{
 	To build and push an image using Dockerfile:
 	  $ buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
 	`,
-	Action: buildAction,
+	Action: commandAction(buildAction),
 	Flags: []cli.Flag{
-		cli.StringSliceFlag{
-			Name:  "output,o",
-			Usage: "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
+		&cli.StringSliceFlag{
+			Name:    "output",
+			Aliases: []string{"o"},
+			Usage:   "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "progress",
 			Usage: "Set type of progress (auto, plain, tty, rawjson). Use plain to show container output",
 			Value: "auto",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "trace",
 			Usage: "Path to trace file. Defaults to no tracing.",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "oci-layout",
 			Usage: "Allow build access to the local OCI layout",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "frontend",
 			Usage: "Define frontend used for build",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "opt",
 			Usage: "Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "no-cache",
 			Usage: "Disable cache for all the vertices",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "export-cache",
 			Usage: "Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "import-cache",
 			Usage: "Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "secret",
 			Usage: "Secret value exposed to the build. Format id=secretname,src=filepath",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow",
 			Usage: "Allow extra privileged entitlement, e.g. network.host, security.insecure, device",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "ssh",
 			Usage: "Allow forwarding SSH agent or a raw Unix socket to the builder. Format default|<id>[=<socket>[,raw=false]|<key>[,<key>]]",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "source-policy-file",
 			Usage: "Read source policy file from a JSON file",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "proxy-network",
 			Usage: "Run build with proxy network enforcement",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "ref-file",
 			Usage: "Write build ref to a file",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "registry-auth-tlscontext",
 			Usage: "Overwrite TLS configuration when authenticating with registries, e.g. --registry-auth-tlscontext host=https://myserver:2376,insecure=false,ca=/path/to/my/ca.crt,cert=/path/to/my/cert.crt,key=/path/to/my/key.crt",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "debug-json-cache-metrics",
 			Usage: "Where to output json cache metrics, use 'stdout' or 'stderr' for standard (error) output.",
 		},
 	},
 }
 
-func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
+func read(r io.Reader, clicontext *cli.Command) (*llb.Definition, error) {
 	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse input")
@@ -142,14 +143,14 @@ func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
 	return def, nil
 }
 
-func openTraceFile(clicontext *cli.Context) (*os.File, error) {
+func openTraceFile(clicontext *cli.Command) (*os.File, error) {
 	if traceFileName := clicontext.String("trace"); traceFileName != "" {
 		return os.OpenFile(traceFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	}
 	return nil, nil
 }
 
-func openCacheMetricsFile(clicontext *cli.Context) (*os.File, error) {
+func openCacheMetricsFile(clicontext *cli.Command) (*os.File, error) {
 	switch out := clicontext.String("debug-json-cache-metrics"); out {
 	case "stdout":
 		return os.Stdout, nil
@@ -162,7 +163,7 @@ func openCacheMetricsFile(clicontext *cli.Context) (*os.File, error) {
 	}
 }
 
-func buildAction(clicontext *cli.Context) error {
+func buildAction(clicontext *cli.Command) error {
 	startTime := time.Now()
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {

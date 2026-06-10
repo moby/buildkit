@@ -14,16 +14,16 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/tracing/delegated"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // ResolveClient resolves a client from CLI args
-func ResolveClient(c *cli.Context) (*client.Client, error) {
-	serverName := c.GlobalString("tlsservername")
+func ResolveClient(c *cli.Command) (*client.Client, error) {
+	serverName := c.String("tlsservername")
 	if serverName == "" {
 		// guess servername as hostname of target address
-		uri, err := url.Parse(c.GlobalString("addr"))
+		uri, err := url.Parse(c.String("addr"))
 		if err != nil {
 			return nil, err
 		}
@@ -37,11 +37,11 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		err    error
 	)
 
-	tlsDir := c.GlobalString("tlsdir")
+	tlsDir := c.String("tlsdir")
 
 	if tlsDir != "" {
 		// Fail straight away if TLS was specified both ways
-		if c.GlobalString("tlscacert") != "" || c.GlobalString("tlscert") != "" || c.GlobalString("tlskey") != "" {
+		if c.String("tlscacert") != "" || c.String("tlscert") != "" || c.String("tlskey") != "" {
 			return nil, errors.New("cannot specify tlsdir and tlscacert/tlscert/tlskey at the same time")
 		}
 
@@ -50,9 +50,9 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 			return nil, err
 		}
 	} else {
-		caCert = c.GlobalString("tlscacert")
-		cert = c.GlobalString("tlscert")
-		key = c.GlobalString("tlskey")
+		caCert = c.String("tlscacert")
+		cert = c.String("tlscert")
+		key = c.String("tlskey")
 	}
 
 	ctx := CommandContext(c)
@@ -71,7 +71,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		opts = append(opts, client.WithCredentials(cert, key))
 	}
 
-	timeout := time.Duration(c.GlobalInt("timeout")) * time.Second
+	timeout := time.Duration(c.Int("timeout")) * time.Second
 	if timeout > 0 {
 		ctx2, cancel := context.WithCancelCause(ctx)
 		ctx2, _ = context.WithTimeoutCause(ctx2, timeout, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
@@ -79,12 +79,12 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 	}
 
-	cl, err := client.New(ctx, c.GlobalString("addr"), opts...)
+	cl, err := client.New(ctx, c.String("addr"), opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	wait := c.GlobalBool("wait")
+	wait := c.Bool("wait")
 	if wait {
 		if err := cl.Wait(ctx); err != nil {
 			return nil, err

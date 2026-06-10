@@ -11,23 +11,23 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var DumpLLBCommand = cli.Command{
+var DumpLLBCommand = &cli.Command{
 	Name:      "dump-llb",
 	Usage:     "dump LLB in human-readable format. LLB can be also passed via stdin. This command does not require the daemon to be running.",
 	ArgsUsage: "<llbfile>",
-	Action:    dumpLLB,
+	Action:    commandAction(dumpLLB),
 	Flags: []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "dot",
 			Usage: "Output dot format",
 		},
 	},
 }
 
-func dumpLLB(clicontext *cli.Context) error {
+func dumpLLB(clicontext *cli.Command) error {
 	var r io.Reader
 	if llbFile := clicontext.Args().First(); llbFile != "" && llbFile != "-" {
 		f, err := os.Open(llbFile)

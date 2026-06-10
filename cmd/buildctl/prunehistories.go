@@ -12,22 +12,22 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var pruneHistoriesCommand = cli.Command{
+var pruneHistoriesCommand = &cli.Command{
 	Name:   "prune-histories",
 	Usage:  "clean up build histories",
-	Action: pruneHistories,
+	Action: commandAction(pruneHistories),
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},
 	},
 }
 
-func pruneHistories(clicontext *cli.Context) error {
+func pruneHistories(clicontext *cli.Command) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -65,16 +65,16 @@ func pruneHistories(clicontext *cli.Context) error {
 				errs = append(errs, err)
 				continue
 			}
-			if err := tmpl.Execute(clicontext.App.Writer, ev); err != nil {
+			if err := tmpl.Execute(clicontext.Root().Writer, ev); err != nil {
 				return err
 			}
-			if _, err = fmt.Fprintf(clicontext.App.Writer, "\n"); err != nil {
+			if _, err = fmt.Fprintf(clicontext.Root().Writer, "\n"); err != nil {
 				return err
 			}
 		}
 		return stderrors.Join(errs...)
 	}
-	return pruneHistoriesWithTableOutput(ctx, clicontext.App.Writer, controlClient, resp)
+	return pruneHistoriesWithTableOutput(ctx, clicontext.Root().Writer, controlClient, resp)
 }
 
 func pruneHistoriesWithTableOutput(ctx context.Context, w io.Writer, controlClient controlapi.ControlClient,

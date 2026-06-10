@@ -69,7 +69,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -105,7 +105,7 @@ type workerInitializerOpt struct {
 }
 
 type workerInitializer struct {
-	fn func(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error)
+	fn func(c *cli.Command, common workerInitializerOpt) ([]worker.Worker, error)
 	// less priority number, more preferred
 	priority int
 }
@@ -124,13 +124,14 @@ func registerWorkerInitializer(wi workerInitializer, flags ...cli.Flag) {
 }
 
 func main() {
-	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
+	cli.VersionPrinter = func(c *cli.Command) {
+		fmt.Println(c.Name, version.Package, c.Version, version.Revision)
 	}
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Name = "buildkitd"
 	app.Usage = "build daemon"
 	app.Version = version.Version
+	app.DisableSliceFlagSeparator = true
 
 	defaultConf, err := defaultConf()
 	if err != nil {
@@ -140,12 +141,13 @@ func main() {
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
 	if userns.RunningInUserNS() {
-		app.Flags = append(app.Flags, cli.BoolTFlag{
+		app.Flags = append(app.Flags, &cli.BoolFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
+			Value: true,
 		})
 	} else {
-		app.Flags = append(app.Flags, cli.BoolFlag{
+		app.Flags = append(app.Flags, &cli.BoolFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage,
 		})
@@ -164,89 +166,89 @@ func main() {
 	}
 
 	app.Flags = append(app.Flags,
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "config",
 			Usage: "path to config file",
 			Value: defaultConfigPath(),
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:   "trace",
 			Usage:  "enable trace output in logs (highly verbose, could affect performance)",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
 			Value: defaultConf.Root,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "addr",
 			Usage: "listening address (socket or tcp)",
-			Value: &cli.StringSlice{defaultConf.GRPC.Address[0]},
+			Value: []string{defaultConf.GRPC.Address[0]},
 		},
 		// Add format flag to control log formatter
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "log-format",
 			Usage: "log formatter: json or text",
 			Value: "text",
 		},
-		cli.StringFlag{
-			Name:   "log-level",
-			Usage:  "set the log level",
-			Value:  "info",
-			EnvVar: "BUILDKITD_LOG_LEVEL",
+		&cli.StringFlag{
+			Name:    "log-level",
+			Usage:   "set the log level",
+			Value:   "info",
+			Sources: cli.EnvVars("BUILDKITD_LOG_LEVEL"),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "group",
 			Usage: groupUsageStr,
 			Value: groupValue(defaultConf.GRPC.GID),
 		},
-		cli.StringFlag{
-			Name:   "debugaddr",
-			Usage:  "debugging address (eg. 0.0.0.0:6060)",
-			Value:  defaultConf.GRPC.DebugAddress,
-			EnvVar: "BUILDKITD_DEBUGADDR",
+		&cli.StringFlag{
+			Name:    "debugaddr",
+			Usage:   "debugging address (eg. 0.0.0.0:6060)",
+			Value:   defaultConf.GRPC.DebugAddress,
+			Sources: cli.EnvVars("BUILDKITD_DEBUGADDR"),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscert",
 			Usage: "certificate file to use",
 			Value: defaultConf.GRPC.TLS.Cert,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlskey",
 			Usage: "key file to use",
 			Value: defaultConf.GRPC.TLS.Key,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 			Value: defaultConf.GRPC.TLS.CA,
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure, device",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "proxy-network",
 			Usage: "enable proxy network enforcement for all builds",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "otel-socket-path",
 			Usage: "OTEL collector trace socket path",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "cdi-disabled",
 			Usage: "disables support of the Container Device Interface (CDI)",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  "cdi-spec-dir",
 			Usage: "list of directories to scan for CDI spec files",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  "save-cache-debug",
 			Usage: "enable saving cache debug info",
 		},
@@ -255,7 +257,7 @@ func main() {
 	app.Flags = append(app.Flags, serviceFlags()...)
 
 	var closers []func(ctx context.Context) error
-	app.Action = func(c *cli.Context) error {
+	app.Action = func(_ context.Context, c *cli.Command) error {
 		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
 		// See https://github.com/golang/go/issues/28804#issuecomment-505326268 for the "short" version.
 		if os.Geteuid() > 0 {
@@ -264,7 +266,7 @@ func main() {
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-		cfg, err := config.LoadFile(c.GlobalString("config"))
+		cfg, err := config.LoadFile(c.String("config"))
 		if err != nil {
 			return err
 		}
@@ -400,7 +402,7 @@ func main() {
 			return err
 		}
 
-		if c.GlobalBool("save-cache-debug") {
+		if c.Bool("save-cache-debug") {
 			db, err := cachedigest.NewDB(filepath.Join(cfg.Root, "cache-debug.db"))
 			if err != nil {
 				return errors.Wrap(err, "failed to create cache debug db")
@@ -419,7 +421,7 @@ func main() {
 		controller.Register(server)
 		reflection.Register(server)
 
-		ents := c.GlobalStringSlice("allow-insecure-entitlement")
+		ents := c.StringSlice("allow-insecure-entitlement")
 		if len(ents) > 0 {
 			cfg.Entitlements = []string{}
 			for _, e := range ents {
@@ -464,7 +466,7 @@ func main() {
 		return err
 	}
 
-	app.After = func(_ *cli.Context) (err error) {
+	app.After = func(_ context.Context, _ *cli.Command) (err error) {
 		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), telemetryShutdownTimeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancel()
 
@@ -482,7 +484,7 @@ func main() {
 
 	profiler.Attach(app)
 
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "buildkitd: %+v\n", err)
 		os.Exit(1)
 	}
@@ -639,7 +641,7 @@ func isRootlessConfig() bool {
 	return u != "" && u != "root"
 }
 
-func applyMainFlags(c *cli.Context, cfg *config.Config, warnings *[]string) error {
+func applyMainFlags(c *cli.Command, cfg *config.Config, warnings *[]string) error {
 	if c.IsSet("debug") && c.Bool("debug") {
 		cfg.Log.Level = "debug"
 	}
@@ -845,7 +847,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(ctx context.Context, c *cli.Context, cfg *config.Config, mp metric.MeterProvider) (*control.Controller, error) {
+func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp metric.MeterProvider) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -965,7 +967,7 @@ func resolverFunc(cfg *config.Config) docker.RegistryHosts {
 	return resolver.NewRegistryConfig(cfg.Registries)
 }
 
-func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {
+func newWorkerController(c *cli.Command, wiOpt workerInitializerOpt) (*worker.Controller, error) {
 	wc := &worker.Controller{}
 	nWorkers := 0
 	for _, wi := range workerInitializers {

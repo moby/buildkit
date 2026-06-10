@@ -10,19 +10,19 @@ import (
 
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var dialStdioCommand = cli.Command{
+var dialStdioCommand = &cli.Command{
 	Name:   "dial-stdio",
 	Usage:  "Proxy the stdio stream to the daemon connection. Should not be invoked manually.",
 	Hidden: true,
-	Action: dialStdioAction,
+	Action: commandAction(dialStdioAction),
 }
 
-func dialStdioAction(clicontext *cli.Context) error {
-	addr := clicontext.GlobalString("addr")
-	timeout := time.Duration(clicontext.GlobalInt("timeout")) * time.Second
+func dialStdioAction(clicontext *cli.Command) error {
+	addr := clicontext.String("addr")
+	timeout := time.Duration(clicontext.Int("timeout")) * time.Second
 	conn, err := dialer(addr, timeout)
 	if err != nil {
 		return err

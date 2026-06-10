@@ -1,34 +1,36 @@
 package profiler
 
 import (
+	"context"
+
 	"github.com/pkg/profile"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-func Attach(app *cli.App) {
+func Attach(app *cli.Command) {
 	app.Flags = append(app.Flags,
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-cpu",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-memory",
 			Hidden: true,
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:   "profile-memoryrate",
 			Value:  512 * 1024,
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-block",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-mutex",
 			Hidden: true,
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:   "profile-trace",
 			Hidden: true,
 		},
@@ -39,10 +41,12 @@ func Attach(app *cli.App) {
 	}{}
 
 	before := app.Before
-	app.Before = func(clicontext *cli.Context) error {
+	app.Before = func(ctx context.Context, clicontext *cli.Command) (context.Context, error) {
 		if before != nil {
-			if err := before(clicontext); err != nil {
-				return err
+			var err error
+			ctx, err = before(ctx, clicontext)
+			if err != nil {
+				return ctx, err
 			}
 		}
 
@@ -65,13 +69,13 @@ func Attach(app *cli.App) {
 		if traceProfile := clicontext.String("profile-trace"); traceProfile != "" {
 			stoppers = append(stoppers, profile.Start(profile.TraceProfile, profile.ProfilePath(traceProfile), profile.NoShutdownHook))
 		}
-		return nil
+		return ctx, nil
 	}
 
 	after := app.After
-	app.After = func(clicontext *cli.Context) error {
+	app.After = func(ctx context.Context, clicontext *cli.Command) error {
 		if after != nil {
-			if err := after(clicontext); err != nil {
+			if err := after(ctx, clicontext); err != nil {
 				return err
 			}
 		}

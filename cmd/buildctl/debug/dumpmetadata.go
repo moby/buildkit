@@ -8,21 +8,21 @@ import (
 
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 	bolt "go.etcd.io/bbolt"
 )
 
-var DumpMetadataCommand = cli.Command{
+var DumpMetadataCommand = &cli.Command{
 	Name:  "dump-metadata",
 	Usage: "dump the meta in human-readable format.  This command requires the daemon NOT to be running.",
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
 			Value: appdefaults.Root,
 		},
 	},
-	Action: func(clicontext *cli.Context) error {
+	Action: commandAction(func(clicontext *cli.Command) error {
 		dbFiles, err := findMetadataDBFiles(clicontext.String("root"))
 		if err != nil {
 			return err
@@ -36,7 +36,7 @@ var DumpMetadataCommand = cli.Command{
 			}
 		}
 		return nil
-	},
+	}),
 }
 
 func findMetadataDBFiles(root string) ([]string, error) {

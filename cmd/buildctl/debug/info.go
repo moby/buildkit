@@ -6,22 +6,22 @@ import (
 	"text/tabwriter"
 
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v3"
 )
 
-var InfoCommand = cli.Command{
+var InfoCommand = &cli.Command{
 	Name:   "info",
 	Usage:  "display internal information",
-	Action: info,
+	Action: commandAction(info),
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  "format",
 			Usage: "Format the output using the given Go template, e.g, '{{json .}}'",
 		},
 	},
 }
 
-func info(clicontext *cli.Context) error {
+func info(clicontext *cli.Command) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -35,10 +35,10 @@ func info(clicontext *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := tmpl.Execute(clicontext.App.Writer, res); err != nil {
+		if err := tmpl.Execute(clicontext.Root().Writer, res); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(clicontext.App.Writer, "\n")
+		_, err = fmt.Fprintf(clicontext.Root().Writer, "\n")
 		return err
 	}
 
