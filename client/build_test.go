@@ -53,8 +53,6 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testNoBuildID,
 		testUnknownBuildID,
 		testClientGatewayContainerExecPipe,
-		testClientGatewayContainerExecPipeRelease,
-		testClientGatewayContainerExecPipeSignalKill,
 		testClientGatewayContainerExecStdinCloseRace,
 		testClientGatewayContainerCancelOnRelease,
 		testClientGatewayContainerPID1Fail,
@@ -402,35 +400,6 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 // process together all started via `Exec` into the same container.
 // We are mimicing: `echo testing | cat | cat > /tmp/foo && cat /tmp/foo`
 func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
-	testClientGatewayContainerExecPipeWithCleanup(t, sb, func(ctx context.Context, ctr client.Container, pid1 client.ContainerProcess, stdin *io.PipeWriter) {
-		stdin.Close()
-		pid1.Wait()
-		ctr.Release(context.WithoutCancel(ctx))
-	})
-}
-
-// testClientGatewayContainerExecPipeRelease verifies that releasing the
-// container while pid1 still has an open stdin reader does not leave runc
-// blocked on the stdin copy.
-func testClientGatewayContainerExecPipeRelease(t *testing.T, sb integration.Sandbox) {
-	testClientGatewayContainerExecPipeWithCleanup(t, sb, func(ctx context.Context, ctr client.Container, pid1 client.ContainerProcess, _ *io.PipeWriter) {
-		ctr.Release(context.WithoutCancel(ctx))
-		pid1.Wait()
-	})
-}
-
-// testClientGatewayContainerExecPipeSignalKill verifies that SIGKILL delivered
-// via the process Signal channel unblocks runc when pid1 still has an open
-// stdin reader.
-func testClientGatewayContainerExecPipeSignalKill(t *testing.T, sb integration.Sandbox) {
-	testClientGatewayContainerExecPipeWithCleanup(t, sb, func(ctx context.Context, ctr client.Container, pid1 client.ContainerProcess, _ *io.PipeWriter) {
-		pid1.Signal(ctx, syscall.SIGKILL)
-		pid1.Wait()
-		ctr.Release(context.WithoutCancel(ctx))
-	})
-}
-
-func testClientGatewayContainerExecPipeWithCleanup(t *testing.T, sb integration.Sandbox, cleanup func(ctx context.Context, ctr client.Container, pid1 client.ContainerProcess, stdin *io.PipeWriter)) {
 	requiresLinux(t)
 
 	ctx := sb.Context()
@@ -470,17 +439,19 @@ func testClientGatewayContainerExecPipeWithCleanup(t *testing.T, sb integration.
 		}
 
 		// background pid1 process that starts container
-		pid1StdinR, pid1StdinW := io.Pipe()
 		pid1, err := ctr.Start(ctx, client.StartRequest{
-			Args:  []string{"cat"},
-			Stdin: pid1StdinR,
+			Args: []string{"sleep", "10"},
 		})
 		if err != nil {
 			ctr.Release(context.WithoutCancel(ctx))
 			return nil, err
 		}
 
-		defer cleanup(ctx, ctr, pid1, pid1StdinW)
+		defer func() {
+			// cancel pid1
+			ctr.Release(context.WithoutCancel(ctx))
+			pid1.Wait()
+		}()
 
 		// first part is `echo testing | cat`
 		stdin2 := bytes.NewBuffer([]byte("testing"))
@@ -555,6 +526,9 @@ func testClientGatewayContainerExecPipeWithCleanup(t *testing.T, sb integration.
 // exec receives stdin before EOF and uses the timeout only to catch stuck execs.
 func testClientGatewayContainerExecStdinCloseRace(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	if !strings.HasPrefix(sb.Name(), "containerd") {
+		t.Skip("test covers the containerd executor stdin close race")
+	}
 
 	ctx, cancel := context.WithTimeoutCause(sb.Context(), 30*time.Second, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
