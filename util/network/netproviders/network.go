@@ -69,22 +69,16 @@ func Providers(opt Opt) (providers map[pb.NetMode]network.Provider, proxyProvide
 		pb.NetMode_NONE:  network.NewNoneProvider(),
 	}
 	if proxyprovider.Supported() {
-		proxyEgressProviders := map[pb.NetMode]network.Provider{}
-		var ownedProxyEgressProviders []network.Provider
-		if resolvedMode == "cni" {
-			proxyEgressProviders[pb.NetMode_UNSET] = defaultProvider
-		} else if bridgeProvider, err := getBridgeProvider(opt.CNI); err == nil {
-			proxyEgressProviders[pb.NetMode_UNSET] = bridgeProvider
-			ownedProxyEgressProviders = append(ownedProxyEgressProviders, bridgeProvider)
+		proxyEgressProviders := map[pb.NetMode]network.Provider{
+			pb.NetMode_UNSET: defaultProvider,
 		}
 		if hostProvider, ok := getHostProvider(); ok {
 			proxyEgressProviders[pb.NetMode_HOST] = hostProvider
 		}
 		proxyProvider, err = proxyprovider.New(proxyprovider.Opt{
-			Root:                 opt.CNI.Root,
-			PoolSize:             opt.CNI.PoolSize,
-			EgressProviders:      proxyEgressProviders,
-			OwnedEgressProviders: ownedProxyEgressProviders,
+			Root:            opt.CNI.Root,
+			PoolSize:        opt.CNI.PoolSize,
+			EgressProviders: proxyEgressProviders,
 		})
 		if err != nil {
 			return nil, nil, resolvedMode, err

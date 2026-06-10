@@ -160,7 +160,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCgroupParent,
 	testLinuxResources,
 	testNetworkMode,
-	testProxyNetworkNoRootless,
 	testFrontendMetadataReturn,
 	testFrontendUseSolveResults,
 	testSSHMount,
@@ -325,11 +324,16 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	)
 
 	integration.Run(t, integration.TestFuncs(
+		testProxyNetworkNoRootless,
 		testProxyNetworkModesNoRootless,
+		testProxyNetworkDefaultEgressNoRootless,
 	),
 		mirrors,
 		integration.WithMatrix("netmode", map[string]any{
-			"bridge": proxyBridgeNetwork,
+			"default":        proxyDefaultNetwork,
+			"host":           proxyHostNetwork,
+			"bridge":         proxyBridgeNetwork,
+			"default-no-cni": proxyDefaultNetworkNoCNI,
 		}),
 	)
 
@@ -12996,6 +13000,45 @@ networkMode = "bridge"
 
 [worker.containerd]
 networkMode = "bridge"
+	`, nil
+}
+
+type netModeProxyDefault struct{}
+
+func (*netModeProxyDefault) UpdateConfigFile(in string) (string, func() error) {
+	return in + `
+
+insecure-entitlements = ["network.host"]
+`, nil
+}
+
+type netModeProxyDefaultNoCNI struct{}
+
+func (*netModeProxyDefaultNoCNI) UpdateConfigFile(in string) (string, func() error) {
+	return in + `
+
+insecure-entitlements = ["network.host"]
+
+[worker.oci]
+cniConfigPath = "/tmp/buildkit-missing-cni.json"
+
+[worker.containerd]
+cniConfigPath = "/tmp/buildkit-missing-cni.json"
+`, nil
+}
+
+type netModeProxyHost struct{}
+
+func (*netModeProxyHost) UpdateConfigFile(in string) (string, func() error) {
+	return in + `
+
+insecure-entitlements = ["network.host"]
+
+[worker.oci]
+networkMode = "host"
+
+[worker.containerd]
+networkMode = "host"
 `, nil
 }
 
@@ -13024,10 +13067,13 @@ nameservers = ["10.11.0.1"]
 }
 
 var (
-	hostNetwork        integration.ConfigUpdater = &netModeHost{}
-	defaultNetwork     integration.ConfigUpdater = &netModeDefault{}
-	proxyBridgeNetwork integration.ConfigUpdater = &netModeProxyBridge{}
-	bridgeDNSNetwork   integration.ConfigUpdater = &netModeBridgeDNS{}
+	hostNetwork              integration.ConfigUpdater = &netModeHost{}
+	defaultNetwork           integration.ConfigUpdater = &netModeDefault{}
+	proxyDefaultNetwork      integration.ConfigUpdater = &netModeProxyDefault{}
+	proxyDefaultNetworkNoCNI integration.ConfigUpdater = &netModeProxyDefaultNoCNI{}
+	proxyBridgeNetwork       integration.ConfigUpdater = &netModeProxyBridge{}
+	proxyHostNetwork         integration.ConfigUpdater = &netModeProxyHost{}
+	bridgeDNSNetwork         integration.ConfigUpdater = &netModeBridgeDNS{}
 )
 
 func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
