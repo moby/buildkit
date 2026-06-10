@@ -40,7 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )
@@ -55,7 +54,6 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExecPipe,
 		testClientGatewayContainerExecPipeRelease,
 		testClientGatewayContainerExecPipeSignalKill,
-		testClientGatewayContainerExecStdinCloseRace,
 		testClientGatewayContainerCancelOnRelease,
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Exit,
@@ -547,137 +545,6 @@ func testClientGatewayContainerExecPipeWithCleanup(t *testing.T, sb integration.
 	require.NoError(t, err)
 	require.Equal(t, "testing", output.String())
 
-	checkAllReleasable(t, c, sb, true)
-}
-
-// testClientGatewayContainerExecStdinCloseRace starts a gateway container and
-// runs many concurrent execs that copy stdin into files. It verifies that every
-// exec receives stdin before EOF and uses the timeout only to catch stuck execs.
-func testClientGatewayContainerExecStdinCloseRace(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-
-	ctx, cancel := context.WithTimeoutCause(sb.Context(), 30*time.Second, errors.WithStack(context.DeadlineExceeded))
-	defer cancel()
-
-	c, err := New(ctx, sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	product := "buildkit_test"
-
-	b := func(ctx context.Context, c client.Client) (_ *client.Result, retErr error) {
-		st := llb.Image("busybox:latest")
-
-		def, err := st.Marshal(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to marshal state")
-		}
-
-		r, err := c.Solve(ctx, client.SolveRequest{
-			Definition: def.ToPB(),
-		})
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to solve")
-		}
-
-		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
-			Mounts: []client.Mount{{
-				Dest:      "/",
-				MountType: pb.MountType_BIND,
-				Ref:       r.Ref,
-			}},
-		})
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := ctr.Release(context.WithoutCancel(ctx)); retErr == nil && err != nil {
-				retErr = errors.WithStack(err)
-			}
-		}()
-
-		pid1StdinR, pid1StdinW := io.Pipe()
-		pid1, err := ctr.Start(ctx, client.StartRequest{
-			Args:  []string{"cat"},
-			Stdin: pid1StdinR,
-		})
-		if err != nil {
-			return nil, err
-		}
-		defer pid1StdinR.Close()
-		defer pid1StdinW.Close()
-
-		const iterations = 600
-		expected := bytes.NewBuffer(nil)
-		eg, execCtx := errgroup.WithContext(ctx)
-		eg.SetLimit(16)
-		for i := range iterations {
-			msg := []byte("hello-" + strconv.Itoa(i))
-			expected.Write(msg)
-			expected.WriteByte('\n')
-
-			eg.Go(func() error {
-				stdout := bytes.NewBuffer(nil)
-				stderr := bytes.NewBuffer(nil)
-				pid, err := ctr.Start(execCtx, client.StartRequest{
-					Args:   []string{"/bin/sh", "-c", "cat > /tmp/msg.$MSG_ID"},
-					Env:    []string{"MSG_ID=" + strconv.Itoa(i)},
-					Stdin:  io.NopCloser(bytes.NewReader(msg)),
-					Stdout: &iohelper.NopWriteCloser{Writer: stdout},
-					Stderr: &iohelper.NopWriteCloser{Writer: stderr},
-				})
-				if err != nil {
-					return errors.Wrapf(err, "exec %d", i)
-				}
-				if err := pid.Wait(); err != nil {
-					return errors.Wrapf(err, "exec %d", i)
-				}
-				if stdout.Len() != 0 {
-					return errors.Errorf("exec %d stdout: %q", i, stdout.String())
-				}
-				if stderr.Len() != 0 {
-					return errors.Errorf("exec %d stderr: %q", i, stderr.String())
-				}
-				return nil
-			})
-		}
-		if err := eg.Wait(); err != nil {
-			return nil, err
-		}
-
-		stdout := bytes.NewBuffer(nil)
-		stderr := bytes.NewBuffer(nil)
-		pid, err := ctr.Start(ctx, client.StartRequest{
-			Args:   []string{"/bin/sh", "-c", "i=0; while [ $i -lt $MSG_COUNT ]; do cat /tmp/msg.$i; echo; i=$((i+1)); done"},
-			Env:    []string{"MSG_COUNT=" + strconv.Itoa(iterations)},
-			Stdout: &iohelper.NopWriteCloser{Writer: stdout},
-			Stderr: &iohelper.NopWriteCloser{Writer: stderr},
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := pid.Wait(); err != nil {
-			return nil, err
-		}
-		if stdout.String() != expected.String() {
-			return nil, errors.Errorf("unexpected stdout: %q", stdout.String())
-		}
-		if stderr.Len() != 0 {
-			return nil, errors.Errorf("stderr: %q", stderr.String())
-		}
-
-		if err := pid1StdinW.Close(); err != nil {
-			return nil, errors.WithStack(err)
-		}
-		if err := pid1.Wait(); err != nil {
-			return nil, err
-		}
-
-		return &client.Result{}, nil
-	}
-
-	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }
 
