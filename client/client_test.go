@@ -4444,9 +4444,9 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 			require.Len(t, ev.Record.Result.Results, 1)
 			require.Len(t, ev.Record.Exporters, 5)
 			if workers.IsTestDockerdMoby(sb) {
-				require.Equal(t, images.MediaTypeDockerSchema2Config, ev.Record.Result.Results[0].MediaType)
+				require.Equal(t, ocispecs.MediaTypeImageConfig, ev.Record.Result.Results[0].MediaType)
 			} else {
-				require.Equal(t, images.MediaTypeDockerSchema2Manifest, ev.Record.Result.Results[0].MediaType)
+				require.Equal(t, ocispecs.MediaTypeImageManifest, ev.Record.Result.Results[0].MediaType)
 			}
 		} else {
 			require.Len(t, ev.Record.Result.Results, 2)
