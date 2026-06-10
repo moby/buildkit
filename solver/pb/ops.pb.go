@@ -30,7 +30,6 @@ const (
 	NetMode_UNSET NetMode = 0 // sandbox
 	NetMode_HOST  NetMode = 1
 	NetMode_NONE  NetMode = 2
-	NetMode_PROXY NetMode = 3
 )
 
 // Enum value maps for NetMode.
@@ -39,13 +38,11 @@ var (
 		0: "UNSET",
 		1: "HOST",
 		2: "NONE",
-		3: "PROXY",
 	}
 	NetMode_value = map[string]int32{
 		"UNSET": 0,
 		"HOST":  1,
 		"NONE":  2,
-		"PROXY": 3,
 	}
 )
 
@@ -3845,12 +3842,11 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05upper\x18\x02 \x01(\v2\x12.pb.UpperDiffInputR\x05upper\"9\n" +
 	"\rPassthroughOp\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aoutputs\x18\x02 \x03(\x03R\aoutputs*3\n" +
+	"\aoutputs\x18\x02 \x03(\x03R\aoutputs*(\n" +
 	"\aNetMode\x12\t\n" +
 	"\x05UNSET\x10\x00\x12\b\n" +
 	"\x04HOST\x10\x01\x12\b\n" +
-	"\x04NONE\x10\x02\x12\t\n" +
-	"\x05PROXY\x10\x03*)\n" +
+	"\x04NONE\x10\x02*)\n" +
 	"\fSecurityMode\x12\v\n" +
 	"\aSANDBOX\x10\x00\x12\f\n" +
 	"\bINSECURE\x10\x01*@\n" +

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/entitlements"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,15 +121,13 @@ func TestWithProxyNetworkAffectsVertexDigest(t *testing.T) {
 
 	defaultEdge, err := Load(t.Context(), def, nil)
 	require.NoError(t, err)
-	defaultOp, ok := defaultEdge.Vertex.Sys().(*pb.Op)
-	require.True(t, ok)
+	defaultOp := requireVertexOp(t, defaultEdge.Vertex)
 	require.Equal(t, pb.NetMode_UNSET, defaultOp.GetExec().Network)
 
 	proxyEdge, err := loadWithProxyNetwork(t.Context(), def, nil, true)
 	require.NoError(t, err)
-	proxyOp, ok := proxyEdge.Vertex.Sys().(*pb.Op)
-	require.True(t, ok)
-	require.Equal(t, pb.NetMode_PROXY, proxyOp.GetExec().Network)
+	proxyOp := requireVertexOp(t, proxyEdge.Vertex)
+	require.Equal(t, pb.NetMode_UNSET, proxyOp.GetExec().Network)
 
 	require.NotEqual(t, defaultEdge.Vertex.Digest(), proxyEdge.Vertex.Digest())
 }
@@ -141,21 +140,55 @@ func TestNormalizeRuntimePlatformsDoesNotAffectVertexDigest(t *testing.T) {
 
 	normalizedEdge, err := Load(t.Context(), def, nil, NormalizeRuntimePlatforms())
 	require.NoError(t, err)
-	normalizedOp, ok := normalizedEdge.Vertex.Sys().(*pb.Op)
-	require.True(t, ok)
+	normalizedOp := requireVertexOp(t, normalizedEdge.Vertex)
 	require.NotNil(t, normalizedOp.Platform)
 
 	require.Equal(t, defaultEdge.Vertex.Digest(), normalizedEdge.Vertex.Digest())
 }
 
-func TestWithProxyNetworkRejectsExplicitProxyWhenDisabled(t *testing.T) {
+func TestWithProxyNetworkPreservesNoneMode(t *testing.T) {
 	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
-		exec.Network = pb.NetMode_PROXY
+		exec.Network = pb.NetMode_NONE
 	})
 
-	_, err := loadWithProxyNetwork(t.Context(), def, nil, false)
+	defaultEdge, err := Load(t.Context(), def, nil)
+	require.NoError(t, err)
+
+	proxyEdge, err := loadWithProxyNetwork(t.Context(), def, nil, true)
+	require.NoError(t, err)
+	proxyOp := requireVertexOp(t, proxyEdge.Vertex)
+	require.Equal(t, pb.NetMode_NONE, proxyOp.GetExec().Network)
+	require.Equal(t, defaultEdge.Vertex.Digest(), proxyEdge.Vertex.Digest())
+}
+
+func TestWithProxyNetworkPreservesHostMode(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.Network = pb.NetMode_HOST
+	})
+
+	defaultEdge, err := Load(t.Context(), def, nil)
+	require.NoError(t, err)
+
+	proxyEdge, err := loadWithProxyNetwork(t.Context(), def, nil, true)
+	require.NoError(t, err)
+	proxyOp := requireVertexOp(t, proxyEdge.Vertex)
+	require.Equal(t, pb.NetMode_HOST, proxyOp.GetExec().Network)
+	require.NotEqual(t, defaultEdge.Vertex.Digest(), proxyEdge.Vertex.Digest())
+}
+
+func TestWithProxyNetworkHostEgressRequiresEntitlement(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.Network = pb.NetMode_HOST
+	})
+
+	_, err := loadWithProxyNetwork(t.Context(), def, nil, true, ValidateEntitlements(entitlements.Set{}, nil))
 	require.Error(t, err)
-	require.ErrorContains(t, err, "requires proxy network to be enabled")
+	require.ErrorContains(t, err, "network.host is not allowed")
+
+	_, err = loadWithProxyNetwork(t.Context(), def, nil, true, ValidateEntitlements(entitlements.Set{
+		entitlements.EntitlementNetworkHost: nil,
+	}, nil))
+	require.NoError(t, err)
 }
 
 func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
@@ -205,4 +238,11 @@ func marshalTestOp(t *testing.T, op *pb.Op) (digest.Digest, []byte) {
 	dt, err := op.Marshal()
 	require.NoError(t, err)
 	return digest.FromBytes(dt), dt
+}
+
+func requireVertexOp(t *testing.T, v interface{ Sys() any }) *pb.Op {
+	t.Helper()
+	op, ok := v.Sys().(*pb.Op)
+	require.True(t, ok)
+	return op
 }

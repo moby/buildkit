@@ -23,6 +23,7 @@ import (
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -175,14 +176,15 @@ func (b *llbBridge) validateEntitlements(p *executor.ProcessInfo) error {
 	}
 	if b.proxyNetwork {
 		switch p.Meta.NetMode {
-		case pb.NetMode_UNSET:
-			p.Meta.NetMode = pb.NetMode_PROXY
-		case pb.NetMode_NONE, pb.NetMode_PROXY:
+		case pb.NetMode_UNSET, pb.NetMode_HOST:
+			if p.Meta.Proxy == nil {
+				p.Meta.Proxy = &network.ProxyConfig{}
+			}
+		case pb.NetMode_NONE:
+			p.Meta.Proxy = nil
 		default:
 			return errors.Errorf("network mode %s is not allowed when proxy network is enabled", p.Meta.NetMode)
 		}
-	} else if p.Meta.NetMode == pb.NetMode_PROXY {
-		return errors.Errorf("network mode %s requires proxy network to be enabled for the build", p.Meta.NetMode)
 	}
 	v := entitlements.Values{
 		NetworkHost:      p.Meta.NetMode == pb.NetMode_HOST,
@@ -199,8 +201,8 @@ func (b *llbBridge) Run(ctx context.Context, id string, rootfs executor.Mount, m
 	if err != nil {
 		return nil, err
 	}
-	if policy != nil {
-		process.Meta.ProxyPolicy = policy
+	if policy != nil && process.Meta.Proxy != nil {
+		process.Meta.Proxy.Policy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {
@@ -217,8 +219,8 @@ func (b *llbBridge) Exec(ctx context.Context, id string, process executor.Proces
 	if err != nil {
 		return err
 	}
-	if policy != nil {
-		process.Meta.ProxyPolicy = policy
+	if policy != nil && process.Meta.Proxy != nil {
+		process.Meta.Proxy.Policy = policy
 	}
 
 	if err := b.loadExecutor(); err != nil {

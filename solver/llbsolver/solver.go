@@ -148,7 +148,11 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 		if err != nil {
 			return nil, err
 		}
-		return w.ResolveOp(v, s.Bridge(b), s.sm)
+		br := s.bridge(b)
+		return w.ResolveOp(v, br, s.sm, worker.ProxyOpt{
+			Network: br.ProxyNetwork(),
+			Policy:  br.ProxyPolicy,
+		})
 	}
 }
 
@@ -241,6 +245,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 	j.SetValue(keyEntitlements, set)
+	if proxyNetwork {
+		j.SetValue(keyProxyNetwork, true)
+	}
 
 	if srcPol != nil {
 		if err := validateSourcePolicy(srcPol); err != nil {

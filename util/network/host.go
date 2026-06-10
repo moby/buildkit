@@ -4,6 +4,7 @@ package network
 
 import (
 	"context"
+	"net"
 
 	"github.com/containerd/containerd/v2/pkg/oci"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
@@ -38,4 +39,8 @@ func (h *hostNS) Close() error {
 
 func (h *hostNS) Sample() (*resourcestypes.NetworkSample, error) {
 	return nil, nil
+}
+
+func (h *hostNS) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return (&net.Dialer{}).DialContext(ctx, network, address)
 }

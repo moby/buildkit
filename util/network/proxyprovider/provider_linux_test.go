@@ -85,8 +85,8 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(upstream.Certificate())
 	handler := newTestProxyHandler(t, nil)
-	handler.provider.client.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
-	handler.provider.client.TLSClientConfig.RootCAs = pool
+	handler.transport.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	handler.transport.TLSClientConfig.RootCAs = pool
 
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cancel(context.Canceled)
@@ -358,8 +358,9 @@ func newTestProxyHandler(t *testing.T, capture *network.ProxyCapture) *proxyHand
 	tr.DisableCompression = true
 	t.Cleanup(tr.CloseIdleConnections)
 	return &proxyHandler{
-		provider: &provider{client: tr},
-		capture:  capture,
+		provider:  &provider{},
+		capture:   capture,
+		transport: tr,
 	}
 }
 

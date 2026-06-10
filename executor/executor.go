@@ -29,8 +29,7 @@ type Meta struct {
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 	ValidExitCodes []int
-	ProxyPolicy    network.ProxyPolicy
-	ProxyCapture   *network.ProxyCapture
+	Proxy          *network.ProxyConfig
 
 	RemoveMountStubsRecursive bool
 }

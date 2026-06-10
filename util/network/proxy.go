@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"io"
 	"slices"
 	"sync"
 
@@ -14,9 +15,21 @@ type ProxyPolicy interface {
 	Evaluate(context.Context, *pb.Op) (bool, error)
 }
 
+type ProxyConfig struct {
+	Policy     ProxyPolicy
+	Capture    *ProxyCapture
+	EgressMode pb.NetMode
+}
+
+type ProxyProvider interface {
+	io.Closer
+	NewProxy(ctx context.Context, cfg *ProxyConfig) (ProxyNamespace, error)
+}
+
 // ProxyNamespace is implemented by network namespaces that expose an internal
 // HTTP(S) proxy to the container.
 type ProxyNamespace interface {
+	Namespace
 	ProxyEnv() []string
 	ProxyCACert() []byte
 }

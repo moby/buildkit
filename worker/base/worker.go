@@ -51,6 +51,7 @@ import (
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
+	"github.com/moby/buildkit/worker"
 	"github.com/moby/sys/user"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -73,6 +74,7 @@ type WorkerOpt struct {
 	GCPolicy         []client.PruneInfo
 	BuildkitVersion  client.BuildkitVersion
 	NetworkProviders map[pb.NetMode]network.Provider
+	ProxyProvider    network.ProxyProvider
 	Executor         executor.Executor
 	Snapshotter      snapshot.Snapshotter
 	ContentStore     *containerdsnapshot.Store
@@ -247,6 +249,11 @@ func (w *Worker) Close() error {
 	if err := w.MetadataStore.Close(); err != nil {
 		errs = append(errs, err)
 	}
+	if w.ProxyProvider != nil {
+		if err := w.ProxyProvider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	for _, provider := range w.NetworkProviders {
 		if err := provider.Close(); err != nil {
 			errs = append(errs, err)
@@ -356,46 +363,42 @@ func (w *Worker) CacheManager() cache.Manager {
 	return w.CacheMgr
 }
 
-type proxyPolicyProvider interface {
-	ProxyPolicy() (network.ProxyPolicy, error)
-}
-
 type proxyPolicyExecutor struct {
 	executor.Executor
-	provider proxyPolicyProvider
+	getProxyPolicy func() (network.ProxyPolicy, error)
 }
 
 func (e *proxyPolicyExecutor) Run(ctx context.Context, id string, rootfs executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (resourcestypes.Recorder, error) {
-	if process.Meta.NetMode == pb.NetMode_PROXY {
+	if process.Meta.Proxy != nil {
 		policy, err := e.proxyPolicy()
 		if err != nil {
 			return nil, err
 		}
-		process.Meta.ProxyPolicy = policy
+		process.Meta.Proxy.Policy = policy
 	}
 	return e.Executor.Run(ctx, id, rootfs, mounts, process, started)
 }
 
 func (e *proxyPolicyExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
-	if process.Meta.NetMode == pb.NetMode_PROXY {
+	if process.Meta.Proxy != nil {
 		policy, err := e.proxyPolicy()
 		if err != nil {
 			return err
 		}
-		process.Meta.ProxyPolicy = policy
+		process.Meta.Proxy.Policy = policy
 	}
 	return e.Executor.Exec(ctx, id, process)
 }
 
 func (e *proxyPolicyExecutor) proxyPolicy() (network.ProxyPolicy, error) {
-	policy, err := e.provider.ProxyPolicy()
+	policy, err := e.getProxyPolicy()
 	if err != nil {
 		return nil, err
 	}
 	return policy, nil
 }
 
-func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
+func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager, proxyOpt worker.ProxyOpt) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
@@ -406,13 +409,13 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 				linuxResources = m.LinuxResources
 			}
 			exec := w.WorkerOpt.Executor
-			if op.Exec != nil && op.Exec.Network == pb.NetMode_PROXY {
-				provider, ok := s.(proxyPolicyProvider)
-				if ok {
-					exec = &proxyPolicyExecutor{Executor: exec, provider: provider}
+			proxyNetwork := proxyOpt.Network && op.Exec.Network != pb.NetMode_NONE
+			if proxyNetwork {
+				if proxyOpt.Policy != nil {
+					exec = &proxyPolicyExecutor{Executor: exec, getProxyPolicy: proxyOpt.Policy}
 				}
 			}
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, exec, w, linuxResources)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, exec, w, linuxResources, proxyNetwork)
 		case *pb.Op_File:
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:

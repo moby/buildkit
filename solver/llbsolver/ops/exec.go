@@ -51,12 +51,13 @@ type ExecOp struct {
 	rec            resourcestypes.Recorder
 	digest         digest.Digest
 	linuxResources *pb.LinuxResources
+	proxyNetwork   bool
 	proxyCap       *network.ProxyCapture
 }
 
 var _ solver.Op = &ExecOp{}
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker, linuxResources *pb.LinuxResources) (*ExecOp, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker, linuxResources *pb.LinuxResources, proxyNetwork bool) (*ExecOp, error) {
 	if err := opsutils.Validate(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
@@ -73,6 +74,7 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 		parallelism:    parallelism,
 		digest:         v.Digest(),
 		linuxResources: linuxResources,
+		proxyNetwork:   proxyNetwork,
 	}, nil
 }
 
@@ -476,6 +478,9 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		SecurityMode:              e.op.Security,
 		RemoveMountStubsRecursive: e.op.Meta.RemoveMountStubsRecursive,
 	}
+	if e.proxyNetwork {
+		meta.Proxy = &network.ProxyConfig{}
+	}
 
 	if e.op.Meta.ProxyEnv != nil {
 		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
@@ -511,9 +516,9 @@ func (e *ExecOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		}
 	}()
 
-	if e.op.Network == pb.NetMode_PROXY {
+	if e.proxyNetwork {
 		e.proxyCap = network.NewProxyCapture()
-		meta.ProxyCapture = e.proxyCap
+		meta.Proxy.Capture = e.proxyCap
 	}
 
 	rec, execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
@@ -637,4 +642,8 @@ func (e *ExecOp) Samples() (*resourcestypes.Samples, error) {
 
 func (e *ExecOp) ProxyCapture() *network.ProxyCapture {
 	return e.proxyCap
+}
+
+func (e *ExecOp) ProxyNetwork() bool {
+	return e.proxyNetwork
 }
