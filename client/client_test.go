@@ -3869,6 +3869,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
 
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
