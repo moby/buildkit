@@ -463,6 +463,9 @@ func testProxyNetworkDefaultEgressNoRootless(t *testing.T, sb integration.Sandbo
 }
 
 func proxyNetModeDefaultHasHostLoopback(sb integration.Sandbox) bool {
+	if sb.DockerAddress() != "" {
+		return false
+	}
 	switch sb.Value("netmode").(type) {
 	case *netModeProxyDefaultNoCNI, *netModeProxyHost:
 		return true
