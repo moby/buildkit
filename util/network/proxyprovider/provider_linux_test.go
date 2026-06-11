@@ -7,6 +7,7 @@ import (
 	"container/list"
 	"context"
 	"crypto/x509"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,6 +97,68 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	require.NoError(t, err)
 	resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestNewProxyTransportAttemptsHTTP2(t *testing.T) {
+	tr := newProxyTransport()
+	t.Cleanup(tr.CloseIdleConnections)
+
+	// The provider transport is cloned per namespace and given a custom
+	// DialContext. Without ForceAttemptHTTP2, the clone can advertise h2 via
+	// ALPN without a registered HTTP/2 RoundTripper, causing apk update to fail
+	// against Alpine HTTPS repositories with proxy 502 responses.
+	require.True(t, tr.ForceAttemptHTTP2)
+}
+
+func TestProxyTransportCloneHTTP2Dial(t *testing.T) {
+	protoCh := make(chan string, 1)
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		protoCh <- r.Proto
+		_, _ = w.Write([]byte("ok"))
+	}))
+	upstream.EnableHTTP2 = true
+	upstream.StartTLS()
+	t.Cleanup(upstream.Close)
+
+	base := newProxyTransport()
+	t.Cleanup(base.CloseIdleConnections)
+
+	tr := base.Clone()
+	t.Cleanup(tr.CloseIdleConnections)
+	pool := x509.NewCertPool()
+	pool.AddCert(upstream.Certificate())
+	require.NotNil(t, tr.TLSClientConfig)
+	tr.TLSClientConfig.RootCAs = pool
+	tr.DialContext = (&net.Dialer{}).DialContext
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL, nil)
+	require.NoError(t, err)
+	resp, err := tr.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "HTTP/2.0", resp.Proto)
+	require.Equal(t, "HTTP/2.0", <-protoCh)
+}
+
+func TestPrepareMITMResponseClosesUnknownLength(t *testing.T) {
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://www.example.com/", nil)
+	resp := &http.Response{
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		StatusCode:    http.StatusOK,
+		Status:        "200 OK",
+		ContentLength: -1,
+	}
+
+	prepareMITMResponse(req, resp)
+
+	require.Equal(t, req.Proto, resp.Proto)
+	require.Equal(t, req.ProtoMajor, resp.ProtoMajor)
+	require.Equal(t, req.ProtoMinor, resp.ProtoMinor)
+	require.True(t, resp.Close)
 }
 
 func TestProxyHandlerMarksPostIncomplete(t *testing.T) {
