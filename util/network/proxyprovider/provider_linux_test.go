@@ -7,6 +7,7 @@ import (
 	"container/list"
 	"context"
 	"crypto/x509"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,6 +108,38 @@ func TestNewProxyTransportAttemptsHTTP2(t *testing.T) {
 	// ALPN without a registered HTTP/2 RoundTripper, causing apk update to fail
 	// against Alpine HTTPS repositories with proxy 502 responses.
 	require.True(t, tr.ForceAttemptHTTP2)
+}
+
+func TestProxyTransportCloneHTTP2Dial(t *testing.T) {
+	protoCh := make(chan string, 1)
+	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		protoCh <- r.Proto
+		_, _ = w.Write([]byte("ok"))
+	}))
+	upstream.EnableHTTP2 = true
+	upstream.StartTLS()
+	t.Cleanup(upstream.Close)
+
+	base := newProxyTransport()
+	t.Cleanup(base.CloseIdleConnections)
+
+	tr := base.Clone()
+	t.Cleanup(tr.CloseIdleConnections)
+	pool := x509.NewCertPool()
+	pool.AddCert(upstream.Certificate())
+	require.NotNil(t, tr.TLSClientConfig)
+	tr.TLSClientConfig.RootCAs = pool
+	tr.DialContext = (&net.Dialer{}).DialContext
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, upstream.URL, nil)
+	require.NoError(t, err)
+	resp, err := tr.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "HTTP/2.0", resp.Proto)
+	require.Equal(t, "HTTP/2.0", <-protoCh)
 }
 
 func TestPrepareMITMResponseClosesUnknownLength(t *testing.T) {
