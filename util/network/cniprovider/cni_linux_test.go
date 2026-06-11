@@ -108,6 +108,35 @@ func TestDialContextDialsInsideNetNS(t *testing.T) {
 	conn.Close()
 }
 
+func TestLoopbackDNSUsesCallerNetNS(t *testing.T) {
+	nsPath := createTestNetNS(t)
+
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	go acceptLoop(ln)
+
+	callerNS, err := netns.GetCurrentNS()
+	require.NoError(t, err)
+	defer callerNS.Close()
+
+	ns := &cniNS{nativeID: nsPath}
+	dialer := ns.dialer(callerNS)
+	require.NotNil(t, dialer.Resolver)
+	require.NotNil(t, dialer.Resolver.Dial)
+
+	var conn net.Conn
+	require.NoError(t, netns.WithNetNSPath(nsPath, func(_ netns.NetNS) error {
+		ctx, cancel := context.WithTimeoutCause(t.Context(), 3*time.Second, nil)
+		defer cancel()
+		var err error
+		conn, err = dialer.Resolver.Dial(ctx, "tcp", ln.Addr().String())
+		return err
+	}))
+	require.NotNil(t, conn)
+	require.NoError(t, conn.Close())
+}
+
 func TestIsLoopbackHost(t *testing.T) {
 	require.True(t, isLoopbackHost("127.0.0.11:53"))
 	require.True(t, isLoopbackHost("127.0.0.53:53"))
