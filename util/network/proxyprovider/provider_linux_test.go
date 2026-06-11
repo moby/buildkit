@@ -98,6 +98,36 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+func TestNewProxyTransportAttemptsHTTP2(t *testing.T) {
+	tr := newProxyTransport()
+	t.Cleanup(tr.CloseIdleConnections)
+
+	// The provider transport is cloned per namespace and given a custom
+	// DialContext. Without ForceAttemptHTTP2, the clone can advertise h2 via
+	// ALPN without a registered HTTP/2 RoundTripper, causing apk update to fail
+	// against Alpine HTTPS repositories with proxy 502 responses.
+	require.True(t, tr.ForceAttemptHTTP2)
+}
+
+func TestPrepareMITMResponseClosesUnknownLength(t *testing.T) {
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "https://www.example.com/", nil)
+	resp := &http.Response{
+		Proto:         "HTTP/2.0",
+		ProtoMajor:    2,
+		ProtoMinor:    0,
+		StatusCode:    http.StatusOK,
+		Status:        "200 OK",
+		ContentLength: -1,
+	}
+
+	prepareMITMResponse(req, resp)
+
+	require.Equal(t, req.Proto, resp.Proto)
+	require.Equal(t, req.ProtoMajor, resp.ProtoMajor)
+	require.Equal(t, req.ProtoMinor, resp.ProtoMinor)
+	require.True(t, resp.Close)
+}
+
 func TestProxyHandlerMarksPostIncomplete(t *testing.T) {
 	methodCh := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
