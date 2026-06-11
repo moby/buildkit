@@ -14,6 +14,7 @@ func TestEngineEvaluate(t *testing.T) {
 	t.Run("Deny All", testDenyAll)
 	t.Run("Allow Deny", testAllowDeny)
 	t.Run("Convert", testConvert)
+	t.Run("Convert exact", testConvertExact)
 	t.Run("Convert Deny", testConvertDeny)
 	t.Run("Allow Convert Deny", testAllowConvertDeny)
 	t.Run("Test convert loop", testConvertLoop)
@@ -378,6 +379,34 @@ func testConvert(t *testing.T) {
 			require.Equal(t, dst, op.Identifier)
 		})
 	}
+}
+
+func testConvertExact(t *testing.T) {
+	src := "docker-image://docker.io/library/busybox:latest"
+	dst := "docker-image://docker.io/library/busybox@sha256:c0d488a800e4127c334ad20d61d7bc21b4097540327217dfab52262adc02380c"
+	op := &pb.SourceOp{
+		Identifier: src,
+	}
+
+	pol := &spb.Policy{
+		Rules: []*spb.Rule{
+			{
+				Action: spb.PolicyAction_CONVERT,
+				Selector: &spb.Selector{
+					Identifier: src,
+					MatchType:  spb.MatchType_EXACT,
+				},
+				Updates: &spb.Update{
+					Identifier: dst,
+				},
+			},
+		},
+	}
+
+	mutated, err := NewEngine([]*spb.Policy{pol}).Evaluate(t.Context(), op)
+	require.True(t, mutated)
+	require.NoError(t, err)
+	require.Equal(t, dst, op.Identifier)
 }
 
 func testAllowDeny(t *testing.T) {
