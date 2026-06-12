@@ -248,6 +248,8 @@ exclude (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 )
 
+replace github.com/moby/policy-helpers => github.com/smerkviladze/policy-helpers v0.0.0-20260603124614-a22db872ec6f
+
 tool (
 	github.com/planetscale/vtprotobuf/cmd/protoc-gen-go-vtproto
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc
