@@ -438,8 +438,17 @@ func testGitProvenanceAttestationSHA256(t *testing.T, sb integration.Sandbox) {
 	testGitProvenanceAttestation(t, sb, "sha256")
 }
 
+// testGitProvenanceAttestation checks that when a build is sourced from a Git
+// repository, the resulting provenance attestation records the Git URL, branch,
+// and commit SHA correctly, masks any credentials in the URL, and includes the
+// base image and Git source in the resolved dependencies.
 func testGitProvenanceAttestation(t *testing.T, sb integration.Sandbox, format string) {
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows:
+	// BuildKit's Git source handler fails to update submodules on Windows even when
+	// the repo has no submodules. The error "failed to update submodules ... git stderr:"
+	// occurs with empty stderr, indicating the submodule update command cannot execute
+	// properly on Windows. Same root cause as testDockerfileFromGit.
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -786,13 +795,12 @@ RUN echo "ok-$TARGETARCH" > /foo
 	}
 }
 
+// testClientFrontendProvenance verifies that frontend provenance metadata is
+// correctly captured when a Dockerfile is built inside a client-side frontend.
+// Normally client frontends skip provenance because they run in the client, not
+// in BuildKit; this test ensures provenance is still recorded in that scenario.
 func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
-	// Building with client frontend does not capture frontend provenance
-	// because frontend runs in client, not in BuildKit.
-	// This test builds Dockerfile inside a client frontend ensuring that
-	// in that case frontend provenance is captured.
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
@@ -800,12 +808,19 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
+
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
 
 	target := registry + "/buildkit/clientprovenance:latest"
+
+	// On Windows, use windows/{arm64,amd64} platform IDs; the worker only
+	// executes one platform natively but the IDs flow through provenance.
+	armPlatformID := integration.UnixOrWindows("linux/arm64", "windows/arm64")
+	amdPlatformID := integration.UnixOrWindows("linux/amd64", "windows/amd64")
+	platformOS := integration.UnixOrWindows("linux", "windows")
 
 	f := getFrontend(t, sb)
 
@@ -814,13 +829,26 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 		t.Skip("not a client frontend")
 	}
 
-	dockerfile := []byte(`
+	// Windows uses nanoserver for both stages (no busybox/alpine equivalents);
+	// USER ContainerAdministrator is required so cmd.exe can write to C:\.
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 	FROM alpine as x86target
 	RUN echo "alpine" > /foo
 
 	FROM busybox:latest AS armtarget
 	RUN --network=none echo "bbox" > /foo
-	`)
+	`,
+		`
+	FROM nanoserver AS x86target
+	USER ContainerAdministrator
+	RUN echo alpine> /foo
+
+	FROM nanoserver AS armtarget
+	USER ContainerAdministrator
+	RUN --network=none echo bbox> /foo
+	`,
+	))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -868,19 +896,22 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 
+		// Platform IDs (armPlatformID, amdPlatformID, platformOS) are captured
+		// from the enclosing testClientFrontendProvenance scope so the result
+		// assembly and the later assertions stay in sync.
 		res := gateway.NewResult()
-		res.AddRef("linux/arm64", res1.Ref)
-		res.AddRef("linux/amd64", res2.Ref)
+		res.AddRef(armPlatformID, res1.Ref)
+		res.AddRef(amdPlatformID, res2.Ref)
 
 		pl, err := json.Marshal(exptypes.Platforms{
 			Platforms: []exptypes.Platform{
 				{
-					ID:       "linux/arm64",
-					Platform: ocispecs.Platform{OS: "linux", Architecture: "arm64"},
+					ID:       armPlatformID,
+					Platform: ocispecs.Platform{OS: platformOS, Architecture: "arm64"},
 				},
 				{
-					ID:       "linux/amd64",
-					Platform: ocispecs.Platform{OS: "linux", Architecture: "amd64"},
+					ID:       amdPlatformID,
+					Platform: ocispecs.Platform{OS: platformOS, Architecture: "amd64"},
 				},
 			},
 		})
@@ -918,11 +949,20 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, 4, len(imgs.Images))
 
-	img := imgs.Find("linux/arm64")
-	require.NotNil(t, img)
-	require.Equal(t, []byte("bbox\n"), img.Layers[1]["foo"].Data)
+	// nanoserver layer entries are under Files/; cmd echo writes CRLF.
+	outFile := integration.UnixOrWindows("foo", "Files/foo")
+	armData := integration.UnixOrWindows([]byte("bbox\n"), []byte("bbox\r\n"))
+	amdData := integration.UnixOrWindows([]byte("alpine\n"), []byte("alpine\r\n"))
+	// Both Windows stages are based on nanoserver, so the resolved base URI is
+	// nanoserver for both platforms; Linux uses the original busybox/alpine.
+	armBase := integration.UnixOrWindows("docker/busybox", "docker/nanoserver")
+	amdBase := integration.UnixOrWindows("docker/alpine", "docker/nanoserver")
 
-	att := imgs.FindAttestation("linux/arm64")
+	img := imgs.Find(armPlatformID)
+	require.NotNil(t, img)
+	require.Equal(t, armData, img.Layers[1][outFile].Data)
+
+	att := imgs.FindAttestation(armPlatformID)
 	require.NotNil(t, att)
 	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 	var attest intoto.Statement
@@ -947,14 +987,14 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
 	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
-	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/busybox")
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, armBase)
 
 	// amd64
-	img = imgs.Find("linux/amd64")
+	img = imgs.Find(amdPlatformID)
 	require.NotNil(t, img)
-	require.Equal(t, []byte("alpine\n"), img.Layers[1]["foo"].Data)
+	require.Equal(t, amdData, img.Layers[1][outFile].Data)
 
-	att = imgs.FindAttestation("linux/amd64")
+	att = imgs.FindAttestation(amdPlatformID)
 	require.NotNil(t, att)
 	require.Equal(t, "attestation-manifest", att.Desc.Annotations["vnd.docker.reference.type"])
 	attest = intoto.Statement{}
@@ -976,7 +1016,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
 	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
-	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/alpine")
+	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, amdBase)
 }
 
 func testGatewayBuiltinSyntaxSourceProvenance(t *testing.T, sb integration.Sandbox) {

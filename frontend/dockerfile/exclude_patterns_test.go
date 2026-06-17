@@ -25,9 +25,19 @@ func init() {
 	allTests = append(allTests, excludedFilesTests...)
 }
 
+// testExcludedFilesOnCopy verifies that COPY --exclude and ADD --exclude glob
+// patterns correctly filter out matching files during a Dockerfile build, while
+// preserving non-matching files with their expected content.
 // See #4439
 func testExcludedFilesOnCopy(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows:
+	// This test builds 8 stages at once (1 base + 6 builders + 1 final), and
+	// every builder copies from the same base stage. On Windows, mounting that
+	// shared parent layer from many stages in parallel hits a known container
+	// bug (hcsshim::ActivateLayer fails with "file is being used by another
+	// process"). That's unrelated to --exclude, so we skip the whole test rather
+	// than weaken it.
+	integration.SkipOnPlatform(t, "windows", "Windows snapshotter cannot mount the same parent layer from many stages in parallel (hcsshim::ActivateLayer race)")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
