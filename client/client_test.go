@@ -23,6 +23,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -245,6 +246,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
 	testExportLocalForcePlatformSplit,
+	testExportTarPlatformIDSanitized,
 	testExportLocalModeCopyKeepsStaleDestinationFiles,
 	testExportLocalModeDeleteRemovesStaleDestinationFiles,
 	testExportLocalModeCopyMultiPlatformKeepsAllPlatforms,
@@ -8090,6 +8092,90 @@ func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
 	dt, err := os.ReadFile(filepath.Join(destDir, expPlatform, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(dt))
+}
+
+func testExportTarPlatformIDSanitized(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const platformID = `..\buildkit-outside`
+	platform := platforms.DefaultSpec()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(
+			llb.Mkfile("payload.txt", 0600, []byte("payload")),
+		)
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		res := gateway.NewResult()
+		res.AddRef(platformID, ref)
+
+		dt, err := json.Marshal(&exptypes.Platforms{
+			Platforms: []exptypes.Platform{{
+				ID:       platformID,
+				Platform: platform,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	outW := bytes.NewBuffer(nil)
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: outW}),
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	for name := range m {
+		require.Falsef(t, strings.HasPrefix(name, "../") ||
+			strings.HasPrefix(name, `..\`) ||
+			strings.Contains(name, `/../`) ||
+			strings.Contains(name, `\..\`) ||
+			strings.Contains(name, `\`) ||
+			strings.Contains(name, ":"),
+			"tar exporter emitted unsafe platform path %q", name)
+	}
+
+	tarPaths := make([]string, 0, len(m))
+	for name := range m {
+		tarPaths = append(tarPaths, name)
+	}
+	sort.Strings(tarPaths)
+
+	expectedPath := path.Join(".._buildkit-outside", integration.UnixOrWindows("payload.txt", "Files/payload.txt"))
+	item := m[expectedPath]
+	require.NotNilf(t, item, "expected sanitized tar path %q in %v", expectedPath, tarPaths)
+	require.Equal(t, "payload", string(item.Data))
 }
 
 func testExportLocalModeCopyKeepsStaleDestinationFiles(t *testing.T, sb integration.Sandbox) {
