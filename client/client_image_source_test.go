@@ -65,11 +65,11 @@ func testClientGatewayCanceledCredentialsCallbackReturns(t *testing.T, sb integr
 	target, err := url.Parse("http://" + registry)
 	require.NoError(t, err)
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	director := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		director(req)
-		req.Host = target.Host
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Host = target.Host
+		},
 	}
 
 	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
