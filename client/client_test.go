@@ -1844,6 +1844,52 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "security.insecure is not allowed")
 	}
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex("echo invalid"))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var foundExec bool
+	digestMap := map[digest.Digest]digest.Digest{}
+	for i, dt := range def.Def {
+		oldDigest := digest.FromBytes(dt)
+		var op pb.Op
+		require.NoError(t, op.UnmarshalVT(dt))
+		changed := false
+
+		for j, input := range op.Inputs {
+			if newDigest, ok := digestMap[digest.Digest(input.Digest)]; ok {
+				op.Inputs[j].Digest = string(newDigest)
+				changed = true
+			}
+		}
+
+		if execOp := op.GetExec(); execOp != nil {
+			execOp.Security = pb.SecurityMode(2)
+			changed = true
+			foundExec = true
+		}
+
+		if changed {
+			newDt, err := op.MarshalVT()
+			require.NoError(t, err)
+			def.Def[i] = newDt
+
+			newDigest := digest.FromBytes(newDt)
+			digestMap[oldDigest] = newDigest
+			if meta, ok := def.Metadata[oldDigest]; ok {
+				delete(def.Metadata, oldDigest)
+				def.Metadata[newDigest] = meta
+			}
+		}
+	}
+	require.True(t, foundExec)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid security mode")
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
