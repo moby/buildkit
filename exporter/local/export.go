@@ -3,7 +3,6 @@ package local
 import (
 	"context"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -127,7 +126,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	platformDirStat := func(k string, opt CreateFSOpts) *fstypes.Stat {
 		st := &fstypes.Stat{
 			Mode: uint32(os.ModeDir | 0755),
-			Path: strings.ReplaceAll(k, "/", "_"),
+			Path: PlatformIDToPath(k),
 		}
 		if opt.Epoch != nil && opt.Epoch.Value != nil {
 			st.ModTime = opt.Epoch.Value.UnixNano()
