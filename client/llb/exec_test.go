@@ -27,6 +27,17 @@ func TestTmpfsMountError(t *testing.T) {
 	require.Contains(t, err.Error(), "must use scratch")
 }
 
+func TestInvalidSecurityModeMarshalError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("busybox:latest").
+		Run(Shlex("true"), Security(pb.SecurityMode(2))).Root()
+
+	_, err := st.Marshal(context.TODO())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid security mode")
+}
+
 func TestValidGetMountIndex(t *testing.T) {
 	// tests for https://github.com/moby/buildkit/issues/1520
 
