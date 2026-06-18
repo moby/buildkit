@@ -234,11 +234,11 @@ FROM nanoserver AS first
 RUN --mount=type=secret,target=/etc/passwd,required=true --mount=type=ssh exit 0
 
 FROM nanoserver AS second
-RUN --mount=type=secret,id=unused --mount=type=ssh,id=ssh2 exit 0
+RUN --mount=type=secret,id=unused,target=C:/unused --mount=type=ssh,id=ssh2 exit 0
 
 FROM nanoserver AS third
 ARG BAR
-RUN --mount=type=secret,id=second${BAR} exit 0
+RUN --mount=type=secret,id=second${BAR},target=C:/second exit 0
 
 FROM third AS target
 COPY --from=first /License.txt /
