@@ -7,10 +7,17 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 )
 
 func dispatchSecret(d *dispatchState, m *instructions.Mount, loc []parser.Range) (llb.RunOption, error) {
+	isWindows := d.platform != nil && d.platform.OS == "windows"
+	if isWindows {
+		// Normalize backslashes so C:\path\to\secret resolves to an absolute path.
+		m.Target = system.ToSlash(m.Target, "windows")
+	}
+
 	id := m.CacheID
 	if m.Source != "" {
 		id = m.Source
@@ -23,6 +30,12 @@ func dispatchSecret(d *dispatchState, m *instructions.Mount, loc []parser.Range)
 		id = path.Base(m.Target)
 	}
 
+	// Reject a non-absolute target (e.g. drive-relative "C:secret.txt") that would
+	// otherwise mount to an unexpected path.
+	if isWindows && m.Target != "" && !system.IsAbs(m.Target, "windows") {
+		return nil, errors.Errorf("secret target %q must be an absolute path with forward slashes on Windows, e.g. --mount=type=secret,id=%s,target=C:/path/to/secret", m.Target, id)
+	}
+
 	var target *string
 	if m.Target != "" {
 		target = &m.Target
@@ -31,6 +44,10 @@ func dispatchSecret(d *dispatchState, m *instructions.Mount, loc []parser.Range)
 	if m.Env == nil {
 		dest := m.Target
 		if dest == "" {
+			// Windows has no default secret location like POSIX /run/secrets.
+			if isWindows {
+				return nil, errors.Errorf("secret target is required on Windows, e.g. --mount=type=secret,id=%s,target=C:/path/to/secret", id)
+			}
 			dest = "/run/secrets/" + path.Base(id)
 		}
 		target = &dest

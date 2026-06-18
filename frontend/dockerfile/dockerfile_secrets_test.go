@@ -21,6 +21,7 @@ var secretsTests = integration.TestFuncs(
 	testSecretRequiredWithoutValue,
 	testSecretAsEnviron,
 	testSecretAsEnvironWithFileMount,
+	testSecretFileMount,
 )
 
 func init() {
@@ -73,7 +74,7 @@ func testSecretRequiredWithoutValue(t *testing.T, sb integration.Sandbox) {
 
 		`FROM nanoserver
 		USER ContainerAdministrator
-		RUN --mount=type=secret,required,id=mysecret foo`,
+		RUN --mount=type=secret,required,id=mysecret,target=C:/mysecret foo`,
 	))
 
 	dir := integration.Tmpdir(
@@ -170,14 +171,61 @@ RUN --mount=type=secret,id=mysecret,env=SECRET_ENV if %SECRET_ENV% NEQ pw (exit 
 // testSecretAsEnvironWithFileMount verifies that a secret with both env= and
 // target= is accessible as an environment variable and as a file.
 func testSecretAsEnvironWithFileMount(t *testing.T, sb integration.Sandbox) {
-	// target= triggers a tmpfs-backed file mount; Windows only accepts "windows-layer" mounts.
-	integration.SkipOnPlatform(t, "windows", "secret file mounts use tmpfs which is unsupported on Windows")
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	// Forward slashes in the Windows path because the Dockerfile parser
+	// consumes backslashes as escapes.
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox
 RUN --mount=type=secret,id=mysecret,target=/run/secrets/secret,env=SECRET_ENV [ "$SECRET_ENV" == "pw" ] && [ -f /run/secrets/secret ] || false
-`)
+`,
+		`
+FROM nanoserver
+USER ContainerAdministrator
+RUN --mount=type=secret,id=mysecret,target=C:/run/secrets/secret,env=SECRET_ENV if %SECRET_ENV% NEQ pw (exit 1) & if not exist C:/run/secrets/secret (exit 1)
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+}
+
+// testSecretFileMount verifies a secret mounted as a file (target=) is readable
+// inside the RUN step on both Linux and Windows.
+func testSecretFileMount(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	// Forward slashes in the Windows path because the Dockerfile parser
+	// consumes backslashes as escapes.
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+FROM busybox
+RUN --mount=type=secret,id=mysecret,target=/secret.txt [ "$(cat /secret.txt)" = "pw" ] || false
+`,
+		`
+FROM nanoserver
+USER ContainerAdministrator
+RUN --mount=type=secret,id=mysecret,target=C:/secret.txt findstr pw C:\secret.txt
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
