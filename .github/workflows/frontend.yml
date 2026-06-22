@@ -138,7 +138,6 @@ jobs:
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: ubuntu-24.04
-      setup-qemu: true
       target: frontend-image-cross
       cache: true
       cache-scope: frontend-${{ matrix.channel }}
