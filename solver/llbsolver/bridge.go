@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/containerd/platforms"
-	"github.com/mitchellh/hashstructure/v2"
+	"github.com/gohugoio/hashstructure"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -382,7 +382,7 @@ func cmKey(im gw.CacheOptionsEntry) (string, error) {
 	if im.Type == "registry" && im.Attrs["ref"] != "" {
 		return im.Attrs["ref"], nil
 	}
-	i, err := hashstructure.Hash(im, hashstructure.FormatV2, nil)
+	i, err := hashstructure.Hash(im, nil)
 	if err != nil {
 		return "", err
 	}
