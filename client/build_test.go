@@ -65,6 +65,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerCancelExecTty,
 		testClientSlowCacheRootfsRef,
 		testClientGatewayContainerPlatformPATH,
+		testClientGatewayContainerInvalidSecurityMode,
 		testClientGatewayExecError,
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
@@ -1912,6 +1913,70 @@ func testClientGatewayContainerSecurityModeCaps(t *testing.T, sb integration.San
 
 func testClientGatewayContainerSecurityModeValidation(t *testing.T, sb integration.Sandbox) {
 	testClientGatewayContainerSecurityMode(t, sb, true)
+}
+
+func testClientGatewayContainerInvalidSecurityMode(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureSecurityMode)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+	defer checkAllReleasable(t, c, sb, true)
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer ctr.Release(ctx)
+
+		stdout := bytes.NewBuffer(nil)
+		stderr := bytes.NewBuffer(nil)
+
+		pid, err := ctr.Start(ctx, client.StartRequest{
+			Args:         []string{"sh", "-euc", `sec=$(awk '/^Seccomp:/{print $2}' /proc/self/status); echo "Seccomp=$sec"; test "$sec" = 0`},
+			Stdout:       &iohelper.NopWriteCloser{Writer: stdout},
+			Stderr:       &iohelper.NopWriteCloser{Writer: stderr},
+			SecurityMode: pb.SecurityMode(2),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		err = pid.Wait()
+
+		t.Logf("Stdout: %q", stdout.String())
+		t.Logf("Stderr: %q", stderr.String())
+
+		return nil, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid security mode")
 }
 
 func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox, expectFail bool) {
