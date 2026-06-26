@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 )
 
@@ -412,7 +413,12 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		}
 	}
 
-	resp, err := c.client.Solve(ctx, req)
+	var opts []grpc.CallOption
+	if len(req.FrontendInputs) > 0 {
+		opts = append(opts, grpc.UseCompressor(gzip.Name))
+	}
+
+	resp, err := c.client.Solve(ctx, req, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -800,7 +806,7 @@ func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 		return nil, err
 	}
 
-	resp, err := c.client.Inputs(ctx, &pb.InputsRequest{})
+	resp, err := c.client.Inputs(ctx, &pb.InputsRequest{}, grpc.UseCompressor(gzip.Name))
 	if err != nil {
 		return nil, err
 	}
