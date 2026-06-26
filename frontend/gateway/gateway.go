@@ -862,7 +862,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	return resp, nil
 }
 
-func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (cache.ImmutableRef, error) {
+func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id, path string) (cache.ImmutableRef, error) {
 	lbf.mu.Lock()
 	ref, ok := lbf.refs[id]
 	if !ok {
@@ -878,7 +878,7 @@ func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (
 	}
 	lbf.mu.Unlock()
 	if ref == nil {
-		return nil, errors.Errorf("empty ref: %s", id)
+		return nil, errors.Wrapf(os.ErrNotExist, "%s (empty ref %s)", path, id)
 	}
 
 	r, err := ref.Result(ctx)
@@ -928,7 +928,7 @@ func (lbf *llbBridgeForwarder) getMount(ctx context.Context, id string, ref cach
 func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 
-	ref, err := lbf.getImmutableRef(ctx, req.Ref)
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.FilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -958,7 +958,7 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirRequest) (*pb.ReadDirResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 
-	ref, err := lbf.getImmutableRef(ctx, req.Ref)
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.DirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -983,7 +983,7 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileRequest) (*pb.StatFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 
-	ref, err := lbf.getImmutableRef(ctx, req.Ref)
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -1003,7 +1003,7 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 func (lbf *llbBridgeForwarder) Evaluate(ctx context.Context, req *pb.EvaluateRequest) (*pb.EvaluateResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 
-	_, err := lbf.getImmutableRef(ctx, req.Ref)
+	_, err := lbf.getImmutableRef(ctx, req.Ref, "/")
 	if err != nil {
 		return nil, err
 	}
