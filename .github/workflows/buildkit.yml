@@ -55,7 +55,6 @@ jobs:
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: ubuntu-24.04
-      setup-qemu: true
       artifact-name: buildkit-binaries
       artifact-upload: true
       cache: true
@@ -235,7 +234,6 @@ jobs:
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
       runner: ubuntu-24.04
-      setup-qemu: true
       target: image-cross
       cache: true
       cache-scope: image

@@ -62,7 +62,7 @@ RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
   xx-verify --static /usr/bin/runc
-  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/runc --version; fi
+  if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/runc --version; fi
 EOT
 
 FROM gobuild-base AS buildkit-base
@@ -104,7 +104,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   set -ex
   xx-go build ${GOBUILDFLAGS} -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
   xx-verify --static /usr/bin/buildctl
-  if [ "$(xx-info os)" = "linux" ]; then /usr/bin/buildctl --version; fi
+  if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/buildctl --version; fi
 EOT
 
 # buildkitd builds daemon binary
@@ -127,7 +127,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   # buildkitd --version can be flaky when running through emulation related to
   # https://github.com/moby/buildkit/pull/4491. Retry a few times as a workaround.
   set +ex
-  if [ "$(xx-info os)" = "linux" ]; then
+  if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then
     max_retries=5
     for attempt in $(seq "$max_retries"); do
       timeout 3 /usr/bin/buildkitd --version
