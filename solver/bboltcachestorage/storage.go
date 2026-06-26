@@ -26,7 +26,8 @@ type Store struct {
 
 func NewStore(dbPath string) (*Store, error) {
 	db, err := boltutil.SafeOpen(dbPath, 0600, &bolt.Options{
-		NoSync: true,
+		NoSync:         true,
+		NoFreelistSync: true,
 	})
 	if err != nil {
 		return nil, err
