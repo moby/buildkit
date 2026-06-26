@@ -857,6 +857,112 @@ func TestSetBlob(t *testing.T) {
 	// snap.SetBlob()
 }
 
+func TestCrossPlatformLayerType(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	cm := co.manager
+
+	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
+	require.NoError(t, err)
+	defer clean(context.TODO())
+
+	// Create a blob and ref
+	b1, desc1, err := mapToBlob(map[string]string{"foo": "bar"}, true)
+	require.NoError(t, err)
+	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b1), desc1)
+	require.NoError(t, err)
+
+	descHandlers := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers[desc1.Digest] = &DescHandler{}
+
+	ref1, err := cm.GetByBlob(ctx, desc1, nil, descHandlers)
+	require.NoError(t, err)
+
+	// Default layer type should be empty
+	require.Equal(t, "", ref1.(*immutableRef).GetLayerType())
+	require.False(t, isTypeWindows(ref1.(*immutableRef)))
+	require.False(t, isCrossPlatformLayer(ref1.(*immutableRef)))
+
+	// Set layer type to "windows" (Windows image pulled on Linux host)
+	err = ref1.(*immutableRef).SetLayerType("windows")
+	require.NoError(t, err)
+	require.Equal(t, "windows", ref1.(*immutableRef).GetLayerType())
+	require.True(t, isTypeWindows(ref1.(*immutableRef)))
+	require.True(t, isCrossPlatformLayer(ref1.(*immutableRef)))
+
+	// Create a second ref with "linux" layer type (Linux image pulled on Windows host)
+	b2, desc2, err := mapToBlob(map[string]string{"foo2": "bar2"}, true)
+	require.NoError(t, err)
+	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
+	require.NoError(t, err)
+
+	descHandlers2 := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers2[desc2.Digest] = &DescHandler{}
+
+	ref2, err := cm.GetByBlob(ctx, desc2, nil, descHandlers2)
+	require.NoError(t, err)
+
+	err = ref2.(*immutableRef).SetLayerType("linux")
+	require.NoError(t, err)
+	require.Equal(t, "linux", ref2.(*immutableRef).GetLayerType())
+	require.False(t, isTypeWindows(ref2.(*immutableRef)))
+	require.True(t, isCrossPlatformLayer(ref2.(*immutableRef)))
+
+	// Create a child ref of the Windows-typed ref - verify parent type propagation
+	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"}, true)
+	require.NoError(t, err)
+	err = content.WriteBlob(ctx, co.cs, "ref3", bytes.NewBuffer(b3), desc3)
+	require.NoError(t, err)
+
+	descHandlers3 := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers3[desc3.Digest] = &DescHandler{}
+
+	ref3, err := cm.GetByBlob(ctx, desc3, ref1, descHandlers3)
+	require.NoError(t, err)
+
+	// Child doesn't have its own layer type set, but parent does
+	require.Equal(t, "", ref3.(*immutableRef).GetLayerType())
+	// isTypeWindows should propagate through layer parent
+	require.True(t, isTypeWindows(ref3.(*immutableRef)))
+	require.True(t, isCrossPlatformLayer(ref3.(*immutableRef)))
+
+	// Ref with no layer type and no parent type
+	b4, desc4, err := mapToBlob(map[string]string{"foo4": "bar4"}, true)
+	require.NoError(t, err)
+	err = content.WriteBlob(ctx, co.cs, "ref4", bytes.NewBuffer(b4), desc4)
+	require.NoError(t, err)
+
+	descHandlers4 := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers4[desc4.Digest] = &DescHandler{}
+
+	ref4, err := cm.GetByBlob(ctx, desc4, nil, descHandlers4)
+	require.NoError(t, err)
+
+	require.Equal(t, "", ref4.(*immutableRef).GetLayerType())
+	require.False(t, isTypeWindows(ref4.(*immutableRef)))
+	require.False(t, isCrossPlatformLayer(ref4.(*immutableRef)))
+}
+
 func TestPrune(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
