@@ -191,15 +191,28 @@ FROM second
 	require.True(t, called)
 }
 
+// testOutlineSecrets checks that BuildKit can look at a Dockerfile and correctly
+// list the secrets and SSH mounts that a given build target needs.
+//
+// The outline feature only reads the Dockerfile — it never actually runs the build.
+// So this test makes sure that:
+//   - Only secrets/SSH used by the target stage (and its dependencies) are listed.
+//     Secrets and SSH declared in unrelated stages are ignored.
+//   - Each secret and SSH entry has the right name, required flag, and line number.
+//   - Build args inside mount ids (like id=second${BAR}) get expanded correctly.
+//
+// Because nothing is executed, the Linux and Windows versions of the Dockerfile
+// only differ in cosmetic ways (base images and the dummy command). The line
+// numbers are kept identical so the same assertions work on both platforms.
 func testOutlineSecrets(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureFrontendOutline)
 	f := getFrontend(t, sb)
 	if _, ok := f.(*clientFrontend); !ok {
 		t.Skip("only test with client frontend")
 	}
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
 FROM busybox AS first
 RUN --mount=type=secret,target=/etc/passwd,required=true --mount=type=ssh true
 
@@ -215,7 +228,25 @@ COPY --from=first /foo /
 RUN --mount=type=ssh,id=ssh3,required true
 
 FROM second
-`)
+`,
+		`
+FROM nanoserver AS first
+RUN --mount=type=secret,target=/etc/passwd,required=true --mount=type=ssh exit 0
+
+FROM nanoserver AS second
+RUN --mount=type=secret,id=unused --mount=type=ssh,id=ssh2 exit 0
+
+FROM nanoserver AS third
+ARG BAR
+RUN --mount=type=secret,id=second${BAR} exit 0
+
+FROM third AS target
+COPY --from=first /License.txt /
+RUN --mount=type=ssh,id=ssh3,required exit 0
+
+FROM second
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,

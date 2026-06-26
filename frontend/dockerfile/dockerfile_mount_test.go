@@ -644,14 +644,22 @@ COPY --from=base /combined.txt /
 	test("updated\n")
 }
 
-// moby/buildkit#5566
+// testCacheMountParallel checks that two build stages sharing nested cache
+// mounts (target=/foo/bar and target=/foo/bar/baz) can run side-by-side. It
+// re-runs the build 20 times to surface the runc mkdir bug on nested cache
+// mounts fixed in runc 1.2.3. Regression test for moby/buildkit#5566.
 func testCacheMountParallel(t *testing.T, sb integration.Sandbox) {
-	// flaky on WS2025
-	integration.SkipOnPlatform(t, "windows")
+	// Skipped on Windows (seen on Windows Server 2025). Starting many containers
+	// in quick succession overloads the host, which fails with "Insufficient
+	// system resources". That's transient host overload, not the #5566 bug this
+	// test guards against (a deterministic mkdir failure setting up the nested
+	// cache mounts). The WCOW daemon should throttle here but doesn't yet, so we
+	// skip rather than mask the gap with in-test retries.
+	integration.SkipOnPlatform(t, "windows", "Insufficient system resources error from creating many containers in quick succession")
+
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(integration.UnixOrWindows(
-		`
+	dockerfile := []byte(`
 FROM alpine AS b1
 RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz echo 1
 
@@ -661,21 +669,7 @@ RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz ec
 FROM scratch
 COPY --from=b1 /etc/passwd p1
 COPY --from=b2 /etc/passwd p2
-`,
-		`
-FROM nanoserver AS b1
-USER ContainerAdministrator
-RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz echo 1
-
-FROM nanoserver AS b2
-USER ContainerAdministrator
-RUN --mount=type=cache,target=/foo/bar --mount=type=cache,target=/foo/bar/baz echo 2
-
-FROM nanoserver
-COPY --from=b1 /License.txt p1
-COPY --from=b2 /License.txt p2
-`,
-	))
+`)
 
 	dir := integration.Tmpdir(
 		t,
