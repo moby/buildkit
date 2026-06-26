@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
 )
+
+var overlayMountProbe struct {
+	once sync.Once
+	err  error
+}
 
 // This test file contains tests that are required in continuity project.
 // (https://github.com/containerd/continuity/blob/v0.1.0/fs/diff_test.go)
@@ -335,6 +341,8 @@ func TestLchtimes(t *testing.T) {
 }
 
 func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestChange, opts ...string) error {
+	requireOverlayMount(t)
+
 	t1 := t.TempDir()
 
 	if err := base.Apply(t1); err != nil {
@@ -359,6 +367,47 @@ func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestCh
 		}
 		return nil
 	})
+}
+
+func requireOverlayMount(t *testing.T) {
+	t.Helper()
+
+	overlayMountProbe.once.Do(func() {
+		lowerdir, err := os.MkdirTemp("", "buildkit-overlay-lowerdir")
+		if err != nil {
+			overlayMountProbe.err = err
+			return
+		}
+		defer os.RemoveAll(lowerdir)
+
+		upperdir, err := os.MkdirTemp("", "buildkit-overlay-upperdir")
+		if err != nil {
+			overlayMountProbe.err = err
+			return
+		}
+		defer os.RemoveAll(upperdir)
+
+		workdir, err := os.MkdirTemp("", "buildkit-overlay-workdir")
+		if err != nil {
+			overlayMountProbe.err = err
+			return
+		}
+		defer os.RemoveAll(workdir)
+
+		overlayMountProbe.err = mount.WithTempMount(context.Background(), []mount.Mount{
+			{
+				Type:    "overlay",
+				Source:  "overlay",
+				Options: []string{fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerdir, upperdir, workdir)},
+			},
+		}, func(string) error {
+			return nil
+		})
+	})
+
+	if overlayMountProbe.err != nil {
+		t.Skipf("overlayfs mounts are unavailable: %v", overlayMountProbe.err)
+	}
 }
 
 func checkChanges(root string, changes, expected []TestChange) error {
