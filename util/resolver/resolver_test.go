@@ -5,6 +5,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/stretchr/testify/require"
 )
@@ -63,6 +64,76 @@ mirrors = ["https://url/", "https://url/path/"]
 			require.NotNil(t, h)
 			require.Equal(t, h.Host, test.host)
 			require.Equal(t, h.Path, test.path)
+		}
+	}
+}
+
+func TestNewRegistryConfig(t *testing.T) {
+	const testConfig = `
+[registry."docker.io"]
+mirrors = ["yourmirror.local", "proxy.local:5000/proxy.docker.io"]
+
+[registry."yourmirror.local"]
+http = true
+
+[registry."proxy.local:5000"]
+capabilities = ["pull", "resolve", "push"]
+`
+
+	pull, resolve, push := docker.HostCapabilityPull, docker.HostCapabilityResolve, docker.HostCapabilityPush
+	tests := map[string][]struct {
+		host         string
+		scheme       string
+		path         string
+		capabilities docker.HostCapabilities
+	}{
+		"docker.io": {
+			{
+				host:         "yourmirror.local",
+				scheme:       "http",
+				path:         defaultPath,
+				capabilities: pull | resolve,
+			},
+			{
+				host:         "proxy.local:5000",
+				scheme:       "https",
+				path:         path.Join(defaultPath, "proxy.docker.io"),
+				capabilities: pull | resolve | push,
+			},
+			{
+				host:         "registry-1.docker.io",
+				scheme:       "https",
+				path:         defaultPath,
+				capabilities: pull | resolve | push,
+			},
+		},
+		"yourmirror.local": {
+			{
+				host:         "yourmirror.local",
+				scheme:       "http",
+				path:         defaultPath,
+				capabilities: pull | resolve | push,
+			},
+		},
+	}
+
+	cfg, err := config.Load(bytes.NewBuffer([]byte(testConfig)))
+	require.NoError(t, err)
+
+	require.NotEqual(t, 0, len(cfg.Registries))
+	registryHosts := NewRegistryConfig(cfg.Registries)
+	require.NotNil(t, registryHosts)
+
+	for hostname, testHost := range tests {
+		hosts, err := registryHosts(hostname)
+		require.NoError(t, err)
+		require.Equal(t, len(testHost), len(hosts))
+		for i, host := range hosts {
+			test := testHost[i]
+			require.Equal(t, test.host, host.Host)
+			require.Equal(t, test.capabilities, host.Capabilities)
+			require.Equal(t, test.scheme, host.Scheme)
+			require.Equal(t, test.path, host.Path)
 		}
 	}
 }
