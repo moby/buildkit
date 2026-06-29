@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.5.1
+ARG LIBPATHRS_VERSION=v0.2.6
 ARG CONTAINERD_VERSION=v2.3.5
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_22=v2.2.8
@@ -53,14 +54,43 @@ FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG RUNC_VERSION
 ADD --keep-git-dir=true "https://github.com/opencontainers/runc.git#$RUNC_VERSION" .
+ARG LIBPATHRS_VERSION
+ADD --keep-git-dir=true "https://github.com/cyphar/libpathrs.git#$LIBPATHRS_VERSION" libpathrs
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
-RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
+# cargo and rust must be installed for the build (native) arch so the toolchain
+# can run while cross-compiling libpathrs; only the target libs go through xx-apk
+RUN set -e; apk add --no-cache cargo rust; \
+  xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
 RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
+  # libpathrs does not compile for s390x-musl: rustix's linux_raw backend
+  # declares __fsword_t as u32 there while the fstatfs magic constants are u64.
+  # Build runc without libpathrs on s390x until that is fixed upstream.
+  if [ "$(xx-info arch)" = "s390x" ]; then
+    export RUNC_BUILDTAGS=-libpathrs
+  else
+    (
+      cd libpathrs
+      # Alpine's rustc names the riscv64 target riscv64-alpine-linux-musl,
+      # while xx-cargo defaults to the rustup-style riscv64gc-alpine-linux-musl.
+      export RISCV64_TARGET_ARCH=riscv64
+      CARGO=xx-cargo make release
+      DESTDIR="$(xx-info sysroot)" ./install.sh --prefix=/usr --rust-target="$(xx-cargo --print-target-triple)" --disable-dynamic
+    )
+    # go-pathrs v0.2.5 (vendored by runc v1.5.1) does not compile with clang:
+    # CGo resolves the PATHRS_PROC_* constants as unsigned values that overflow
+    # int64. Fixed in go-pathrs v0.2.6, which is the only change in that
+    # release, so sync the single affected file from the libpathrs checkout.
+    # Drop this once runc vendors go-pathrs v0.2.6 (opencontainers/runc#5449).
+    if grep -qx "# cyphar.com/go-pathrs v0.2.5" vendor/modules.txt; then
+      cp libpathrs/go-pathrs/internal/libpathrs/libpathrs_linux.go vendor/cyphar.com/go-pathrs/internal/libpathrs/
+    fi
+  fi
+  CGO_ENABLED=1 GO=xx-go make static
+  cp -a runc /usr/bin
   xx-verify --static /usr/bin/runc
   if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/runc --version; fi
 EOT
