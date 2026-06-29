@@ -18,6 +18,7 @@ import (
 	"github.com/moby/sys/user"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 const (
@@ -111,8 +112,74 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 	if err != nil {
 		return mount.Mount{}, nil, err
 	}
+	if err := verifySubpathWithinRoot(m.Source, src, subPath); err != nil {
+		return mount.Mount{}, nil, err
+	}
 	m.Source = src
 	return m, func() error { return nil }, nil
+}
+
+func verifySubpathWithinRoot(root, src, subPath string) error {
+	realRoot, err := resolveFinalPath(root)
+	if err != nil {
+		return errors.Wrapf(err, "resolving mount root %q", root)
+	}
+	realSrc, err := resolveFinalPath(src)
+	if err != nil {
+		return errors.Wrapf(err, "resolving mount source subpath %q", subPath)
+	}
+	if !pathWithinRoot(realRoot, realSrc) {
+		return errors.Errorf("mount source subpath %q resolves to %q which escapes the mount root %q", subPath, realSrc, realRoot)
+	}
+	return nil
+}
+
+// resolveFinalPath returns the real path of p with all reparse points followed.
+func resolveFinalPath(p string) (string, error) {
+	pathPtr, err := windows.UTF16PtrFromString(p)
+	if err != nil {
+		return "", err
+	}
+	// FILE_FLAG_BACKUP_SEMANTICS allows opening a directory; omitting
+	// FILE_FLAG_OPEN_REPARSE_POINT makes GetFinalPathNameByHandle follow links.
+	h, err := windows.CreateFile(
+		pathPtr,
+		0,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
+		0,
+	)
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(h)
+
+	// flags 0 == FILE_NAME_NORMALIZED | VOLUME_NAME_DOS.
+	n := uint32(windows.MAX_PATH)
+	for {
+		buf := make([]uint16, n)
+		got, err := windows.GetFinalPathNameByHandle(h, &buf[0], n, 0)
+		if err != nil {
+			return "", err
+		}
+		if got <= n {
+			return windows.UTF16ToString(buf[:got]), nil
+		}
+		n = got
+	}
+}
+
+// pathWithinRoot reports whether p is root or a descendant of root. Inputs are
+// already-resolved real paths; filepath.Rel handles case-insensitivity and
+// cross-volume paths on Windows.
+func pathWithinRoot(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func generateLinuxResourceOpts(res *pb.LinuxResources) ([]oci.SpecOpts, error) {
