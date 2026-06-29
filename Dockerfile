@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG RUNC_VERSION=v1.3.6
+ARG RUNC_VERSION=v1.5.0
+ARG LIBPATHRS_VERSION=v0.2.5
 ARG CONTAINERD_VERSION=v2.2.5
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_21=v2.1.9
@@ -53,14 +54,33 @@ FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG RUNC_VERSION
 ADD --keep-git-dir=true "https://github.com/opencontainers/runc.git#$RUNC_VERSION" .
+ARG LIBPATHRS_VERSION
+ADD --keep-git-dir=true "https://github.com/cyphar/libpathrs.git#$LIBPATHRS_VERSION" libpathrs
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
-RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
+# cargo and rust must be installed for the build (native) arch so the toolchain
+# can run while cross-compiling libpathrs; only the target libs go through xx-apk
+RUN set -e; apk add --no-cache cargo rust; \
+  xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
 RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
-  CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./
+  (
+    cd libpathrs
+    CARGO=xx-cargo make release
+    DESTDIR="$(xx-info sysroot)" ./install.sh --prefix=/usr --rust-target="$(xx-cargo --print-target-triple)" --disable-dynamic
+  )
+  # go-pathrs' init() sanity check assigns the PATHRS_PROC_* enum constants to
+  # int64 temporaries. Those values exceed math.MaxInt64, and clang's cgo (used
+  # by xx-go for cross-compilation) emits them as untyped constants, so the
+  # assignment fails to compile with "overflows int64" (gcc types them as the
+  # enum's unsigned type, so it happens to work there). Rewrite the temporaries
+  # to uint64; the values fit and the comparison that follows is unchanged.
+  # TODO: drop this once fixed upstream: https://github.com/cyphar/go-pathrs
+  sed -i 's/int64 = C.PATHRS_PROC/uint64 = C.PATHRS_PROC/' vendor/cyphar.com/go-pathrs/internal/libpathrs/libpathrs_linux.go
+  CGO_ENABLED=1 GO=xx-go make static
+  cp -a runc /usr/bin
   xx-verify --static /usr/bin/runc
   if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/runc --version; fi
 EOT
