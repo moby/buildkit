@@ -186,7 +186,7 @@ func (ce *contentCacheExporter) Config() Config {
 
 func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string, error) {
 	res := make(map[string]string)
-	config, descs, err := ce.chains.Marshal(ctx)
+	config, descs, err := ce.chains.Marshal(ctx, v1.MarshalOpt{OCIMediaTypes: &ce.oci})
 	if err != nil {
 		return nil, err
 	}

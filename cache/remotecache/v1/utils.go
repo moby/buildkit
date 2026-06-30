@@ -10,6 +10,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -120,9 +121,10 @@ type nlink struct {
 }
 
 type marshalState struct {
-	layers      []cacheimporttypes.CacheLayer
-	chainsByID  map[string]int
-	descriptors DescriptorProvider
+	layers        []cacheimporttypes.CacheLayer
+	chainsByID    map[string]int
+	descriptors   DescriptorProvider
+	ociMediaTypes *bool
 
 	records       []cacheimporttypes.CacheRecord
 	recordsByItem map[*item]int
@@ -152,6 +154,9 @@ func marshalRemote(ctx context.Context, r *solver.Remote, state *marshalState) s
 		parentID = marshalRemote(ctx, r2, state)
 	}
 	desc := r.Descriptors[len(r.Descriptors)-1]
+	if state.ociMediaTypes != nil {
+		desc = compression.ConvertAllLayerMediaTypes(ctx, *state.ociMediaTypes, desc)[0]
+	}
 
 	state.descriptors[desc.Digest] = DescriptorProviderPair{
 		Descriptor: desc,

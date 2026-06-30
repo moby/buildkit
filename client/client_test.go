@@ -7142,7 +7142,6 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"dest":              dir,
 			"compression":       "zstd",
 			"force-compression": "true",
-			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
@@ -7169,9 +7168,8 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	ex := CacheOptionsEntry{
 		Type: "registry",
 		Attrs: map[string]string{
-			"ref":            target,
-			"oci-mediatypes": "true",
-			"mode":           "max",
+			"ref":  target,
+			"mode": "max",
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
@@ -7205,7 +7203,6 @@ func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"compression":       "zstd",
 			"force-compression": "true",
 			"image-manifest":    "false",
-			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})

@@ -6324,8 +6324,7 @@ COPY --from=base unique /
 			{
 				Type: "registry",
 				Attrs: map[string]string{
-					"ref":            target,
-					"oci-mediatypes": "true",
+					"ref": target,
 				},
 			},
 		},
