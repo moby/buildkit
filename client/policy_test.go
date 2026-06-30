@@ -1681,6 +1681,38 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 
+	t.Run("deny canonical git subdir", func(t *testing.T) {
+		const (
+			src       = "git://github.com/user/repo.git#main:../absolute/path"
+			canonical = "git://github.com/user/repo.git#main:absolute/path"
+		)
+		frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			st := llb.NewState(llb.NewSource(src, nil, llb.Constraints{}).Output())
+			def, err := st.Marshal(sb.Context())
+			if err != nil {
+				return nil, err
+			}
+			return c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+		}
+
+		_, err = c.Build(sb.Context(), SolveOpt{
+			SourcePolicy: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_DENY,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: canonical,
+							MatchType:  sourcepolicypb.MatchType_EXACT,
+						},
+					},
+				},
+			},
+		}, "", frontend, nil)
+		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+	})
+
 	t.Run("Frontend policies", func(t *testing.T) {
 		t.Run("deny http", func(t *testing.T) {
 			denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
