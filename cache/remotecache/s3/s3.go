@@ -240,9 +240,8 @@ type nopCloserSectionReader struct {
 
 func (*nopCloserSectionReader) Close() error { return nil }
 
-func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
-	ociMediaTypes := true
-	cacheConfig, descs, err := e.chains.Marshal(ctx, v1.MarshalOpt{OCIMediaTypes: &ociMediaTypes})
+func (e *exporter) Finalize(ctx context.Context, opt remotecache.ExporterFinalizeOpt) (map[string]string, error) {
+	cacheConfig, descs, err := e.chains.Marshal(ctx, v1.MarshalOpt{OCIMediaTypes: opt.OCIMediaTypes})
 	if err != nil {
 		return nil, err
 	}

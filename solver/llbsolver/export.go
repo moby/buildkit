@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/session"
 	sessionexporter "github.com/moby/buildkit/session/exporter"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/compat"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -86,6 +87,15 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
 	resps := make([]map[string]string, len(exporters))
+	compatibilityVersion, err := j.CompatibilityVersion()
+	if err != nil {
+		return nil, err
+	}
+	finalizeOpt := remotecache.ExporterFinalizeOpt{}
+	if compatibilityVersion >= compat.CompatibilityVersion032 {
+		ociMediaTypes := true
+		finalizeOpt.OCIMediaTypes = &ociMediaTypes
+	}
 	for i, exp := range exporters {
 		id := fmt.Sprint(j.SessionID, "-cache-", i)
 		eg.Go(func() (err error) {
@@ -110,7 +120,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}
 				prepareDone(nil)
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
-				resps[i], err = exp.Finalize(ctx)
+				resps[i], err = exp.Finalize(ctx, finalizeOpt)
 				return finalizeDone(err)
 			})
 			if exp.IgnoreError {

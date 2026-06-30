@@ -10,7 +10,8 @@ const (
 	CompatibilityVersion013     = 10
 	CompatibilityVersion015     = 20
 	CompatibilityVersion031     = 30
-	CompatibilityVersionCurrent = CompatibilityVersion031
+	CompatibilityVersion032     = 40
+	CompatibilityVersionCurrent = CompatibilityVersion032
 )
 
 // JobValueKey is the key used to store the compatibility version on a solver
@@ -21,6 +22,7 @@ var supportedCompatibilityVersions = []int{
 	CompatibilityVersion013,
 	CompatibilityVersion015,
 	CompatibilityVersion031,
+	CompatibilityVersion032,
 }
 
 func SupportedCompatibilityVersions() []int {
