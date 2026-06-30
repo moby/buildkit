@@ -17,7 +17,7 @@ func TestParsePidsStat(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedPidsStat := &resourcestypes.PIDsStat{
-		Current: uint64Ptr(123),
+		Current: new(uint64(123)),
 	}
 	stats, err := getCgroupPIDsStat(filepath.Clean(testDir))
 	require.NoError(t, err)
