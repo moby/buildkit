@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.25.9
+go 1.26.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
