@@ -319,8 +319,8 @@ github.com/cloudflare/circl/math/mlsbset
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
-# github.com/containerd/accelerated-container-image v1.3.0
-## explicit; go 1.22.0
+# github.com/containerd/accelerated-container-image v1.4.3
+## explicit; go 1.26.0
 github.com/containerd/accelerated-container-image/pkg/label
 github.com/containerd/accelerated-container-image/pkg/types
 github.com/containerd/accelerated-container-image/pkg/utils
