@@ -35,8 +35,14 @@ type Exporter interface {
 	Name() string
 	// Finalize finalizes and return metadata that are returned to the client
 	// e.g. ExporterResponseManifestDesc
-	Finalize(ctx context.Context) (map[string]string, error)
+	Finalize(ctx context.Context, opt ExporterFinalizeOpt) (map[string]string, error)
 	Config() Config
+}
+
+type ExporterFinalizeOpt struct {
+	// OCIMediaTypes controls cache metadata layer media type normalization.
+	// Nil preserves the descriptors as they were produced by the worker.
+	OCIMediaTypes *bool
 }
 
 type Config struct {
@@ -184,9 +190,9 @@ func (ce *contentCacheExporter) Config() Config {
 	}
 }
 
-func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string, error) {
+func (ce *contentCacheExporter) Finalize(ctx context.Context, _ ExporterFinalizeOpt) (map[string]string, error) {
 	res := make(map[string]string)
-	config, descs, err := ce.chains.Marshal(ctx)
+	config, descs, err := ce.chains.Marshal(ctx, v1.MarshalOpt{OCIMediaTypes: &ce.oci})
 	if err != nil {
 		return nil, err
 	}

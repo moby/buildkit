@@ -43,7 +43,7 @@ func (ce *exporter) Config() remotecache.Config {
 	}
 }
 
-func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
+func (ce *exporter) Finalize(ctx context.Context, _ remotecache.ExporterFinalizeOpt) (map[string]string, error) {
 	return nil, nil
 }
 

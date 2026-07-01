@@ -27,6 +27,13 @@ type CacheChains struct {
 	roots map[digest.Digest]*item
 }
 
+// MarshalOpt controls cache chain serialization.
+type MarshalOpt struct {
+	// OCIMediaTypes controls whether layer media types are serialized as OCI
+	// or Docker schema 2 media types. Nil preserves the original descriptor media type.
+	OCIMediaTypes *bool
+}
+
 var _ solver.CacheExporterTarget = &CacheChains{}
 
 func (c *CacheChains) computeIDs() {
@@ -209,10 +216,15 @@ func IntersectAll[T comparable](
 // Marshal aims to validate, normalize and sort the output to ensure a
 // consistent digest (since cache configs are typically uploaded and stored in
 // content-addressable OCI registries).
-func (c *CacheChains) Marshal(ctx context.Context) (*cacheimporttypes.CacheConfig, DescriptorProvider, error) {
+func (c *CacheChains) Marshal(ctx context.Context, opts ...MarshalOpt) (*cacheimporttypes.CacheConfig, DescriptorProvider, error) {
+	var opt MarshalOpt
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 	st := &marshalState{
 		chainsByID:    map[string]int{},
 		descriptors:   DescriptorProvider{},
+		ociMediaTypes: opt.OCIMediaTypes,
 		recordsByItem: map[*item]int{},
 	}
 

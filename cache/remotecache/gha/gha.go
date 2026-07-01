@@ -236,9 +236,9 @@ func (ce *exporter) initActiveKeyMapOnce(ctx context.Context) (map[string]struct
 	return keys, nil
 }
 
-func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err error) {
+func (ce *exporter) Finalize(ctx context.Context, opt remotecache.ExporterFinalizeOpt) (_ map[string]string, err error) {
 	// res := make(map[string]string)
-	config, descs, err := ce.chains.Marshal(ctx)
+	config, descs, err := ce.chains.Marshal(ctx, v1.MarshalOpt{OCIMediaTypes: opt.OCIMediaTypes})
 	if err != nil {
 		return nil, err
 	}
