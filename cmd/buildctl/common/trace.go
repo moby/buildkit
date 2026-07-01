@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v3"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -85,7 +86,10 @@ func AttachAppContext(app *cli.Command) error {
 		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), exportTimeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancel()
 
-		return tp.Shutdown(ctx)
+		if err := tp.Shutdown(ctx); err != nil {
+			otel.Handle(err)
+		}
+		return nil
 	}
 	return nil
 }
