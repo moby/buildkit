@@ -163,6 +163,9 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 }
 
 func (b *llbBridge) policy(engine *sourcepolicy.Engine) SourcePolicyEvaluator {
+	if engine == nil {
+		return nil
+	}
 	return &policyEvaluator{
 		llbBridge: b,
 		engine:    engine,
@@ -279,6 +282,7 @@ func (b *llbBridge) resolveSourceMetadata(ctx context.Context, op *pb.SourceOp, 
 	engine := sourcepolicy.NewEngine(opt.SourcePolicies)
 
 	if !withPolicy {
+		op.Identifier = normalizedSourceIdentifier(w, op)
 		if _, err := engine.Evaluate(ctx, op); err != nil {
 			return nil, errors.Wrap(err, "could not resolve image due to policy")
 		}
