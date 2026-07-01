@@ -92,6 +92,7 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	grpcgzip "google.golang.org/grpc/encoding/gzip"
 )
 
 func init() {
@@ -237,6 +238,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testImageManifestRegistryCacheImportExport,
 	testLLBMountPerformance,
 	testClientCustomGRPCOpts,
+	testClientGatewayFrontendInputsCompressed,
 	testMultipleRecordsWithSameLayersCacheImportExport,
 	testRegistryEmptyCacheExport,
 	testSnapshotWithMultipleBlobs,
@@ -13412,6 +13414,53 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
+}
+
+func testClientGatewayFrontendInputsCompressed(t *testing.T, sb integration.Sandbox) {
+	var solveCalls atomic.Int64
+	var solveCompressed atomic.Bool
+	intercept := func(
+		ctx context.Context,
+		method string,
+		req,
+		reply any,
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		if method == gatewaypb.LLBBridge_Solve_FullMethodName {
+			solveCalls.Add(1)
+			for _, opt := range opts {
+				compressor, ok := opt.(grpc.CompressorCallOption)
+				if ok && compressor.CompressorType == grpcgzip.Name {
+					solveCompressed.Store(true)
+				}
+			}
+		}
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	c, err := New(sb.Context(), sb.Address(), WithGRPCDialOption(grpc.WithChainUnaryInterceptor(intercept)))
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data")))
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+			FrontendInputs: map[string]*pb.Definition{
+				"context": def.ToPB(),
+			},
+		})
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+	require.NoError(t, err)
+	require.NotZero(t, solveCalls.Load(), "expected a gateway Solve request")
+	require.True(t, solveCompressed.Load(), "expected gateway Solve request with frontend inputs to use gzip compression")
 }
 
 func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
