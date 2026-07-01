@@ -148,6 +148,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
 	opts.SetOCITypesDefault(e.defaultOCITypes(buildInfo.CompatibilityVersion, src))
+	opts.SetOCIArtifactDefault(opts.OCITypesEnabled())
 	if err := opts.Validate(); err != nil {
 		return nil, nil, nil, err
 	}

@@ -16,6 +16,7 @@ type ImageCommitOpts struct {
 	RefCfg      cacheconfig.RefConfig
 	OCITypes    *bool
 	OCIArtifact bool
+	ociArtifact *bool
 	Annotations AnnotationsGroup
 	Epoch       *epoch.Epoch
 
@@ -51,7 +52,10 @@ func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[
 			err = parseBool(&b, k, v)
 			c.OCITypes = &b
 		case exptypes.OptKeyOCIArtifact:
-			err = parseBool(&c.OCIArtifact, k, v)
+			var b bool
+			err = parseBool(&b, k, v)
+			c.OCIArtifact = b
+			c.ociArtifact = &b
 		case exptypes.OptKeyForceInlineAttestations:
 			err = parseBool(&c.ForceInlineAttestations, k, v)
 		case exptypes.OptKeyPreferNondistLayers:
@@ -92,6 +96,12 @@ func (c *ImageCommitOpts) Validate() error {
 func (c *ImageCommitOpts) SetOCITypesDefault(v bool) {
 	if c.OCITypes == nil {
 		c.OCITypes = &v
+	}
+}
+
+func (c *ImageCommitOpts) SetOCIArtifactDefault(v bool) {
+	if c.ociArtifact == nil {
+		c.OCIArtifact = v
 	}
 }
 

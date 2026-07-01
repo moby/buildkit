@@ -2,14 +2,15 @@
 title: Image attestation storage
 ---
 
-Buildkit supports creating and attaching attestations to build artifacts. These
+BuildKit supports creating and attaching attestations to build artifacts. These
 attestations can provide valuable information from the build process,
 including, but not limited to: [SBOMs](https://en.wikipedia.org/wiki/Software_supply_chain),
 [SLSA Provenance](https://slsa.dev/provenance), build logs, etc.
 
-This document describes the current custom format used to store attestations,
-which is designed to be compatible with current registry implementations today.
-In the future, we may support exporting attestations in additional formats.
+This document describes the storage format used for attestations. When the image
+output uses OCI media types, BuildKit exports attestation manifests as OCI
+artifacts by default. Set the image exporter option `oci-artifact=false` to use
+the legacy image manifest format instead.
 
 Attestations are stored as manifest objects in the image index, similar in
 style to OCI artifacts.

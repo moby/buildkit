@@ -216,6 +216,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testPullWithLayerLimit,
 	testExportAnnotations,
 	testExportAnnotationsMediaTypes,
+	testExportAttestationsOCIArtifactDefault,
 	testExportAttestationsOCIArtifact,
 	testExportAttestationsImageManifest,
 	testExportedImageLabels,
@@ -10915,15 +10916,21 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
+func testExportAttestationsOCIArtifactDefault(t *testing.T, sb integration.Sandbox) {
+	testExportAttestations(t, sb, nil)
+}
+
 func testExportAttestationsOCIArtifact(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, true)
+	ociArtifact := true
+	testExportAttestations(t, sb, &ociArtifact)
 }
 
 func testExportAttestationsImageManifest(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, false)
+	ociArtifact := false
+	testExportAttestations(t, sb, &ociArtifact)
 }
 
-func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bool) {
+func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact *bool) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -11038,15 +11045,18 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			registry + "/buildkit/testattestationsfoo:latest",
 			registry + "/buildkit/testattestationsbar:latest",
 		}
+		attrs := map[string]string{
+			"name": strings.Join(targets, ","),
+			"push": "true",
+		}
+		if ociArtifact != nil {
+			attrs["oci-artifact"] = strconv.FormatBool(*ociArtifact)
+		}
 		_, err = c.Build(sb.Context(), SolveOpt{
 			Exports: []ExportEntry{
 				{
-					Type: ExporterImage,
-					Attrs: map[string]string{
-						"name":         strings.Join(targets, ","),
-						"push":         "true",
-						"oci-artifact": strconv.FormatBool(ociArtifact),
-					},
+					Type:  ExporterImage,
+					Attrs: attrs,
 				},
 			},
 		}, "", frontend, nil)
@@ -11079,7 +11089,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
 			require.Equal(t, 2, len(att.Layers))
 
-			if ociArtifact {
+			if ociArtifact == nil || *ociArtifact {
 				subject := att.Manifest.Subject
 				require.NotNil(t, subject)
 				require.Equal(t, bases[i].Desc.MediaType, subject.MediaType)
