@@ -1327,8 +1327,8 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		ctx = leaseCtx
 	}
 
-	if sr.GetLayerType() == "windows" {
-		ctx = winlayers.UseWindowsLayerMode(ctx)
+	if layerType := sr.GetLayerType(); layerType != "" {
+		ctx = winlayers.SetLayerOS(ctx, layerType)
 	}
 
 	eg, egctx := errgroup.WithContext(ctx)
