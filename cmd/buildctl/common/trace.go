@@ -85,7 +85,10 @@ func AttachAppContext(app *cli.Command) error {
 		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), exportTimeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancel()
 
-		return tp.Shutdown(ctx)
+		if err := tp.Shutdown(ctx); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return nil
 	}
 	return nil
 }
