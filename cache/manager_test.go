@@ -327,6 +327,50 @@ func TestManager(t *testing.T) {
 	require.Equal(t, 0, len(dirs))
 }
 
+func TestPruneUntilRemovesOldParentAfterChild(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	parentActive, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	parent, err := parentActive.Commit(ctx)
+	require.NoError(t, err)
+
+	childActive, err := cm.New(ctx, parent, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	child, err := childActive.Commit(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, parent.Release(ctx))
+	require.NoError(t, child.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 2)
+
+	time.Sleep(10 * time.Millisecond)
+
+	buf := pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{KeepDuration: time.Millisecond})
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 0, 0)
+	require.Len(t, buf.all, 2)
+}
+
 func TestLazyGetByBlob(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
