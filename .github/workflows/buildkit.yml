@@ -43,7 +43,7 @@ jobs:
       -
         name: Platforms matrix
         id: platforms
-        uses: docker/bake-action/subaction/matrix@6614cfa25eff9a0b2b2697efb0b6159e7680d584 # v7.2.0
+        uses: docker/bake-action/subaction/matrix@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
         with:
           target: release
           fields: platforms
