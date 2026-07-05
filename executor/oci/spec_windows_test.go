@@ -104,6 +104,23 @@ func TestSubRejectsNestedJunctionEscape(t *testing.T) {
 	require.NotEqual(t, filepath.Join(outside, "leaf"), m.Source, "resolved source must not escape the cache root")
 }
 
+// TestSubPinsSourceAgainstSwap verifies that while sub() holds the mount source,
+// the entry cannot be renamed/swapped, and that releasing the cleanup lifts it.
+func TestSubPinsSourceAgainstSwap(t *testing.T) {
+	cacheRoot := t.TempDir()
+	sel := filepath.Join(cacheRoot, "sel")
+	require.NoError(t, os.MkdirAll(sel, 0700))
+
+	_, cleanup, err := sub(mount.Mount{Source: cacheRoot}, "sel")
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+
+	require.Error(t, os.Rename(sel, sel+".swap"), "pinned source must not be renamable during the mount window")
+
+	require.NoError(t, cleanup())
+	require.NoError(t, os.Rename(sel, sel+".swap"), "source must be renamable after the pin is released")
+}
+
 func TestPathWithinRoot(t *testing.T) {
 	cases := []struct {
 		name string
