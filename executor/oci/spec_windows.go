@@ -115,8 +115,37 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 	if err := verifySubpathWithinRoot(m.Source, src, subPath); err != nil {
 		return mount.Mount{}, nil, err
 	}
+
+	release, err := pinPathForMount(src)
+	if err != nil {
+		return mount.Mount{}, nil, errors.Wrapf(err, "pinning mount source subpath %q", subPath)
+	}
 	m.Source = src
-	return m, func() error { return nil }, nil
+	return m, release, nil
+}
+
+// pinPathForMount holds src open (omitting FILE_SHARE_DELETE) so the entry
+// cannot be renamed or swapped for an escaping junction before the later HCS
+// mount. GENERIC_READ is used rather than DELETE so a concurrent read/traverse
+// open still succeeds. The returned func releases the handle.
+func pinPathForMount(src string) (func() error, error) {
+	pathPtr, err := windows.UTF16PtrFromString(src)
+	if err != nil {
+		return nil, err
+	}
+	h, err := windows.CreateFile(
+		pathPtr,
+		windows.GENERIC_READ,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return func() error { return windows.CloseHandle(h) }, nil
 }
 
 func verifySubpathWithinRoot(root, src, subPath string) error {
