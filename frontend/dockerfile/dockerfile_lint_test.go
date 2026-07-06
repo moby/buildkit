@@ -48,6 +48,7 @@ var lintTests = integration.TestFuncs(
 	testInvalidDefaultArgInFrom,
 	testFromPlatformFlagConstDisallowed,
 	testCopyIgnoredFiles,
+	testCopyIgnoredFileContextRoot,
 	testDefinitionDescription,
 	testExposeProtoCasing,
 	testExposeInvalidFormat,
@@ -239,6 +240,41 @@ COPY . .
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile:   dockerfile,
 		DockerIgnore: dockerignore,
+	})
+}
+
+func testCopyIgnoredFileContextRoot(t *testing.T, sb integration.Sandbox) {
+	dockerfile := []byte(`
+FROM scratch
+COPY . .
+`)
+
+	t.Run("dotfiles", func(t *testing.T) {
+		checkLinterWarnings(t, sb, &lintTestParams{
+			Dockerfile: dockerfile,
+			DockerIgnore: []byte(`
+.*
+`),
+		})
+	})
+
+	t.Run("wildcard", func(t *testing.T) {
+		checkLinterWarnings(t, sb, &lintTestParams{
+			Dockerfile: dockerfile,
+			DockerIgnore: []byte(`
+*
+`),
+			Warnings: []expectedLintWarning{
+				{
+					RuleName:    "CopyIgnoredFile",
+					Description: "Attempting to Copy file that is excluded by .dockerignore",
+					Detail:      `Attempting to Copy file "." that is excluded by .dockerignore`,
+					URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+					Level:       1,
+					Line:        3,
+				},
+			},
+		})
 	})
 }
 
