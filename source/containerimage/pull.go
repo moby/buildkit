@@ -246,7 +246,12 @@ func (p *puller) Snapshot(ctx context.Context, jobCtx solver.JobContext) (ir cac
 	}()
 
 	var parent cache.ImmutableRef
-	setWindowsLayerType := p.Platform.OS == "windows" && runtime.GOOS != "windows"
+	// Set layer type when pulling cross-platform images so that the winlayers
+	// package can apply the appropriate transformation on apply/diff.
+	var crossPlatformLayerType string
+	if p.Platform.OS != runtime.GOOS {
+		crossPlatformLayerType = p.Platform.OS
+	}
 	for _, layerDesc := range p.manifest.Descriptors {
 		parent = current
 		current, err = p.CacheAccessor.GetByBlob(ctx, layerDesc, parent,
@@ -257,8 +262,8 @@ func (p *puller) Snapshot(ctx context.Context, jobCtx solver.JobContext) (ir cac
 		if err != nil {
 			return nil, err
 		}
-		if setWindowsLayerType {
-			if err := current.SetLayerType("windows"); err != nil {
+		if crossPlatformLayerType != "" {
+			if err := current.SetLayerType(crossPlatformLayerType); err != nil {
 				return nil, err
 			}
 		}
