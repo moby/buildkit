@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -29,6 +30,7 @@ import (
 	solvererrdefs "github.com/moby/buildkit/solver/errdefs"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy"
 	sourcepolicypb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/moby/buildkit/sourcepolicy/policysession"
 	"github.com/moby/buildkit/util/entitlements"
@@ -1579,4 +1581,188 @@ func tamperDigestHex(dgst digest.Digest) digest.Digest {
 		hexPart[len(hexPart)-1] = '0'
 	}
 	return digest.NewDigestFromEncoded(dgst.Algorithm(), string(hexPart))
+}
+
+func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Image("busybox:1.34.1-uclibc").File(
+			llb.Copy(llb.HTTP("https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"),
+				"README.md", "README.md"))
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	type testCase struct {
+		srcPol      *sourcepolicypb.Policy
+		expectedErr string
+	}
+	testCases := []testCase{
+		{
+			// Valid
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:3614ca5eacf0a3a1bcc361c939202a974b4902b9334ff36eb29ffe9011aaad83",
+						},
+					},
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+							Attrs:      map[string]string{"http.checksum": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"},
+						},
+					},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			// Invalid docker-image source
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc",
+						},
+						Updates: &sourcepolicypb.Update{
+							Identifier: "docker-image://docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // invalid
+						},
+					},
+				},
+			},
+			expectedErr: "docker.io/library/busybox:1.34.1-uclibc@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: not found",
+		},
+		{
+			// Invalid http source
+			srcPol: &sourcepolicypb.Policy{
+				Rules: []*sourcepolicypb.Rule{
+					{
+						Action: sourcepolicypb.PolicyAction_CONVERT,
+						Selector: &sourcepolicypb.Selector{
+							Identifier: "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+						},
+						Updates: &sourcepolicypb.Update{
+							Attrs: map[string]string{opspb.AttrHTTPChecksum: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, // invalid
+						},
+					},
+				},
+			},
+			expectedErr: "digest mismatch sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			_, err = c.Build(sb.Context(), SolveOpt{SourcePolicy: tc.srcPol}, "", frontend, nil)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErr)
+			}
+		})
+	}
+
+	t.Run("Frontend policies", func(t *testing.T) {
+		t.Run("deny http", func(t *testing.T) {
+			denied := "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md"
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				st := llb.Image("busybox:1.34.1-uclibc").File(
+					llb.Copy(llb.HTTP(denied),
+						"README.md", "README.md"))
+				def, err := st.Marshal(sb.Context())
+				if err != nil {
+					return nil, err
+				}
+				return c.Solve(ctx, gateway.SolveRequest{
+					Definition: def.ToPB(),
+					SourcePolicies: []*sourcepolicypb.Policy{{
+						Rules: []*sourcepolicypb.Rule{
+							{
+								Action: sourcepolicypb.PolicyAction_DENY,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: denied,
+								},
+							},
+						},
+					}},
+				})
+			}
+
+			_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+			require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+		})
+		t.Run("resolve image config", func(t *testing.T) {
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				const (
+					origRef    = "docker.io/library/busybox:1.34.1-uclibc"
+					updatedRef = "docker.io/library/busybox:latest"
+				)
+				pol := []*sourcepolicypb.Policy{
+					{
+						Rules: []*sourcepolicypb.Rule{
+							{
+								Action: sourcepolicypb.PolicyAction_DENY,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "*",
+								},
+							},
+							{
+								Action: sourcepolicypb.PolicyAction_ALLOW,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "docker-image://" + updatedRef + "*",
+								},
+							},
+							{
+								Action: sourcepolicypb.PolicyAction_CONVERT,
+								Selector: &sourcepolicypb.Selector{
+									Identifier: "docker-image://" + origRef,
+								},
+								Updates: &sourcepolicypb.Update{
+									Identifier: "docker-image://" + updatedRef,
+								},
+							},
+						},
+					},
+				}
+
+				ref, dgst, _, err := c.ResolveImageConfig(ctx, origRef, sourceresolver.Opt{
+					SourcePolicies: pol,
+				})
+				if err != nil {
+					return nil, err
+				}
+				require.Equal(t, updatedRef, ref)
+				st := llb.Image(ref + "@" + dgst.String())
+				def, err := st.Marshal(sb.Context())
+				if err != nil {
+					return nil, err
+				}
+				return c.Solve(ctx, gateway.SolveRequest{
+					Definition:     def.ToPB(),
+					SourcePolicies: pol,
+				})
+			}
+			_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+			require.NoError(t, err)
+		})
+	})
 }
