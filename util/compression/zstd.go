@@ -3,6 +3,7 @@ package compression
 import (
 	"context"
 	"io"
+	"runtime"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
@@ -12,7 +13,10 @@ import (
 
 func (c zstdType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
-		var opts []zstd.EOption
+		opts := []zstd.EOption{
+			zstd.WithEncoderConcurrency(runtime.GOMAXPROCS(0)), // TBD: default is GOMAXPROCS for each writer.
+			zstd.WithConcurrentBlocks(true),
+		}
 		if comp.Level != nil {
 			opts = append(opts, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(*comp.Level)))
 		}
