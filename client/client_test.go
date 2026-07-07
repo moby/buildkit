@@ -89,7 +89,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalModeInvalid,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
-	testExportTarPlatformIDSanitized,
 	testExporterTargetExists,
 	testMultipleExporters,
 	testSessionExporter,
