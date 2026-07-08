@@ -13,6 +13,7 @@ import (
 	contentapi "github.com/containerd/containerd/api/services/content/v1"
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/plugins/services/content/contentserver"
+	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
 	"github.com/gohugoio/hashstructure"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -548,7 +549,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			resolveMode = v
 		}
 
-		procs = append(procs, proc.SBOMProcessor(ref.String(), useCache, resolveMode, params))
+		scannerPlatform := platforms.Normalize(platforms.DefaultSpec())
+		if ps := w.Platforms(false); len(ps) > 0 {
+			scannerPlatform = ps[0]
+		}
+		procs = append(procs, proc.SBOMProcessor(ref.String(), scannerPlatform, useCache, resolveMode, params))
 	}
 
 	if attrs, ok := attests["provenance"]; ok {
