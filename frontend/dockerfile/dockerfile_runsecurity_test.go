@@ -12,7 +12,8 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var runSecurityTests = integration.TestFuncs(
+// Tests that depend on the `security.*` entitlements
+var securityTests = integration.TestFuncs(
 	testRunSecurityInsecure,
 	testRunSecuritySandbox,
 	testRunSecurityDefault,
@@ -26,8 +27,6 @@ func init() {
 			"tonistiigi/hellofs:latest": "docker.io/tonistiigi/hellofs:latest",
 		}),
 	}
-
-	securityTests = append(securityTests, runSecurityTests...)
 }
 
 func testInsecureDevicesWhitelist(t *testing.T, sb integration.Sandbox) {

@@ -17,7 +17,8 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var hdTests = integration.TestFuncs(
+// Tests that depend on heredoc support
+var heredocTests = integration.TestFuncs(
 	testCopyHeredoc,
 	testCopyHeredocSpecialSymbols,
 	testRunBasicHeredoc,
@@ -28,10 +29,6 @@ var hdTests = integration.TestFuncs(
 	testHeredocVarSubstitution,
 	testOnBuildHeredoc,
 )
-
-func init() {
-	heredocTests = append(heredocTests, hdTests...)
-}
 
 // testCopyHeredoc verifies Dockerfile COPY with heredoc syntax for inline file creation.
 // It tests single file, multiple files into a directory, --chmod, --chown permissions,
