@@ -17,16 +17,13 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var runNetworkTests = integration.TestFuncs(
+// Tests that depend on the `network.*` entitlements
+var networkTests = integration.TestFuncs(
 	testRunDefaultNetwork,
 	testRunNoNetwork,
 	testRunHostNetwork,
 	testRunGlobalNetwork,
 )
-
-func init() {
-	networkTests = append(networkTests, runNetworkTests...)
-}
 
 func testRunDefaultNetwork(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {

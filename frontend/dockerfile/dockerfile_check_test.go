@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"testing"
@@ -18,9 +19,9 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerui"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
-
 	"github.com/moby/buildkit/frontend/subrequests/lint"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
@@ -1874,4 +1875,102 @@ type lintTestParams struct {
 	UnmarshalBuildErrRegexp *regexp.Regexp
 	BuildErrLocation        int32
 	FrontendAttrs           map[string]string
+}
+
+func testBaseImagePlatformMismatch(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(`
+FROM scratch
+COPY foo /foo
+`, `
+FROM nanoserver:latest
+COPY foo C:/foo
+`))
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("test"), 0644),
+	)
+
+	// choose target platform that is different from the current platform
+	targetPlatform := integration.UnixOrWindows(
+		runtime.GOOS+"/"+map[bool]string{true: "amd64", false: "arm64"}[runtime.GOARCH == "arm64"],
+		"windows/amd64",
+	)
+	expectedCurrentPlatform := integration.UnixOrWindows(
+		runtime.GOOS+"/"+runtime.GOARCH,
+		"windows/arm64", // Force different expected platform
+	)
+
+	target := registry + "/buildkit/testbaseimageplatform:latest"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": targetPlatform,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = fmt.Appendf(nil, `
+FROM %s
+ENV foo=bar
+	`, target)
+
+	integration.UnixOrWindows(
+		func() {
+			// Unix platforms use simple format like "linux/amd64"
+			checkLinterWarnings(t, sb, &lintTestParams{
+				Dockerfile: dockerfile,
+				Warnings: []expectedLintWarning{
+					{
+						RuleName:    "InvalidBaseImagePlatform",
+						Description: "Base image platform does not match expected target platform",
+						Detail:      fmt.Sprintf("Base image %s was pulled with platform %q, expected %q for current build", target, targetPlatform, expectedCurrentPlatform),
+						Level:       1,
+						Line:        2,
+					},
+				},
+				FrontendAttrs: map[string]string{
+					"platform": expectedCurrentPlatform, // Explicitly set different platform to trigger mismatch
+				},
+			})
+		},
+		func() {
+			// Windows platforms include OS version like "windows(10.0.20348.4171)/amd64"
+			// Use StreamBuildErrRegexp to match the pattern instead of exact Detail
+			checkLinterWarnings(t, sb, &lintTestParams{
+				Dockerfile:           dockerfile,
+				StreamBuildErrRegexp: regexp.MustCompile(fmt.Sprintf(`InvalidBaseImagePlatform: Base image %s was pulled with platform "windows\([^)]+\)/amd64", expected "%s" for current build \(line 2\)`, regexp.QuoteMeta(target), expectedCurrentPlatform)),
+				FrontendAttrs: map[string]string{
+					"platform": expectedCurrentPlatform, // Explicitly set different platform to trigger mismatch
+				},
+			})
+		},
+	)
 }

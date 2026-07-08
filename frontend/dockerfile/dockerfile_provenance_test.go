@@ -45,37 +45,6 @@ import (
 	"github.com/tonistiigi/fsutil"
 )
 
-var provenanceTests = integration.TestFuncs(
-	testGitProvenanceAttestationSHA1,
-	testGitProvenanceAttestationSHA256,
-	testMultiPlatformProvenance,
-	testClientFrontendProvenance,
-	testGatewayBuiltinSyntaxSourceProvenance,
-	testClientLLBProvenance,
-	testGatewayProvenanceRootRequest,
-	testGatewayProvenanceSameCallbackInputProducer,
-	testGatewayProvenanceDifferentCallbackInputProducer,
-	testGatewayProvenancePlainLLBInputFallback,
-	testGatewayProvenanceNestedInputProducer,
-	testDockerfileProvenanceInputProducer,
-	testSecretSSHProvenance,
-	testOCILayoutProvenance,
-	testNilProvenance,
-	testDuplicatePlatformProvenance,
-	testDockerIgnoreMissingProvenance,
-	testCommandSourceMapping,
-	testFrontendDeduplicateSources,
-	testDuplicateLayersProvenance,
-	testProvenanceExportLocal,
-	testProvenanceExportLocalForceSplit,
-	testProvenanceExportLocalMultiPlatform,
-	testProvenanceExportLocalMultiPlatformNoSplit,
-)
-
-func init() {
-	allTests = append(allTests, provenanceTests...)
-}
-
 func daemonDockerfileVersion(ctx context.Context, t *testing.T, c *client.Client) string {
 	info, err := c.Info(ctx)
 	require.NoError(t, err)
