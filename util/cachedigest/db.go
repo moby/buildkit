@@ -31,7 +31,9 @@ func GetDefaultDB() *DB {
 }
 
 func NewDB(path string) (*DB, error) {
-	db, err := bolt.Open(path, 0600, nil)
+	db, err := bolt.Open(path, 0600, &bolt.Options{
+		FreelistType: bolt.FreelistMapType,
+	})
 	if err != nil {
 		return nil, err
 	}
