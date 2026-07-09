@@ -79,6 +79,8 @@ linters:
         - unusedwrite
     importas:
       alias:
+        - pkg: go.etcd.io/bbolt
+          alias: bolt
         - pkg: github.com/containerd/errdefs
           alias: cerrdefs
         - pkg: github.com/opencontainers/image-spec/specs-go/v1
