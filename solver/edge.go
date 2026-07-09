@@ -215,6 +215,41 @@ func (e *edge) probeCache(d *dep, depKeys []CacheKeyWithSelector) bool {
 	return found
 }
 
+// probeResultCache handles the stale/complete shared-dependency case
+// (moby/buildkit#4674 family). A dependency that this edge subscribes to
+// *after* it has already reached `complete` -- e.g. a shared base edge kept
+// alive in Solver.actives by a concurrent solve -- can carry its cache key only
+// on its result (dep.result.CacheKeys()). In the cold-execute case its
+// edgeState.keys is empty: a leaf that executed against an empty cache never
+// appended a key, and a completed edge never re-queries. The edgeState.keys-
+// driven probeCache calls therefore see an empty slice, dep.keyMap stays empty,
+// and checkDepMatchPossible latches noCacheMatchPossible -- forcing
+// re-execution despite an intact cached result. Probe the result's cache keys
+// directly so keyMap/Records get populated, mirroring how currentIndexKey reads
+// dep.result.CacheKeys(). Guarded to a no-op unless the dep already carries a
+// result and has no probeable key yet, so healthy edges (result nil while
+// cache-slow, or keyMap already populated -- e.g. a warm base whose key survived
+// on edgeState.keys) are unaffected.
+func (e *edge) probeResultCache(dep *dep) bool {
+	if e.cacheMap == nil || dep.result == nil || len(dep.keyMap) != 0 {
+		return false
+	}
+	// probeCache already honors THIS edge's own IgnoreCache; this guards the
+	// DEPENDENCY's. An ignore-cache dep still executes and Saves, so its result
+	// carries cache keys -- but the normal edgeState.keys path withholds them
+	// (the dep skipped its own Query), starving this edge into re-executing.
+	// Probing the result keys directly would leak them, so skip it to keep
+	// --no-cache working on a dependency.
+	if e.edge.Vertex.Inputs()[dep.index].Vertex.Options().IgnoreCache {
+		return false
+	}
+	found := e.probeCache(dep, withSelector(dep.result.CacheKeys(), e.cacheMap.Deps[dep.index].Selector))
+	if found && e.allDepsHaveKeys(false) {
+		e.keysDidChange = true
+	}
+	return found
+}
+
 // checkDepMatchPossible checks if any cache matches are possible past this point
 func (e *edge) checkDepMatchPossible(dep *dep) {
 	depHasSlowCache := e.cacheMap.Deps[dep.index].ComputeDigestFunc != nil
@@ -611,6 +646,10 @@ func (e *edge) processCacheMapReq() {
 	// probe keys that were loaded before cache map
 	for i, dep := range e.deps {
 		e.probeCache(dep, withSelector(dep.keys, e.cacheMap.Deps[i].Selector))
+		// retry now that the cacheMap is available: a dep may have reached
+		// `complete` before it resolved, delivering 0 edgeState.keys (see
+		// probeResultCache)
+		e.probeResultCache(dep)
 		e.checkDepMatchPossible(dep)
 	}
 	if !e.cacheMapDone {
@@ -678,6 +717,12 @@ func (e *edge) processDepReq(dep *dep) (depChanged bool) {
 	recheck := state.state != dep.state
 
 	dep.edgeState = *state
+
+	// a dep that jumped straight to `complete` delivered 0 edgeState.keys, so the
+	// probe above never ran; probe its result keys instead (see probeResultCache)
+	if e.probeResultCache(dep) {
+		depChanged = true
+	}
 
 	if recheck && e.cacheMap != nil {
 		e.checkDepMatchPossible(dep)
