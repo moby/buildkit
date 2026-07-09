@@ -218,6 +218,23 @@ func TestHTTPInvalidURL(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid response")
 }
 
+func TestHTTPCredentialsRedactedInError(t *testing.T) {
+	t.Parallel()
+
+	hs := &httpSourceHandler{
+		src: HTTPIdentifier{
+			URL:      "https://user:s3cr3t@example.com/file",
+			Checksum: digest.FromBytes([]byte("expected")),
+		},
+	}
+
+	err := hs.validatePinnedChecksum(digest.FromBytes([]byte("actual")))
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "s3cr3t")
+	require.NotContains(t, err.Error(), "user:")
+	require.Contains(t, err.Error(), "xxxxx:xxxxx@example.com")
+}
+
 func TestHTTPChecksum(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
