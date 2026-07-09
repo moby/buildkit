@@ -220,6 +220,7 @@ func (e *edge) checkDepMatchPossible(dep *dep) {
 	depHasSlowCache := e.cacheMap.Deps[dep.index].ComputeDigestFunc != nil
 	if !e.noCacheMatchPossible && (((!dep.slowCacheFoundKey && dep.slowCacheComplete && depHasSlowCache) || (!depHasSlowCache && dep.state >= edgeStatusCacheSlow)) && len(dep.keyMap) == 0) {
 		e.noCacheMatchPossible = true
+		debugSchedulerNoCacheMatchPossible(e, dep, depHasSlowCache)
 	}
 }
 
@@ -652,6 +653,10 @@ func (e *edge) processDepReq(dep *dep) (depChanged bool) {
 	if !isEdgeState {
 		bklog.G(context.TODO()).Warnf("invalid edgeState value for update: %T", state)
 		return false
+	}
+
+	if state.state >= edgeStatusCacheSlow {
+		debugSchedulerDepDelivery(e, dep, state)
 	}
 
 	if len(dep.keys) < len(state.keys) {
