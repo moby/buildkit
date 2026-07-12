@@ -68,7 +68,9 @@ type GitRef struct {
 }
 
 // ParseGitRef parses a git ref.
-func ParseGitRef(ref string) (*GitRef, bool, error) {
+// An HTTP(S) URL is a valid git ref when it has the ".git" suffix,
+// or when `knownGit` is true (such as when `--keep-git-dir` is passed).
+func ParseGitRef(ref string, knownGit bool) (*GitRef, bool, error) {
 	res := &GitRef{}
 
 	var (
@@ -104,9 +106,8 @@ func ParseGitRef(ref string) (*GitRef, bool, error) {
 		}
 
 		switch remote.Scheme {
-		// An HTTP(S) URL is considered to be a valid git ref only when it has the ".git[...]" suffix.
 		case gitutil.HTTPProtocol, gitutil.HTTPSProtocol:
-			if !strings.HasSuffix(remote.Path, ".git") {
+			if !knownGit && !strings.HasSuffix(remote.Path, ".git") {
 				return nil, false, errors.WithStack(cerrdefs.ErrInvalidArgument)
 			}
 		}
@@ -244,7 +245,7 @@ func (gf *GitRef) loadQuery(query url.Values) error {
 // FragmentFormat returns a simplified git URL in fragment format.
 // If the URL cannot be parsed, the original string is returned with false.
 func FragmentFormat(remote string, withSubdir bool) (string, bool) {
-	gitRef, _, err := ParseGitRef(remote)
+	gitRef, _, err := ParseGitRef(remote, false)
 	if err != nil || gitRef == nil {
 		return remote, false
 	}

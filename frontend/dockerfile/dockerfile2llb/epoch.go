@@ -177,7 +177,10 @@ func sourceDateEpochAddSource(cmd *instructions.AddCommand, env *llb.EnvList, sh
 		return nil, err
 	}
 
-	if isHTTPSource(src) {
+	// An explicit --keep-git-dir flag identifies the source as a git URL
+	knownGit := cmd.KeepGitDir != nil
+
+	if cmd.KeepGitDir == nil && isHTTPSource(src, knownGit) {
 		var checksum digest.Digest
 		if cmd.Checksum != "" {
 			expandedChecksum, _, err := shlex.ProcessWord(cmd.Checksum, env)
@@ -193,7 +196,7 @@ func sourceDateEpochAddSource(cmd *instructions.AddCommand, env *llb.EnvList, sh
 		return &st, nil
 	}
 
-	gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src)
+	gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src, knownGit)
 	if gitRefErr != nil && isGit {
 		return nil, gitRefErr
 	}
