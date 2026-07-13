@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,11 +14,13 @@ import (
 //
 //	"base" --> "step"
 //
-// A1 builds step -> base against an empty cache. base executes, and its cache
-// key ends up living only on base's *result*, not on edgeState.keys (a leaf that
-// executed against an empty cache never appended a key, and a completed edge
-// never re-queries). Both base and step are saved. A2 then builds a step with
-// the SAME cache seed on the SAME shared base and should reuse the cached step.
+// A1 builds step -> base against an empty cache. base executes; on unfixed
+// code its cache key then lived only on base's *result*, never on
+// edgeState.keys (a leaf that executed against an empty cache never appended a
+// key, and a completed edge never re-queries; the fix appends the committed
+// keys to edgeState.keys at completion). Both base and step are saved. A2 then
+// builds a step with the SAME cache seed on the SAME shared base and should
+// reuse the cached step.
 //
 // A parent learns a completed dep's key one of two ways: (a) probeCache/Query,
 // fed only from the dep's edgeState.keys, or (b) an edge-index merge onto a
@@ -36,13 +37,12 @@ import (
 //     Solver.actives. A2 recreates it fresh; it re-queries the populated cache
 //     and delivers its key via edgeState.keys -> A2 probes -> hit.
 //   - B holds only the base alive: the base stays referenced in Solver.actives,
-//     already `complete`, and is reused by A2. It delivers edgeState.keys=0 while
-//     its result carries the key -- so pre-fix probeCache sees an empty slice,
-//     noCacheMatchPossible latches, and A2 re-executes; post-fix probeResultCache
-//     reads the result key and A2 hits.
+//     already `complete`, and is reused by A2. On unfixed code it delivered
+//     edgeState.keys=0 while its result carried the key -- probeCache saw an
+//     empty slice, noCacheMatchPossible latched, and A2 re-executed; post-fix
+//     the executed base appended its committed keys to edgeState.keys at
+//     completion, so A2 receives them, probes, and hits.
 func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
-	t.Parallel()
-
 	// baseEdge builds a leaf "base" vertex with a fixed digest and cache seed so
 	// it is a single shared active vertex across builds. value differs per build
 	// only to prove the returned result came from A1's cache. ignoreCache marks
@@ -79,7 +79,7 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 		ignoreBase     bool // base carries IgnoreCache (`--no-cache` on the dependency)
 	}
 	run := func(t *testing.T, scenario scenario) (secondExecs int64, secondResult string) {
-		ctx := context.TODO()
+		ctx := t.Context()
 
 		cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 		solver := NewSolver(SolverOpt{
@@ -93,9 +93,9 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 		// A1. A throwaway build of base alone (then discarded) Saves that
 		// record. A1's base then cache-HITS its own query -- it does
 		// NOT execute and leaves its key in edgeState.keys -- whereas on a cold
-		// cache base EXECUTES and its key lives only on the result. The warm-up's
-		// distinct value ("base-result-warmup") lets us confirm A1's
-		// base came from the cache rather than executing.
+		// cache base EXECUTES, which on unfixed code left its key only on the
+		// result. The warm-up's distinct value ("base-result-warmup") lets us
+		// confirm A1's base came from the cache rather than executing.
 		if scenario.warmBase {
 			warmJob, err := solver.NewJob("warmup")
 			require.NoError(t, err)
@@ -104,8 +104,8 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 			require.NoError(t, warmJob.Discard())
 		}
 
-		// A1: build step -> base. Cold cache: both execute and are saved,
-		// base ending `complete` with its key on its result only. Warm cache: base
+		// A1: build step -> base. Cold cache: both execute and are saved (on
+		// unfixed code base then held its key on its result only). Warm cache: base
 		// cache-hits its own query (no exec), only step executes; base's key is in
 		// edgeState.keys.
 		jobA1, err := solver.NewJob("a1")
@@ -184,7 +184,6 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 	// here: with no B, A1's step edge is gone from the
 	// edge index once discarded either way.)
 	t.Run("FreshBaseHits", func(t *testing.T) {
-		t.Parallel()
 		execs, result := run(t, scenario{sameStepVertex: true})
 		require.Equal(t, int64(0), execs, "A2 step should reuse cache when base is recreated fresh")
 		require.Equal(t, "step-result", result, "A2 should return A1's cached result")
@@ -196,23 +195,20 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 	// When B then holds that base `complete`, the reused base
 	// STILL delivers its key via edgeState.keys, so A2 probes and
 	// hits. This is the healthy warm path, distinct from the cold bug below: it
-	// passes REGARDLESS of the completed-dep result-key probe fix, and is kept to
-	// confirm the fix does not regress the warm case.
+	// passes REGARDLESS of the fix, and is kept to confirm the fix does not
+	// regress the warm case.
 	t.Run("WarmHeldBaseHits", func(t *testing.T) {
-		t.Parallel()
 		execs, result := run(t, scenario{holdBaseAlive: true, sameStepVertex: true, warmBase: true})
 		require.Equal(t, int64(0), execs, "A2 step should reuse cache: a warm held base delivers its key via edgeState.keys even when held complete")
 		require.Equal(t, "step-result", result, "A2 should return A1's cached result")
 	})
 
-	// Bug: with B holding only the base alive, the shared base
-	// is reused already `complete` and delivers edgeState.keys=0 while its result
-	// carries the key. A2 must still reuse the cached step result.
-	// On current code it re-executes; with the completed-dep result-key probe fix
-	// it hits.
+	// Bug: with B holding only the base alive, the shared base is reused
+	// already `complete`; on unfixed code it delivers edgeState.keys=0 while its
+	// result carries the key. A2 must still reuse the cached step result.
+	// On unfixed code it re-executes; with the completion-time key append in
+	// processExecReq it hits.
 	t.Run("HeldCompleteBaseMisses", func(t *testing.T) {
-		t.Parallel()
-
 		// SameStepVertex models rebuilding the *same* image: A2's
 		// step reuses A1's step name/digest. The base is held
 		// `complete` by B, but A1's Discard() has
@@ -220,7 +216,6 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 		// step edge must resolve through the cache (no live peer to merge
 		// onto).
 		t.Run("SameStepVertex", func(t *testing.T) {
-			t.Parallel()
 			execs, result := run(t, scenario{holdBaseAlive: true, sameStepVertex: true})
 			require.Equal(t, int64(0), execs, "A2 step re-executed instead of reusing cache (stale complete shared-dep)")
 			require.Equal(t, "step-result", result, "A2 should return A1's cached result")
@@ -233,7 +228,6 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 		// keyed on the cache key, not the vertex digest, so a distinct digest
 		// alone would not close the merge path; the discard does.
 		t.Run("DistinctStepVertex", func(t *testing.T) {
-			t.Parallel()
 			execs, result := run(t, scenario{holdBaseAlive: true})
 			require.Equal(t, int64(0), execs, "A2 step re-executed instead of reusing cache (stale complete shared-dep)")
 			require.Equal(t, "step-result", result, "A2 should return A1's cached result")
@@ -244,15 +238,14 @@ func TestCacheMissStaleCompleteSharedDep(t *testing.T) {
 	// survive the fix. B holds the shared base `complete`, but the base carries
 	// IgnoreCache (as `--no-cache` / `--no-cache-filter=base` would set). An
 	// ignore-cache base still executes and Saves, so its result carries cache
-	// keys -- but probeResultCache must NOT probe them, or step would wrongly
-	// reuse A1's record. So A2's step must RE-EXECUTE.
+	// keys -- but it must NOT advertise them in edgeState.keys, or step would
+	// wrongly reuse A1's record. So A2's step must RE-EXECUTE.
 	//
-	// This holds with or without the broader fix; it exists to lock in
-	// probeResultCache's dependency-IgnoreCache guard. Remove that guard and A2
-	// reuses the step, dropping execs to 0 -- which is how this test discriminates
-	// it.
+	// This holds with or without the broader fix; it exists to lock in the
+	// IgnoreCache guard on the completion-time key append in processExecReq.
+	// Remove that guard and A2 reuses the step, dropping execs to 0 -- which is
+	// how this test discriminates it.
 	t.Run("HeldCompleteIgnoreCacheBaseReExecutes", func(t *testing.T) {
-		t.Parallel()
 		execs, _ := run(t, scenario{holdBaseAlive: true, sameStepVertex: true, ignoreBase: true})
 		require.NotEqual(t, int64(0), execs, "A2 step must re-run: base is --no-cache, so its result key must not seed reuse")
 	})
