@@ -367,6 +367,11 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		if err := pbop.Unmarshal(dt); err != nil {
 			return solver.Edge{}, errors.Wrap(err, "failed to parse llb proto op")
 		}
+		for i, input := range pbop.Inputs {
+			if input.Index < 0 {
+				return solver.Edge{}, errors.Errorf("invalid input %d output index %d", i, input.Index)
+			}
+		}
 		dgst := digest.FromBytes(dt)
 		if pbop.GetSource() != nil {
 			sources[dgst] = struct{}{}
