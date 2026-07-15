@@ -112,50 +112,58 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 	if err != nil {
 		return mount.Mount{}, nil, err
 	}
-	if err := verifySubpathWithinRoot(m.Source, src, subPath); err != nil {
+
+	realSrc, release, err := resolveAndPinPath(src)
+	if err != nil {
+		return mount.Mount{}, nil, errors.Wrapf(err, "resolving and pinning mount source subpath %q", subPath)
+	}
+	if err := verifySubpathWithinRoot(m.Source, realSrc, subPath); err != nil {
+		_ = release()
 		return mount.Mount{}, nil, err
 	}
 
-	release, err := pinPathForMount(src)
-	if err != nil {
-		return mount.Mount{}, nil, errors.Wrapf(err, "pinning mount source subpath %q", subPath)
-	}
-	m.Source = src
+	// Use the path of the object represented by the pinned handle. HCS can then
+	// realize the mount without traversing attacker-controlled reparse points in
+	// the original source path again.
+	m.Source = mountSourcePath(realSrc)
 	return m, release, nil
 }
 
-// pinPathForMount holds src open (omitting FILE_SHARE_DELETE) so the entry
-// cannot be renamed or swapped for an escaping junction before the later HCS
-// mount. GENERIC_READ is used rather than DELETE so a concurrent read/traverse
-// open still succeeds. The returned func releases the handle.
-func pinPathForMount(src string) (func() error, error) {
+// resolveAndPinPath opens src while following reparse points and returns the
+// normalized path of the object represented by that handle. Omitting delete
+// sharing prevents the resolved directory from being renamed or deleted before
+// HCS realizes the mount. Write sharing is still allowed so a writable cache
+// mount can modify contents while the handle is alive.
+func resolveAndPinPath(src string) (string, func() error, error) {
 	pathPtr, err := windows.UTF16PtrFromString(src)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	h, err := windows.CreateFile(
 		pathPtr,
-		windows.GENERIC_READ,
+		windows.DELETE,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
 		nil,
 		windows.OPEN_EXISTING,
-		windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
 		0,
 	)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return func() error { return windows.CloseHandle(h) }, nil
+
+	realSrc, err := finalPathNameByHandle(h)
+	if err != nil {
+		_ = windows.CloseHandle(h)
+		return "", nil, err
+	}
+	return realSrc, func() error { return windows.CloseHandle(h) }, nil
 }
 
-func verifySubpathWithinRoot(root, src, subPath string) error {
+func verifySubpathWithinRoot(root, realSrc, subPath string) error {
 	realRoot, err := resolveFinalPath(root)
 	if err != nil {
 		return errors.Wrapf(err, "resolving mount root %q", root)
-	}
-	realSrc, err := resolveFinalPath(src)
-	if err != nil {
-		return errors.Wrapf(err, "resolving mount source subpath %q", subPath)
 	}
 	if !pathWithinRoot(realRoot, realSrc) {
 		return errors.Errorf("mount source subpath %q resolves to %q which escapes the mount root %q", subPath, realSrc, realRoot)
@@ -184,7 +192,10 @@ func resolveFinalPath(p string) (string, error) {
 		return "", err
 	}
 	defer windows.CloseHandle(h)
+	return finalPathNameByHandle(h)
+}
 
+func finalPathNameByHandle(h windows.Handle) (string, error) {
 	// flags 0 == FILE_NAME_NORMALIZED | VOLUME_NAME_DOS.
 	n := uint32(windows.MAX_PATH)
 	for {
@@ -198,6 +209,20 @@ func resolveFinalPath(p string) (string, error) {
 		}
 		n = got
 	}
+}
+
+func mountSourcePath(p string) string {
+	if strings.HasPrefix(p, `\\?\UNC\`) {
+		return `\\` + p[len(`\\?\UNC\`):]
+	}
+	if len(p) >= len(`\\?\C:\`) && p[:4] == `\\?\` && isDriveLetter(p[4]) && p[5:7] == `:\` {
+		return p[4:]
+	}
+	return p
+}
+
+func isDriveLetter(c byte) bool {
+	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
 }
 
 // pathWithinRoot reports whether p is root or a descendant of root. Inputs are
