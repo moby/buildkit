@@ -95,7 +95,9 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	db, err := bolt.Open(filepath.Join(root, "containerdmeta.db"), 0644, nil)
+	db, err := bolt.Open(filepath.Join(root, "containerdmeta.db"), 0644, &bolt.Options{
+		NoFreelistSync: true,
+	})
 	if err != nil {
 		return opt, err
 	}
