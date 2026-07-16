@@ -2815,6 +2815,79 @@ func TestBundleStagedRefShape(t *testing.T) {
 	require.Equal(t, headSha, md.Checksum)
 }
 
+func TestGetDefaultBranchRejectsDashPrefixedRef(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on git shell helpers")
+	}
+
+	t.Parallel()
+	ctx := t.Context()
+
+	work := t.TempDir()
+	runShell(t, work,
+		"git init -q seed",
+		"git -C seed -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m seed",
+		"git clone -q --bare seed mal.git",
+	)
+
+	shaCmd := exec.CommandContext(ctx, "git", "-C", filepath.Join(work, "seed"), "rev-parse", "HEAD") //nolint:gosec // test uses t.TempDir-owned path
+	out, err := shaCmd.Output()
+	require.NoError(t, err)
+	sha := strings.TrimSpace(string(out))
+
+	malDir := filepath.Join(work, "mal.git")
+	require.NoError(t, os.RemoveAll(filepath.Join(malDir, "refs", "heads")))
+	require.NoError(t, os.WriteFile(filepath.Join(malDir, "packed-refs"),
+		fmt.Appendf(nil, "# pack-refs with: peeled fully-peeled sorted\n%s refs/heads/--upload-pack=/tmp/evil.sh\n", sha), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(malDir, "HEAD"),
+		[]byte("ref: refs/heads/--upload-pack=/tmp/evil.sh\n"), 0600))
+
+	ref, err := getDefaultBranch(ctx, gitutil.NewGitCLI(), "file://"+malDir)
+	require.ErrorContains(t, err, `invalid git ref "--upload-pack=/tmp/evil.sh"`)
+	require.Empty(t, ref)
+}
+
+func TestFetchCommitForBundleUsesOptionTerminator(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on shell script git stub")
+	}
+
+	t.Parallel()
+	ctx := t.Context()
+
+	dir := t.TempDir()
+	capture := filepath.Join(dir, "args")
+	fakeGit := filepath.Join(dir, "git")
+	require.NoError(t, os.WriteFile(fakeGit, fmt.Appendf(nil, `#!/bin/sh
+for arg do
+	printf '%%s\n' "$arg"
+done > %s
+`, strconv.Quote(capture)), 0600))
+	require.NoError(t, os.Chmod(fakeGit, 0700))
+
+	sharedURL := "file:///tmp/shared.git"
+	commit := "--upload-pack=/tmp/evil.sh"
+	err := fetchCommitForBundle(ctx, gitutil.NewGitCLI(gitutil.WithGitBinary(fakeGit)), sharedURL, commit)
+	require.NoError(t, err)
+
+	buf, err := os.ReadFile(capture)
+	require.NoError(t, err)
+	args := strings.Split(strings.TrimSpace(string(buf)), "\n")
+
+	fetchIdx := -1
+	for i, arg := range args {
+		if arg == "fetch" {
+			fetchIdx = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, fetchIdx, "fake git args: %v", args)
+	require.GreaterOrEqual(t, len(args), fetchIdx+4, "fake git args: %v", args)
+	require.Equal(t, sharedURL, args[fetchIdx+1])
+	require.Equal(t, "--", args[fetchIdx+2])
+	require.Equal(t, commit, args[fetchIdx+3])
+}
+
 func TestDetectBundleSHA256(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on git bundle support exercised via shell helpers")

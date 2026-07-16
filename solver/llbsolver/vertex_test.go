@@ -199,6 +199,30 @@ func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
 	require.True(t, br.proxyNetwork)
 }
 
+func TestLoadRejectsNegativeInputIndex(t *testing.T) {
+	for _, tt := range []struct {
+		name           string
+		execInputIndex int64
+		rootInputIndex int64
+	}{
+		{
+			name:           "vertex input",
+			execInputIndex: -1,
+			rootInputIndex: 0,
+		},
+		{
+			name:           "root input",
+			execInputIndex: 0,
+			rootInputIndex: -1,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(t.Context(), inputIndexTestDefinition(t, tt.execInputIndex, tt.rootInputIndex), nil)
+			require.ErrorContains(t, err, "invalid input 0 output index -1")
+		})
+	}
+}
+
 func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Definition {
 	t.Helper()
 	source := &pb.Op{
@@ -227,6 +251,37 @@ func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Defi
 
 	root := &pb.Op{
 		Inputs: []*pb.Input{{Digest: string(execDigest)}},
+	}
+	_, rootBytes := marshalTestOp(t, root)
+
+	return &pb.Definition{Def: [][]byte{sourceBytes, execBytes, rootBytes}}
+}
+
+func inputIndexTestDefinition(t *testing.T, execInputIndex, rootInputIndex int64) *pb.Definition {
+	t.Helper()
+	source := &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{Identifier: "local://context"},
+		},
+	}
+	sourceDigest, sourceBytes := marshalTestOp(t, source)
+
+	exec := &pb.Op{
+		Inputs: []*pb.Input{{Digest: string(sourceDigest), Index: execInputIndex}},
+		Op: &pb.Op_Exec{
+			Exec: &pb.ExecOp{
+				Meta: &pb.Meta{Args: []string{"true"}},
+				Mounts: []*pb.Mount{{
+					Input: 0,
+					Dest:  pb.RootMount,
+				}},
+			},
+		},
+	}
+	execDigest, execBytes := marshalTestOp(t, exec)
+
+	root := &pb.Op{
+		Inputs: []*pb.Input{{Digest: string(execDigest), Index: rootInputIndex}},
 	}
 	_, rootBytes := marshalTestOp(t, root)
 
