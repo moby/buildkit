@@ -130,10 +130,11 @@ func sub(m mount.Mount, subPath string) (mount.Mount, func() error, error) {
 }
 
 // resolveAndPinPath opens src while following reparse points and returns the
-// normalized path of the object represented by that handle. Omitting delete
-// sharing prevents the resolved directory from being renamed or deleted before
-// HCS realizes the mount. Write sharing is still allowed so a writable cache
-// mount can modify contents while the handle is alive.
+// normalized path of the object represented by that handle. GENERIC_READ makes
+// the handle participate in share-access checks without requiring delete access
+// to the source. Omitting delete sharing prevents the resolved directory from
+// being renamed or deleted before HCS realizes the mount. Write sharing is still
+// allowed so a writable cache mount can modify contents while the handle is alive.
 func resolveAndPinPath(src string) (string, func() error, error) {
 	pathPtr, err := windows.UTF16PtrFromString(src)
 	if err != nil {
@@ -141,7 +142,7 @@ func resolveAndPinPath(src string) (string, func() error, error) {
 	}
 	h, err := windows.CreateFile(
 		pathPtr,
-		windows.DELETE,
+		windows.GENERIC_READ,
 		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
 		nil,
 		windows.OPEN_EXISTING,
