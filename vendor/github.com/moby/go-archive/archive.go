@@ -440,7 +440,10 @@ func (ta *tarAppender) addTarFile(srcPath, archivePath string) error {
 // createTarFile extracts a single tar entry into the given root. dstPath is the
 // root-relative path of the entry being extracted, in native (host-separator)
 // form so it can be passed directly to os.Root methods and fsRootPath.
-func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Reader, opts *TarOptions) error {
+//
+// dc caches the last-used parent directory fd to avoid repeated path walks
+// for consecutive entries in the same directory.
+func createTarFile(dc *dirCache, root *os.Root, dstPath string, hdr *tar.Header, reader io.Reader, opts *TarOptions) error {
 	var (
 		Lchown                     = true
 		inUserns, bestEffortXattrs bool
@@ -466,8 +469,12 @@ func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Rea
 		// os.Root.Mkdir only accepts the nine least-significant permission
 		// bits; special bits (setuid, setgid, sticky) are applied afterward
 		// by handleLChmod via root.Chmod.
-		if fi, err := root.Lstat(dstPath); err != nil || !fi.IsDir() {
-			if err := root.Mkdir(dstPath, hdrInfo.Mode()&0o777); err != nil {
+		isDir, err := dc.isExistingDir(root, dstPath)
+		if err != nil {
+			return err
+		}
+		if !isDir {
+			if err := dc.mkdir(root, dstPath, hdrInfo.Mode()&0o777); err != nil {
 				return err
 			}
 		}
@@ -479,7 +486,7 @@ func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Rea
 		// bits; special bits are applied afterward by handleLChmod.
 		// We use sequential file access to avoid depleting the standby list
 		// on Windows (go1.26). On Linux, this equates to a regular os.OpenFile.
-		file, err := root.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|windows_O_FILE_FLAG_SEQUENTIAL_SCAN, hdrInfo.Mode()&0o777)
+		file, err := dc.openFile(root, dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC|windows_O_FILE_FLAG_SEQUENTIAL_SCAN, hdrInfo.Mode()&0o777)
 		if err != nil {
 			return err
 		}
@@ -548,7 +555,7 @@ func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Rea
 		if chownOpts == nil {
 			chownOpts = &ChownOpts{UID: hdr.Uid, GID: hdr.Gid}
 		}
-		if err := root.Lchown(dstPath, chownOpts.UID, chownOpts.GID); err != nil {
+		if err := dc.lchown(root, dstPath, chownOpts.UID, chownOpts.GID); err != nil {
 			var msg string
 			if inUserns && errors.Is(err, syscall.EINVAL) {
 				msg = " (try increasing the number of subordinate IDs in /etc/subuid and /etc/subgid)"
@@ -591,7 +598,7 @@ func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Rea
 
 	// There is no LChmod, so ignore mode for symlink. Also, this
 	// must happen after chown, as that can modify the file mode
-	if err := handleLChmod(root, dstPath, hdr, hdrInfo); err != nil {
+	if err := handleLChmod(dc, root, dstPath, hdr, hdrInfo); err != nil {
 		return err
 	}
 
@@ -601,20 +608,20 @@ func createTarFile(root *os.Root, dstPath string, hdr *tar.Header, reader io.Rea
 	switch hdr.Typeflag {
 	case tar.TypeSymlink:
 		// Apply timestamps to the symlink itself (AT_SYMLINK_NOFOLLOW).
-		if err := lchtimes(root, dstPath, aTime, mTime); err != nil {
+		if err := dc.lchtimes(root, dstPath, aTime, mTime); err != nil {
 			return err
 		}
 	case tar.TypeLink:
 		// Follow the hardlink only when its target is not itself a symlink.
 		fi, err := root.Lstat(filepath.FromSlash(path.Clean(hdr.Linkname)))
 		if err == nil && fi.Mode()&os.ModeSymlink == 0 {
-			if err := root.Chtimes(dstPath, aTime, mTime); err != nil {
+			if err := dc.chtimes(root, dstPath, aTime, mTime); err != nil {
 				return err
 			}
 		}
 	default:
 		// All other file types follow symlinks.
-		if err := root.Chtimes(dstPath, aTime, mTime); err != nil {
+		if err := dc.chtimes(root, dstPath, aTime, mTime); err != nil {
 			return err
 		}
 	}
@@ -881,6 +888,11 @@ func Unpack(decompressedArchive io.Reader, dest string, options *TarOptions) err
 
 	tr := tar.NewReader(decompressedArchive)
 
+	// dc caches the last-opened parent directory fd so that consecutive
+	// entries in the same directory avoid re-walking the full path.
+	var dc dirCache
+	defer dc.close()
+
 	var dirs []unpackedDir
 	whiteoutConverter := getWhiteoutConverter(options.WhiteoutFormat)
 
@@ -981,7 +993,7 @@ loop:
 			}
 		}
 
-		if err := createTarFile(root, dstPath, hdr, tr, options); err != nil {
+		if err := createTarFile(&dc, root, dstPath, hdr, tr, options); err != nil {
 			return err
 		}
 
