@@ -70,6 +70,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
+	bolt "go.etcd.io/bbolt"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -899,7 +900,9 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 	}
 	cacheStoreForDebug = cacheStorage
 
-	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, nil)
+	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, &bolt.Options{
+		FreelistType: bolt.FreelistMapType,
+	})
 	if err != nil {
 		return nil, err
 	}
