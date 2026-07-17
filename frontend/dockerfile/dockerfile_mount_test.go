@@ -29,6 +29,7 @@ var mountTests = integration.TestFuncs(
 	testMountDuplicate,
 	testCacheMountUser,
 	testCacheMountParallel,
+	testCacheMountSourceEscape,
 )
 
 func init() {
@@ -692,4 +693,58 @@ COPY --from=b2 /etc/passwd p2
 		}, nil)
 		require.NoError(t, err)
 	}
+}
+
+func testCacheMountSourceEscape(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+FROM busybox AS init
+RUN --mount=type=cache,id=sourceescape,target=/cache mkdir -p /cache/sel && echo benign > /cache/sel/benign.txt
+
+FROM init AS link
+RUN --mount=type=cache,id=sourceescape,target=/cache rm -rf /cache/sel && ln -s /etc /cache/sel
+
+FROM link AS victim
+RUN --mount=type=cache,id=sourceescape,source=sel,target=/victim cat /victim/hostname
+
+FROM scratch
+COPY --from=victim /etc/hostname /hostname
+`,
+		`# escape=`+"`"+`
+FROM nanoserver AS init
+USER ContainerAdministrator
+RUN --mount=type=cache,id=sourceescape,target=C:\cache cmd /S /C "if not exist C:\cache\sel mkdir C:\cache\sel & echo benign> C:\cache\sel\benign.txt"
+
+FROM init AS link
+RUN --mount=type=cache,id=sourceescape,target=C:\cache cmd /S /C "rmdir C:\cache\sel /S /Q & mklink /J C:\cache\sel C:\Windows"
+
+FROM link AS victim
+RUN --mount=type=cache,id=sourceescape,source=sel,target=C:\victim cmd /S /C "dir C:\victim"
+
+FROM nanoserver AS final
+COPY --from=victim C:\License.txt C:\License.txt
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"no-cache": "",
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err, "build must fail when a cache source= resolves through a link outside the cache root")
 }

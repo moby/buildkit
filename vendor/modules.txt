@@ -1038,7 +1038,7 @@ github.com/theupdateframework/go-tuf/v2/metadata/updater
 # github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20260609091201-0257b3308df4
+# github.com/tonistiigi/fsutil v0.0.0-20260717003753-6d9dc2ebad62
 ## explicit; go 1.25.0
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
