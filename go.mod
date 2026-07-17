@@ -2,6 +2,9 @@ module github.com/moby/buildkit
 
 go 1.26.3
 
+// FIXME(thaJeztah): testing https://github.com/moby/go-archive/pull/45
+replace github.com/moby/go-archive => github.com/ctalledo/go-archive v0.2.1-0.20260723195316-47e37ddcd67b
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
