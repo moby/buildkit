@@ -28,6 +28,12 @@ image built externally is prone to breaking, since working directory may change
 upstream without warning, resulting in a completely different directory
 hierarchy for your build.
 
+> [!NOTE]
+>
+> `WORKDIR` does not perform shell expansion. Paths beginning with `~` or
+> `~username` are treated as literal directory names and are not resolved to a
+> user's home directory.
+
 ## Examples
 
 ❌ Bad: this assumes that `WORKDIR` in the base image is `/`
