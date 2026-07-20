@@ -481,8 +481,10 @@ func newS3Client(ctx context.Context, config Config) (*s3Client, error) {
 	})
 
 	return &s3Client{
-		Client:          client,
-		transferManager: transfermanager.New(client),
+		Client: client,
+		transferManager: transfermanager.New(client, func(options *transfermanager.Options) {
+			options.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		}),
 		bucket:          config.Bucket,
 		prefix:          config.Prefix,
 		blobsPrefix:     config.BlobsPrefix,
