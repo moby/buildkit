@@ -881,6 +881,9 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 	if err != nil {
 		return nil, err
 	}
+	if err := worker.RegisterMetrics(mp, wc); err != nil {
+		return nil, err
+	}
 	frontends := map[string]frontend.Frontend{}
 
 	if cfg.Frontends.Dockerfile.Enabled == nil || *cfg.Frontends.Dockerfile.Enabled {
