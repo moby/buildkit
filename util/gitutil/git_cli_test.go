@@ -69,3 +69,35 @@ func TestGitCLIConfigEnv(t *testing.T) {
 		require.Contains(t, got, "SUDO_UID=1000")
 	})
 }
+
+func TestGitCLIAdvice(t *testing.T) {
+	run := func(t *testing.T) (env, args []string) {
+		cli := NewGitCLI(WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+			env = append([]string(nil), cmd.Env...)
+			args = append([]string(nil), cmd.Args...)
+			return nil
+		}))
+		_, err := cli.Run(context.Background(), "status")
+		require.NoError(t, err)
+		return env, args
+	}
+
+	t.Run("silenced by default", func(t *testing.T) {
+		env, args := run(t)
+		// GIT_ADVICE=0 disables all advice hints on Git >= 2.45.
+		require.Contains(t, env, "GIT_ADVICE=0")
+		// advice.detachedHead=false keeps the detached-HEAD checkout quiet
+		// on older Git releases that predate GIT_ADVICE.
+		require.Contains(t, args, "advice.detachedHead=false")
+	})
+
+	t.Run("restored when GIT_ADVICE is set for debugging", func(t *testing.T) {
+		t.Setenv("GIT_ADVICE", "1")
+		env, args := run(t)
+		require.Contains(t, env, "GIT_ADVICE=1")
+		require.NotContains(t, env, "GIT_ADVICE=0")
+		// The detached-HEAD override is dropped so the operator sees the
+		// full advice output while debugging.
+		require.NotContains(t, args, "advice.detachedHead=false")
+	})
+}
