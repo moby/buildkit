@@ -11,6 +11,7 @@ func TestNewGitIdentifier(t *testing.T) {
 	tests := []struct {
 		url      string
 		expected GitIdentifier
+		str      string
 	}{
 		{
 			url: "ssh://root@subdomain.example.hostname:2222/root/my/really/weird/path/foo.git",
@@ -37,6 +38,7 @@ func TestNewGitIdentifier(t *testing.T) {
 				Remote: "https://github.com/moby/buildkit.git",
 				Ref:    "main",
 			},
+			str: "git://github.com/moby/buildkit.git#main",
 		},
 		{
 			url: "git://github.com/user/repo.git",
@@ -51,6 +53,7 @@ func TestNewGitIdentifier(t *testing.T) {
 				Ref:    "mybranch",
 				Subdir: "mydir/mysubdir",
 			},
+			str: "git://github.com/user/repo.git#mybranch:mydir/mysubdir",
 		},
 		{
 			url: "git://github.com/user/repo.git#:mydir/mysubdir/",
@@ -72,6 +75,7 @@ func TestNewGitIdentifier(t *testing.T) {
 				Ref:    "mybranch",
 				Subdir: "mydir/mysubdir",
 			},
+			str: "git://github.com/user/repo.git#mybranch:mydir/mysubdir",
 		},
 		{
 			url: "git@github.com:user/repo.git",
@@ -132,6 +136,7 @@ func TestNewGitIdentifier(t *testing.T) {
 				Ref:    "main",
 				Subdir: "absolute/path",
 			},
+			str: "git://github.com/user/repo.git#main:absolute/path",
 		},
 		{
 			url: "https://github.com/user/repo.git#main:../",
@@ -171,6 +176,7 @@ func TestNewGitIdentifier(t *testing.T) {
 				Ref:    "main",
 				Subdir: "absolute/path",
 			},
+			str: "git://github.com/user/repo.git#main:absolute/path",
 		},
 	}
 	for _, tt := range tests {
@@ -178,6 +184,9 @@ func TestNewGitIdentifier(t *testing.T) {
 			gi, err := NewGitIdentifier(tt.url)
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, *gi)
+			if tt.str != "" {
+				require.Equal(t, tt.str, gi.String())
+			}
 		})
 	}
 }
