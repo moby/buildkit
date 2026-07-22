@@ -54,36 +54,36 @@ oom_kill 5`
 
 	var expectedPressure = &resourcestypes.Pressure{
 		Some: &resourcestypes.PressureValues{
-			Avg10:  float64Ptr(1.23),
-			Avg60:  float64Ptr(4.56),
-			Avg300: float64Ptr(7.89),
-			Total:  uint64Ptr(3031),
+			Avg10:  new(1.23),
+			Avg60:  new(4.56),
+			Avg300: new(7.89),
+			Total:  new(uint64(3031)),
 		},
 		Full: &resourcestypes.PressureValues{
-			Avg10:  float64Ptr(0.12),
-			Avg60:  float64Ptr(0.34),
-			Avg300: float64Ptr(0.56),
-			Total:  uint64Ptr(9876),
+			Avg10:  new(0.12),
+			Avg60:  new(0.34),
+			Avg300: new(0.56),
+			Total:  new(uint64(9876)),
 		},
 	}
 
 	expectedMemoryStat := &resourcestypes.MemoryStat{
-		SwapBytes:     uint64Ptr(987654),
-		Anon:          uint64Ptr(24576),
-		File:          uint64Ptr(12791808),
-		KernelStack:   uint64Ptr(8192),
-		PageTables:    uint64Ptr(4096),
-		Sock:          uint64Ptr(2048),
-		Shmem:         uint64Ptr(16384),
-		FileMapped:    uint64Ptr(8192),
-		FileDirty:     uint64Ptr(32768),
-		FileWriteback: uint64Ptr(16384),
-		Slab:          uint64Ptr(1503104),
-		Pgscan:        uint64Ptr(100),
-		Pgsteal:       uint64Ptr(99),
-		Pgfault:       uint64Ptr(32711),
-		Pgmajfault:    uint64Ptr(12),
-		Peak:          uint64Ptr(123456),
+		SwapBytes:     new(uint64(987654)),
+		Anon:          new(uint64(24576)),
+		File:          new(uint64(12791808)),
+		KernelStack:   new(uint64(8192)),
+		PageTables:    new(uint64(4096)),
+		Sock:          new(uint64(2048)),
+		Shmem:         new(uint64(16384)),
+		FileMapped:    new(uint64(8192)),
+		FileDirty:     new(uint64(32768)),
+		FileWriteback: new(uint64(16384)),
+		Slab:          new(uint64(1503104)),
+		Pgscan:        new(uint64(100)),
+		Pgsteal:       new(uint64(99)),
+		Pgfault:       new(uint64(32711)),
+		Pgmajfault:    new(uint64(12)),
+		Peak:          new(uint64(123456)),
 		LowEvents:     4,
 		HighEvents:    3,
 		MaxEvents:     2,
@@ -92,8 +92,4 @@ oom_kill 5`
 		Pressure:      expectedPressure,
 	}
 	assert.Equal(t, expectedMemoryStat, memoryStat)
-}
-
-func float64Ptr(v float64) *float64 {
-	return &v
 }
