@@ -92,6 +92,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExporterTargetExists,
 	testMultipleExporters,
 	testSessionExporter,
+	testSessionExporterFinalizeExport,
 	testTarExporterSymlink,
 	testTarExporterWithSocket,
 	testTarExporterWithSocketCopy,

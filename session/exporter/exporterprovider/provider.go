@@ -11,14 +11,37 @@ import (
 
 type Callback func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error)
 
-func New(cb Callback) *Exporter {
-	return &Exporter{
-		cb: cb,
+type FinalizeCallback func(ctx context.Context, exporterResponse map[string]string) error
+
+type Option func(*Exporter)
+
+func WithFinalizeCallback(cb FinalizeCallback) Option {
+	return func(e *Exporter) {
+		e.finalize = cb
 	}
 }
 
+func New(cb Callback, opts ...Option) *Exporter {
+	e := &Exporter{cb: cb}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
 type Exporter struct {
-	cb Callback
+	cb       Callback
+	finalize FinalizeCallback
+}
+
+func (e *Exporter) FinalizeExport(ctx context.Context, in *exporter.FinalizeExportRequest) (*exporter.FinalizeExportResponse, error) {
+	if e.finalize == nil {
+		return nil, status.Errorf(codes.Unimplemented, "no exporter finalize callback registered")
+	}
+	if err := e.finalize(ctx, in.ExporterResponse); err != nil {
+		return nil, err
+	}
+	return &exporter.FinalizeExportResponse{}, nil
 }
 
 func (e *Exporter) Register(server *grpc.Server) {
