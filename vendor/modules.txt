@@ -810,8 +810,8 @@ github.com/moby/locker
 ## explicit; go 1.19
 github.com/moby/patternmatcher
 github.com/moby/patternmatcher/ignorefile
-# github.com/moby/policy-helpers v0.0.0-20260612073044-d5411a945cfc
-## explicit; go 1.25.0
+# github.com/moby/policy-helpers v0.0.0-20260722051018-856be88baec4
+## explicit; go 1.25.8
 github.com/moby/policy-helpers
 github.com/moby/policy-helpers/image
 github.com/moby/policy-helpers/roots
