@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"testing"
@@ -24,6 +27,7 @@ type MinioOpts struct {
 	Region          string
 	AccessKeyID     string
 	SecretAccessKey string
+	RequestVerifier func(*http.Request) error
 }
 
 func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (address string, bucket string, cl func() error, err error) {
@@ -99,7 +103,35 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	}
 	deferF.Append(traceStop)
 
+	if opts.RequestVerifier != nil {
+		proxyAddr, proxyStop, err := newMinioProxy(address, opts.RequestVerifier)
+		if err != nil {
+			return "", "", nil, err
+		}
+		deferF.Append(proxyStop)
+		address = proxyAddr
+	}
+
 	return
+}
+
+func newMinioProxy(target string, verify func(*http.Request) error) (string, func() error, error) {
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", nil, err
+	}
+	proxy := httputil.NewSingleHostReverseProxy(u)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := verify(r); err != nil {
+			http.Error(w, err.Error(), http.StatusNotImplemented)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	return server.URL, func() error {
+		server.Close()
+		return nil
+	}, nil
 }
 
 func waitMinio(ctx context.Context, address string, d time.Duration) error {

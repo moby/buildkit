@@ -4,10 +4,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -366,6 +369,24 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 		SecretAccessKey: "minioadmin",
 	}
 
+	var putRequests atomic.Int64
+	opts.RequestVerifier = func(r *http.Request) error {
+		if r.Method != http.MethodPut {
+			return nil
+		}
+		putRequests.Add(1)
+		if got := r.Header.Get("X-Amz-Sdk-Checksum-Algorithm"); got != "" {
+			return errors.Errorf("unexpected checksum algorithm header %q", got)
+		}
+		if got := r.Header.Get("X-Amz-Trailer"); got != "" {
+			return errors.Errorf("unexpected checksum trailer header %q", got)
+		}
+		if got := r.Header.Get("Content-Encoding"); strings.Contains(strings.ToLower(got), "aws-chunked") {
+			return errors.Errorf("unexpected aws-chunked content encoding %q", got)
+		}
+		return nil
+	}
+
 	s3Addr, s3Bucket, cleanup, err := helpers.NewMinioServer(t, sb, opts)
 	require.NoError(t, err)
 	defer cleanup()
@@ -393,6 +414,7 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+	require.NotZero(t, putRequests.Load())
 }
 
 func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
