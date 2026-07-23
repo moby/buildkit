@@ -150,6 +150,16 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 		"http_proxy", "https_proxy", "no_proxy", "all_proxy",
 	}
 
+	// Silence Git's advice hints (for example the "detached HEAD" advice
+	// printed while checking out a git context) so builds are less noisy.
+	// An operator debugging git behavior can restore the hints by setting
+	// GIT_ADVICE explicitly in buildkitd's environment: when set it is
+	// forwarded as-is instead of being forced off.
+	gitAdvice, adviceOverridden := os.LookupEnv("GIT_ADVICE")
+	if !adviceOverridden {
+		gitAdvice = "0"
+	}
+
 	for {
 		var cmd *exec.Cmd
 		if cli.exec == nil {
@@ -165,6 +175,12 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 
 		// Block sneaky repositories from using repos from the filesystem as submodules.
 		cmd.Args = append(cmd.Args, "-c", "protocol.file.allow=user")
+		if !adviceOverridden {
+			// GIT_ADVICE (below) covers this on Git >= 2.45; older Git
+			// releases predate it, so disable the specific detached-HEAD
+			// advice here to keep checkouts quiet on those versions too.
+			cmd.Args = append(cmd.Args, "-c", "advice.detachedHead=false")
+		}
 		if cli.workTree != "" {
 			cmd.Args = append(cmd.Args, "--work-tree", cli.workTree)
 		}
@@ -200,6 +216,7 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 			"PATH=" + os.Getenv("PATH"),
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_SSH_COMMAND=" + getGitSSHCommand(cli.sshKnownHosts),
+			"GIT_ADVICE=" + gitAdvice, // Silence advice hints unless overridden for debugging.
 			//	"GIT_TRACE=1",
 			"LC_ALL=C", // Ensure consistent output.
 		}
