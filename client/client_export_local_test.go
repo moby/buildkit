@@ -32,7 +32,10 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func testExportLocalForcePlatformSplit(t *testing.T, sb integration.Sandbox) {
@@ -664,6 +667,8 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 
 	outW := bytes.NewBuffer(nil)
 	exporterCalled := false
+	// The provider has no finalization callback; FinalizeExport returning
+	// Unimplemented must not fail the solve.
 	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error) {
 		require.Len(t, refs, 1)
 		g := c.GatewayClientForBuild(buildID)
@@ -728,6 +733,65 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 2, len(mfst.Layers))
 	for _, layer := range mfst.Layers {
 		require.Contains(t, layer.MediaType, ocispecs.MediaTypeImageLayerZstd)
+	}
+}
+
+func testSessionExporterFinalizeExport(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image(integration.UnixOrWindows("busybox:latest", "nanoserver:latest"))
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	build := func(name string, p session.Attachable) error {
+		_, err := c.Build(sb.Context(), SolveOpt{
+			EnableSessionExporter: true,
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": "session-exporter-finalize-" + name,
+					},
+				},
+			},
+			Session: []session.Attachable{p},
+			Ref:     identity.NewID(),
+		}, "", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			return c.Solve(ctx, gateway.SolveRequest{
+				Definition: def.ToPB(),
+			})
+		}, nil)
+		return err
+	}
+
+	callbackErr := errors.New("finalize callback failed")
+	for _, tc := range []struct {
+		name        string
+		callbackErr error
+		wantErr     bool
+	}{
+		{name: "success"},
+		{name: "unavailable", callbackErr: status.Error(codes.Unavailable, "finalize callback unavailable")},
+		{name: "error", callbackErr: callbackErr, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			p := exporterprovider.New(nil, exporterprovider.WithFinalizeCallback(func(_ context.Context, exporterResponse map[string]string) error {
+				called = true
+				assert.NotEmpty(t, exporterResponse[exptypes.ExporterImageDescriptorKey])
+				return tc.callbackErr
+			}))
+
+			err := build(tc.name, p)
+			if tc.wantErr {
+				require.ErrorContains(t, err, tc.callbackErr.Error())
+			} else {
+				require.NoError(t, err)
+			}
+			assert.True(t, called)
+		})
 	}
 }
 
