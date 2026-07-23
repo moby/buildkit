@@ -2,6 +2,9 @@ module github.com/moby/buildkit
 
 go 1.26.3
 
+// FIXME(thaJeztah): testing https://github.com/moby/go-archive/pull/49
+replace github.com/moby/go-archive => github.com/thaJeztah/go-archive v0.0.0-20260723175701-ceb54da816b8
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
@@ -49,7 +52,7 @@ require (
 	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/klauspost/compress v1.19.1
 	github.com/moby/docker-image-spec v1.3.1
-	github.com/moby/go-archive v0.2.0
+	github.com/moby/go-archive v0.2.1-0.20260723140524-5b4e0436acc8 // main / v0.3.0-dev
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/moby/policy-helpers v0.0.0-20260722051018-856be88baec4

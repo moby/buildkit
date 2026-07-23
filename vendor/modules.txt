@@ -795,8 +795,8 @@ github.com/kylelemons/godebug/pretty
 # github.com/moby/docker-image-spec v1.3.1
 ## explicit; go 1.18
 github.com/moby/docker-image-spec/specs-go/v1
-# github.com/moby/go-archive v0.2.0
-## explicit; go 1.23.0
+# github.com/moby/go-archive v0.2.1-0.20260723140524-5b4e0436acc8 => github.com/thaJeztah/go-archive v0.0.0-20260723175701-ceb54da816b8
+## explicit; go 1.25
 github.com/moby/go-archive
 github.com/moby/go-archive/chrootarchive
 github.com/moby/go-archive/compression
@@ -1480,3 +1480,4 @@ tags.cncf.io/container-device-interface/pkg/parser
 # tags.cncf.io/container-device-interface/specs-go v1.1.0
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
+# github.com/moby/go-archive => github.com/thaJeztah/go-archive v0.0.0-20260723175701-ceb54da816b8
