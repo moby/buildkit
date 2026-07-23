@@ -84,6 +84,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}
 	}
 
+	// An explicit --keep-git-dir flag identifies the source as a git URL
+	knownGit := cfg.keepGitDir != nil
+
 	if cfg.checksum != "" {
 		if !cfg.isAddCommand {
 			return errors.New("checksum can't be specified for COPY")
@@ -91,7 +94,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		if len(cfg.params.SourcePaths) != 1 {
 			return errors.New("checksum can't be specified for multiple sources")
 		}
-		if !isHTTPSource(cfg.params.SourcePaths[0]) && !isGitSource(cfg.params.SourcePaths[0]) {
+		if src := cfg.params.SourcePaths[0]; !isHTTPSource(src, knownGit) && !isGitSource(src, knownGit) {
 			return errors.New("checksum requires HTTP(S) or Git sources")
 		}
 	}
@@ -126,7 +129,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
-		gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src)
+		gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src, knownGit)
 		if gitRefErr != nil && isGit {
 			return gitRefErr
 		}
@@ -181,7 +184,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			} else {
 				a = a.Copy(st, "/", dest, opts...)
 			}
-		} else if isHTTPSource(src) {
+		} else if isHTTPSource(src, knownGit) {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
@@ -351,16 +354,16 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state, d.epoch)
 }
 
-func isHTTPSource(src string) bool {
+func isHTTPSource(src string, knownGit bool) bool {
 	if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
 		return false
 	}
-	return !isGitSource(src)
+	return !isGitSource(src, knownGit)
 }
 
-func isGitSource(src string) bool {
+func isGitSource(src string, knownGit bool) bool {
 	// https://github.com/ORG/REPO.git is a git source, not an http source
-	if gitRef, isGit, _ := dfgitutil.ParseGitRef(src); gitRef != nil && isGit {
+	if gitRef, isGit, _ := dfgitutil.ParseGitRef(src, knownGit); gitRef != nil && isGit {
 		return true
 	}
 	return false

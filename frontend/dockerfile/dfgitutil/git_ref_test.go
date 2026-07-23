@@ -10,6 +10,7 @@ import (
 func TestParseGitRef(t *testing.T) {
 	cases := []struct {
 		ref      string
+		knownGit bool
 		expected *GitRef
 		err      string
 	}{
@@ -268,10 +269,60 @@ func TestParseGitRef(t *testing.T) {
 			ref: "https://github.com/moby/buildkit.git?invalid=123",
 			err: "unexpected query \"invalid\"",
 		},
+		{
+			// HTTP(S) URLs do not need the ".git" suffix when the ref is known to be a git URL,
+			// e.g., for git forges that do not support the suffix, such as sourcehut.
+			ref:      "https://git.sr.ht/~foo/bar",
+			knownGit: true,
+			expected: &GitRef{
+				Remote:    "https://git.sr.ht/~foo/bar",
+				ShortName: "bar",
+			},
+		},
+		{
+			ref:      "https://git.sr.ht/~foo/bar#main",
+			knownGit: true,
+			expected: &GitRef{
+				Remote:    "https://git.sr.ht/~foo/bar",
+				ShortName: "bar",
+				Ref:       "main",
+			},
+		},
+		{
+			ref:      "https://github.com/moby/buildkit",
+			knownGit: true,
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit",
+				ShortName: "buildkit",
+			},
+		},
+		{
+			ref:      "https://github.com/moby/buildkit.git",
+			knownGit: true,
+			expected: &GitRef{
+				Remote:    "https://github.com/moby/buildkit.git",
+				ShortName: "buildkit",
+			},
+		},
+		{
+			ref:      "http://example.com/foo?tag=v1.0.0",
+			knownGit: true,
+			expected: &GitRef{
+				Remote:         "http://example.com/foo",
+				ShortName:      "foo",
+				Ref:            "refs/tags/v1.0.0",
+				UnencryptedTCP: true,
+			},
+		},
+		{
+			ref:      "./.git",
+			knownGit: true,
+			expected: nil,
+		},
 	}
 	for i, tt := range cases {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
-			got, _, err := ParseGitRef(tt.ref)
+			got, _, err := ParseGitRef(tt.ref, tt.knownGit)
 			if tt.expected == nil {
 				require.Nil(t, got)
 				require.Error(t, err)

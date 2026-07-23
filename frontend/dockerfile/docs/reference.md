@@ -1601,6 +1601,17 @@ FROM alpine
 ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
 ```
 
+Passing the `--keep-git-dir` flag explicitly (whether `true` or `false`) also
+marks `<src>` as the URL of a Git repository, even when the URL doesn't end
+with the `.git` suffix. This is useful for Git forges such as Azure DevOps
+or SourceHut that don't support the `.git` suffix in clone URLs.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM alpine
+ADD --keep-git-dir=false https://git.sr.ht/~foo/bar#main /bar
+```
+
 ### ADD --checksum
 
 ```dockerfile
