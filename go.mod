@@ -49,7 +49,7 @@ require (
 	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/klauspost/compress v1.19.1
 	github.com/moby/docker-image-spec v1.3.1
-	github.com/moby/go-archive v0.2.0
+	github.com/moby/go-archive v0.2.1
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/moby/policy-helpers v0.0.0-20260722051018-856be88baec4
