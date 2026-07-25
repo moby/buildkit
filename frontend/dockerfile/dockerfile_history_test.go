@@ -178,7 +178,7 @@ RUN dir C:\Windows
 	cmd := sb.Cmd(args + " --output type=image,push=true,name=" + target)
 	require.NoError(t, cmd.Run())
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)

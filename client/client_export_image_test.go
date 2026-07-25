@@ -151,7 +151,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	}, "", makeFrontend([]string{"linux/amd64", "linux/arm64"}), nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	require.Empty(t, img.Layers)
 	require.True(t, platforms.Only(platforms.DefaultSpec()).Match(img.Img.Platform))
 
-	desc, provider, err = contentutil.ProviderFromRef(targetMulti)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), targetMulti)
 	require.NoError(t, err)
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -1744,10 +1744,10 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	_, _, err = contentutil.ProviderFromRef(name + ":latest")
+	_, _, err = contentutil.ProviderFromRef(sb.Context(), name+":latest")
 	require.Error(t, err)
 
-	desc, _, err := contentutil.ProviderFromRef(name + "@" + resp.ExporterResponse[exptypes.ExporterImageDigestKey])
+	desc, _, err := contentutil.ProviderFromRef(sb.Context(), name+"@"+resp.ExporterResponse[exptypes.ExporterImageDigestKey])
 	require.NoError(t, err)
 
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())

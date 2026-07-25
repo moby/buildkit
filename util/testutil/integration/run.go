@@ -236,7 +236,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						ctx, cancel := context.WithCancelCause(ctx)
 						defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-						sb, closer, err := newSandbox(ctx, t, br, getMirror(), mv)
+						sb, closer, err := newSandbox(ctx, t, br, getMirror(ctx), mv)
 						require.NoError(t, err)
 						t.Cleanup(func() {
 							if closer != nil {
@@ -268,7 +268,7 @@ func getFunctionName(i any) string {
 var localImageCache map[string]map[string]struct{}
 var localImageCacheMu sync.Mutex
 
-func copyImagesLocal(t *testing.T, host string, images map[string]string) error {
+func copyImagesLocal(ctx context.Context, t *testing.T, host string, images map[string]string) error {
 	localImageCacheMu.Lock()
 	defer localImageCacheMu.Unlock()
 	for to, from := range images {
@@ -284,7 +284,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		localImageCache[host][to] = struct{}{}
 
 		// already exists check
-		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(t.Context(), host+"/"+to); err == nil {
+		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(ctx, host+"/"+to); err == nil {
 			continue
 		}
 
@@ -303,7 +303,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		} else {
 			dockerConfig := config.LoadDefaultConfigFile(os.Stderr)
 
-			desc, provider, err = contentutil.ProviderFromRef(from, contentutil.WithCredentials(
+			desc, provider, err = contentutil.ProviderFromRef(ctx, from, contentutil.WithCredentials(
 				func(host string) (string, string, error) {
 					ac, err := dockerConfig.GetAuthConfig(host)
 					if err != nil {
@@ -316,16 +316,16 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 			}
 		}
 
-		desc, err = resolveDefaultPlatform(t.Context(), provider, desc)
+		desc, err = resolveDefaultPlatform(ctx, provider, desc)
 		if err != nil {
 			return err
 		}
 
-		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
+		ingester, err := contentutil.IngesterFromRef(ctx, host+"/"+to)
 		if err != nil {
 			return err
 		}
-		if err := contentutil.CopyChain(t.Context(), ingester, provider, desc); err != nil {
+		if err := contentutil.CopyChain(ctx, ingester, provider, desc); err != nil {
 			return err
 		}
 		t.Logf("copied %s to local mirror %s", from, host+"/"+to)
@@ -402,14 +402,14 @@ func WriteConfig(updaters []ConfigUpdater) (_ string, _ func() error, err error)
 	return filepath.Join(tmpdir, buildkitdConfigFile), deferF.F(), nil
 }
 
-func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func() string {
+func lazyMirrorRunnerFunc(t *testing.T, images map[string]string) func(context.Context) string {
 	var once sync.Once
 	var mirror string
-	return func() string {
+	return func(ctx context.Context) string {
 		once.Do(func() {
 			m, err := RunMirror()
 			require.NoError(t, err)
-			require.NoError(t, m.AddImages(t, images))
+			require.NoError(t, m.AddImages(ctx, t, images))
 			t.Cleanup(func() { _ = m.Close() })
 			mirror = m.Host
 		})
@@ -444,7 +444,7 @@ func (m *Mirror) Close() error {
 	return nil
 }
 
-func (m *Mirror) AddImages(t *testing.T, images map[string]string) (err error) {
+func (m *Mirror) AddImages(ctx context.Context, t *testing.T, images map[string]string) (err error) {
 	lock, err := m.lock()
 	if err != nil {
 		return err
@@ -455,7 +455,7 @@ func (m *Mirror) AddImages(t *testing.T, images map[string]string) (err error) {
 		}
 	}()
 
-	if err := copyImagesLocal(t, m.Host, images); err != nil {
+	if err := copyImagesLocal(ctx, t, m.Host, images); err != nil {
 		return err
 	}
 	return nil

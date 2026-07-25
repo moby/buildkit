@@ -38,16 +38,16 @@ func RunMirror() func() error {
 	return func() error { return mirror.Close() }
 }
 
-func mirrorBusybox(t *testing.T) string {
+func mirrorBusybox(ctx context.Context, t *testing.T) string {
 	mirrorMu.Lock()
 	defer mirrorMu.Unlock()
 	require.NotNil(t, mirror, "mirror must be initialized")
-	require.NoError(t, mirror.AddImages(t, integration.OfficialImages("busybox:latest")))
+	require.NoError(t, mirror.AddImages(ctx, t, integration.OfficialImages("busybox:latest")))
 	return mirror.Host + "/library/busybox:latest"
 }
 
 func NewBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker, sm *session.Manager) cache.ImmutableRef {
-	img, err := containerimage.NewImageIdentifier(mirrorBusybox(t))
+	img, err := containerimage.NewImageIdentifier(mirrorBusybox(ctx, t))
 	require.NoError(t, err)
 	src, err := w.SourceManager.Resolve(ctx, img, sm, nil)
 	require.NoError(t, err)

@@ -335,7 +335,7 @@ RUN echo foo>> C:\test
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -381,7 +381,7 @@ RUN echo foo>> C:\test
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(targetDerived)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), targetDerived)
 	require.NoError(t, err)
 	imgDerived, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
