@@ -350,7 +350,7 @@ func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 	// digest; the repository exists implicitly once any blob is uploaded
 	// under its name.
 	bundleRepoRef := registry + "/foo/bundle@" + bundleDgst.String()
-	ingester, err := contentutil.IngesterFromRef(bundleRepoRef)
+	ingester, err := contentutil.IngesterFromRef(sb.Context(), bundleRepoRef)
 	require.NoError(t, err)
 	err = content.WriteBlob(ctx, ingester, "bundle-"+bundleDgst.String(), bytes.NewReader(bundleBytes),
 		ocispecs.Descriptor{Digest: bundleDgst, Size: int64(len(bundleBytes))})

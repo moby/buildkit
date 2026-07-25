@@ -1067,7 +1067,7 @@ func timeMustParse(t *testing.T, layout, value string) time.Time {
 
 //nolint:revive // context-as-argument: context.Context should be the first parameter of a function
 func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descriptor, ocispecs.Manifest, ocispecs.Image) {
-	desc, provider, err := contentutil.ProviderFromRef(ref)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, ref)
 	require.NoError(t, err)
 	dt, err := content.ReadBlob(ctx, provider, desc)
 	require.NoError(t, err)
