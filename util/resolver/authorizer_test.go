@@ -3,15 +3,25 @@ package resolver
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	"github.com/moby/buildkit/session"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestParseScopes(t *testing.T) {
 	for _, tc := range []struct {
@@ -117,4 +127,41 @@ func TestBearerAuthFallsBackToAnonymousTokenWithoutSession(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("expected anonymous token request")
 	}
+}
+
+func TestFetchTokenRetriesOnTransientNetworkError(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+			"token":      "retried-token",
+			"expires_in": 60,
+		}))
+	}))
+	defer tokenServer.Close()
+
+	client := tokenServer.Client()
+	realTransport := client.Transport
+
+	var attempts atomic.Int32
+	client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if attempts.Add(1) == 1 {
+			// simulate the transient connection reset described in
+			// https://github.com/moby/buildkit/issues/6981
+			return nil, &net.OpError{Op: "read", Err: syscall.ECONNRESET}
+		}
+		return realTransport.RoundTrip(req)
+	})
+
+	ah := newAuthFetcher("registry.example", client, auth.BearerAuth, nil, auth.TokenOptions{
+		Realm:   tokenServer.URL,
+		Service: "registry.example",
+	})
+
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+
+	token, err := ah.authorize(t.Context(), sm, session.NewGroup(""))
+	require.NoError(t, err)
+	require.Equal(t, "Bearer retried-token", token)
+	require.EqualValues(t, 2, attempts.Load())
 }

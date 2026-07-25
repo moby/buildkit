@@ -28,7 +28,7 @@ func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 				case <-ctx.Done():
 					return nil, err
 				default:
-					if !retryError(err) {
+					if !IsErrorRetriable(err) {
 						return nil, err
 					}
 				}
@@ -51,7 +51,9 @@ func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	}
 }
 
-func retryError(err error) bool {
+// IsErrorRetriable reports whether err is a transient error (e.g. connection
+// reset, EOF, timeout, or a 5xx response) that is worth retrying.
+func IsErrorRetriable(err error) bool {
 	// Retry on 5xx errors
 	var errUnexpectedStatus remoteserrors.ErrUnexpectedStatus
 	if errors.As(err, &errUnexpectedStatus) &&

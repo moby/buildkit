@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -330,6 +331,30 @@ func (ah *authFetcher) doBearerAuth(ctx context.Context, sm *session.Manager, g 
 	return res.token, nil
 }
 
+// retryTokenFetch retries f on transient network errors (e.g. connection
+// reset, EOF, timeouts, 5xx), the same errors that are already retried for
+// blob/manifest fetches by retryhandler, since a token exchange is just as
+// prone to hitting a flaky registry connection.
+func retryTokenFetch[T any](ctx context.Context, f func() (T, error)) (T, error) {
+	backoff := time.Second
+	for {
+		v, err := f()
+		if err == nil {
+			return v, nil
+		}
+		select {
+		case <-ctx.Done():
+			return v, err
+		default:
+		}
+		if !retryhandler.IsErrorRetriable(err) || backoff >= retryhandler.MaxRetryBackoff {
+			return v, err
+		}
+		time.Sleep(backoff)
+		backoff *= 2
+	}
+}
+
 func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g session.Group, to auth.TokenOptions) (r *authResult, err error) {
 	var issuedAt time.Time
 	var expires int
@@ -385,7 +410,9 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		}()
 		// try GET first because Docker Hub does not support POST
 		// switch once support has landed
-		resp, err := auth.FetchToken(ctx, ah.client, nil, to)
+		resp, err := retryTokenFetch(ctx, func() (*auth.FetchTokenResponse, error) {
+			return auth.FetchToken(ctx, ah.client, nil, to)
+		})
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -393,7 +420,9 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
-					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
+					resp, err := retryTokenFetch(ctx, func() (*auth.OAuthTokenResponse, error) {
+						return auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
+					})
 					if err != nil {
 						return nil, err
 					}
@@ -419,7 +448,9 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		return nil, nil
 	}
 	// do request anonymously
-	resp, err := auth.FetchToken(ctx, ah.client, hdr, to)
+	resp, err := retryTokenFetch(ctx, func() (*auth.FetchTokenResponse, error) {
+		return auth.FetchToken(ctx, ah.client, hdr, to)
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
