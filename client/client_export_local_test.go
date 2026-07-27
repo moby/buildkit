@@ -710,6 +710,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSessionExporterFinalizeExport(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
