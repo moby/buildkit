@@ -14,6 +14,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	"github.com/moby/buildkit/session"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,9 +131,13 @@ func TestBearerAuthFallsBackToAnonymousTokenWithoutSession(t *testing.T) {
 }
 
 func TestFetchTokenRetriesOnTransientNetworkError(t *testing.T) {
+	old := tokenFetchInitialBackoff
+	tokenFetchInitialBackoff = time.Millisecond
+	defer func() { tokenFetchInitialBackoff = old }()
+
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
 			"token":      "retried-token",
 			"expires_in": 60,
 		}))

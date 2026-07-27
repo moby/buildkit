@@ -331,12 +331,17 @@ func (ah *authFetcher) doBearerAuth(ctx context.Context, sm *session.Manager, g 
 	return res.token, nil
 }
 
+// tokenFetchInitialBackoff is the initial backoff before retrying a failed
+// token fetch. It is a variable so tests can override it to avoid waiting
+// out the real backoff schedule.
+var tokenFetchInitialBackoff = time.Second
+
 // retryTokenFetch retries f on transient network errors (e.g. connection
 // reset, EOF, timeouts, 5xx), the same errors that are already retried for
 // blob/manifest fetches by retryhandler, since a token exchange is just as
 // prone to hitting a flaky registry connection.
 func retryTokenFetch[T any](ctx context.Context, f func() (T, error)) (T, error) {
-	backoff := time.Second
+	backoff := tokenFetchInitialBackoff
 	for {
 		v, err := f()
 		if err == nil {
@@ -350,7 +355,11 @@ func retryTokenFetch[T any](ctx context.Context, f func() (T, error)) (T, error)
 		if !retryhandler.IsErrorRetriable(err) || backoff >= retryhandler.MaxRetryBackoff {
 			return v, err
 		}
-		time.Sleep(backoff)
+		select {
+		case <-ctx.Done():
+			return v, err
+		case <-time.After(backoff):
+		}
 		backoff *= 2
 	}
 }
