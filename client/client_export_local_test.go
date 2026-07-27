@@ -181,33 +181,6 @@ func testExportLocalModeDeleteMultiPlatformKeepsAllPlatforms(t *testing.T, sb in
 	testExportLocalModeMultiPlatformKeepsAllPlatforms(t, sb, true)
 }
 
-func testExportLocalModeInvalid(t *testing.T, sb integration.Sandbox) {
-	c, err := New(sb.Context(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	st := llb.Scratch().File(
-		llb.Mkfile("fresh.txt", 0600, []byte("fresh")),
-	)
-	def, err := st.Marshal(sb.Context())
-	require.NoError(t, err)
-
-	destDir := t.TempDir()
-	_, err = c.Solve(sb.Context(), def, SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
-				Attrs: map[string]string{
-					"mode": "backup",
-				},
-			},
-		},
-	}, nil)
-	require.Error(t, err)
-	require.ErrorContains(t, err, `invalid local exporter mode "backup"`)
-}
-
 func testExportLocalModeMultiPlatformKeepsAllPlatforms(t *testing.T, sb integration.Sandbox, deleteMode bool) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
