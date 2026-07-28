@@ -7,9 +7,12 @@ import (
 	"container/list"
 	"context"
 	"crypto/x509"
+	"encoding/base64"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +24,120 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestProxyHandlerUsesUpstreamHTTPProxy(t *testing.T) {
+	requestCh := make(chan *http.Request, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCh <- r.Clone(r.Context())
+		_, _ = w.Write([]byte("from upstream proxy"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	handler := newTestProxyHandler(t, nil)
+	transport := handler.transport.(*http.Transport)
+	proxyURL, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	transport.Proxy = http.ProxyURL(proxyURL)
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://destination.invalid/file", nil)
+
+	handler.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "from upstream proxy", resp.Body.String())
+	proxied := <-requestCh
+	require.Equal(t, "destination.invalid", proxied.Host)
+	require.Equal(t, "http://destination.invalid/file", proxied.URL.String())
+}
+
+func TestProxyHandlerUsesUpstreamProxyForHTTPS(t *testing.T) {
+	type connectRequest struct {
+		host string
+		auth string
+	}
+
+	originRequestCh := make(chan *http.Request, 1)
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originRequestCh <- r.Clone(r.Context())
+		w.Header().Set("Connection", "close")
+		_, _ = w.Write([]byte("from TLS origin"))
+	}))
+	t.Cleanup(origin.Close)
+
+	connectCh := make(chan connectRequest, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
+			return
+		}
+		connectCh <- connectRequest{
+			host: r.Host,
+			auth: r.Header.Get("Proxy-Authorization"),
+		}
+		originConn, err := net.Dial("tcp", origin.Listener.Addr().String())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		clientConn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			_ = originConn.Close()
+			return
+		}
+		_, _ = io.WriteString(clientConn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		go func() {
+			_, _ = io.Copy(originConn, clientConn)
+			_ = originConn.Close()
+		}()
+		_, _ = io.Copy(clientConn, originConn)
+		_ = clientConn.Close()
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, originPort, err := net.SplitHostPort(origin.Listener.Addr().String())
+	require.NoError(t, err)
+	targetURL := "https://example.com:" + originPort + "/file"
+	proxyURL := strings.Replace(upstream.URL, "http://", "http://proxy-user:proxy-pass@", 1)
+	handler := newTestProxyHandler(t, nil)
+	transport := handler.transport.(*http.Transport)
+	parsedProxyURL, err := url.Parse(proxyURL)
+	require.NoError(t, err)
+	transport.Proxy = http.ProxyURL(parsedProxyURL)
+	pool := x509.NewCertPool()
+	pool.AddCert(origin.Certificate())
+	transport.TLSClientConfig.RootCAs = pool
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, targetURL, nil)
+	require.NoError(t, err)
+	req.Close = true
+	req.Header.Set("Proxy-Authorization", "Basic client-supplied")
+
+	resp, err := handler.roundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "from TLS origin", string(body))
+
+	connect := <-connectCh
+	require.Equal(t, "example.com:"+originPort, connect.host)
+	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("proxy-user:proxy-pass"))
+	require.Equal(t, expectedAuth, connect.auth)
+	originRequest := <-originRequestCh
+	require.Equal(t, http.MethodGet, originRequest.Method)
+	require.Equal(t, "/file", originRequest.URL.Path)
+	require.Empty(t, originRequest.Header.Get("Proxy-Authorization"))
+}
+
+func TestProxyNamespaceEnvIncludesAllProxy(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	ns := proxyNS{ln: ln}
+	proxy := "http://" + ln.Addr().String()
+	require.Contains(t, ns.ProxyEnv(), "ALL_PROXY="+proxy)
+	require.Contains(t, ns.ProxyEnv(), "all_proxy="+proxy)
+}
 
 func TestProxyHandlerCapturesGetMaterial(t *testing.T) {
 	methodCh := make(chan string, 1)
@@ -86,8 +203,9 @@ func TestProxyHandlerRoundTripIgnoresClientContextCancel(t *testing.T) {
 	pool := x509.NewCertPool()
 	pool.AddCert(upstream.Certificate())
 	handler := newTestProxyHandler(t, nil)
-	handler.transport.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
-	handler.transport.TLSClientConfig.RootCAs = pool
+	transport := handler.transport.(*http.Transport)
+	transport.TLSClientConfig = upstream.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	transport.TLSClientConfig.RootCAs = pool
 
 	ctx, cancel := context.WithCancelCause(t.Context())
 	cancel(context.Canceled)

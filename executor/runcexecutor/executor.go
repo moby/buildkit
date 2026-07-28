@@ -213,7 +213,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		return nil, err
 	}
 	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
-		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+		meta.Env = executor.ReplaceEnv(meta.Env, proxyNS.ProxyEnv())
 	}
 	doReleaseNetwork := true
 	defer func() {
