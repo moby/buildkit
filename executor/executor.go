@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/containerd/v2/core/mount"
@@ -32,6 +33,43 @@ type Meta struct {
 	Proxy          *network.ProxyConfig
 
 	RemoveMountStubsRecursive bool
+}
+
+// ReplaceEnv removes entries whose names are present in replacement, then
+// appends replacement in order.
+func ReplaceEnv(env, replacement []string) []string {
+	names := make(map[string]struct{}, len(replacement))
+	for _, entry := range replacement {
+		name, _, _ := strings.Cut(entry, "=")
+		names[name] = struct{}{}
+	}
+	out := make([]string, 0, len(env)+len(replacement))
+	for _, entry := range env {
+		name, _, _ := strings.Cut(entry, "=")
+		if _, ok := names[name]; !ok {
+			out = append(out, entry)
+		}
+	}
+	return append(out, replacement...)
+}
+
+// FilterProxyEnv returns the HTTP proxy environment entries from env in their
+// original order.
+func FilterProxyEnv(env []string) []string {
+	out := make([]string, 0, 8)
+	for _, entry := range env {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		switch name {
+		case "HTTP_PROXY", "http_proxy",
+			"HTTPS_PROXY", "https_proxy",
+			"NO_PROXY", "no_proxy":
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 type MountableRef interface {

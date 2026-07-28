@@ -192,7 +192,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer namespace.Close()
 	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
-		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+		meta.Env = executor.ReplaceEnv(meta.Env, proxyNS.ProxyEnv())
 		cleanProxyCA, err := executor.InjectProxyCA(details.rootfsPath, proxyNS.ProxyCACert())
 		if err != nil {
 			return nil, err
@@ -315,6 +315,10 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	}
 
 	proc := spec.Process
+	if meta.Proxy != nil && len(meta.Env) > 0 {
+		meta.Env = executor.ReplaceEnv(meta.Env, executor.FilterProxyEnv(proc.Env))
+		process.Meta = meta
+	}
 	if meta.User != "" {
 		userSpec, err := getUserSpec(meta.User, details.rootfsPath)
 		if err != nil {
@@ -332,8 +336,8 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	if meta.Cwd != "" {
 		spec.Process.Cwd = meta.Cwd
 	}
-	if len(process.Meta.Env) > 0 {
-		spec.Process.Env = process.Meta.Env
+	if len(meta.Env) > 0 {
+		proc.Env = meta.Env
 	}
 
 	fixProcessOutput(&process)
