@@ -272,7 +272,7 @@ target "lint" {
   matrix = {
     buildtags = [
       { name = "default", tags = "", target = "golangci-lint" },
-      { name = "labs", tags = "dfrundevice", target = "golangci-lint" },
+      { name = "labs", tags = "", target = "golangci-lint" },
       { name = "nydus", tags = "nydus", target = "golangci-lint" },
       { name = "yaml", tags = "", target = "yamllint" },
       { name = "golangci-verify", tags = "", target = "golangci-verify" },
