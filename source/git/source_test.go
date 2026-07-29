@@ -2847,6 +2847,32 @@ func TestGetDefaultBranchRejectsDashPrefixedRef(t *testing.T) {
 	require.Empty(t, ref)
 }
 
+func TestGitCLIAdvice(t *testing.T) {
+	run := func(t *testing.T, gitAdvice bool) (env, args []string) {
+		t.Helper()
+		cli := gitCLI(gitutil.WithGitAdvice(gitAdvice), gitutil.WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+			env = append([]string(nil), cmd.Env...)
+			args = append([]string(nil), cmd.Args...)
+			return nil
+		}))
+		_, err := cli.Run(context.Background(), "status")
+		require.NoError(t, err)
+		return env, args
+	}
+
+	t.Run("disabled by default", func(t *testing.T) {
+		env, args := run(t, false)
+		require.Contains(t, env, "GIT_ADVICE=0")
+		require.Contains(t, args, "advice.detachedHead=false")
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		env, args := run(t, true)
+		require.Contains(t, env, "GIT_ADVICE=1")
+		require.NotContains(t, args, "advice.detachedHead=false")
+	})
+}
+
 func TestFetchCommitForBundleUsesOptionTerminator(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on shell script git stub")
@@ -2902,7 +2928,7 @@ func TestDetectBundleSHA256(t *testing.T) {
 			bundlePath := filepath.Join(t.TempDir(), "bundle.pack")
 			runShell(t, repo.mainPath, "git bundle create "+bundlePath+" refs/heads/master")
 
-			sha256, err := detectBundleSHA256(ctx, bundlePath)
+			sha256, err := detectBundleSHA256(ctx, bundlePath, false)
 			require.NoError(t, err)
 			require.Equal(t, format == "sha256", sha256)
 
