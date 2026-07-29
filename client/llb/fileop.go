@@ -242,6 +242,11 @@ func WithUser(name string) ChownOption {
 				opt.User = &UserOpt{UID: uid}
 			}
 		case 1:
+			if v == "" {
+				// "user:" with no group after the colon means "use the
+				// user's primary group", same as omitting the colon.
+				continue
+			}
 			gid, err := parseUID(v)
 			if err != nil {
 				opt.Group = &UserOpt{Name: v}

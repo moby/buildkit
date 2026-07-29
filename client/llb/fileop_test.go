@@ -631,6 +631,23 @@ func TestFileOwnerWithGroup(t *testing.T) {
 	require.Equal(t, "bar", mkdir.Owner.Group.User.(*pb.UserOpt_ByName).ByName.Name)
 }
 
+func TestFileOwnerWithTrailingColonNoGroup(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("foo:")))
+	def, err := st.Marshal(t.Context())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, "foo", mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Nil(t, mkdir.Owner.Group)
+}
+
 func TestFileOwnerWithUIDAndGID(t *testing.T) {
 	t.Parallel()
 
