@@ -1,6 +1,7 @@
 package contentutil
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"slices"
@@ -38,6 +39,31 @@ func Copy(ctx context.Context, ingester content.Ingester, provider content.Provi
 	}
 	return nil
 }
+
+// WriteBlob writes dt to ingester with the same retry and concurrency handling
+// as Copy, so that a remote ingester can recover from a failed request.
+func WriteBlob(ctx context.Context, ingester content.Ingester, dt []byte, desc ocispecs.Descriptor, ref string, logger func([]byte)) error {
+	return Copy(ctx, ingester, bytesProvider{dt}, desc, ref, logger)
+}
+
+// bytesProvider serves dt as the content for any descriptor, so an in-memory
+// payload can be written through Copy. Each call returns a fresh reader, which
+// is what allows a retried write to start over.
+type bytesProvider struct {
+	dt []byte
+}
+
+func (p bytesProvider) ReaderAt(context.Context, ocispecs.Descriptor) (content.ReaderAt, error) {
+	return bytesReaderAt{bytes.NewReader(p.dt)}, nil
+}
+
+// bytesReaderAt adapts *bytes.Reader, which already implements ReadAt and Size,
+// to content.ReaderAt.
+type bytesReaderAt struct {
+	*bytes.Reader
+}
+
+func (bytesReaderAt) Close() error { return nil }
 
 type localFetcher struct {
 	content.Provider
