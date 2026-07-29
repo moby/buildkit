@@ -710,7 +710,7 @@ The available `[OPTIONS]` for the `RUN` instruction are:
 
 | Option                          | Minimum Dockerfile version |
 |---------------------------------|----------------------------|
-| [`--device`](#run---device)     | 1.14-labs                  |
+| [`--device`](#run---device)     | 1.27                       |
 | [`--mount`](#run---mount)       | 1.2                        |
 | [`--network`](#run---network)   | 1.3                        |
 | [`--security`](#run---security) | 1.20                       |
@@ -731,8 +731,7 @@ The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`
 ### RUN --device
 
 > [!NOTE]
-> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
-> version. It also needs BuildKit 0.20.0 or later.
+> This option needs BuildKit 0.20.0 or later.
 
 ```dockerfile
 RUN --device=name,[required]
@@ -804,7 +803,7 @@ In this example we use the `--device` flag to run `llama.cpp` inference using
 an NVIDIA GPU device through CDI:
 
 ```dockerfile
-# syntax=docker/dockerfile:1-labs
+# syntax=docker/dockerfile:1
 
 FROM scratch AS model
 ADD https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf /model.gguf
