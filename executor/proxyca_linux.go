@@ -107,7 +107,9 @@ func InjectProxyCA(rootfsPath string, caPEM []byte) (func() error, error) {
 }
 
 func readCertBundle(path string) ([]byte, os.FileInfo, error) {
-	f, err := os.Open(path)
+	// O_NONBLOCK prevents cleanup from hanging if the bundle was replaced by a
+	// FIFO. Non-regular bundles are rejected by the Stat check below.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
