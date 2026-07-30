@@ -58,6 +58,10 @@ func InjectProxyCA(rootfsPath string, caPEM []byte) (func() error, error) {
 	if bundle == "" {
 		return func() error { return nil }, nil
 	}
+	bundleRel, err := filepath.Rel(rootfsPath, bundle)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to relativize certificate bundle %s", bundle)
+	}
 
 	original, st, err := readCertBundle(bundle)
 	if err != nil {
@@ -81,7 +85,13 @@ func InjectProxyCA(rootfsPath string, caPEM []byte) (func() error, error) {
 	}
 
 	return func() error {
-		current, st, err := readCertBundle(bundle)
+		// Re-resolve the original target inside rootfs because bundle path
+		// symlinks may have changed since injection.
+		cleanupBundle, err := fs.RootPath(rootfsPath, bundleRel)
+		if err != nil {
+			return errors.Wrapf(err, "failed to resolve certificate bundle %s", bundleRel)
+		}
+		current, st, err := readCertBundle(cleanupBundle)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil
@@ -92,7 +102,7 @@ func InjectProxyCA(rootfsPath string, caPEM []byte) (func() error, error) {
 		if bytes.Equal(current, cleaned) {
 			return nil
 		}
-		return writeCertBundle(bundle, cleaned, st)
+		return writeCertBundle(cleanupBundle, cleaned, st)
 	}, nil
 }
 
