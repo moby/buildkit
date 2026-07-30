@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -116,6 +117,35 @@ func TestInjectProxyCACleanupHandlesRetargetedSymlinks(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, string(retargeted), string(afterRetargeted))
 	})
+}
+
+func TestInjectProxyCACleanupDoesNotBlockOnFIFO(t *testing.T) {
+	rootfs := t.TempDir()
+	const bundle = "etc/ssl/certs/ca-certificates.crt"
+	bundlePath := filepath.Join(rootfs, bundle)
+	require.NoError(t, os.MkdirAll(filepath.Dir(bundlePath), 0o755))
+	require.NoError(t, os.WriteFile(bundlePath, []byte("original bundle\n"), 0o644))
+
+	caPEM := testCertPEM(t)
+	cleanup, err := InjectProxyCA(rootfs, caPEM)
+	require.NoError(t, err)
+
+	// Simulate a malicious RUN step replacing the bundle with a FIFO that has
+	// no writer. A blocking open would hang cleanup indefinitely.
+	require.NoError(t, os.Remove(bundlePath))
+	require.NoError(t, syscall.Mkfifo(bundlePath, 0o644))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cleanup()
+	}()
+
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "is not a regular file")
+	case <-time.After(3 * time.Second):
+		t.Fatal("cleanup blocked on FIFO bundle")
+	}
 }
 
 func testCertPEM(t *testing.T) []byte {
