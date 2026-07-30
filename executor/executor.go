@@ -53,25 +53,6 @@ func ReplaceEnv(env, replacement []string) []string {
 	return append(out, replacement...)
 }
 
-// FilterProxyEnv returns the HTTP proxy environment entries from env in their
-// original order.
-func FilterProxyEnv(env []string) []string {
-	out := make([]string, 0, 8)
-	for _, entry := range env {
-		name, _, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		switch name {
-		case "HTTP_PROXY", "http_proxy",
-			"HTTPS_PROXY", "https_proxy",
-			"NO_PROXY", "no_proxy":
-			out = append(out, entry)
-		}
-	}
-	return out
-}
-
 type MountableRef interface {
 	Mount() ([]mount.Mount, func() error, error)
 	IdentityMapping() *user.IdentityMapping

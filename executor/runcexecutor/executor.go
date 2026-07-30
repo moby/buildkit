@@ -481,7 +481,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		return errors.Errorf("unexpected data after JSON spec object")
 	}
 	if meta.Proxy != nil && len(meta.Env) > 0 {
-		meta.Env = executor.ReplaceEnv(meta.Env, executor.FilterProxyEnv(spec.Process.Env))
+		meta.Env = executor.ReplaceEnv(meta.Env, network.FilterProxyEnv(spec.Process.Env))
 		process.Meta = meta
 	}
 

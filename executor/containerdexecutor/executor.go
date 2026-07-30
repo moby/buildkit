@@ -316,7 +316,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 
 	proc := spec.Process
 	if meta.Proxy != nil && len(meta.Env) > 0 {
-		meta.Env = executor.ReplaceEnv(meta.Env, executor.FilterProxyEnv(proc.Env))
+		meta.Env = executor.ReplaceEnv(meta.Env, network.FilterProxyEnv(proc.Env))
 		process.Meta = meta
 	}
 	if meta.User != "" {

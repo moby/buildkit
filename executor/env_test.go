@@ -28,17 +28,3 @@ func TestReplaceEnv(t *testing.T) {
 		"NO_PROXY=localhost",
 	}, ReplaceEnv(env, replacement))
 }
-
-func TestFilterProxyEnv(t *testing.T) {
-	require.Equal(t, []string{
-		"HTTP_PROXY=http://buildkit-proxy",
-		"NO_PROXY=localhost",
-	}, FilterProxyEnv([]string{
-		"PATH=/usr/bin",
-		"HTTP_PROXY=http://buildkit-proxy",
-		"FTP_PROXY=http://ftp-proxy",
-		"ALL_PROXY=http://initial-process-proxy",
-		"all_proxy=http://initial-process-proxy",
-		"NO_PROXY=localhost",
-	}))
-}
