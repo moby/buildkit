@@ -47,6 +47,77 @@ func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
 	require.Contains(t, string(dt), "container change\n")
 }
 
+func TestInjectProxyCACleanupHandlesRetargetedSymlinks(t *testing.T) {
+	t.Run("external directory symlink", func(t *testing.T) {
+		rootfs := t.TempDir()
+		const testCABundle = "etc/ssl/certs/ca-certificates.crt"
+		bundle := filepath.Join(rootfs, testCABundle)
+		certsDir := filepath.Join(rootfs, "etc/ssl/certs")
+		require.NoError(t, os.MkdirAll(certsDir, 0o755))
+		require.NoError(t, os.WriteFile(bundle, []byte("original bundle\n"), 0o644))
+
+		caPEM := testCertPEM(t)
+		cleanup, err := InjectProxyCA(rootfs, caPEM)
+		require.NoError(t, err)
+
+		external := t.TempDir()
+		externalBundle := filepath.Join(external, "ca-certificates.crt")
+		injected, err := os.ReadFile(bundle)
+		require.NoError(t, err)
+		require.Contains(t, string(injected), string(caPEM))
+		require.NoError(t, os.WriteFile(externalBundle, injected, 0o644))
+
+		require.NoError(t, os.RemoveAll(certsDir))
+		require.NoError(t, os.Symlink(external, certsDir))
+		require.NoError(t, cleanup())
+
+		after, err := os.ReadFile(externalBundle)
+		require.NoError(t, err)
+		require.Equal(t, string(injected), string(after))
+		require.Contains(t, string(after), string(caPEM))
+	})
+
+	t.Run("retargeted bundle symlink", func(t *testing.T) {
+		rootfs := t.TempDir()
+		const testCABundle = "etc/ssl/certs/ca-certificates.crt"
+		bundle := filepath.Join(rootfs, testCABundle)
+		require.NoError(t, os.MkdirAll(filepath.Dir(bundle), 0o755))
+
+		originalTarget := filepath.Join(rootfs, "original/ca-bundle.crt")
+		original := []byte("original bundle\n")
+		require.NoError(t, os.MkdirAll(filepath.Dir(originalTarget), 0o755))
+		require.NoError(t, os.WriteFile(originalTarget, original, 0o644))
+
+		retargetedTarget := filepath.Join(rootfs, "retargeted/ca-bundle.crt")
+		retargeted := []byte("retargeted bundle\n")
+		require.NoError(t, os.MkdirAll(filepath.Dir(retargetedTarget), 0o755))
+		require.NoError(t, os.WriteFile(retargetedTarget, retargeted, 0o644))
+
+		require.NoError(t, os.Symlink("/original/ca-bundle.crt", bundle))
+
+		caPEM := testCertPEM(t)
+		cleanup, err := InjectProxyCA(rootfs, caPEM)
+		require.NoError(t, err)
+
+		injected, err := os.ReadFile(originalTarget)
+		require.NoError(t, err)
+		require.Contains(t, string(injected), string(caPEM))
+
+		require.NoError(t, os.Remove(bundle))
+		require.NoError(t, os.Symlink("/retargeted/ca-bundle.crt", bundle))
+		require.NoError(t, cleanup())
+
+		afterOriginal, err := os.ReadFile(originalTarget)
+		require.NoError(t, err)
+		require.NotContains(t, string(afterOriginal), string(caPEM))
+		require.Contains(t, string(afterOriginal), string(original))
+
+		afterRetargeted, err := os.ReadFile(retargetedTarget)
+		require.NoError(t, err)
+		require.Equal(t, string(retargeted), string(afterRetargeted))
+	})
+}
+
 func testCertPEM(t *testing.T) []byte {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
