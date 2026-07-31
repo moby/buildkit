@@ -36,6 +36,8 @@ var allTests = integration.TestFuncs(
 	// dockerfile_add_test.go
 	testDockerfileADDFromURL,
 	testDockerfileAddArchive,
+	testDockerfileAddArchiveWithImpliedParentDir,
+	testDockerfileAddArchiveThroughAbsoluteSymlink,
 	testDockerfileAddChownArchive,
 	testDockerfileAddArchiveWildcard,
 	testDockerfileAddChownExpand,

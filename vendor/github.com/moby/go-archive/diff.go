@@ -28,6 +28,9 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 	if options == nil {
 		options = &TarOptions{}
 	}
+	if options.ExcludePatterns == nil {
+		options.ExcludePatterns = []string{}
+	}
 
 	aufsTempdir := ""
 	aufsHardlinks := make(map[string]*tar.Header)
@@ -99,8 +102,8 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 			}
 		}
 		// #nosec G305 -- The joined path is guarded against path traversal.
-		dstPath := filepath.Join(dest, hdr.Name)
-		rel, err := filepath.Rel(dest, dstPath)
+		path := filepath.Join(dest, hdr.Name)
+		rel, err := filepath.Rel(dest, path)
 		if err != nil {
 			return 0, err
 		}
@@ -109,10 +112,10 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 		if strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			return 0, breakoutError(fmt.Errorf("%q is outside of %q", hdr.Name, dest))
 		}
-		base := filepath.Base(dstPath)
+		base := filepath.Base(path)
 
 		if strings.HasPrefix(base, WhiteoutPrefix) {
-			dir := filepath.Dir(dstPath)
+			dir := filepath.Dir(path)
 			if base == WhiteoutOpaqueDir {
 				_, err := os.Lstat(dir)
 				if err != nil {
@@ -129,7 +132,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 						return nil
 					}
 					if _, exists := unpackedPaths[path]; !exists {
-						return os.RemoveAll(path) // #nosec G122 -- FIXME: consider root-scoped APIs (e.g. os.Root) to prevent symlink TOCTOU traversal
+						return os.RemoveAll(path)
 					}
 					return nil
 				})
@@ -144,13 +147,13 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 				}
 			}
 		} else {
-			// If dstPath exists we almost always just want to remove and replace it.
+			// If path exits we almost always just want to remove and replace it.
 			// The only exception is when it is a directory *and* the file from
 			// the layer is also a directory. Then we want to merge them (i.e.
 			// just apply the metadata from the layer).
-			if fi, err := os.Lstat(dstPath); err == nil {
+			if fi, err := os.Lstat(path); err == nil {
 				if !fi.IsDir() || hdr.Typeflag != tar.TypeDir {
-					if err := os.RemoveAll(dstPath); err != nil {
+					if err := os.RemoveAll(path); err != nil {
 						return 0, err
 					}
 				}
@@ -179,7 +182,7 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 				return 0, err
 			}
 
-			if err := createTarFile(dstPath, dest, srcHdr, srcData, options); err != nil {
+			if err := createTarFile(path, dest, srcHdr, srcData, options); err != nil {
 				return 0, err
 			}
 
@@ -188,14 +191,14 @@ func UnpackLayer(dest string, layer io.Reader, options *TarOptions) (size int64,
 			if hdr.Typeflag == tar.TypeDir {
 				dirs = append(dirs, hdr)
 			}
-			unpackedPaths[dstPath] = struct{}{}
+			unpackedPaths[path] = struct{}{}
 		}
 	}
 
 	for _, hdr := range dirs {
 		// #nosec G305 -- The header was checked for path traversal before it was appended to the dirs slice.
-		dstPath := filepath.Join(dest, hdr.Name)
-		if err := chtimes(dstPath, hdr.AccessTime, hdr.ModTime); err != nil {
+		path := filepath.Join(dest, hdr.Name)
+		if err := chtimes(path, hdr.AccessTime, hdr.ModTime); err != nil {
 			return 0, err
 		}
 	}
