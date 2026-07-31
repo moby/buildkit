@@ -429,6 +429,13 @@ func testDockerfileAddArchiveThroughAbsoluteSymlink(t *testing.T, sb integration
 	require.NoError(t, err)
 	_, err = tw.Write(expectedContent)
 	require.NoError(t, err)
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "var/run/act/actions/broad/.git/HEAD.link",
+		Typeflag: tar.TypeLink,
+		Linkname: "var/run/act/actions/broad/.git/HEAD",
+		Mode:     0644,
+	})
+	require.NoError(t, err)
 	err = tw.Close()
 	require.NoError(t, err)
 
@@ -456,6 +463,17 @@ ADD payload.tar /
 	dt, err := os.ReadFile(filepath.Join(destDir, "run/act/actions/broad/.git/HEAD"))
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
+
+	linkPath := filepath.Join(destDir, "run/act/actions/broad/.git/HEAD.link")
+	dt, err = os.ReadFile(linkPath)
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+
+	fileInfo, err := os.Stat(filepath.Join(destDir, "run/act/actions/broad/.git/HEAD"))
+	require.NoError(t, err)
+	linkInfo, err := os.Stat(linkPath)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(fileInfo, linkInfo))
 }
 
 func testDockerfileAddChownArchive(t *testing.T, sb integration.Sandbox) {
