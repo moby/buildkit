@@ -26,7 +26,7 @@ func collectFileInfoForChanges(oldDir, newDir string) (*FileInfo, *FileInfo, err
 	}()
 
 	// block until both routines have returned
-	for range 2 {
+	for i := 0; i < 2; i++ {
 		if err := <-errs; err != nil {
 			return nil, nil, err
 		}

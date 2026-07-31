@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -218,8 +217,8 @@ func (info *FileInfo) LookUp(path string) *FileInfo {
 		return info
 	}
 
-	pathElements := strings.SplitSeq(path, string(os.PathSeparator))
-	for elem := range pathElements {
+	pathElements := strings.Split(path, string(os.PathSeparator))
+	for _, elem := range pathElements {
 		if elem != "" {
 			child := parent.children[elem]
 			if child == nil {
@@ -257,7 +256,9 @@ func (info *FileInfo) addChanges(oldInfo *FileInfo, changes *[]Change) {
 	// otherwise any previous delete/change is considered recursive
 	oldChildren := make(map[string]*FileInfo)
 	if oldInfo != nil && info.isDir() {
-		maps.Copy(oldChildren, oldInfo.children)
+		for k, v := range oldInfo.children {
+			oldChildren[k] = v
+		}
 	}
 
 	for name, newChild := range info.children {
@@ -400,7 +401,7 @@ func ExportChanges(dir string, changes []Change, idMap user.IdentityMapping) (io
 				whiteOut := filepath.Join(whiteOutDir, WhiteoutPrefix+whiteOutBase)
 				timestamp := time.Now()
 				hdr := &tar.Header{
-					Name:       strings.TrimPrefix(filepath.ToSlash(whiteOut), "/"),
+					Name:       whiteOut[1:],
 					Size:       0,
 					ModTime:    timestamp,
 					AccessTime: timestamp,
@@ -410,10 +411,9 @@ func ExportChanges(dir string, changes []Change, idMap user.IdentityMapping) (io
 					log.G(context.TODO()).Debugf("Can't write whiteout header: %s", err)
 				}
 			} else {
-				srcPath := filepath.Join(dir, change.Path)
-				archivePath := strings.TrimPrefix(filepath.ToSlash(change.Path), "/")
-				if err := ta.addTarFile(srcPath, archivePath); err != nil {
-					log.G(context.TODO()).Debugf("Can't add file %s to tar: %s", srcPath, err)
+				path := filepath.Join(dir, change.Path)
+				if err := ta.addTarFile(path, change.Path[1:]); err != nil {
+					log.G(context.TODO()).Debugf("Can't add file %s to tar: %s", path, err)
 				}
 			}
 		}
