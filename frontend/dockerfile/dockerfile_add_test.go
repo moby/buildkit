@@ -323,6 +323,65 @@ ADD %s /newname.tar.gz
 	require.Equal(t, buf2.Bytes(), dt)
 }
 
+// https://github.com/moby/moby/issues/53257
+func testDockerfileAddArchiveWithImpliedParentDir(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "etc/dnf/",
+		Typeflag: tar.TypeDir,
+		Mode:     0755,
+	})
+	require.NoError(t, err)
+	expectedContent := []byte("content0")
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "etc/dnf/dnf.conf",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	gzBuf := bytes.NewBuffer(nil)
+	gz := gzip.NewWriter(gzBuf)
+	_, err = gz.Write(buf.Bytes())
+	require.NoError(t, err)
+	err = gz.Close()
+	require.NoError(t, err)
+
+	baseImage := integration.UnixOrWindows("scratch", "nanoserver")
+
+	dockerfile := fmt.Appendf(nil, `
+FROM %s
+ADD t.tar.gz /
+`, baseImage)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar.gz", gzBuf.Bytes(), 0600),
+	)
+
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	destDir := t.TempDir()
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "etc/dnf/dnf.conf"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+}
+
 func testDockerfileAddChownArchive(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows", "ADD --chown tests Unix UID/GID ownership which is not applicable to Windows file permissions")
 	f := getFrontend(t, sb)
