@@ -382,6 +382,82 @@ ADD t.tar.gz /
 	require.Equal(t, expectedContent, dt)
 }
 
+// https://github.com/moby/moby/issues/53258
+func testDockerfileAddArchiveThroughAbsoluteSymlink(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows", "absolute /run symlink traversal is a Unix-specific archive extraction case")
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	writeDir := func(tw *tar.Writer, name string) {
+		err := tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Typeflag: tar.TypeDir,
+			Mode:     0755,
+		})
+		require.NoError(t, err)
+	}
+
+	rootfs := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(rootfs)
+	writeDir(tw, "run/")
+	writeDir(tw, "var/")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "var/run",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "/run",
+		Mode:     0777,
+	})
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	payload := bytes.NewBuffer(nil)
+	tw = tar.NewWriter(payload)
+	// Keep parent directories explicit so this isolates extraction through the
+	// absolute symlink from implied parent directory handling.
+	writeDir(tw, "var/run/act/")
+	writeDir(tw, "var/run/act/actions/")
+	writeDir(tw, "var/run/act/actions/broad/")
+	writeDir(tw, "var/run/act/actions/broad/.git/")
+	expectedContent := []byte("ref: refs/heads/main\n")
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "var/run/act/actions/broad/.git/HEAD",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD rootfs.tar /
+ADD payload.tar /
+`)
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("rootfs.tar", rootfs.Bytes(), 0600),
+		fstest.CreateFile("payload.tar", payload.Bytes(), 0600),
+	)
+
+	args, trace := f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	destDir := t.TempDir()
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "run/act/actions/broad/.git/HEAD"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+}
+
 func testDockerfileAddChownArchive(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows", "ADD --chown tests Unix UID/GID ownership which is not applicable to Windows file permissions")
 	f := getFrontend(t, sb)
