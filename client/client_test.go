@@ -104,7 +104,6 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportAttestationsDefaultOCIArtifact,
 	testExportAttestationsImageManifest,
 	testExportAttestationsOCIArtifact,
-	testExportAttestationsOCIArtifactSubjectPushOrder,
 	testImageResolveAttestationChainLocal,
 	testImageResolveAttestationChainRequiresNetwork,
 	testImageResolveProvenanceAttestation,

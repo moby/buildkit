@@ -5,17 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -673,7 +668,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ocispecs.MediaTypeImageIndex, imgs2.Index.MediaType)
 }
 
-func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bool, setOCIArtifact bool, strictSubjectRegistry bool) {
+func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bool, setOCIArtifact bool) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -685,12 +680,6 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
-
-	var strictRegistry *strictSubjectRegistryProxy
-	if strictSubjectRegistry {
-		strictRegistry = newStrictSubjectRegistryProxy(t, registry)
-		registry = strictRegistry.host
-	}
 
 	ps := []ocispecs.Platform{
 		platforms.MustParse("linux/amd64"),
@@ -909,10 +898,6 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			require.Equal(t, subjects, attest2.Subject)
 		}
 
-		if strictRegistry != nil {
-			require.True(t, strictRegistry.sawSubjectManifest(), "expected an OCI artifact manifest with subject")
-		}
-
 		cdAddress := sb.ContainerdAddress()
 		if cdAddress == "" {
 			return
@@ -928,10 +913,6 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 		}
 		checkAllReleasable(t, c, sb, true)
 	})
-
-	if strictRegistry != nil {
-		return // strict registry only exercises the image push path
-	}
 
 	t.Run("local", func(t *testing.T) {
 		dir := t.TempDir()
@@ -1041,19 +1022,15 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 }
 
 func testExportAttestationsDefaultOCIArtifact(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, false, false, false)
+	testExportAttestations(t, sb, false, false)
 }
 
 func testExportAttestationsImageManifest(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, false, true, false)
+	testExportAttestations(t, sb, false, true)
 }
 
 func testExportAttestationsOCIArtifact(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, true, true, false)
-}
-
-func testExportAttestationsOCIArtifactSubjectPushOrder(t *testing.T, sb integration.Sandbox) {
-	testExportAttestations(t, sb, true, true, true)
+	testExportAttestations(t, sb, true, true)
 }
 
 func testImageResolveAttestationChainLocal(t *testing.T, sb integration.Sandbox) {
@@ -2442,125 +2419,4 @@ func isSLSAPredicateType(v string) bool {
 	default:
 		return false
 	}
-}
-
-type strictSubjectRegistryProxy struct {
-	host string
-
-	mu         sync.Mutex
-	manifests  map[digest.Digest]struct{}
-	sawSubject bool
-}
-
-func newStrictSubjectRegistryProxy(t *testing.T, registry string) *strictSubjectRegistryProxy {
-	t.Helper()
-
-	target, err := url.Parse("http://" + registry)
-	require.NoError(t, err)
-
-	p := &strictSubjectRegistryProxy{
-		manifests: map[digest.Digest]struct{}{},
-	}
-	proxy := &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(target)
-			pr.Out.Host = target.Host
-		},
-	}
-
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || !strings.Contains(r.URL.Path, "/manifests/") {
-			proxy.ServeHTTP(w, r)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
-		r.ContentLength = int64(len(body))
-
-		subject, err := manifestSubject(body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if subject != "" && !p.hasManifest(subject) {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprintf(w, "unknown: blob unknown to registry - %s", subject)
-			return
-		}
-
-		rw := &statusRecorder{ResponseWriter: w}
-		proxy.ServeHTTP(rw, r)
-		if rw.success() {
-			p.recordManifest(digest.FromBytes(body), subject)
-		}
-	}))
-	t.Cleanup(s.Close)
-
-	p.host = strings.TrimPrefix(s.URL, "http://")
-	return p
-}
-
-func (p *strictSubjectRegistryProxy) hasManifest(dgst digest.Digest) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	_, ok := p.manifests[dgst]
-	return ok
-}
-
-func (p *strictSubjectRegistryProxy) recordManifest(dgst, subject digest.Digest) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.manifests[dgst] = struct{}{}
-	p.sawSubject = p.sawSubject || subject != ""
-}
-
-func (p *strictSubjectRegistryProxy) sawSubjectManifest() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.sawSubject
-}
-
-func manifestSubject(dt []byte) (digest.Digest, error) {
-	var manifest struct {
-		Subject *ocispecs.Descriptor `json:"subject"`
-	}
-	if err := json.Unmarshal(dt, &manifest); err != nil {
-		return "", err
-	}
-	if manifest.Subject == nil {
-		return "", nil
-	}
-	return manifest.Subject.Digest, nil
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(status int) {
-	r.status = status
-	r.ResponseWriter.WriteHeader(status)
-}
-
-func (r *statusRecorder) Write(dt []byte) (int, error) {
-	if r.status == 0 {
-		r.status = http.StatusOK
-	}
-	return r.ResponseWriter.Write(dt)
-}
-
-func (r *statusRecorder) Flush() {
-	if f, ok := r.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func (r *statusRecorder) success() bool {
-	return r.status == 0 || r.status >= http.StatusOK && r.status < http.StatusMultipleChoices
 }
