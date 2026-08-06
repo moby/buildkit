@@ -55,18 +55,50 @@ ENV DEPS="\
     make"
 ```
 
-> [!NOTE]
-> Be aware of leading whitespace when converting multi-line legacy syntax to
-> the modern `key=value` format. In the legacy format, leading whitespace on
-> continuation lines is included in the value. In the modern format with
-> quoted values, leading whitespace inside the quotes is also preserved. If
-> you don't want leading whitespace in the value, make sure to remove it when
-> rewriting to the new format:
->
-> ```dockerfile
-> ENV DEPS="\
-> curl \
-> git \
-> make"
-> ```
+## "Breaking" changes
 
+Be aware that when converting multi-line legacy syntax to the modern
+`key=value` format the output may be different. Review the changes carefully.
+
+There are currently 2 known pitfalls regarding leading whitespaces and quote escape
+
+
+
+### Leading whitespace
+
+```dockerfile
+ENV DEPS \
+    curl \
+    git \
+    make
+```
+
+Should be written as:
+
+```dockerfile
+ENV DEPS="curl \
+    git \
+    make"
+```
+```dockerfile
+ENV DEPS="\
+curl \
+    git \
+    make"
+```
+
+### quote escape
+
+```dockerfile
+ENV SCRIPT1 script.sh --host=''
+ENV SCRIPT2 script.sh --host 'argument'
+ENV SCRIPT3 export MYFLAGS="\"flag\""
+```
+
+Should be written as:
+
+```dockerfile
+ENV SCRIPT1="script.sh --host="
+ENV SCRIPT1="script.sh --host argument"
+ENV SCRIPT3="export MYFLAGS=\"flag\""
+```
