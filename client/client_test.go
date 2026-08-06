@@ -349,6 +349,7 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	integration.Run(t, integration.TestFuncs(
 		// policy_test.go
 		testProxyNetworkNoRootless,
+		testProxyNetworkGatewayExecEnvNoRootless,
 		testProxyNetworkModesNoRootless,
 		testProxyNetworkDefaultEgressNoRootless,
 	),

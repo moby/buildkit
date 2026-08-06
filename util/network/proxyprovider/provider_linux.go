@@ -278,14 +278,7 @@ func (n *proxyNS) Sample() (*resourcestypes.NetworkSample, error) {
 func (n *proxyNS) ProxyEnv() []string {
 	proxy := "http://" + n.ln.Addr().String()
 	noProxy := "127.0.0.1,localhost,::1"
-	return []string{
-		"HTTP_PROXY=" + proxy,
-		"HTTPS_PROXY=" + proxy,
-		"http_proxy=" + proxy,
-		"https_proxy=" + proxy,
-		"NO_PROXY=" + noProxy,
-		"no_proxy=" + noProxy,
-	}
+	return network.ProxyEnv(proxy, noProxy)
 }
 
 func (n *proxyNS) ProxyCACert() []byte {
