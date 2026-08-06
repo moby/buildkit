@@ -358,7 +358,7 @@ func createCompatibilityBaseImage(ctx context.Context, t *testing.T, c *Client, 
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(baseRef)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, baseRef)
 	require.NoError(t, err)
 	actual := readCompatibilityActualFromProvider(ctx, t, provider, desc)
 
@@ -452,7 +452,7 @@ func exportCompatibilityImageCase(ctx context.Context, t *testing.T, c *Client, 
 		return compatibilityActual{}, err
 	}
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, target)
 	if err != nil {
 		return compatibilityActual{}, err
 	}
@@ -655,7 +655,7 @@ func readCompatibilityActualFromProvider(ctx context.Context, t *testing.T, prov
 }
 
 func readImageCompatibilityProvenance(ctx context.Context, ref string) (*provenancetypes.ProvenancePredicateSLSA1, error) {
-	desc, provider, err := contentutil.ProviderFromRef(ref)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, ref)
 	if err != nil {
 		return nil, err
 	}

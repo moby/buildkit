@@ -137,7 +137,7 @@ RUN echo ok> /foo
 				}, nil)
 				require.NoError(t, err)
 
-				desc, provider, err := contentutil.ProviderFromRef(target)
+				desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 				require.NoError(t, err)
 				imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 				require.NoError(t, err)
@@ -499,7 +499,7 @@ COPY myapp.Dockerfile /
 			}, nil)
 			require.NoError(t, err)
 
-			desc, provider, err := contentutil.ProviderFromRef(target)
+			desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 			require.NoError(t, err)
 			imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 			require.NoError(t, err)
@@ -701,7 +701,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -912,7 +912,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -1058,7 +1058,7 @@ COPY --from=base C:\out C:\Files
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
@@ -1172,7 +1172,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -1869,7 +1869,7 @@ func assertFrontendRequest(t *testing.T, f frontendGateway, req *provenancetypes
 }
 
 func readNativeProvenancePredicate(ctx context.Context, t *testing.T, target string) provenancetypes.ProvenancePredicateSLSA1 {
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(ctx, target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
@@ -1932,7 +1932,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -2062,7 +2062,7 @@ EOF
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -2334,7 +2334,7 @@ ADD bar bar`)
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -2628,7 +2628,7 @@ func testDuplicateLayersProvenance(t *testing.T, sb integration.Sandbox) {
 
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)

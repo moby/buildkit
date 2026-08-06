@@ -254,7 +254,7 @@ COPY --from=base /arch /
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target + "-img")
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target+"-img")
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -299,7 +299,7 @@ COPY --from=base /arch /
 		}, nil)
 		require.NoError(t, err)
 
-		desc2, provider, err := contentutil.ProviderFromRef(target + "-img")
+		desc2, provider, err := contentutil.ProviderFromRef(sb.Context(), target+"-img")
 		require.NoError(t, err)
 
 		require.Equal(t, desc.Digest, desc2.Digest)
@@ -383,7 +383,7 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	img, err := testutil.ReadImage(sb.Context(), provider, desc)
 	require.NoError(t, err)
