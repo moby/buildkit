@@ -88,6 +88,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testExportLocalModeDeleteMultiPlatformKeepsAllPlatforms,
 	testExportLocalNoPlatformSplit,
 	testExportLocalNoPlatformSplitOverwrite,
+	testExportTarPlatformIDSanitized,
 	testExporterTargetExists,
 	testMultipleExporters,
 	testSessionExporter,
