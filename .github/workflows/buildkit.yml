@@ -221,7 +221,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder/.github/workflows/bake.yml@27ade872c1e2296e62ef15ab3b10d37665e57cf7 # v1.15.0
+    uses: docker/github-builder/.github/workflows/bake.yml@a492c6d04fd3315f67230809b44d60cc0acd50b3 # v1.16.0
     needs:
       - image-prepare
       - test
@@ -231,7 +231,7 @@ jobs:
         include: ${{ fromJson(needs.image-prepare.outputs.includes) }}
     permissions:
       contents: read # same as global permission
-      id-token: write # for signing attestation(s) with GitHub OIDC Token
+      id-token: write # for signing attestations, cache entries and logging in to Docker Hub with GitHub OIDC
     with:
       runner: ubuntu-24.04
       target: image-cross
@@ -279,20 +279,18 @@ jobs:
         org.opencontainers.image.title=BuildKit
         org.opencontainers.image.vendor=Moby
       meta-bake-target: meta-helper
-    secrets:
-      registry-auths: |
-        - registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      registry-identities: |
+        - type: dockerhub
+          registry: docker.io
+          username: moby
+          connection_id: ${{ vars.BUILDKIT_OIDC_CONNECTIONID }}
 
   scout:
     runs-on: ubuntu-24.04
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
-      # same as global permission
-      contents: read
-      # required to write sarif report
-      security-events: write
+      contents: read # same as global permission
+      security-events: write # required to write sarif report
     needs:
       - image
     strategy:
@@ -306,6 +304,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       -
+        # FIXME: switch to OIDC once Scout supports it
         name: Login to DockerHub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
