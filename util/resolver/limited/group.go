@@ -3,7 +3,9 @@ package limited
 import (
 	"context"
 	"io"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -21,9 +23,19 @@ type contextKeyT string
 var contextKey = contextKeyT("buildkit/util/resolver/limited")
 
 // DefaultMaxConcurrency is the default number of concurrent connections per registry.
-var DefaultMaxConcurrency int64 = 4
+// It can be overridden by setting the BUILDKIT_MAX_REGISTRY_CONCURRENCY environment variable.
+var DefaultMaxConcurrency = getMaxConcurrency()
 
 var Default = New(int(DefaultMaxConcurrency))
+
+func getMaxConcurrency() int64 {
+	if v := os.Getenv("BUILDKIT_MAX_REGISTRY_CONCURRENCY"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 4
+}
 
 type Group struct {
 	mu   sync.Mutex
