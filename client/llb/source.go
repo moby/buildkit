@@ -483,6 +483,10 @@ func Git(url, fragment string, opts ...GitOption) State {
 		addCap(&gi.Constraints, pb.CapSourceGitMTime)
 	}
 
+	if gi.Advice {
+		attrs[pb.AttrGitAdvice] = "true"
+	}
+
 	if gi.FetchByCommit {
 		attrs[pb.AttrGitFetchByCommit] = "true"
 		addCap(&gi.Constraints, pb.CapSourceGitFetchByCommit)
@@ -531,6 +535,7 @@ type GitInfo struct {
 	SubDir             string
 	SkipSubmodules     bool
 	MTime              string
+	Advice             bool
 	Bundle             string
 	BundleOCISessionID string
 	BundleOCIStoreID   string
@@ -567,6 +572,14 @@ func GitMTimeCommit() GitOption {
 func GitMTime(v string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.MTime = v
+	})
+}
+
+// GitAdvice controls whether Git advice messages are emitted while resolving
+// this git source.
+func GitAdvice(enabled bool) GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.Advice = enabled
 	})
 }
 

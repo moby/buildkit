@@ -90,6 +90,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 	if opts[buildArgPrefix+"SOURCE_DATE_EPOCH"] != "" {
 		extraGitOpts = append(extraGitOpts, llb.GitMTimeCommit())
 	}
+	extraGitOpts = append(extraGitOpts, gitAdviceOpts(bc.GitAdvice)...)
 	if st, ok, err := DetectGitContext(opts[localNameContext], keepGit, extraGitOpts...); ok {
 		if err != nil {
 			return nil, err
@@ -323,6 +324,13 @@ func DetectGitContext(ref string, keepGit *bool, opts ...llb.GitOption) (*llb.St
 
 	st := llb.Git(g.Remote, "", gitOpts...)
 	return &st, true, nil
+}
+
+func gitAdviceOpts(enabled bool) []llb.GitOption {
+	if enabled {
+		return []llb.GitOption{llb.GitAdvice(true)}
+	}
+	return nil
 }
 
 func DetectHTTPContext(ref string) (*llb.State, string, bool) {

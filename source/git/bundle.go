@@ -71,8 +71,8 @@ func bundleTargetRef(ref string) string {
 // sha256 object IDs. git ls-remote reads bundle files directly, so this works
 // before a destination repo exists and lets callers initialize the right object
 // format for a subsequent fetch/import.
-func detectBundleSHA256(ctx context.Context, bundlePath string) (bool, error) {
-	buf, err := gitCLI().Run(ctx, "ls-remote", "--", bundlePath)
+func detectBundleSHA256(ctx context.Context, bundlePath string, gitAdvice bool) (bool, error) {
+	buf, err := gitCLI(gitutil.WithGitAdvice(gitAdvice)).Run(ctx, "ls-remote", "--", bundlePath)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to inspect git bundle %s", bundlePath)
 	}
@@ -119,7 +119,7 @@ func (gs *gitSourceHandler) stageBundle(ctx context.Context, g session.Group) (_
 		return "", nil, err
 	}
 	bundlePath := filepath.Join(tmpDir, bundleImportFileName)
-	sha256, err := detectBundleSHA256(ctx, bundlePath)
+	sha256, err := detectBundleSHA256(ctx, bundlePath, gs.src.Advice)
 	if err != nil {
 		return "", nil, err
 	}
@@ -132,7 +132,7 @@ func (gs *gitSourceHandler) stageBundle(ctx context.Context, g session.Group) (_
 	if err := os.Mkdir(tmpRepoDir, 0700); err != nil {
 		return "", nil, errors.Wrap(err, "failed to create temp bare repo dir")
 	}
-	tmpGit := gitCLI(gitutil.WithGitDir(tmpRepoDir))
+	tmpGit := gitCLI(gitutil.WithGitAdvice(gs.src.Advice), gitutil.WithGitDir(tmpRepoDir))
 	initArgs := []string{"-c", "init.defaultBranch=master", "init", "--bare"}
 	if sha256 {
 		initArgs = append(initArgs, "--object-format=sha256")
