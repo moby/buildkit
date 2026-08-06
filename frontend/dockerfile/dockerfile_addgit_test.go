@@ -78,6 +78,7 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.3")...)
 	gitCommands = append(gitCommands, "git update-server-info")
+	gitCommands = append(gitCommands, "ln -s .git/ bla")
 	err = runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
@@ -216,6 +217,39 @@ RUN [ ! -d /nogitdir/.git ]
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir4,
 			dockerui.DefaultLocalNameContext:    dir4,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Additional test: ADD from a git URL without the ".git" suffix.
+	// --keep-git-dir flag marks the URL as a git URL regardless of the suffix.
+	dockerfileNoSuffix, err := applyTemplate(`
+	FROM alpine
+	ARG REPO="{{.ServerURL}}/bla"
+	ADD ${REPO} /nogitanything
+	RUN [ ! -f /nogitanything/foo ]
+	RUN [ ! -d /nogitanything/.git ]
+	ADD --keep-git-dir=true ${REPO}#v0.0.2 /gitdir
+	RUN [ -f /gitdir/foo ]
+	RUN [ "$(cat /gitdir/foo)" = "foo of v0.0.2" ]
+	RUN [ -d /gitdir/.git ]
+	ADD --keep-git-dir=false ${REPO}#v0.0.3 /nogitdir
+	RUN [ -f /nogitdir/foo ]
+	RUN [ "$(cat /nogitdir/foo)" = "foo of v0.0.3" ]
+	RUN [ ! -d /nogitdir/.git ]
+	`, map[string]string{
+		"ServerURL": serverURL,
+	})
+	require.NoError(t, err)
+
+	dirNoSuffix := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfileNoSuffix), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dirNoSuffix,
+			dockerui.DefaultLocalNameContext:    dirNoSuffix,
 		},
 	}, nil)
 	require.NoError(t, err)

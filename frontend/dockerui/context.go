@@ -291,7 +291,7 @@ func sourceOpFromState(ctx context.Context, st *llb.State, opts ...llb.Constrain
 }
 
 func DetectGitContext(ref string, keepGit *bool, opts ...llb.GitOption) (*llb.State, bool, error) {
-	g, isGit, err := dfgitutil.ParseGitRef(ref)
+	g, isGit, err := dfgitutil.ParseGitRef(ref, keepGit != nil)
 	if err != nil {
 		return nil, isGit, err
 	}
