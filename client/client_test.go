@@ -63,6 +63,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_export_image_test.go
 	testBuildExportScratch,
+	testBuildExportUnpackWithRewriteTimestamp,
 	testBuildExportWithForeignLayer,
 	testBuildExportWithUncompressed,
 	testBuildExportZstd,
