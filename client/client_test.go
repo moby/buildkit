@@ -107,6 +107,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testImageResolveAttestationChainLocal,
 	testImageResolveAttestationChainRequiresNetwork,
 	testImageResolveProvenanceAttestation,
+	testSBOMCycloneDX,
 	testSBOMScan,
 	testSBOMScanSingleRef,
 	testSBOMSupplements,
