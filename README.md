@@ -823,6 +823,10 @@ export JAEGER_TRACE=0.0.0.0:6831
 > set the environment variable `setx -m JAEGER_TRACE "0.0.0.0:6831"`,
 > restart `buildkitd` in a new terminal and the traces will be collected automatically.
 
+BuildKit also exports metrics through OpenTelemetry. See
+[`docs/metrics.md`](docs/metrics.md) for the available instruments and how to
+scrape them.
+
 ## Running BuildKit without root privileges
 
 Please refer to [`docs/rootless.md`](docs/rootless.md).
