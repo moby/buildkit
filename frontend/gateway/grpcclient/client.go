@@ -1452,8 +1452,8 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
-		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(8 * defaults.DefaultMaxRecvMsgSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(8 * defaults.DefaultMaxSendMsgSize)),
 	}
 
 	//nolint:staticcheck // ignore SA1019 NewClient has different behavior and needs to be tested
