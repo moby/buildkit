@@ -413,7 +413,7 @@ func collectAndCheckChanges(t *testing.T, base, upperdir string, expected []Test
 			Options: []string{fmt.Sprintf("lowerdir=%s", strings.Join([]string{upperdir, emptyLower}, ":"))},
 		},
 	}
-	return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
+	return mount.WithReadonlyTempMount(ctx, upperView, func(upperViewRoot string) error {
 		if err := Changes(ctx, func(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
