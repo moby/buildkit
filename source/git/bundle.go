@@ -17,6 +17,7 @@ import (
 	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/gitutil"
+	"github.com/moby/buildkit/util/urlutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -336,7 +337,7 @@ func (gs *gitSourceHandler) checkoutAsBundle(ctx context.Context, repo *gitRepo,
 		commit = ref
 	}
 
-	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("git bundle checkout for %s#%s", gs.src.Remote, ref)))
+	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("git bundle checkout for %s#%s", urlutil.RedactCredentials(gs.src.Remote), ref)))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create new mutable for bundle checkout")
 	}
