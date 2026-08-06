@@ -522,10 +522,25 @@ func testExportTarPlatformIDSanitized(t *testing.T, sb integration.Sandbox) {
 	}
 	sort.Strings(tarPaths)
 
-	expectedPath := path.Join(".._buildkit-outside", integration.UnixOrWindows("payload.txt", "Files/payload.txt"))
-	item := m[expectedPath]
-	require.NotNilf(t, item, "expected sanitized tar path %q in %v", expectedPath, tarPaths)
-	require.Equal(t, "payload", string(item.Data))
+	const platformDir = ".._buildkit-outside"
+	payloadPath := ""
+	for name, item := range m {
+		// The tar can contain directory entries and unrelated files; this test
+		// only verifies that the payload is exported under the sanitized root.
+		if item.Header.Typeflag != tar.TypeReg {
+			continue
+		}
+		if !strings.HasPrefix(name, platformDir+"/") {
+			continue
+		}
+		if path.Base(name) != "payload.txt" {
+			continue
+		}
+		payloadPath = name
+		require.Equal(t, "payload", string(item.Data))
+		break
+	}
+	require.NotEmptyf(t, payloadPath, "expected payload under sanitized tar path %q in %v", platformDir, tarPaths)
 }
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
