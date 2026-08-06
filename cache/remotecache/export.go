@@ -1,7 +1,6 @@
 package remotecache
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -244,7 +243,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		MediaType: cacheimporttypes.CacheConfigMediaTypeV0,
 	}
 	configDone := progress.OneOff(ctx, fmt.Sprintf("writing config %s", dgst))
-	if err := content.WriteBlob(ctx, ce.ingester, dgst.String(), bytes.NewReader(dt), desc); err != nil {
+	if err := contentutil.WriteBlob(ctx, ce.ingester, dt, desc, ce.ref, logs.LoggerFromContext(ctx)); err != nil {
 		err = withRemoteCacheErrorDetails(err)
 		return nil, configDone(errors.Wrap(err, "error writing config blob"))
 	}
@@ -269,7 +268,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		mfstLog = fmt.Sprintf("writing cache image manifest %s", dgst)
 	}
 	mfstDone := progress.OneOff(ctx, mfstLog)
-	if err := content.WriteBlob(ctx, ce.ingester, dgst.String(), bytes.NewReader(dt), desc); err != nil {
+	if err := contentutil.WriteBlob(ctx, ce.ingester, dt, desc, ce.ref, logs.LoggerFromContext(ctx)); err != nil {
 		err = withRemoteCacheErrorDetails(err)
 		return nil, mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
