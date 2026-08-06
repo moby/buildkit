@@ -76,8 +76,10 @@ process:
 ```text
 HTTP_PROXY
 HTTPS_PROXY
+ALL_PROXY
 http_proxy
 https_proxy
+all_proxy
 NO_PROXY
 no_proxy
 ```
@@ -90,6 +92,20 @@ handled according to the exec network mode.
 BuildKit also injects a generated CA certificate into common Linux trust bundle
 locations for the duration of the exec. This lets HTTPS requests using the
 system trust store pass through the BuildKit proxy.
+
+## Upstream proxies
+
+The BuildKit proxy can chain requests through an upstream proxy using Go's
+standard proxy environment handling, including HTTP(S) and SOCKS5 proxy URLs.
+
+The internal proxy inherits `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` from
+the `buildkitd` environment. These settings apply to all proxy-network execs;
+proxy settings passed to an individual exec do not change upstream routing.
+The proxy URL values injected into each process still point to BuildKit's
+internal proxy. `NO_PROXY` applies to the connection from the BuildKit proxy to
+the destination, so matching requests connect directly. An invalid upstream
+proxy URL prevents proxy-network execs from starting rather than falling back
+to a direct connection.
 
 ## Request capture and logs
 
@@ -126,6 +142,6 @@ The current implementation is Linux-focused. Rootless workers also have the
 usual rootless networking limitations, where worker networking may behave like
 host networking.
 
-Applications that ignore `HTTP_PROXY` and `HTTPS_PROXY`, use custom trust
-stores, or open raw TCP connections cannot bypass the proxy. That traffic is
-blocked instead of being captured.
+Applications that ignore the injected proxy environment variables, use custom
+trust stores, or open raw TCP connections cannot bypass the proxy. That traffic
+is blocked instead of being captured.

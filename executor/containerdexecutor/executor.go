@@ -192,7 +192,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer namespace.Close()
 	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
-		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+		meta.Env = executor.ReplaceEnv(meta.Env, proxyNS.ProxyEnv())
 		cleanProxyCA, err := executor.InjectProxyCA(details.rootfsPath, proxyNS.ProxyCACert())
 		if err != nil {
 			return nil, err
