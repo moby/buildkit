@@ -781,9 +781,8 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 			if err == nil && strings.Contains(key, "/wd") {
 				ok = true
 				break
-			} else {
-				ok = false
 			}
+			ok = false
 		}
 		require.True(t, ok)
 
@@ -791,9 +790,8 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 			if err == nil && strings.Contains(key, "/foo2/bar") {
 				ok = true
 				break
-			} else {
-				ok = false
 			}
+			ok = false
 		}
 		require.True(t, ok)
 
@@ -801,9 +799,8 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 			if err == nil && strings.Contains(key, "/foo2") {
 				ok = true
 				break
-			} else {
-				ok = false
 			}
+			ok = false
 		}
 		require.True(t, ok)
 	case "busybox:latest":

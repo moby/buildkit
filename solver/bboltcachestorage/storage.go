@@ -163,11 +163,7 @@ func (s *Store) AddResult(id string, res solver.CacheResult) error {
 		if err != nil {
 			return err
 		}
-		if err := b.Put([]byte(id), []byte{}); err != nil {
-			return err
-		}
-
-		return nil
+		return b.Put([]byte(id), []byte{})
 	})
 }
 
@@ -207,12 +203,9 @@ func (s *Store) Release(resultID string) error {
 		if b == nil {
 			return errors.WithStack(solver.ErrNotFound)
 		}
-		if err := b.ForEach(func(k, v []byte) error {
+		return b.ForEach(func(k, v []byte) error {
 			return s.releaseHelper(tx, string(k), resultID)
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
 	})
 }
 
@@ -332,11 +325,7 @@ func (s *Store) AddLink(id string, link solver.CacheInfoLink, target string) err
 			return err
 		}
 
-		if err := b.Put([]byte(id), []byte{}); err != nil {
-			return err
-		}
-
-		return nil
+		return b.Put([]byte(id), []byte{})
 	})
 }
 
@@ -466,12 +455,12 @@ func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInf
 			return nil
 		}
 
-		if err := b.ForEach(func(bid, v []byte) error {
+		return b.ForEach(func(bid, v []byte) error {
 			b = links.Bucket(bid)
 			if b == nil {
 				return nil
 			}
-			if err := b.ForEach(func(k, v []byte) error {
+			return b.ForEach(func(k, v []byte) error {
 				parts := bytes.Split(k, []byte("@"))
 				if len(parts) == 2 {
 					if string(parts[1]) != id {
@@ -487,15 +476,8 @@ func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInf
 					outLinks = append(outLinks, l)
 				}
 				return nil
-			}); err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		return nil
+			})
+		})
 	}); err != nil {
 		return err
 	}

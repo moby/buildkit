@@ -1415,10 +1415,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	}
 	sr.queueBlobOnly(false)
 	sr.queueSize(sizeUnknown)
-	if err := sr.commitMetadata(); err != nil {
-		return err
-	}
-	return nil
+	return sr.commitMetadata()
 }
 
 func (sr *immutableRef) Release(ctx context.Context) error {

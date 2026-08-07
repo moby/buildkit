@@ -31,12 +31,11 @@ func (g *CachedGroup[T]) Do(ctx context.Context, key string, fn func(ctx context
 		g.mu.Lock()
 		if v, ok := g.cache[key]; ok {
 			g.mu.Unlock()
-			if v.err != nil {
-				if g.CacheError {
-					return v.v, v.err
-				}
-			} else {
+			if v.err == nil {
 				return v.v, nil
+			}
+			if g.CacheError {
+				return v.v, v.err
 			}
 		}
 		g.mu.Unlock()

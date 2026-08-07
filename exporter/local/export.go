@@ -194,10 +194,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 			progress, closeProgress := NewProgressHandler(ctx, lbl)
 			defer closeProgress()
-			if err := filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress); err != nil {
-				return err
-			}
-			return nil
+			return filesync.CopyToCaller(ctx, outputFS, e.id, caller, progress)
 		}
 	}
 

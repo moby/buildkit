@@ -91,11 +91,35 @@ linters:
     revive:
       enable-all-rules: false
       enable-default-rules: true
+      max-open-files: 2048
       rules:
+        - name: early-return
+          arguments:
+            - "preserve-scope"
+        - name: empty-block
+          disabled: true
         - name: errorf
+        - name: exported
+          disabled: true
         - name: if-return
+        - name: indent-error-flow
+          arguments:
+            - "preserve-scope"
+        - name: redefines-builtin-id
+          disabled: true
+        - name: unused-parameter
+          disabled: true
         - name: unnecessary-format
+        - name: unnecessary-if
+        - name: unnecessary-stmt
         - name: use-errors-new
+        - name: use-fmt-print
+        - name: useless-break
+        - name: superfluous-else
+          arguments:
+            - "preserve-scope"
+        - name: var-naming
+          disabled: true
     staticcheck:
       checks:
         - all
@@ -113,27 +137,6 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      - linters:
-          - revive
-        text: stutters
-      - linters:
-          - revive
-        text: empty-block
-      - linters:
-          - revive
-        text: superfluous-else
-      - linters:
-          - revive
-        text: unused-parameter
-      - linters:
-          - revive
-        text: redefines-builtin-id
-      - linters:
-          - revive
-        text: if-return
-      - linters:
-          - revive
-        text: var-naming
       - linters:
           - staticcheck
         text: "SA1019: .* is deprecated: .*in-toto/attestation"

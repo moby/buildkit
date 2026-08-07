@@ -25,11 +25,10 @@ func validateCaps(req string) (forward bool, err error) {
 		parts := strings.SplitN(c, "+", 2)
 		if _, ok := enabledCaps[parts[0]]; !ok {
 			err = stack.Enable(grpcerrors.WrapCode(errdefs.NewUnsupportedFrontendCapError(parts[0]), codes.Unimplemented))
-			if strings.Contains(c, "+forward") {
-				forward = true
-			} else {
+			if !strings.Contains(c, "+forward") {
 				return false, err
 			}
+			forward = true
 		}
 	}
 	return

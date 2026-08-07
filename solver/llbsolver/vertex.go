@@ -128,8 +128,7 @@ func NormalizeRuntimePlatforms() LoadOpt {
 
 func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) LoadOpt {
 	return func(op *pb.Op, _ *pb.OpMetadata, opt *solver.VertexOptions) error {
-		switch op := op.Op.(type) {
-		case *pb.Op_Exec:
+		if op, ok := op.Op.(*pb.Op_Exec); ok {
 			v := entitlements.Values{
 				NetworkHost:      op.Exec.Network == pb.NetMode_HOST,
 				SecurityInsecure: op.Exec.Security == pb.SecurityMode_INSECURE,
@@ -224,8 +223,7 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 	if md == nil || !md.IgnoreCache {
 		return nil
 	}
-	switch op := op.Op.(type) {
-	case *pb.Op_Exec:
+	if op, ok := op.Op.(*pb.Op_Exec); ok {
 		for _, m := range op.Exec.GetMounts() {
 			if m.MountType == pb.MountType_CACHE {
 				if m.CacheOpt != nil {

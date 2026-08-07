@@ -131,17 +131,16 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 				bklog.G(ctx).WithError(err).Errorf("failed to get reuse ref for cache dir %q: %s", id, si.ID())
 			}
 		}
-		if block && locked {
-			cacheRefsLocker.Unlock(key)
-			select {
-			case <-ctx.Done():
-				cacheRefsLocker.Lock(key)
-				return nil, context.Cause(ctx)
-			case <-time.After(100 * time.Millisecond):
-				cacheRefsLocker.Lock(key)
-			}
-		} else {
+		if !block || !locked {
 			break
+		}
+		cacheRefsLocker.Unlock(key)
+		select {
+		case <-ctx.Done():
+			cacheRefsLocker.Lock(key)
+			return nil, context.Cause(ctx)
+		case <-time.After(100 * time.Millisecond):
+			cacheRefsLocker.Lock(key)
 		}
 	}
 	mRef, err := makeMutable(ref)

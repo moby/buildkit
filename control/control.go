@@ -338,10 +338,7 @@ func (c *Controller) ListenBuildHistory(req *controlapi.BuildHistoryRequest, srv
 		return err
 	}
 	return c.history.Listen(srv.Context(), req, func(h *controlapi.BuildHistoryEvent) error {
-		if err := srv.Send(h); err != nil {
-			return err
-		}
-		return nil
+		return srv.Send(h)
 	})
 }
 

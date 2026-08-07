@@ -455,10 +455,7 @@ func (m *Mirror) AddImages(t *testing.T, images map[string]string) (err error) {
 		}
 	}()
 
-	if err := copyImagesLocal(t, m.Host, images); err != nil {
-		return err
-	}
-	return nil
+	return copyImagesLocal(t, m.Host, images)
 }
 
 func RunMirror() (_ *Mirror, err error) {
