@@ -654,7 +654,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		}
 		t.Logf("readdir: %v", resp)
 
-		require.Equal(t, 2, len(resp.Entries))
+		require.Len(t, resp.Entries, 2)
 		require.Equal(t, "bar", resp.Entries[0].Path)
 		require.Equal(t, "foo", resp.Entries[1].Path)
 
@@ -692,7 +692,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest
 
 	var mfst ocispecs.Manifest
@@ -703,7 +703,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 		mfst.Layers = mfst.Layers[1:] // skip base layer
 	}
 
-	require.Equal(t, 2, len(mfst.Layers))
+	require.Len(t, mfst.Layers, 2)
 	for _, layer := range mfst.Layers {
 		require.Contains(t, layer.MediaType, ocispecs.MediaTypeImageLayerZstd)
 	}

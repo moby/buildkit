@@ -32,7 +32,7 @@ func TestAsyncNonBlocking(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 4, len(arr))
+	require.Len(t, arr, 4)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)

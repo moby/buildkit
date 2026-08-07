@@ -48,12 +48,12 @@ func TestMkdirMkfile(t *testing.T) {
 	inp := rb.NewRef("ref1")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, append(outs, inp))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-ref1-mkdir-mkfile-commit", o.id)
-	require.Equal(t, 2, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 2)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
@@ -118,12 +118,12 @@ func TestChownOpt(t *testing.T) {
 	inp2 := rb.NewRef("usermount")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp, inp2}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, append(outs, inp, inp2))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-ref1-mkdir#u(mount-usermount)#g(mount-usermount)-mkfile-commit", o.id)
-	require.Equal(t, 2, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 2)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
@@ -180,12 +180,12 @@ func TestChownCopy(t *testing.T) {
 	inpDest := rb.NewRef("dest")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inpSrc, inpDest}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, append(outs, inpSrc, inpDest))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-dest-copy(mount-src)#u(mount-dest)#g(mount-scratch-mkfile)-commit", o.id)
-	require.Equal(t, 1, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 1)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Copy).Copy, o.mount.chain[0].copy)
 }
 
@@ -212,7 +212,7 @@ func TestInvalidNoOutput(t *testing.T) {
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	rb.checkReleased(t, outs)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no outputs specified")
+	require.ErrorContains(t, err, "no outputs specified")
 }
 
 func TestInvalidDuplicateOutput(t *testing.T) {
@@ -248,7 +248,7 @@ func TestInvalidDuplicateOutput(t *testing.T) {
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "duplicate output")
+	require.ErrorContains(t, err, "duplicate output")
 	rb.checkReleased(t, nil)
 }
 
@@ -274,7 +274,7 @@ func TestActionInvalidIndex(t *testing.T) {
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "loop from index")
+	require.ErrorContains(t, err, "loop from index")
 	rb.checkReleased(t, nil)
 }
 
@@ -311,7 +311,7 @@ func TestActionLoop(t *testing.T) {
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "loop from index")
+	require.ErrorContains(t, err, "loop from index")
 	rb.checkReleased(t, nil)
 }
 
@@ -349,17 +349,17 @@ func TestMultiOutput(t *testing.T) {
 	inp := rb.NewRef("ref1")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(outs))
+	require.Len(t, outs, 2)
 	rb.checkReleased(t, append(outs, inp))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-ref1-mkdir-commit", o.id)
-	require.Equal(t, 1, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 1)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
 
 	o = outs[1].(*testFileRef)
 	require.Equal(t, "mount-ref1-mkdir-mkfile-commit", o.id)
-	require.Equal(t, 2, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 2)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
@@ -397,13 +397,13 @@ func TestFileFromScratch(t *testing.T) {
 	s, rb := newTestFileSolver()
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, outs)
 
 	o := outs[0].(*testFileRef)
 
 	require.Equal(t, "mount-scratch-mkdir-mkfile-commit", o.id)
-	require.Equal(t, 2, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 2)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
@@ -431,12 +431,12 @@ func TestFileCopyInputSrc(t *testing.T) {
 	inp1 := rb.NewRef("destref")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, append(outs, inp0, inp1))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-destref-copy(mount-srcref)-commit", o.id)
-	require.Equal(t, 1, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 1)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Copy).Copy, o.mount.chain[0].copy)
 }
 
@@ -485,12 +485,12 @@ func TestFileCopyInputRm(t *testing.T) {
 	inp1 := rb.NewRef("destref")
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 	rb.checkReleased(t, append(outs, inp0, inp1))
 
 	o := outs[0].(*testFileRef)
 	require.Equal(t, "mount-destref-copy(mount-srcref-mkdir)-rm-commit", o.id)
-	require.Equal(t, 2, len(o.mount.chain))
+	require.Len(t, o.mount.chain, 2)
 	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].copySrc[0].mkdir)
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Copy).Copy, o.mount.chain[0].copy)
 	require.Equal(t, fo.Actions[2].Action.(*pb.FileAction_Rm).Rm, o.mount.chain[1].rm)
@@ -549,7 +549,7 @@ func TestFileParallelActions(t *testing.T) {
 
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(outs))
+	require.Len(t, outs, 1)
 
 	require.Equal(t, int64(2), sem)
 }

@@ -165,11 +165,11 @@ func TestParseKeyValue(t *testing.T) {
 
 	k, v = parseKeyValue("key=")
 	assert.Equal(t, "key", k)
-	assert.Equal(t, "", v)
+	assert.Empty(t, v)
 
 	k, v = parseKeyValue("key")
 	assert.Equal(t, "key", k)
-	assert.Equal(t, "", v)
+	assert.Empty(t, v)
 }
 
 func TestToEnvList(t *testing.T) {

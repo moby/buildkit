@@ -64,7 +64,7 @@ func TestPassthroughEmptyID(t *testing.T) {
 
 	_, err := Image("example.com/base:latest").Requires("", Image("example.com/dep:latest")).Marshal(t.Context())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "passthrough requires an id")
+	require.ErrorContains(t, err, "passthrough requires an id")
 }
 
 func requirePassthroughVertex(t *testing.T, def *Definition) *pb.Op {

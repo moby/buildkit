@@ -10,7 +10,6 @@ import (
 
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,12 +67,12 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(m))
+	require.Len(t, m, 2)
 	f0, ok := m["foo0"]
 	require.True(t, ok)
 	f1, ok := m["foo1"]
 	require.True(t, ok)
-	require.True(t, f0.CreatedAt.Before(f1.CreatedAt), "f0.CreatedAt %v was not Before f1.CreatedAt %v", f0.CreatedAt, f1.CreatedAt)
+	require.Less(t, f0.CreatedAt, f1.CreatedAt, "f0.CreatedAt %v was not Before f1.CreatedAt %v", f0.CreatedAt, f1.CreatedAt)
 
 	m = map[string]solver.CacheResult{}
 	err = st.WalkResults("bar", func(r solver.CacheResult) error {
@@ -82,7 +81,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 	_, ok = m["bar0"]
 	require.True(t, ok)
 
@@ -100,11 +99,11 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 
 	_, err = st.Load("foo1", "foo1")
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
+	require.ErrorIs(t, err, solver.ErrNotFound)
 
 	_, err = st.Load("foo", "foo2")
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
+	require.ErrorIs(t, err, solver.ErrNotFound)
 }
 
 func testLinks(t *testing.T, st solver.CacheKeyStorage) {
@@ -126,7 +125,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 	_, ok := m["target0"]
 	require.True(t, ok)
 
@@ -139,7 +138,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, len(m))
+	require.Empty(t, m)
 
 	err = st.AddLink("foo", l1, "target1")
 	require.NoError(t, err)
@@ -150,7 +149,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 
 	_, ok = m["target1"]
 	require.True(t, ok)
@@ -164,7 +163,7 @@ func testLinks(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, 2, len(m))
+	require.Len(t, m, 2)
 	_, ok = m["target1"]
 	require.True(t, ok)
 	_, ok = m["target1-second"]
@@ -195,7 +194,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 	_, ok := m["foo1"]
 	require.True(t, ok)
 
@@ -208,7 +207,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 
-	require.Equal(t, 0, len(m))
+	require.Empty(t, m)
 
 	st.Walk(func(id string) error {
 		require.Fail(t, fmt.Sprintf("id %s should have been released", id))
@@ -290,7 +289,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 	_, ok := m["foo-result"]
 	require.True(t, ok)
 
@@ -302,7 +301,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 
 	_, ok = m["sub1"]
 	require.True(t, ok)
@@ -321,7 +320,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, 0, len(m))
+	require.Empty(t, m)
 
 	m = map[string]struct{}{}
 	err = st.WalkLinks("foo", l0, func(id string) error {
@@ -329,7 +328,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(m))
+	require.Len(t, m, 1)
 
 	// release sub1 now releases foo as well
 	err = st.Release("sub1-result")

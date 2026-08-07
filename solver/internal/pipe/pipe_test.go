@@ -30,12 +30,12 @@ func TestPipe(t *testing.T) {
 	p, start := NewWithFunction[any](f)
 	p.OnSendCompletion = signal
 	go start()
-	require.Equal(t, false, p.Receiver.Receive())
+	require.False(t, p.Receiver.Receive())
 
 	st := p.Receiver.Status()
-	require.Equal(t, false, st.Completed)
-	require.Equal(t, false, st.Canceled)
-	require.Zero(t, st.Value)
+	require.False(t, st.Completed)
+	require.False(t, st.Canceled)
+	require.Empty(t, st.Value)
 	require.Equal(t, 0, signalled)
 
 	close(runCh)
@@ -43,8 +43,8 @@ func TestPipe(t *testing.T) {
 
 	p.Receiver.Receive()
 	st = p.Receiver.Status()
-	require.Equal(t, true, st.Completed)
-	require.Equal(t, false, st.Canceled)
+	require.True(t, st.Completed)
+	require.False(t, st.Canceled)
 	require.NoError(t, st.Err)
 	require.Equal(t, "res0", st.Value)
 }
@@ -75,9 +75,9 @@ func TestPipeCancel(t *testing.T) {
 	p.Receiver.Receive()
 
 	st := p.Receiver.Status()
-	require.Equal(t, false, st.Completed)
-	require.Equal(t, false, st.Canceled)
-	require.Zero(t, st.Value)
+	require.False(t, st.Completed)
+	require.False(t, st.Canceled)
+	require.Empty(t, st.Value)
 	require.Equal(t, 0, signalled)
 
 	p.Receiver.Cancel()
@@ -85,8 +85,8 @@ func TestPipeCancel(t *testing.T) {
 
 	p.Receiver.Receive()
 	st = p.Receiver.Status()
-	require.Equal(t, true, st.Completed)
-	require.Equal(t, true, st.Canceled)
+	require.True(t, st.Completed)
+	require.True(t, st.Canceled)
 	require.Error(t, st.Err)
 	require.ErrorIs(t, st.Err, context.Canceled)
 }

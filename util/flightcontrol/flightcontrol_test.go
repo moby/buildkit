@@ -54,7 +54,7 @@ func TestCancelOne(t *testing.T) {
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r1 = ret1
 		}
@@ -79,7 +79,7 @@ func TestCancelOne(t *testing.T) {
 	})
 	err := eg.Wait()
 	require.NoError(t, err)
-	assert.Equal(t, "", r1)
+	assert.Empty(t, r1)
 	assert.Equal(t, "bar", r2)
 	assert.Equal(t, int64(1), counter)
 }
@@ -135,7 +135,7 @@ func TestCancelRace(t *testing.T) {
 
 	_, err := g.Do(ctx, "foo", f)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 	<-wait
 }
 
@@ -151,7 +151,7 @@ func TestCancelBoth(t *testing.T) {
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r1 = ret1
 		}
@@ -160,7 +160,7 @@ func TestCancelBoth(t *testing.T) {
 	eg.Go(func() error {
 		ret2, err := g.Do(ctx3, "foo", f)
 		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r2 = ret2
 		}
@@ -186,8 +186,8 @@ func TestCancelBoth(t *testing.T) {
 	})
 	err := eg.Wait()
 	require.NoError(t, err)
-	assert.Equal(t, "", r1)
-	assert.Equal(t, "", r2)
+	assert.Empty(t, r1)
+	assert.Empty(t, r2)
 	assert.Equal(t, int64(1), counter)
 	ret1, err := g.Do(context.TODO(), "foo", f)
 	require.NoError(t, err)

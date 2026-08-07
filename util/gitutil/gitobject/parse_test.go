@@ -95,7 +95,7 @@ hack: update hack/compose with newer otel collector`, obj.Message)
 	_, offset := commit.Author.When.Zone()
 	require.Equal(t, -7*3600, offset)
 
-	require.Equal(t, 2, len(commit.Parents))
+	require.Len(t, commit.Parents, 2)
 	require.Equal(t, "2777c1b86e59a951188b81e310d3dc8b05b6ac9c", commit.Parents[0])
 	require.Equal(t, "916074cfc59ff9d4a29e0e1e74c3dd745b5e0d23", commit.Parents[1])
 

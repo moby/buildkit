@@ -139,7 +139,7 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 	case networkHostDenied:
 		if !workers.IsTestDockerd() {
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+			require.ErrorContains(t, err, "entitlement network.host is not allowed")
 		} else {
 			require.NoError(t, err)
 		}
@@ -190,7 +190,7 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 	case networkHostDenied:
 		if !workers.IsTestDockerd() {
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+			require.ErrorContains(t, err, "entitlement network.host is not allowed")
 		} else {
 			require.NoError(t, err)
 		}

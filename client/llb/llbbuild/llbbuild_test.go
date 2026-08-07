@@ -26,9 +26,9 @@ func TestMarshal(t *testing.T) {
 	buildop := op.GetBuild()
 	require.NotNil(t, buildop)
 
-	require.Equal(t, 1, len(op.Inputs))
+	require.Len(t, op.Inputs, 1)
 	require.Equal(t, pb.LLBBuilder, pb.InputIndex(buildop.Builder))
-	require.Equal(t, 1, len(buildop.Inputs))
+	require.Len(t, buildop.Inputs, 1)
 	require.Equal(t, &pb.BuildInput{Input: 0}, buildop.Inputs[string(pb.LLBDefinitionInput)])
 
 	require.Equal(t, "myfilename", buildop.Attrs[pb.AttrLLBDefinitionFilename])

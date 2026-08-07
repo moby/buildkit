@@ -73,19 +73,19 @@ Dockerfile
 
 	_, err = os.Stat(filepath.Join(destDir, ".dockerignore"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Stat(filepath.Join(destDir, "Dockerfile"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Stat(filepath.Join(destDir, "bar"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Stat(filepath.Join(destDir, "baz"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "bay"))
 	require.NoError(t, err)

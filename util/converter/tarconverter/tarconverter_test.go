@@ -31,12 +31,12 @@ func createTar(t testing.TB, name string, b []byte) []byte {
 // https://github.com/moby/buildkit/pull/4057#issuecomment-1693484361
 func TestPaddingForReader(t *testing.T) {
 	inB := createTar(t, "foo", []byte("hi"))
-	assert.Equal(t, 2048, len(inB))
+	assert.Len(t, inB, 2048)
 	r := NewReader(bytes.NewReader(inB), func(hdr *tar.Header) {
 		hdr.ModTime = time.Unix(0, 0)
 	})
 	outB, err := io.ReadAll(r)
 	require.NoError(t, err)
 	require.NoError(t, r.Close())
-	assert.Equal(t, len(inB), len(outB))
+	assert.Len(t, outB, len(inB))
 }

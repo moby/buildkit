@@ -34,7 +34,7 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	srcs := errdefs.Sources(err)
-	require.Equal(t, 3, len(srcs))
+	require.Len(t, srcs, 3)
 
 	// Source errors are wrapped in the order provided as llb.ConstraintOpts, so
 	// when they are unwrapped, the first unwrapped error is the last location
@@ -43,7 +43,7 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("data1"), srcs[0].Info.Data)
 	require.Nil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[0].Ranges))
+	require.Len(t, srcs[0].Ranges, 1)
 	require.Equal(t, int32(9), srcs[0].Ranges[0].Start.Line)
 	require.Equal(t, int32(0), srcs[0].Ranges[0].Start.Character)
 
@@ -51,7 +51,7 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("data2"), srcs[1].Info.Data)
 	require.Nil(t, srcs[1].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[1].Ranges))
+	require.Len(t, srcs[1].Ranges, 1)
 	require.Equal(t, int32(8), srcs[1].Ranges[0].Start.Line)
 	require.Equal(t, int32(0), srcs[1].Ranges[0].Start.Character)
 
@@ -59,7 +59,7 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("data1"), srcs[2].Info.Data)
 	require.Nil(t, srcs[2].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[2].Ranges))
+	require.Len(t, srcs[2].Ranges, 1)
 	require.Equal(t, int32(7), srcs[2].Ranges[0].Start.Line)
 	require.Equal(t, int32(0), srcs[2].Ranges[0].Start.Character)
 }
@@ -119,14 +119,14 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	srcs := errdefs.Sources(err)
-	require.Equal(t, 1, len(srcs))
+	require.Len(t, srcs, 1)
 
 	require.Equal(t, "bar", srcs[0].Info.Filename)
 	require.Equal(t, "mylang", srcs[0].Info.Language)
 	require.Equal(t, []byte("bardata"), srcs[0].Info.Data)
 	require.NotNil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[0].Ranges))
+	require.Len(t, srcs[0].Ranges, 1)
 	require.Equal(t, int32(3), srcs[0].Ranges[0].Start.Line)
 	require.Equal(t, int32(1), srcs[0].Ranges[0].Start.Character)
 }

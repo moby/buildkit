@@ -455,8 +455,6 @@ func writeCDISpecFile(t *testing.T, sb integration.Sandbox, c *Client, csf ...cd
 			return
 		}
 
-		if now.After(deadline) {
-			t.Fatalf("timeout waiting for CDI devices to appear")
-		}
+		require.LessOrEqualf(t, now, deadline, "timeout waiting for CDI devices to appear")
 	}
 }

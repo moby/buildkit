@@ -79,7 +79,7 @@ func testClientGatewayContainerInvalidSecurityMode(t *testing.T, sb integration.
 
 	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid security mode")
+	require.ErrorContains(t, err, "invalid security mode")
 }
 
 func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox, expectFail bool) {
@@ -181,7 +181,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 
 		if expectFail {
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "security.insecure is not allowed")
+			require.ErrorContains(t, err, "security.insecure is not allowed")
 			return nil, err
 		}
 
@@ -202,7 +202,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 
 	if expectFail {
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "security.insecure is not allowed")
+		require.ErrorContains(t, err, "security.insecure is not allowed")
 	} else {
 		require.NoError(t, err)
 	}

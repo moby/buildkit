@@ -503,7 +503,7 @@ func TestSingleCancelCache(t *testing.T) {
 
 	_, err = j0.Build(ctx, g0)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 
 	require.Equal(t, int64(1), *g0.Vertex.(*vertex).cacheCallCount)
 	require.Equal(t, int64(0), *g0.Vertex.(*vertex).execCallCount)
@@ -545,7 +545,7 @@ func TestSingleCancelExec(t *testing.T) {
 
 	_, err = j1.Build(ctx, g1)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 
 	require.Equal(t, int64(1), *g1.Vertex.(*vertex).cacheCallCount)
 	require.Equal(t, int64(1), *g1.Vertex.(*vertex).execCallCount)
@@ -599,7 +599,7 @@ func TestSingleCancelParallel(t *testing.T) {
 		_, err = j.Build(ctx, g)
 		close(firstErrored)
 		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		return nil
 	})
 
@@ -1273,7 +1273,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j0.Build(ctx, g0)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "error-from-test")
+	require.ErrorContains(t, err, "error-from-test")
 
 	require.NoError(t, j0.Discard())
 	j0 = nil
@@ -1314,7 +1314,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j1.Build(ctx, g1)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
@@ -1355,7 +1355,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j2.Build(ctx, g2)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "exec-error-from-test")
+	require.ErrorContains(t, err, "exec-error-from-test")
 
 	require.NoError(t, j2.Discard())
 	j1 = nil
@@ -2675,7 +2675,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 3, expTarget.numUniqueRecords())
-	require.Equal(t, false, called)
+	require.False(t, called)
 
 	j2, err := l.NewJob("j2")
 	require.NoError(t, err)
@@ -2710,7 +2710,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 3, expTarget.numUniqueRecords())
-	require.Equal(t, true, called)
+	require.True(t, called)
 }
 
 func TestCacheInputMultipleMaps(t *testing.T) {
@@ -3544,7 +3544,7 @@ func TestUnknownBuildID(t *testing.T) {
 
 	_, err := s.Get(identity.NewID())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no such job")
+	require.ErrorContains(t, err, "no such job")
 }
 
 func TestStaleEdgeMerge(t *testing.T) {

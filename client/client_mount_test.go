@@ -562,7 +562,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	// Would prefer to detect more specifically "Read-only file
 	// system" but that isn't exposed here (it is on the stdio
 	// which we don't see).
-	require.Contains(t, err.Error(), "process \"/bin/touch /foo\" did not complete successfully")
+	require.ErrorContains(t, err, "process \"/bin/touch /foo\" did not complete successfully")
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -892,7 +892,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no SSH key ")
+	require.ErrorContains(t, err, "no SSH key ")
 
 	// custom ID not exposed
 	st = llb.Image("busybox:latest").Run(llb.Shlex(`nosuchcmd`), llb.AddSSHSocket(llb.SSHID("customID")))
@@ -903,7 +903,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 		Session: []session.Attachable{ssh},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unset ssh forward key customID")
+	require.ErrorContains(t, err, "unset ssh forward key customID")
 
 	// missing custom ID ignored on optional
 	st = llb.Image("busybox:latest").Run(llb.Shlex(`ls`), llb.AddSSHSocket(llb.SSHID("customID"), llb.SSHOptional))

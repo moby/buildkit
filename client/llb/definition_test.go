@@ -45,8 +45,8 @@ func TestDefinitionEquivalence(t *testing.T) {
 
 			def2, err := st2.Marshal(ctx)
 			require.NoError(t, err)
-			require.Equal(t, len(def.Def), len(def2.Def))
-			require.Equal(t, len(def.Metadata), len(def2.Metadata))
+			require.Len(t, def2.Def, len(def.Def))
+			require.Len(t, def2.Metadata, len(def.Metadata))
 
 			for i := range def.Def {
 				res := bytes.Compare(def.Def[i], def2.Def[i])
@@ -116,7 +116,7 @@ func TestDefinitionInputCache(t *testing.T) {
 	_, err = marshal(ctx, st2.Output().Vertex(ctx, constraints), marshalDef, smc, map[digest.Digest]struct{}{}, vertexCache, constraints)
 	require.NoError(t, err)
 	// 1 exec + 2x2 mounts from stA and stB + 1 src = 6 vertexes
-	require.Equal(t, 6, len(vertexCache))
+	require.Len(t, vertexCache, 6)
 
 	// make sure that walking vertices in parallel doesn't cause panic
 	var all []RunOption

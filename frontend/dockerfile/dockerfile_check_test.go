@@ -1654,8 +1654,8 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			require.NotNil(t, lintResults.Error)
 			if lintTest.BuildErr != "" {
 				require.Equal(t, lintTest.BuildErr, lintResults.Error.Message)
-			} else if !lintTest.UnmarshalBuildErrRegexp.MatchString(lintResults.Error.Message) {
-				t.Fatalf("error %q does not match %q", lintResults.Error.Message, lintTest.UnmarshalBuildErrRegexp.String())
+			} else {
+				require.Truef(t, lintTest.UnmarshalBuildErrRegexp.MatchString(lintResults.Error.Message), "error %q does not match %q", lintResults.Error.Message, lintTest.UnmarshalBuildErrRegexp.String())
 			}
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
@@ -1667,7 +1667,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			}
 		}
 
-		require.Equal(t, len(warnings), len(lintResults.Warnings))
+		require.Len(t, lintResults.Warnings, len(warnings))
 
 		slices.SortFunc(lintResults.Warnings, func(a, b lint.Warning) int {
 			firstRange := a.Location.Ranges[0]
@@ -1768,7 +1768,7 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 			t.Logf("\t%d: %s", i, w.Short)
 		}
 	}
-	require.Equal(t, len(lintTest.Warnings), len(warnings))
+	require.Len(t, warnings, len(lintTest.Warnings))
 	sort.Slice(warnings, func(i, j int) bool {
 		w1 := warnings[i]
 		w2 := warnings[j]

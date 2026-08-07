@@ -240,7 +240,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		},
 	}, product, b, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), context.Canceled.Error())
+	require.ErrorContains(t, err, context.Canceled.Error())
 
 	checkAllReleasable(t, c, sb, true)
 }

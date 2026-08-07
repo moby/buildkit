@@ -116,7 +116,7 @@ func TestEncodeDecodeFrames(t *testing.T) {
 	decoded, err := decodeFrames(encoded)
 	require.NoError(t, err, "decodeFrames should not error")
 
-	assert.Equal(t, len(framesIn), len(decoded), "number of frames should match")
+	assert.Len(t, decoded, len(framesIn), "number of frames should match")
 	for i, f := range framesIn {
 		assert.Equal(t, f.ID, decoded[i].ID, "frame id should match")
 		assert.Equal(t, f.Data, decoded[i].Data, "frame data should match")

@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/cmd/buildctl/build"
@@ -15,14 +14,9 @@ import (
 
 func TestToAgentSource(t *testing.T) {
 	configs, err := build.ParseSSH([]string{"default"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	_, err = sshprovider.NewSSHAgentProvider(configs)
-	ok := err == nil || strings.Contains(err.Error(), "invalid empty ssh agent socket")
-	if !ok {
-		t.Fatal(err)
-	}
+	require.ErrorContains(t, err, "invalid empty ssh agent socket")
 
 	_, err = build.ParseSSH([]string{"default=raw=true"})
 	require.ErrorContains(t, err, "raw mode must supply exactly one socket path")

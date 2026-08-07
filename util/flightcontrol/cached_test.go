@@ -33,7 +33,7 @@ func TestCached(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, v)
-	require.Equal(t, false, didCall)
+	require.False(t, didCall)
 
 	// by default, errors are not cached
 	_, err = g.Do(ctx, "33", func(ctx context.Context) (int, error) {

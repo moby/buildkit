@@ -172,7 +172,7 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 		if netMode == pb.NetMode_HOST {
 			if expectFail {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "network.host is not allowed")
+				require.ErrorContains(t, err, "network.host is not allowed")
 			} else {
 				require.NoError(t, err)
 			}

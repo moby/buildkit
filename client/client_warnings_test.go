@@ -69,13 +69,13 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 
 	warnings := wc.wait()
 
-	require.Equal(t, 1, len(wc.vertexes))
-	require.Equal(t, 1, len(warnings))
+	require.Len(t, wc.vertexes, 1)
+	require.Len(t, warnings, 1)
 
 	w := warnings[0]
 
 	require.Equal(t, "this is warning", string(w.Short))
-	require.Equal(t, 2, len(w.Detail))
+	require.Len(t, w.Detail, 2)
 	require.Equal(t, "this is detail", string(w.Detail[0]))
 	require.Equal(t, "and more detail", string(w.Detail[1]))
 	require.Equal(t, "https://example.com", w.URL)
@@ -85,7 +85,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, "mydockerfile", w.SourceInfo.Filename)
 	require.Equal(t, "filedata", string(w.SourceInfo.Data))
-	require.Equal(t, 1, len(w.Range))
+	require.Len(t, w.Range, 1)
 	require.Equal(t, int32(2), w.Range[0].Start.Line)
 	require.Equal(t, int32(4), w.Range[0].End.Line)
 

@@ -205,7 +205,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	_, err = os.ReadFile(filepath.Join(destDir, "third"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "forth"))
 	require.NoError(t, err)
@@ -232,11 +232,11 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	_, err = os.ReadFile(filepath.Join(destDir, "first"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.ReadFile(filepath.Join(destDir, "second"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "third"))
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid layer limit")
+	require.ErrorContains(t, err, "invalid layer limit")
 }
 
 func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {

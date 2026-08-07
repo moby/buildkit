@@ -179,7 +179,7 @@ COPY Dockerfile .
 	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(idx.Manifests))
+	require.Len(t, idx.Manifests, 2)
 
 	for i, exp := range []struct {
 		p          string
@@ -197,7 +197,7 @@ COPY Dockerfile .
 			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
-			require.Equal(t, 1, len(mfst.Layers))
+			require.Len(t, mfst.Layers, 1)
 
 			var img ocispecs.Image
 			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
@@ -313,7 +313,7 @@ RUN ["echo", "hello"]this is invalid
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "this is invalid")
+	require.ErrorContains(t, err, "this is invalid")
 
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureDirectPush,
@@ -444,6 +444,6 @@ FNTRYPOINT ["cmd", "/c", "echo invalidinstruction"]
 	}, nil)
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown instruction: FNTRYPOINT")
-	require.Contains(t, err.Error(), "did you mean ENTRYPOINT?")
+	require.ErrorContains(t, err, "unknown instruction: FNTRYPOINT")
+	require.ErrorContains(t, err, "did you mean ENTRYPOINT?")
 }

@@ -141,7 +141,7 @@ RUN echo ok> /foo
 				require.NoError(t, err)
 				imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 				require.NoError(t, err)
-				require.Equal(t, 2, len(imgs.Images))
+				require.Len(t, imgs.Images, 2)
 
 				img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 				require.NotNil(t, img)
@@ -184,23 +184,23 @@ RUN echo ok> /foo
 					pred := stmt.Predicate
 
 					require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
-					require.Equal(t, "", pred.RunDetails.Builder.ID)
+					require.Empty(t, pred.RunDetails.Builder.ID)
 
-					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+					require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 					require.Equal(t, expCustom, pred.BuildDefinition.InternalParameters.ProvenanceCustomEnv)
 
 					args := pred.BuildDefinition.ExternalParameters.Request.Args
 					if isClient {
-						require.Equal(t, "", pred.BuildDefinition.ExternalParameters.Request.Frontend)
-						require.Equal(t, 0, len(args), "%v", args)
+						require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
+						require.Empty(t, args, "%v", args)
 						require.False(t, pred.RunDetails.Metadata.Completeness.Request)
-						require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+						require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 					} else if isGateway {
 						require.Equal(t, "gateway.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
 
 						if mode == "max" || mode == "" {
-							require.Equal(t, 4, len(args), "%v", args)
+							require.Len(t, args, 4, "%v", args)
 							require.True(t, pred.RunDetails.Metadata.Completeness.Request)
 
 							require.Equal(t, "bar", args["build-arg:FOO"])
@@ -208,7 +208,7 @@ RUN echo ok> /foo
 							require.Contains(t, args["source"], "buildkit_test/")
 						} else {
 							require.False(t, pred.RunDetails.Metadata.Completeness.Request)
-							require.Equal(t, 2, len(args), "%v", args)
+							require.Len(t, args, 2, "%v", args)
 							require.Contains(t, args["source"], "buildkit_test/")
 						}
 						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
@@ -216,14 +216,14 @@ RUN echo ok> /foo
 						require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
 
 						if mode == "max" || mode == "" {
-							require.Equal(t, 3, len(args))
+							require.Len(t, args, 3)
 							require.True(t, pred.RunDetails.Metadata.Completeness.Request)
 
 							require.Equal(t, "bar", args["build-arg:FOO"])
 							require.Equal(t, "abc", args["label:lbl"])
 						} else {
 							require.False(t, pred.RunDetails.Metadata.Completeness.Request)
-							require.Equal(t, 1, len(args), "%v", args)
+							require.Len(t, args, 1, "%v", args)
 						}
 						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
 					}
@@ -232,12 +232,12 @@ RUN echo ok> /foo
 					escapedPlatform := url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 					expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, escapedPlatform)
 					if isGateway {
-						require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+						require.Len(t, pred.BuildDefinition.ResolvedDependencies, 2, "%+v", pred.BuildDefinition.ResolvedDependencies)
 						require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "docker/buildkit_test")
 						require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[1].URI)
 						require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[1].Digest["sha256"])
 					} else {
-						require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+						require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1, "%+v", pred.BuildDefinition.ResolvedDependencies)
 						require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
 						require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
 					}
@@ -250,7 +250,7 @@ RUN echo ok> /foo
 
 					require.NotEmpty(t, pred.RunDetails.Metadata.InvocationID)
 
-					require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+					require.Len(t, pred.BuildDefinition.ExternalParameters.Request.Locals, 2, "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
 					require.Equal(t, "context", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
 					require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[1].Name)
 
@@ -272,14 +272,14 @@ RUN echo ok> /foo
 					require.False(t, pred.RunDetails.Metadata.Hermetic)
 
 					if mode == "max" || mode == "" {
-						require.Equal(t, 2, len(pred.RunDetails.Metadata.BuildKitMetadata.Layers))
+						require.Len(t, pred.RunDetails.Metadata.BuildKitMetadata.Layers, 2)
 						require.NotNil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
 						require.Equal(t, "Dockerfile", pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos[0].Filename)
 						require.Equal(t, dockerfile, pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos[0].Data)
 						require.NotNil(t, pred.BuildDefinition.InternalParameters.BuildConfig)
-						require.Equal(t, 3, len(pred.BuildDefinition.InternalParameters.BuildConfig.Definition))
+						require.Len(t, pred.BuildDefinition.InternalParameters.BuildConfig.Definition, 3)
 					} else {
-						require.Equal(t, 0, len(pred.RunDetails.Metadata.BuildKitMetadata.Layers))
+						require.Empty(t, pred.RunDetails.Metadata.BuildKitMetadata.Layers)
 						require.Nil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
 						require.Nil(t, pred.BuildDefinition.InternalParameters.BuildConfig)
 					}
@@ -292,23 +292,23 @@ RUN echo ok> /foo
 					pred := stmt.Predicate
 
 					require.Equal(t, "https://mobyproject.org/buildkit@v1", pred.BuildType)
-					require.Equal(t, "", pred.Builder.ID)
+					require.Empty(t, pred.Builder.ID)
 
-					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
+					require.Empty(t, pred.Invocation.ConfigSource.URI)
 
 					require.Equal(t, expCustom, pred.Invocation.Environment.ProvenanceCustomEnv)
 
 					args := pred.Invocation.Parameters.Args
 					if isClient {
-						require.Equal(t, "", pred.Invocation.Parameters.Frontend)
-						require.Equal(t, 0, len(args), "%v", args)
+						require.Empty(t, pred.Invocation.Parameters.Frontend)
+						require.Empty(t, args, "%v", args)
 						require.False(t, pred.Metadata.Completeness.Parameters)
-						require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
+						require.Empty(t, pred.Invocation.ConfigSource.EntryPoint)
 					} else if isGateway {
 						require.Equal(t, "gateway.v0", pred.Invocation.Parameters.Frontend)
 
 						if mode == "max" || mode == "" {
-							require.Equal(t, 4, len(args), "%v", args)
+							require.Len(t, args, 4, "%v", args)
 							require.True(t, pred.Metadata.Completeness.Parameters)
 
 							require.Equal(t, "bar", args["build-arg:FOO"])
@@ -316,7 +316,7 @@ RUN echo ok> /foo
 							require.Contains(t, args["source"], "buildkit_test/")
 						} else {
 							require.False(t, pred.Metadata.Completeness.Parameters)
-							require.Equal(t, 2, len(args), "%v", args)
+							require.Len(t, args, 2, "%v", args)
 							require.Contains(t, args["source"], "buildkit_test/")
 						}
 						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
@@ -324,14 +324,14 @@ RUN echo ok> /foo
 						require.Equal(t, "dockerfile.v0", pred.Invocation.Parameters.Frontend)
 
 						if mode == "max" || mode == "" {
-							require.Equal(t, 3, len(args))
+							require.Len(t, args, 3)
 							require.True(t, pred.Metadata.Completeness.Parameters)
 
 							require.Equal(t, "bar", args["build-arg:FOO"])
 							require.Equal(t, "abc", args["label:lbl"])
 						} else {
 							require.False(t, pred.Metadata.Completeness.Parameters)
-							require.Equal(t, 1, len(args), "%v", args)
+							require.Len(t, args, 1, "%v", args)
 						}
 						require.Equal(t, "https://xxxxx:xxxxx@example.invalid/foo.html", args["context:foo"])
 					}
@@ -345,12 +345,12 @@ RUN echo ok> /foo
 					escapedPlatform := url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 					expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, escapedPlatform)
 					if isGateway {
-						require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
+						require.Len(t, pred.Materials, 2, "%+v", pred.Materials)
 						require.Contains(t, pred.Materials[0].URI, "docker/buildkit_test")
 						require.Equal(t, expectedBase, pred.Materials[1].URI)
 						require.NotEmpty(t, pred.Materials[1].Digest["sha256"])
 					} else {
-						require.Equal(t, 1, len(pred.Materials), "%+v", pred.Materials)
+						require.Len(t, pred.Materials, 1, "%+v", pred.Materials)
 						require.Equal(t, expectedBase, pred.Materials[0].URI)
 						require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
 					}
@@ -363,7 +363,7 @@ RUN echo ok> /foo
 
 					require.NotEmpty(t, pred.Metadata.BuildInvocationID)
 
-					require.Equal(t, 2, len(pred.Invocation.Parameters.Locals), "%+v", pred.Invocation.Parameters.Locals)
+					require.Len(t, pred.Invocation.Parameters.Locals, 2, "%+v", pred.Invocation.Parameters.Locals)
 					require.Equal(t, "context", pred.Invocation.Parameters.Locals[0].Name)
 					require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[1].Name)
 
@@ -381,15 +381,15 @@ RUN echo ok> /foo
 					require.False(t, pred.Metadata.Hermetic)
 
 					if mode == "max" || mode == "" {
-						require.Equal(t, 2, len(pred.Metadata.BuildKitMetadata.Layers))
+						require.Len(t, pred.Metadata.BuildKitMetadata.Layers, 2)
 						require.NotNil(t, pred.Metadata.BuildKitMetadata.Source)
 						require.Equal(t, "Dockerfile", pred.Metadata.BuildKitMetadata.Source.Infos[0].Filename)
 						require.Equal(t, dockerfile, pred.Metadata.BuildKitMetadata.Source.Infos[0].Data)
 						require.NotNil(t, pred.BuildConfig)
 
-						require.Equal(t, 3, len(pred.BuildConfig.Definition))
+						require.Len(t, pred.BuildConfig.Definition, 3)
 					} else {
-						require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.Layers))
+						require.Empty(t, pred.Metadata.BuildKitMetadata.Layers)
 						require.Nil(t, pred.Metadata.BuildKitMetadata.Source)
 						require.Nil(t, pred.BuildConfig)
 					}
@@ -503,7 +503,7 @@ COPY myapp.Dockerfile /
 			require.NoError(t, err)
 			imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 			require.NoError(t, err)
-			require.Equal(t, 2, len(imgs.Images))
+			require.Len(t, imgs.Images, 2)
 
 			img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 			require.NotNil(t, img)
@@ -533,8 +533,8 @@ COPY myapp.Dockerfile /
 
 				if isClient {
 					require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
-					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
-					require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
+					require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+					require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.Path)
 					require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 				} else {
 					require.NotEmpty(t, pred.BuildDefinition.ExternalParameters.Request.Frontend)
@@ -549,7 +549,7 @@ COPY myapp.Dockerfile /
 
 				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 				if isGateway {
-					require.Equal(t, 3, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+					require.Len(t, pred.BuildDefinition.ResolvedDependencies, 3, "%+v", pred.BuildDefinition.ResolvedDependencies)
 
 					require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "pkg:docker/buildkit_test/")
 					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest)
@@ -560,7 +560,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, expectedURL+"/.git#v1", pred.BuildDefinition.ResolvedDependencies[2].URI)
 					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[2].Digest[format])
 				} else {
-					require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+					require.Len(t, pred.BuildDefinition.ResolvedDependencies, 2, "%+v", pred.BuildDefinition.ResolvedDependencies)
 
 					require.Equal(t, expBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
 					require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
@@ -569,7 +569,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.BuildDefinition.ResolvedDependencies[1].Digest[format])
 				}
 
-				require.Equal(t, 0, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+				require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Locals)
 
 				require.True(t, pred.RunDetails.Metadata.Completeness.ResolvedDependencies)
 				require.True(t, pred.RunDetails.Metadata.Hermetic)
@@ -581,7 +581,7 @@ COPY myapp.Dockerfile /
 				}
 				require.False(t, pred.RunDetails.Metadata.Reproducible)
 
-				require.Equal(t, 0, len(pred.RunDetails.Metadata.BuildKitMetadata.VCS), "%+v", pred.RunDetails.Metadata.BuildKitMetadata.VCS)
+				require.Empty(t, pred.RunDetails.Metadata.BuildKitMetadata.VCS, "%+v", pred.RunDetails.Metadata.BuildKitMetadata.VCS)
 			} else {
 				require.Equal(t, "https://slsa.dev/provenance/v0.2", attest.PredicateType) // intentionally not const
 
@@ -594,8 +594,8 @@ COPY myapp.Dockerfile /
 
 				if isClient {
 					require.Empty(t, pred.Invocation.Parameters.Frontend)
-					require.Equal(t, "", pred.Invocation.ConfigSource.URI)
-					require.Equal(t, "", pred.Invocation.ConfigSource.EntryPoint)
+					require.Empty(t, pred.Invocation.ConfigSource.URI)
+					require.Empty(t, pred.Invocation.ConfigSource.EntryPoint)
 					require.Empty(t, pred.Invocation.Environment.DockerfileVersion)
 				} else {
 					require.NotEmpty(t, pred.Invocation.Parameters.Frontend)
@@ -610,7 +610,7 @@ COPY myapp.Dockerfile /
 
 				expBase := "pkg:docker/busybox@latest?platform=" + url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 				if isGateway {
-					require.Equal(t, 3, len(pred.Materials), "%+v", pred.Materials)
+					require.Len(t, pred.Materials, 3, "%+v", pred.Materials)
 
 					require.Contains(t, pred.Materials[0].URI, "pkg:docker/buildkit_test/")
 					require.NotEmpty(t, pred.Materials[0].Digest)
@@ -621,7 +621,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, expectedURL+"/.git#v1", pred.Materials[2].URI)
 					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[2].Digest[format])
 				} else {
-					require.Equal(t, 2, len(pred.Materials), "%+v", pred.Materials)
+					require.Len(t, pred.Materials, 2, "%+v", pred.Materials)
 
 					require.Equal(t, expBase, pred.Materials[0].URI)
 					require.NotEmpty(t, pred.Materials[0].Digest["sha256"])
@@ -630,7 +630,7 @@ COPY myapp.Dockerfile /
 					require.Equal(t, strings.TrimSpace(string(expectedGitSHA)), pred.Materials[1].Digest[format])
 				}
 
-				require.Equal(t, 0, len(pred.Invocation.Parameters.Locals))
+				require.Empty(t, pred.Invocation.Parameters.Locals)
 
 				require.True(t, pred.Metadata.Completeness.Materials)
 				require.True(t, pred.Metadata.Completeness.Environment)
@@ -643,7 +643,7 @@ COPY myapp.Dockerfile /
 				}
 				require.False(t, pred.Metadata.Reproducible)
 
-				require.Equal(t, 0, len(pred.Metadata.BuildKitMetadata.VCS), "%+v", pred.Metadata.BuildKitMetadata.VCS)
+				require.Empty(t, pred.Metadata.BuildKitMetadata.VCS, "%+v", pred.Metadata.BuildKitMetadata.VCS)
 			}
 		})
 	}
@@ -705,7 +705,7 @@ RUN echo "ok-$TARGETARCH" > /foo
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 4, len(imgs.Images))
+	require.Len(t, imgs.Images, 4)
 
 	_, isClient := f.(*clientFrontend)
 	_, isGateway := f.(*gatewayFrontend)
@@ -734,30 +734,30 @@ RUN echo "ok-$TARGETARCH" > /foo
 		pred := stmt.Predicate
 
 		require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
-		require.Equal(t, "", pred.RunDetails.Builder.ID)
-		require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+		require.Empty(t, pred.RunDetails.Builder.ID)
+		require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 		if isGateway {
-			require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+			require.Len(t, pred.BuildDefinition.ResolvedDependencies, 2, "%+v", pred.BuildDefinition.ResolvedDependencies)
 			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "buildkit_test")
 			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, "pkg:docker/busybox@latest")
 			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, url.PathEscape(p))
 		} else {
-			require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+			require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1, "%+v", pred.BuildDefinition.ResolvedDependencies)
 			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, "pkg:docker/busybox@latest")
 			require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, url.PathEscape(p))
 		}
 
 		args := pred.BuildDefinition.ExternalParameters.Request.Args
 		if isClient {
-			require.Equal(t, 0, len(args), "%+v", args)
+			require.Empty(t, args, "%+v", args)
 		} else if isGateway {
-			require.Equal(t, 3, len(args), "%+v", args)
+			require.Len(t, args, 3, "%+v", args)
 			require.Equal(t, "bar", args["build-arg:FOO"])
 			require.Equal(t, "abc", args["label:lbl"])
 			require.Contains(t, args["source"], "buildkit_test/")
 		} else {
-			require.Equal(t, 2, len(args), "%+v", args)
+			require.Len(t, args, 2, "%+v", args)
 			require.Equal(t, "bar", args["build-arg:FOO"])
 			require.Equal(t, "abc", args["label:lbl"])
 		}
@@ -916,7 +916,7 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 4, len(imgs.Images))
+	require.Len(t, imgs.Images, 4)
 
 	// nanoserver layer entries are under Files/; cmd echo writes CRLF.
 	outFile := integration.UnixOrWindows("foo", "Files/foo")
@@ -946,16 +946,16 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	pred := stmt.Predicate
 
 	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
-	require.Equal(t, "", pred.RunDetails.Builder.ID)
-	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Empty(t, pred.RunDetails.Builder.ID)
+	require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 	args := pred.BuildDefinition.ExternalParameters.Request.Args
-	require.Equal(t, 2, len(args), "%+v", args)
+	require.Len(t, args, 2, "%+v", args)
 	require.Equal(t, "The", args["build-arg:FOO"])
 	require.Equal(t, "armtarget", args["target"])
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
-	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
+	require.Len(t, pred.BuildDefinition.ExternalParameters.Request.Locals, 2)
+	require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1)
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, armBase)
 
 	// amd64
@@ -975,16 +975,16 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	pred = stmt.Predicate
 
 	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
-	require.Equal(t, "", pred.RunDetails.Builder.ID)
-	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Empty(t, pred.RunDetails.Builder.ID)
+	require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 	args = pred.BuildDefinition.ExternalParameters.Request.Args
-	require.Equal(t, 2, len(args), "%+v", args)
+	require.Len(t, args, 2, "%+v", args)
 	require.Equal(t, "Moby", args["build-arg:FOO"])
 	require.Equal(t, "x86target", args["target"])
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
-	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
+	require.Len(t, pred.BuildDefinition.ExternalParameters.Request.Locals, 2)
+	require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1)
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, amdBase)
 }
 
@@ -1062,7 +1062,7 @@ COPY --from=base C:\out C:\Files
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(ctx, provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -1089,11 +1089,11 @@ COPY --from=base C:\out C:\Files
 	require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
 	require.Equal(t, daemonDockerfileVersion(ctx, t, c), pred.BuildDefinition.InternalParameters.DockerfileVersion)
 	require.NotContains(t, pred.BuildDefinition.ExternalParameters.Request.Args, "source")
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+	require.Len(t, pred.BuildDefinition.ExternalParameters.Request.Locals, 2, "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
 
 	expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
 	expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec()))))
-	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+	require.Len(t, pred.BuildDefinition.ResolvedDependencies, 1, "%+v", pred.BuildDefinition.ResolvedDependencies)
 	require.Equal(t, expectedBase, pred.BuildDefinition.ResolvedDependencies[0].URI)
 	require.NotEmpty(t, pred.BuildDefinition.ResolvedDependencies[0].Digest["sha256"])
 }
@@ -1176,7 +1176,7 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	nativePlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -1200,14 +1200,14 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 	pred := stmt.Predicate
 
 	require.Equal(t, "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md", pred.BuildDefinition.BuildType)
-	require.Equal(t, "", pred.RunDetails.Builder.ID)
-	require.Equal(t, "", pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Empty(t, pred.RunDetails.Builder.ID)
+	require.Empty(t, pred.BuildDefinition.ExternalParameters.ConfigSource.URI)
 
 	args := pred.BuildDefinition.ExternalParameters.Request.Args
-	require.Equal(t, 0, len(args), "%+v", args)
-	require.Equal(t, 0, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+	require.Empty(t, args, "%+v", args)
+	require.Empty(t, pred.BuildDefinition.ExternalParameters.Request.Locals)
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ResolvedDependencies), "%+v", pred.BuildDefinition.ResolvedDependencies)
+	require.Len(t, pred.BuildDefinition.ResolvedDependencies, 2, "%+v", pred.BuildDefinition.ResolvedDependencies)
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, integration.UnixOrWindows("docker/alpine", "docker/nanoserver"))
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[1].URI, "README.md")
 }
@@ -1936,7 +1936,7 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -1952,13 +1952,13 @@ RUN --mount=type=secret,id=mysecret --mount=type=secret,id=othersecret --mount=t
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
 	pred := stmt.Predicate
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Secrets), "%+v", pred.BuildDefinition.ExternalParameters.Request.Secrets)
+	require.Len(t, pred.BuildDefinition.ExternalParameters.Request.Secrets, 2, "%+v", pred.BuildDefinition.ExternalParameters.Request.Secrets)
 	require.Equal(t, "mysecret", pred.BuildDefinition.ExternalParameters.Request.Secrets[0].ID)
 	require.True(t, pred.BuildDefinition.ExternalParameters.Request.Secrets[0].Optional)
 	require.Equal(t, "othersecret", pred.BuildDefinition.ExternalParameters.Request.Secrets[1].ID)
 	require.True(t, pred.BuildDefinition.ExternalParameters.Request.Secrets[1].Optional)
 
-	require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.SSH), "%+v", pred.BuildDefinition.ExternalParameters.Request.SSH)
+	require.Len(t, pred.BuildDefinition.ExternalParameters.Request.SSH, 1, "%+v", pred.BuildDefinition.ExternalParameters.Request.SSH)
 	require.Equal(t, "default", pred.BuildDefinition.ExternalParameters.Request.SSH[0].ID)
 	require.True(t, pred.BuildDefinition.ExternalParameters.Request.SSH[0].Optional)
 }
@@ -2020,7 +2020,7 @@ EOF
 	require.NoError(t, err)
 	err = json.Unmarshal(dt, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest.Hex()
 
 	store, err := local.NewStore(ocidir)
@@ -2066,7 +2066,7 @@ EOF
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -2338,7 +2338,7 @@ ADD bar bar`)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	expPlatform := platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -2360,7 +2360,7 @@ ADD bar bar`)
 		steps[step.ID] = step
 	}
 	// ensure all IDs are unique
-	require.Equal(t, len(steps), len(def))
+	require.Len(t, def, len(steps))
 
 	src := pred.RunDetails.Metadata.BuildKitMetadata.Source
 
@@ -2378,7 +2378,7 @@ ADD bar bar`)
 			require.NotNil(t, s, "unmapped step %s is not source", id)
 			require.Equal(t, "local://context", s.Identifier)
 		} else if len(loc.Locations) >= 1 {
-			require.Equal(t, 1, len(loc.Locations), "step %s has more than one location", id)
+			require.Len(t, loc.Locations, 1, "step %s has more than one location", id)
 		}
 
 		for _, loc := range loc.Locations {
@@ -2386,9 +2386,8 @@ ADD bar bar`)
 				require.Equal(t, r.Start.Line, r.End.Line, "step %s has range with multiple lines", id)
 
 				idx := r.Start.Line - 1
-				if idx < 0 || int(idx) >= len(lines) {
-					t.Fatalf("step %s has invalid range on line %d", id, idx)
-				}
+				require.GreaterOrEqualf(t, idx, 0, "step %s has invalid range on line %d", id, idx)
+				require.Lessf(t, int(idx), len(lines), "step %s has invalid range on line %d", id, idx)
 				lines[idx] = true
 			}
 		}
@@ -2539,7 +2538,7 @@ COPY bar bar2
 		}
 	}
 
-	require.NotEqual(t, 0, len(provDt))
+	require.NotEmpty(t, provDt)
 
 	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(provDt, &pred))
@@ -2548,12 +2547,12 @@ COPY bar bar2
 	require.NotNil(t, pred.RunDetails.Metadata.BuildKitMetadata.Source)
 	sources := pred.RunDetails.Metadata.BuildKitMetadata.Source.Infos
 
-	require.Equal(t, 1, len(sources))
+	require.Len(t, sources, 1)
 	require.Equal(t, "Dockerfile", sources[0].Filename)
 	require.Equal(t, "Dockerfile", sources[0].Language)
 
 	require.Equal(t, dockerfile, sources[0].Data)
-	require.NotEqual(t, 0, len(sources[0].Definition))
+	require.NotEmpty(t, sources[0].Definition)
 }
 
 // testDuplicateLayersProvenance builds a Dockerfile with a diamond dependency pattern (stages "a" and "b" both derive from "base"), pushes the image with max provenance, and checks that the base layer referenced by step0 appears exactly once in the provenance metadata rather than being listed multiple times.
@@ -2632,7 +2631,7 @@ func testDuplicateLayersProvenance(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att := imgs.Find("unknown/unknown")
 	require.NotNil(t, att)
@@ -2712,7 +2711,7 @@ COPY --from=base /out /
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "provenance.json"))
 	require.NoError(t, err)
-	require.NotEqual(t, 0, len(dt))
+	require.NotEmpty(t, dt)
 
 	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(dt, &pred))
@@ -2780,7 +2779,7 @@ COPY --from=base /out /
 
 	dt, err = os.ReadFile(filepath.Join(destDir, expPlatform, "provenance.json"))
 	require.NoError(t, err)
-	require.NotEqual(t, 0, len(dt))
+	require.NotEmpty(t, dt)
 
 	var pred provenancetypes.ProvenancePredicateSLSA1
 	require.NoError(t, json.Unmarshal(dt, &pred))
@@ -2845,7 +2844,7 @@ COPY --from=base /out /
 
 		dt, err = os.ReadFile(filepath.Join(destDir, platform, "provenance.json"))
 		require.NoError(t, err)
-		require.NotEqual(t, 0, len(dt))
+		require.NotEmpty(t, dt)
 
 		var pred provenancetypes.ProvenancePredicateSLSA1
 		require.NoError(t, json.Unmarshal(dt, &pred))
@@ -2916,7 +2915,7 @@ COPY --from=base /out /
 
 		dt, err = os.ReadFile(filepath.Join(destDir, "provenance.linux_"+arch+".json"))
 		require.NoError(t, err)
-		require.NotEqual(t, 0, len(dt))
+		require.NotEmpty(t, dt)
 
 		var pred provenancetypes.ProvenancePredicateSLSA1
 		require.NoError(t, json.Unmarshal(dt, &pred))

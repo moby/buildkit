@@ -76,8 +76,8 @@ func TestFormat(t *testing.T) {
 	t.Parallel()
 
 	t.Run("empty", func(t *testing.T) {
-		require.Equal(t, "", Format(nil))
-		require.Equal(t, "", Format(map[int]struct{}{}))
+		require.Empty(t, Format(nil))
+		require.Empty(t, Format(map[int]struct{}{}))
 	})
 
 	t.Run("single value", func(t *testing.T) {

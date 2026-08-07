@@ -127,7 +127,7 @@ func TestHealthCheckCmd(t *testing.T) {
 	cmd, err := ParseInstruction(node)
 	require.NoError(t, err)
 	hc, ok := cmd.(*HealthCheckCommand)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	expected := []string{"CMD-SHELL", "hello world"}
 	require.Equal(t, expected, hc.Health.Test)
 }
@@ -140,7 +140,7 @@ func TestParseOptInterval(t *testing.T) {
 	}
 	_, err := parseOptInterval(flInterval)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "cannot be less than 1ms")
+	require.ErrorContains(t, err, "cannot be less than 1ms")
 
 	flInterval.Value = "0ms"
 	_, err = parseOptInterval(flInterval)
@@ -200,7 +200,7 @@ ARG bar baz=123
 	st := stages[0]
 
 	require.Equal(t, "foo", st.Commands[0].(*ArgCommand).Args[0].Key)
-	require.Equal(t, "", st.Commands[0].(*ArgCommand).Args[0].DocComment)
+	require.Empty(t, st.Commands[0].(*ArgCommand).Args[0].DocComment)
 	require.Equal(t, "bar", st.Commands[1].(*ArgCommand).Args[0].Key)
 	require.Equal(t, "defines bar", st.Commands[1].(*ArgCommand).Args[0].DocComment)
 	require.Equal(t, "baz", st.Commands[1].(*ArgCommand).Args[1].Key)
@@ -250,9 +250,7 @@ func TestErrorCases(t *testing.T) {
 		r := strings.NewReader(c.dockerfile)
 		ast, err := parser.Parse(r)
 
-		if err != nil {
-			t.Fatalf("Error when parsing Dockerfile: %s", err)
-		}
+		require.NoErrorf(t, err, "Error when parsing Dockerfile")
 		n := ast.AST.Children[0]
 		_, err = ParseInstruction(n)
 		require.ErrorContains(t, err, c.expectedError)

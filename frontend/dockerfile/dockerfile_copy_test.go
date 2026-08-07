@@ -595,7 +595,7 @@ COPY . /
 	fi, err := os.Lstat(filepath.Join(destDir, "socket.sock"))
 	require.NoError(t, err)
 	// make sure socket is converted to regular file.
-	require.Equal(t, true, fi.Mode().IsRegular())
+	require.True(t, fi.Mode().IsRegular())
 }
 
 // #1197

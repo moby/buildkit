@@ -95,7 +95,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), context.Canceled.Error())
+	require.ErrorContains(t, err, context.Canceled.Error())
 
 	inputW.Close()
 	inputR.Close()
@@ -162,10 +162,10 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 
 		ctr.Release(ctx)
 		err = pid1.Wait()
-		require.Contains(t, err.Error(), context.Canceled.Error())
+		require.ErrorContains(t, err, context.Canceled.Error())
 
 		err = pid2.Wait()
-		require.Contains(t, err.Error(), context.Canceled.Error())
+		require.ErrorContains(t, err, context.Canceled.Error())
 
 		return &client.Result{}, nil
 	}
@@ -1167,7 +1167,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 		require.True(t, ok)
 		// Slow cache errors should only have exactly one input and no outputs.
 		require.Len(t, se.InputIDs, 1)
-		require.Len(t, se.MountIDs, 0)
+		require.Empty(t, se.MountIDs)
 
 		st := llb.Image("busybox:latest")
 		def, err := st.Marshal(ctx)

@@ -46,11 +46,11 @@ func TestInMemoryCache(t *testing.T) {
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err := m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -62,11 +62,11 @@ func TestInMemoryCache(t *testing.T) {
 
 	keys, err = m.Query(nil, 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err = m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestInMemoryCache(t *testing.T) {
 	// invalid request
 	keys, err = m.Query(nil, 0, dgst("baz"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	// second level
 	k := testCacheKey(dgst("baz"), Index(1), *cacheFoo, *cacheBar)
@@ -84,23 +84,23 @@ func TestInMemoryCache(t *testing.T) {
 
 	keys, err = m.Query(nil, 0, dgst("baz"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("baz"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query(depKeys(*cacheFoo), 1, dgst("baz"), Index(1))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("baz"), Index(1))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err = m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestInMemoryCache(t *testing.T) {
 
 	keys2, err := m.Query(depKeys(*cacheBar), 1, dgst("baz"), Index(1))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys2))
+	require.Len(t, keys2, 1)
 
 	require.Equal(t, keys[0].ID, keys2[0].ID)
 
@@ -118,11 +118,11 @@ func TestInMemoryCache(t *testing.T) {
 
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("baz"), Index(1))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 2, len(matches))
+	require.Len(t, matches, 2)
 
 	k = testCacheKeyWithDeps(dgst("bax"), 0, [][]CacheKeyWithSelector{
 		{{CacheKey: *cacheFoo}, {CacheKey: *cacheBaz}},
@@ -134,18 +134,18 @@ func TestInMemoryCache(t *testing.T) {
 	// foo, bar, baz should all point to result4
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("bax"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	id := keys[0].ID
 
 	keys, err = m.Query(depKeys(*cacheBar), 1, dgst("bax"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 	require.Equal(t, keys[0].ID, id)
 
 	keys, err = m.Query(depKeys(*cacheBaz), 0, dgst("bax"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 	require.Equal(t, keys[0].ID, id)
 }
 
@@ -164,19 +164,19 @@ func TestInMemoryCacheSelector(t *testing.T) {
 
 	keys, err := m.Query(depKeys(*cacheFoo), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query([]CacheKeyWithSelector{{Selector: "sel-invalid", CacheKey: *cacheFoo}}, 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query([]CacheKeyWithSelector{{Selector: dgst("sel0"), CacheKey: *cacheFoo}}, 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err := m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -200,11 +200,11 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 		[]CacheKeyWithSelector{{Selector: dgst("sel0"), CacheKey: *cacheFoo}},
 		0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err := m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -212,19 +212,19 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query([]CacheKeyWithSelector{{Selector: dgst("bar"), CacheKey: *cacheFoo}}, 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 
 	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), "", 0))), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	res, err = m.Load(ctx, matches[0])
 	require.NoError(t, err)
@@ -232,7 +232,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 
 	keys, err = m.Query(depKeys(expKey(NewCacheKey(dgst("second"), "", 0))), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 }
 
 func TestInMemoryCacheReleaseParent(t *testing.T) {
@@ -251,11 +251,11 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	err = storage.Release(res0.ID())
 	require.NoError(t, err)
@@ -263,19 +263,19 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	// foo becomes unloadable
 	keys, err = m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 0, len(matches))
+	require.Empty(t, matches)
 
 	keys, err = m.Query(depKeys(expKey(keys[0])), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 
 	// releasing bar releases both foo and bar
 	err = storage.Release(res1.ID())
@@ -283,7 +283,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 
 	keys, err = m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(keys))
+	require.Empty(t, keys)
 }
 
 // TestInMemoryCacheRestoreOfflineDeletion deletes a result while the
@@ -310,19 +310,19 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err := m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 0, len(matches))
+	require.Empty(t, matches)
 
 	keys, err = m.Query(depKeys(expKey(keys[0])), 0, dgst("bar"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	matches, err = m.Records(ctx, keys[0])
 	require.NoError(t, err)
-	require.Equal(t, 1, len(matches))
+	require.Len(t, matches, 1)
 }
 
 func TestCarryOverFromSublink(t *testing.T) {
@@ -347,13 +347,13 @@ func TestCarryOverFromSublink(t *testing.T) {
 		{CacheKey: expKey(NewCacheKey(dgst("content0"), "", 0))},
 	}, 0, dgst("res"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 
 	keys, err = m.Query([]CacheKeyWithSelector{
 		{Selector: dgst("sel0"), CacheKey: *cacheBar},
 	}, 0, dgst("res"), 0)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(keys))
+	require.Len(t, keys, 1)
 }
 
 func dgst(s string) digest.Digest {

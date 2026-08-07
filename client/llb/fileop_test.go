@@ -19,18 +19,18 @@ func TestFileMkdir(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, arr[0], m[arr[1].Inputs[0].Digest])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 1, len(f.Actions))
+	require.Len(t, f.Actions, 1)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -53,18 +53,18 @@ func TestFileMkdirChain(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -73,7 +73,7 @@ func TestFileMkdirChain(t *testing.T) {
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
 	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
-	require.Equal(t, false, mkdir.MakeParents)
+	require.False(t, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
 
 	action = f.Actions[1]
@@ -83,7 +83,7 @@ func TestFileMkdirChain(t *testing.T) {
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
 	require.Equal(t, "/etc/bar", mkdir.Path)
 	require.Equal(t, 0600, int(mkdir.Mode))
-	require.Equal(t, true, mkdir.MakeParents)
+	require.True(t, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
 
 	action = f.Actions[2]
@@ -93,7 +93,7 @@ func TestFileMkdirChain(t *testing.T) {
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
 	require.Equal(t, "/etc/bar/baz", mkdir.Path)
 	require.Equal(t, 0701, int(mkdir.Mode))
-	require.Equal(t, false, mkdir.MakeParents)
+	require.False(t, mkdir.MakeParents)
 	require.Nil(t, mkdir.Owner)
 }
 
@@ -106,18 +106,18 @@ func TestFileMkdirMkfile(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 2, len(arr))
+	require.Len(t, arr, 2)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[0])
 
 	f := arr[0].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 2, len(f.Actions))
+	require.Len(t, f.Actions, 2)
 
 	action := f.Actions[0]
 	require.Equal(t, -1, int(action.Input))
@@ -152,18 +152,18 @@ func TestFileMkfile(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 1, len(f.Actions))
+	require.Len(t, f.Actions, 1)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -196,7 +196,7 @@ func TestFileSymlink(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, numOps+1, len(arr))
+	require.Len(t, arr, numOps+1)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
@@ -204,8 +204,8 @@ func TestFileSymlink(t *testing.T) {
 
 	fileOpNode := arr[1]
 	fileOp := fileOpNode.Op.(*pb.Op_File).File
-	require.Equal(t, numActions, len(fileOp.Actions))
-	require.Equal(t, 1, len(fileOpNode.Inputs))
+	require.Len(t, fileOp.Actions, numActions)
+	require.Len(t, fileOpNode.Inputs, 1)
 	require.Equal(t, m[fileOpNode.Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(fileOpNode.Inputs[0].Index))
 
@@ -248,18 +248,18 @@ func TestFileRm(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 1, len(f.Actions))
+	require.Len(t, f.Actions, 1)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -289,17 +289,17 @@ func TestFileSimpleChains(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 4, len(arr))
+	require.Len(t, arr, 4)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[2])
 
 	f := arr[2].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[2].Inputs))
+	require.Len(t, arr[2].Inputs, 1)
 	require.Equal(t, m[arr[2].Inputs[0].Digest], arr[1])
 	require.Equal(t, 0, int(arr[2].Inputs[0].Index))
-	require.Equal(t, 2, len(f.Actions))
+	require.Len(t, f.Actions, 2)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -318,10 +318,10 @@ func TestFileSimpleChains(t *testing.T) {
 	require.Equal(t, "/abc", mkfile.Path)
 
 	f = arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action = f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -357,20 +357,20 @@ func TestFileCopy(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 4, len(arr))
+	require.Len(t, arr, 4)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[2])
 
 	f := arr[2].Op.(*pb.Op_File).File
-	require.Equal(t, 2, len(arr[2].Inputs))
+	require.Len(t, arr[2].Inputs, 2)
 	require.Equal(t, "docker-image://docker.io/library/foo:latest", m[arr[2].Inputs[0].Digest].Op.(*pb.Op_Source).Source.Identifier)
 	require.Equal(t, 0, int(arr[2].Inputs[0].Index))
 	require.Equal(t, "docker-image://docker.io/library/bar:latest", m[arr[2].Inputs[1].Digest].Op.(*pb.Op_Source).Source.Identifier)
 	require.Equal(t, 0, int(arr[2].Inputs[1].Index))
 
-	require.Equal(t, 1, len(f.Actions))
+	require.Len(t, f.Actions, 1)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -398,18 +398,18 @@ func TestFileCopyFromAction(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action := f.Actions[0]
 	require.Equal(t, -1, int(action.Input))
@@ -466,21 +466,21 @@ func TestFilePipeline(t *testing.T) {
 
 	m, arr := parseDef(t, def.Def)
 
-	require.Equal(t, 6, len(arr)) // 3 img + 2 file + pointer
+	require.Len(t, arr, 6) // 3 img + 2 file + pointer
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[4])
 
 	f := arr[4].Op.(*pb.Op_File).File
-	require.Equal(t, 3, len(arr[4].Inputs))
+	require.Len(t, arr[4].Inputs, 3)
 
 	require.Equal(t, "docker-image://docker.io/library/foo:latest", m[arr[4].Inputs[1].Digest].Op.(*pb.Op_Source).Source.Identifier)
 	require.Equal(t, 0, int(arr[4].Inputs[1].Index))
 	require.Equal(t, "docker-image://docker.io/library/baz:latest", m[arr[4].Inputs[2].Digest].Op.(*pb.Op_Source).Source.Identifier)
 	require.Equal(t, 0, int(arr[4].Inputs[2].Index))
 
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action := f.Actions[0]
 	require.Equal(t, 0, int(action.Input))
@@ -514,8 +514,8 @@ func TestFilePipeline(t *testing.T) {
 
 	f = m[arr[4].Inputs[0].Digest].Op.(*pb.Op_File).File
 	op := m[arr[4].Inputs[0].Digest]
-	require.Equal(t, 2, len(op.Inputs))
-	require.Equal(t, 4, len(f.Actions))
+	require.Len(t, op.Inputs, 2)
+	require.Len(t, f.Actions, 4)
 
 	action = f.Actions[0]
 	require.Equal(t, 1, int(action.Input))
@@ -567,18 +567,18 @@ func TestFileOwner(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action := f.Actions[0]
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
@@ -664,18 +664,18 @@ func TestFileCopyOwner(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 5, len(f.Actions))
+	require.Len(t, f.Actions, 5)
 
 	action := f.Actions[0]
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
@@ -727,18 +727,18 @@ func TestFileCreatedTime(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 3, len(arr))
+	require.Len(t, arr, 3)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 	require.Equal(t, m[dgst], arr[1])
 
 	f := arr[1].Op.(*pb.Op_File).File
-	require.Equal(t, 1, len(arr[1].Inputs))
+	require.Len(t, arr[1].Inputs, 1)
 	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
 	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
 
-	require.Equal(t, 3, len(f.Actions))
+	require.Len(t, f.Actions, 3)
 
 	action := f.Actions[0]
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
@@ -774,7 +774,7 @@ func last(t *testing.T, arr []*pb.Op) (string, int) {
 	require.Greater(t, len(arr), 1)
 
 	op := arr[len(arr)-1]
-	require.Equal(t, 1, len(op.Inputs))
+	require.Len(t, op.Inputs, 1)
 	return op.Inputs[0].Digest, int(op.Inputs[0].Index)
 }
 

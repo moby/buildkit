@@ -27,5 +27,5 @@ func TestSetErrorPath(t *testing.T) {
 	// Set the path in the error to a new path.
 	replaceErrorPath(err, "/my/new/path")
 	require.NotContains(t, err.Error(), "a/b/c")
-	require.Contains(t, err.Error(), "/my/new/path")
+	require.ErrorContains(t, err, "/my/new/path")
 }

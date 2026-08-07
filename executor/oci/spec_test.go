@@ -10,7 +10,7 @@ func TestEnvName(t *testing.T) {
 	require.Equal(t, "FOO", envName("FOO=bar"))
 	require.Equal(t, "FOO", envName("FOO="))
 	require.Equal(t, "FOO", envName("FOO"))
-	require.Equal(t, "", envName("=bar"))
+	require.Empty(t, envName("=bar"))
 }
 
 func TestAppendMissingTracingEnv(t *testing.T) {

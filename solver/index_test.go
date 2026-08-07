@@ -7,8 +7,8 @@ import (
 )
 
 func checkEmpty(t *testing.T, ei *edgeIndex) {
-	require.Equal(t, 0, len(ei.items))
-	require.Equal(t, 0, len(ei.backRefs))
+	require.Empty(t, ei.items)
+	require.Empty(t, ei.backRefs)
 }
 
 func TestIndexSimple(t *testing.T) {

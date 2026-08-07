@@ -71,7 +71,7 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(imgs.Images))
+	require.Len(t, imgs.Images, 1)
 	mfst := imgs.Images[0].Manifest
 	require.GreaterOrEqual(t, len(mfst.Layers), 1)
 
@@ -264,7 +264,7 @@ func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(indexDt, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 
 	var mfst ocispecs.Manifest
 	mfstDt, err := os.ReadFile(filepath.Join(ociDir, "blobs/sha256", index.Manifests[0].Digest.Hex()))
@@ -427,7 +427,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest
 
 	store, err := local.NewStore(dir)
@@ -564,7 +564,7 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest
 
 	store, err := local.NewStore(dir)

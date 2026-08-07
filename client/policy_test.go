@@ -631,7 +631,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 			}, nil)
 			if tc.expectedError != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -754,7 +754,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 
 			if tc.expectedError != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -1245,7 +1245,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 			}, nil)
 			if tc.expectedError != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -1362,7 +1362,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 			}, nil)
 			if tc.expectedError != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -1676,7 +1676,7 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedErr)
+				require.ErrorContains(t, err, tc.expectedErr)
 			}
 		})
 	}

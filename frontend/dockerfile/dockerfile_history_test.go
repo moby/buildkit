@@ -100,21 +100,21 @@ EXPOSE 2375 5000 1234/udp
 	require.Equal(t, "layers", ociimg.RootFS.Type)
 	// this depends on base image. should be ok after freezing images
 	expectedDiffIDs := integration.UnixOrWindows(4, 5)
-	require.Equal(t, expectedDiffIDs, len(ociimg.RootFS.DiffIDs))
+	require.Len(t, ociimg.RootFS.DiffIDs, expectedDiffIDs)
 
 	// Windows nanoserver has 1 base history entry (for 2 layers) vs busybox's 2 entries (for 1 layer)
 	// Total: busybox (2 base + 6 new = 8), nanoserver (1 base + 6 new = 7)
 	expectedHistoryCount := integration.UnixOrWindows(8, 7)
-	require.Equal(t, expectedHistoryCount, len(ociimg.History))
+	require.Len(t, ociimg.History, expectedHistoryCount)
 
 	// History indices: Windows has 1 base entry (starts at index 1), Unix has 2 base entries (starts at index 2)
 	historyOffset := integration.UnixOrWindows(2, 1)
 
 	require.Contains(t, ociimg.History[historyOffset].CreatedBy, "lbl=val")
-	require.Equal(t, true, ociimg.History[historyOffset].EmptyLayer)
+	require.True(t, ociimg.History[historyOffset].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset].Created)
 	require.Contains(t, ociimg.History[historyOffset+1].CreatedBy, "COPY foo2 foo3")
-	require.Equal(t, false, ociimg.History[historyOffset+1].EmptyLayer)
+	require.False(t, ociimg.History[historyOffset+1].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+1].Created)
 	// The history records the Dockerfile command as written, so it's "/workdir" on both platforms
 	// even though Windows converts it to "C:\workdir" at runtime
@@ -125,16 +125,16 @@ EXPOSE 2375 5000 1234/udp
 	require.Equal(t, expectedWorkdirEmptyLayer, ociimg.History[historyOffset+2].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+2].Created)
 	require.Contains(t, ociimg.History[historyOffset+3].CreatedBy, "echo bar > foo4")
-	require.Equal(t, false, ociimg.History[historyOffset+3].EmptyLayer)
+	require.False(t, ociimg.History[historyOffset+3].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+3].Created)
 	expectedLs := integration.UnixOrWindows("RUN ls", "RUN cmd /S /C dir")
 	require.Contains(t, ociimg.History[historyOffset+4].CreatedBy, expectedLs)
-	require.Equal(t, false, ociimg.History[historyOffset+4].EmptyLayer)
+	require.False(t, ociimg.History[historyOffset+4].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+4].Created)
 	// On Windows, EXPOSE may be formatted differently in history
 	expectedExpose := integration.UnixOrWindows("EXPOSE [1234/udp 2375/tcp 5000/tcp]", "EXPOSE")
 	require.Contains(t, ociimg.History[historyOffset+5].CreatedBy, expectedExpose)
-	require.Equal(t, true, ociimg.History[historyOffset+5].EmptyLayer)
+	require.True(t, ociimg.History[historyOffset+5].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+5].Created)
 }
 
@@ -184,7 +184,7 @@ RUN dir C:\Windows
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(imgs.Images))
+	require.Len(t, imgs.Images, 1)
 
 	history := imgs.Images[0].Img.History
 
@@ -195,7 +195,7 @@ RUN dir C:\Windows
 			break
 		}
 	}
-	require.Greater(t, firstNonBase, 0)
+	require.Positive(t, firstNonBase)
 
 	require.Len(t, history, firstNonBase+4)
 	require.Contains(t, history[firstNonBase+1].CreatedBy, "ARG bar=123")
@@ -256,20 +256,20 @@ COPY notexist /foo
 	for {
 		resp, err := cl.Recv()
 		if errors.Is(err, io.EOF) {
-			require.Equal(t, true, got, "expected error was %+v", expectedError)
+			require.True(t, got, "expected error was %+v", expectedError)
 			break
 		}
 		require.NoError(t, err)
 		require.NotEmpty(t, resp.Record.Error)
 		got = true
 
-		require.Len(t, resp.Record.Error.Details, 0)
+		require.Empty(t, resp.Record.Error.Details)
 		require.Contains(t, resp.Record.Error.Message, "/notexist")
 
 		extErr := resp.Record.ExternalError
 		require.NotNil(t, extErr)
 
-		require.Greater(t, extErr.Size, int64(0))
+		require.Positive(t, extErr.Size)
 		require.Equal(t, "application/vnd.googeapis.google.rpc.status+proto", extErr.MediaType)
 
 		bkstore := proxy.NewContentStore(c.ContentClient())
@@ -310,12 +310,9 @@ COPY notexist /foo
 
 		// contains vertex metadata
 		var ve *errdefs.VertexError
-		if errors.As(err, &ve) {
-			_, err := digest.Parse(ve.Digest)
-			require.NoError(t, err)
-		} else {
-			t.Fatalf("did not find vertex error")
-		}
+		require.ErrorAs(t, err, &ve, "did not find vertex error")
+		_, err = digest.Parse(ve.Digest)
+		require.NoError(t, err)
 
 		// source points to Dockerfile
 		sources := errdefs.Sources(err)
@@ -380,7 +377,7 @@ COPY Dockerfile /foo
 	for {
 		resp, err := cl.Recv()
 		if errors.Is(err, io.EOF) {
-			require.Equal(t, true, got)
+			require.True(t, got)
 			break
 		}
 		require.NoError(t, err)

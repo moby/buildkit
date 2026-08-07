@@ -52,7 +52,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 			"/foo: no such file or directory",
 			winErrMsgs[i],
 		)
-		require.Contains(t, err.Error(), errMsg)
+		require.ErrorContains(t, err, errMsg)
 
 		imgName := integration.UnixOrWindows(
 			"busybox:latest",
@@ -142,7 +142,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 
 	// check for a bug that added whiteout for subfile
 	_, ok = m["d1/.wh.bar"]
-	require.True(t, !ok)
+	require.False(t, ok)
 }
 
 func testFileOpCopyAlwaysReplaceExistingDestPaths(t *testing.T, sb integration.Sandbox) {
@@ -411,7 +411,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 
 	fi, err := os.Stat(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, true, fi.IsDir())
+	require.True(t, fi.IsDir())
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out/bar"))
 	require.NoError(t, err)
@@ -514,7 +514,7 @@ func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
 		"bar: no such file",
 		"bar: The system cannot find the file specified",
 	)
-	require.Contains(t, err.Error(), errStr)
+	require.ErrorContains(t, err, errStr)
 }
 
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
@@ -543,7 +543,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 
 	fi, err := os.Stat(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, true, fi.IsDir())
+	require.True(t, fi.IsDir())
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
@@ -595,7 +595,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 
 	fi, err := os.Stat(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, true, fi.IsDir())
+	require.True(t, fi.IsDir())
 
 	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
 	require.ErrorIs(t, err, os.ErrNotExist)
@@ -677,7 +677,7 @@ func testFileOpSymlink(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, fileGroup, header.Gid)
 
 	entry, ok = m["baz"]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	header = entry.Header
 	// ensure it is a symlink
@@ -690,7 +690,7 @@ func testFileOpSymlink(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, linkGroup, header.Gid)
 
 	// ensure it was timestamped properly
-	require.Equal(t, dummyTime, header.ModTime)
+	require.WithinDuration(t, dummyTime, header.ModTime, 0)
 }
 
 // #2490

@@ -121,7 +121,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	}
 	ok, err := img.IsUnpacked(ctx, snapshotter)
 	require.NoError(t, err)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 }
 
 func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {

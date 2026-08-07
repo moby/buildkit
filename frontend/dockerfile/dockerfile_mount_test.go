@@ -129,8 +129,8 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown flag: --mont")
-	require.Contains(t, err.Error(), "did you mean mount?")
+	require.ErrorContains(t, err, "unknown flag: --mont")
+	require.ErrorContains(t, err, "did you mean mount?")
 
 	dockerfile = []byte(integration.UnixOrWindows(
 		`
@@ -155,8 +155,8 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unexpected key 'typ'")
-	require.Contains(t, err.Error(), "did you mean type?")
+	require.ErrorContains(t, err, "unexpected key 'typ'")
+	require.ErrorContains(t, err, "did you mean type?")
 
 	dockerfile = []byte(integration.UnixOrWindows(
 		`
@@ -181,8 +181,8 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsupported mount type \"tmp\"")
-	require.Contains(t, err.Error(), "did you mean tmpfs?")
+	require.ErrorContains(t, err, "unsupported mount type \"tmp\"")
+	require.ErrorContains(t, err, "did you mean tmpfs?")
 }
 
 func testMountRWCache(t *testing.T, sb integration.Sandbox) {
@@ -536,7 +536,7 @@ RUN --mount=from=$ttt,type=cache,target=/tmp dir
 		},
 	}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "'from' doesn't support variable expansion, define alias stage instead")
+	require.ErrorContains(t, err, "'from' doesn't support variable expansion, define alias stage instead")
 }
 
 func testMountTmpfsSize(t *testing.T, sb integration.Sandbox) {

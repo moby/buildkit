@@ -101,7 +101,7 @@ func TestParseImportCache(t *testing.T) {
 			require.Equal(t, tc.expected, im)
 		} else {
 			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.expectedErr)
+			require.ErrorContains(t, err, tc.expectedErr)
 		}
 	}
 }
