@@ -8,7 +8,7 @@ import (
 )
 
 func testcall1() error {
-	return errors.Errorf("error1")
+	return errors.New("error1")
 }
 
 func testcall2() error {

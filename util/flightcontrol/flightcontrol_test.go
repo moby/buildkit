@@ -230,7 +230,7 @@ func TestMassiveParallel(t *testing.T) {
 	for range 1000 {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {
-				return "", errors.Errorf("always fail")
+				return "", errors.New("always fail")
 			})
 			if errors.Is(err, errRetryTimeout) {
 				atomic.AddInt64(&retryCount, 1)

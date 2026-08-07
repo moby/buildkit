@@ -478,7 +478,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 				cancel(errors.WithStack(context.Canceled))
 			}
 			io.Cancel()
-			return errors.Errorf("failed to kill process on cancel")
+			return errors.New("failed to kill process on cancel")
 		}
 	}
 }

@@ -76,12 +76,12 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 			return nil, errors.Errorf("missing blob %s", l.Blob)
 		}
 		if dgstPair.Descriptor.Annotations == nil {
-			return nil, errors.Errorf("invalid descriptor without annotations")
+			return nil, errors.New("invalid descriptor without annotations")
 		}
 		var diffID digest.Digest
 		v, ok := dgstPair.Descriptor.Annotations[labels.LabelUncompressed]
 		if !ok {
-			return nil, errors.Errorf("invalid descriptor without uncompressed annotation")
+			return nil, errors.New("invalid descriptor without uncompressed annotation")
 		}
 		dgst, err := digest.Parse(v)
 		if err != nil {

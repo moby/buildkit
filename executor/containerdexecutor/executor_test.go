@@ -11,6 +11,6 @@ func TestContainerdUnknownExitStatus(t *testing.T) {
 	// There are assumptions in the containerd executor that the UnknownExitStatus
 	// used in errdefs.ExitError matches the variable in the containerd package.
 	if ctd.UnknownExitStatus != gatewayapi.UnknownExitStatus {
-		t.Fatalf("containerd.UnknownExitStatus != errdefs.UnknownExitStatus")
+		t.Fatal("containerd.UnknownExitStatus != errdefs.UnknownExitStatus")
 	}
 }

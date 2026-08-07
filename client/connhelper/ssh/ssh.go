@@ -66,7 +66,7 @@ func SpecFromURL(u *url.URL) (*Spec, error) {
 		}
 	}
 	if sp.Host == "" {
-		return nil, errors.Errorf("no host specified")
+		return nil, errors.New("no host specified")
 	}
 	if u.RawQuery != "" {
 		return nil, errors.Errorf("extra query after the host: %q", u.RawQuery)

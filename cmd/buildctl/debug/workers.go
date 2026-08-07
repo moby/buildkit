@@ -61,7 +61,7 @@ func listWorkers(clicontext *cli.Command) error {
 		if err := tmpl.Execute(clicontext.Root().Writer, workers); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(clicontext.Root().Writer, "\n")
+		_, err = fmt.Fprint(clicontext.Root().Writer, "\n")
 		return err
 	}
 
@@ -83,7 +83,7 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 		if wi.BuildkitVersion.DockerfileVersion != "" {
 			fmt.Fprintf(tw, "Dockerfile:\t%s\n", wi.BuildkitVersion.DockerfileVersion)
 		}
-		fmt.Fprintf(tw, "Labels:\n")
+		fmt.Fprint(tw, "Labels:\n")
 		for _, k := range sortedKeys(wi.Labels) {
 			v := wi.Labels[k]
 			fmt.Fprintf(tw, "\t%s:\t%s\n", k, v)
@@ -124,7 +124,7 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 				fmt.Fprintf(tw, "\tMaximum used space:\t%g\n", units.Bytes(rule.MaxUsedSpace))
 			}
 		}
-		fmt.Fprintf(tw, "\n")
+		fmt.Fprint(tw, "\n")
 	}
 
 	tw.Flush()

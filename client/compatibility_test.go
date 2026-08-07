@@ -868,11 +868,11 @@ func removeGoldenFileIfExists(t *testing.T, path string) {
 
 func formatCompatibilityDebug(exporterType, caseName string, version int, attrs map[string]string, exp compatibilityActual, actual compatibilityActual, manifestDiff, configDiff string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "compatibility regression mismatch\n")
+	fmt.Fprint(&b, "compatibility regression mismatch\n")
 	fmt.Fprintf(&b, "case: %s\n", caseName)
 	fmt.Fprintf(&b, "exporter: %s\n", exporterType)
 	fmt.Fprintf(&b, "compatibility-version: %d\n", version)
-	fmt.Fprintf(&b, "attrs:\n")
+	fmt.Fprint(&b, "attrs:\n")
 
 	keys := make([]string, 0, len(attrs))
 	for k := range attrs {
@@ -883,14 +883,14 @@ func formatCompatibilityDebug(exporterType, caseName string, version int, attrs 
 		fmt.Fprintf(&b, "  %s=%s\n", k, attrs[k])
 	}
 
-	fmt.Fprintf(&b, "\nexpected:\n")
+	fmt.Fprint(&b, "\nexpected:\n")
 	fmt.Fprintf(&b, "  manifest=%s\n", exp.ManifestDigest)
 	fmt.Fprintf(&b, "  config=%s\n", exp.ConfigDigest)
 	for i, layer := range exp.Layers {
 		fmt.Fprintf(&b, "  layer[%d]=%s %s\n", i, layer.MediaType, layer.Digest)
 	}
 
-	fmt.Fprintf(&b, "\nactual:\n")
+	fmt.Fprint(&b, "\nactual:\n")
 	fmt.Fprintf(&b, "  manifest=%s\n", actual.ManifestDigest)
 	fmt.Fprintf(&b, "  config=%s\n", actual.ConfigDigest)
 	for i, layer := range actual.Layers {

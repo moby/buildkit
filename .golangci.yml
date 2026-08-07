@@ -88,6 +88,14 @@ linters:
         - pkg: github.com/opencontainers/go-digest
           alias: digest
       no-unaliased: true
+    revive:
+      enable-all-rules: false
+      enable-default-rules: true
+      rules:
+        - name: errorf
+        - name: if-return
+        - name: unnecessary-format
+        - name: use-errors-new
     staticcheck:
       checks:
         - all
@@ -132,6 +140,7 @@ linters:
     paths:
       - .*\.pb\.go$
       - examples
+    warn-unused: true
 
 formatters:
   enable:

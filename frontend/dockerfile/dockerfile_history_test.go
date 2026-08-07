@@ -314,7 +314,7 @@ COPY notexist /foo
 			_, err := digest.Parse(ve.Digest)
 			require.NoError(t, err)
 		} else {
-			t.Fatalf("did not find vertex error")
+			t.Fatal("did not find vertex error")
 		}
 
 		// source points to Dockerfile

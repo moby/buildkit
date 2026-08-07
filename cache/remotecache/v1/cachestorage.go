@@ -47,7 +47,7 @@ func addItemToStorage(k *cacheKeyStorage, it *item, visited map[*item]*itemWithO
 
 	if id, ok := k.byItem[it]; ok {
 		if id == "" {
-			return nil, errors.Errorf("invalid loop")
+			return nil, errors.New("invalid loop")
 		}
 		return k.byID[id], nil
 	}
@@ -256,7 +256,7 @@ type cacheResultStorage struct {
 }
 
 func (cs *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solver.CacheResult, error) {
-	return solver.CacheResult{}, errors.Errorf("importer is immutable")
+	return solver.CacheResult{}, errors.New("importer is immutable")
 }
 
 func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.CacheResult) (map[string]solver.Result, error) {

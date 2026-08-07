@@ -38,7 +38,7 @@ func info(clicontext *cli.Command) error {
 		if err := tmpl.Execute(clicontext.Root().Writer, res); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(clicontext.Root().Writer, "\n")
+		_, err = fmt.Fprint(clicontext.Root().Writer, "\n")
 		return err
 	}
 
