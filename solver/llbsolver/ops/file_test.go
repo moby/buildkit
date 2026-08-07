@@ -568,7 +568,7 @@ type testFileRef struct {
 
 func (r *testFileRef) Release(context.Context) error {
 	if r.refcount == 0 {
-		return errors.Errorf("ref already released")
+		return errors.New("ref already released")
 	}
 	r.refcount--
 	return nil
@@ -611,7 +611,7 @@ func (tm *testMount) Release(ctx context.Context) error {
 		return tm.b.mounts[tm.initID].Release(ctx)
 	}
 	if tm.unmounted {
-		return errors.Errorf("already unmounted")
+		return errors.New("already unmounted")
 	}
 	tm.unmounted = true
 	if tm.active != nil {

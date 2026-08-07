@@ -38,7 +38,7 @@ func (s *setup) Validate() error {
 	_, err = os.Stat("/dev/dri")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errors.Errorf("no DRI device found, make you use Docker VMM Hypervisor")
+			return errors.New("no DRI device found, make you use Docker VMM Hypervisor")
 		}
 		return errors.Wrap(err, "failed to check DRI device")
 	}

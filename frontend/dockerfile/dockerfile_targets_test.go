@@ -191,7 +191,7 @@ COPY Dockerfile Dockerfile
 func unmarshalTargets(res *gateway.Result) (*targets.List, error) {
 	dt, ok := res.Metadata["result.json"]
 	if !ok {
-		return nil, errors.Errorf("missing frontend.outline")
+		return nil, errors.New("missing frontend.outline")
 	}
 	var l targets.List
 	if err := json.Unmarshal(dt, &l); err != nil {

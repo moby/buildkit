@@ -73,7 +73,7 @@ type cmOut struct {
 func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, cleanup func(), err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {
-		return nil, nil, errors.Errorf("namespace required for test")
+		return nil, nil, errors.New("namespace required for test")
 	}
 
 	if opt.snapshotterName == "" {
@@ -1280,7 +1280,7 @@ func TestSharingCompressionVariant(t *testing.T) {
 		}
 	}
 
-	t.Logf("Test cases with possible compression types")
+	t.Log("Test cases with possible compression types")
 	do(func(testCase testCaseSharingCompressionVariant) {
 		testCase.checkPrune = true
 		testSharingCompressionVariant(ctx, t, co, testCase)
@@ -1288,7 +1288,7 @@ func TestSharingCompressionVariant(t *testing.T) {
 		checkDiskUsage(ctx, t, co.manager, 0, 0)
 	})
 
-	t.Logf("Test case with many parallel operation")
+	t.Log("Test case with many parallel operation")
 	eg, egctx := errgroup.WithContext(ctx)
 	do(func(testCase testCaseSharingCompressionVariant) {
 		eg.Go(func() error {

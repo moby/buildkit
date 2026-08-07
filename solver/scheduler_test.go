@@ -1147,7 +1147,7 @@ func TestSlowCacheErrorResultCloneRelease(t *testing.T) {
 			},
 			slowCacheCompute: map[int]ResultBasedCacheFunc{
 				0: func(context.Context, Result, session.Group) (digest.Digest, error) {
-					return "", errors.Errorf("slow cache error")
+					return "", errors.New("slow cache error")
 				},
 			},
 		}),
@@ -1259,7 +1259,7 @@ func TestErrorReturns(t *testing.T) {
 					cacheKeySeed: "seed1",
 					value:        "result1",
 					cachePreFunc: func(ctx context.Context) error {
-						return errors.Errorf("error-from-test")
+						return errors.New("error-from-test")
 					},
 				})},
 				{Vertex: vtx(vtxOpt{
@@ -1346,7 +1346,7 @@ func TestErrorReturns(t *testing.T) {
 					cacheKeySeed: "seed3",
 					value:        "result2",
 					execPreFunc: func(ctx context.Context) error {
-						return errors.Errorf("exec-error-from-test")
+						return errors.New("exec-error-from-test")
 					},
 				})},
 			},
@@ -3834,7 +3834,7 @@ func (v *vertex) CacheMap(ctx context.Context, jobCtx JobContext, index int) (*C
 
 func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	if len(inputs) != len(v.Inputs()) {
-		return errors.Errorf("invalid number of inputs")
+		return errors.New("invalid number of inputs")
 	}
 	if f := v.opt.execPreFunc; f != nil {
 		if err := f(ctx); err != nil {
@@ -4089,7 +4089,7 @@ func testOpResolver(v Vertex, b Builder) (Op, error) {
 		return op, nil
 	}
 
-	return nil, errors.Errorf("invalid vertex")
+	return nil, errors.New("invalid vertex")
 }
 
 func unwrap(res Result) string {
@@ -4133,7 +4133,7 @@ type trackingCacheManager struct {
 func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, error) {
 	atomic.AddInt64(&cm.loadCounter, 1)
 	if cm.forceFail {
-		return nil, errors.Errorf("force fail")
+		return nil, errors.New("force fail")
 	}
 	return cm.CacheManager.Load(ctx, rec)
 }

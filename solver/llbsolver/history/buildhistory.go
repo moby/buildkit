@@ -335,7 +335,7 @@ func (h *Queue) UpdateRef(ctx context.Context, ref string, upt func(r *controlap
 	br.Generation++
 
 	if br.Ref != ref {
-		return errors.Errorf("invalid ref change")
+		return errors.New("invalid ref change")
 	}
 
 	if err := h.update(ctx, &br); err != nil {

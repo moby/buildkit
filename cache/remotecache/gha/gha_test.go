@@ -167,7 +167,7 @@ func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
 		}
 		t.Logf("retrying prune(%d)", i)
 	}
-	t.Fatalf("failed to ensure prune")
+	t.Fatal("failed to ensure prune")
 }
 
 func requiresLinux(t *testing.T) {

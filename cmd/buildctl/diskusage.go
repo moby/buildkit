@@ -58,7 +58,7 @@ func diskUsage(clicontext *cli.Command) error {
 		if err := tmpl.Execute(clicontext.Root().Writer, du); err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(clicontext.Root().Writer, "\n")
+		_, err = fmt.Fprint(clicontext.Root().Writer, "\n")
 		return err
 	}
 
@@ -103,7 +103,7 @@ func printVerbose(tw *tabwriter.Writer, du []*client.UsageInfo) {
 			printKV(tw, "Type", di.RecordType)
 		}
 
-		fmt.Fprintf(tw, "\n")
+		fmt.Fprint(tw, "\n")
 	}
 
 	tw.Flush()

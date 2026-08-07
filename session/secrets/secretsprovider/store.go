@@ -19,7 +19,7 @@ func NewStore(files []Source) (secrets.SecretStore, error) {
 	m := map[string]Source{}
 	for _, f := range files {
 		if f.ID == "" {
-			return nil, errors.Errorf("secret missing ID")
+			return nil, errors.New("secret missing ID")
 		}
 		if f.Env == "" && f.FilePath == "" {
 			if _, ok := os.LookupEnv(f.ID); ok {

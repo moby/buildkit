@@ -1753,7 +1753,7 @@ func solveProvenanceNamedTarget(ctx context.Context, c gateway.Client, f fronten
 	}
 	dt, ok := res.Metadata["containerimage.config"]
 	if !ok {
-		return llb.State{}, "", errors.Errorf("no containerimage.config in metadata")
+		return llb.State{}, "", errors.New("no containerimage.config in metadata")
 	}
 	dt, err = json.Marshal(map[string][]byte{
 		"containerimage.config": dt,
@@ -1794,7 +1794,7 @@ func solveProvenanceInputProducerWithInner(ctx context.Context, c gateway.Client
 	}
 	dt, ok := res.Metadata["containerimage.config"]
 	if !ok {
-		return llb.State{}, "", errors.Errorf("no containerimage.config in metadata")
+		return llb.State{}, "", errors.New("no containerimage.config in metadata")
 	}
 	dt, err = json.Marshal(map[string][]byte{
 		"containerimage.config": dt,
@@ -2452,7 +2452,7 @@ COPY bar bar2
 
 		dt, ok := res.Metadata["containerimage.config"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 
 		dt, err = json.Marshal(map[string][]byte{

@@ -1753,17 +1753,17 @@ func checkProgressStream(t *testing.T, sb integration.Sandbox, lintTest *lintTes
 	select {
 	case <-statusDone:
 	case <-time.After(10 * time.Second):
-		t.Fatalf("timed out waiting for statusDone")
+		t.Fatal("timed out waiting for statusDone")
 	}
 
 	if len(lintTest.Warnings) != len(warnings) {
 		t.Logf("expected %d warnings, received:", len(lintTest.Warnings))
-		t.Logf("\texpected:")
+		t.Log("\texpected:")
 		for i, w := range lintTest.Warnings {
 			t.Logf("\t\t%d: %s", i, w.Detail)
 		}
 
-		t.Logf("\treceived:")
+		t.Log("\treceived:")
 		for i, w := range warnings {
 			t.Logf("\t%d: %s", i, w.Short)
 		}
@@ -1845,7 +1845,7 @@ func checkLintWarning(t *testing.T, warning lint.Warning, expected expectedLintW
 func unmarshalLintResults(res *gateway.Result) (*lint.LintResults, error) {
 	dt, ok := res.Metadata["result.json"]
 	if !ok {
-		return nil, errors.Errorf("missing frontend.outline")
+		return nil, errors.New("missing frontend.outline")
 	}
 	var l lint.LintResults
 	if err := json.Unmarshal(dt, &l); err != nil {

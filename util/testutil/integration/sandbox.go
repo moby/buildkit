@@ -144,7 +144,7 @@ func newSandbox(ctx context.Context, t *testing.T, w Worker, mirror string, mv m
 		case <-ctx.Done():
 			return
 		default:
-			t.Logf("sandbox timeout reached, stopping worker")
+			t.Log("sandbox timeout reached, stopping worker")
 			if addr := b.DebugAddress(); addr != "" {
 				printBuildkitdDebugLogs(t, addr)
 			}

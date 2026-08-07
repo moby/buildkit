@@ -233,7 +233,7 @@ func (bc *Client) init() error {
 			return errors.Errorf("invalid boolean value for multi-platform: %s", v)
 		}
 		if !b && multiPlatform {
-			return errors.Errorf("conflicting config: returning multiple target platforms is not allowed")
+			return errors.New("conflicting config: returning multiple target platforms is not allowed")
 		}
 		multiPlatform = b
 	}
@@ -285,7 +285,7 @@ func (bc *Client) init() error {
 			}
 		}
 		if ref == nil {
-			return errors.Errorf("sbom scanner cannot be empty")
+			return errors.New("sbom scanner cannot be empty")
 		}
 
 		bc.SBOM = &SBOM{

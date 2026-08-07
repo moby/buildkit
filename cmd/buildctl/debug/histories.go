@@ -54,7 +54,7 @@ func histories(clicontext *cli.Command) error {
 			if err := tmpl.Execute(clicontext.Root().Writer, ev); err != nil {
 				return err
 			}
-			if _, err = fmt.Fprintf(clicontext.Root().Writer, "\n"); err != nil {
+			if _, err = fmt.Fprint(clicontext.Root().Writer, "\n"); err != nil {
 				return err
 			}
 		}

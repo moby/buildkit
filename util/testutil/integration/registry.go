@@ -112,5 +112,5 @@ func detectPort(ctx context.Context, rc io.ReadCloser) (string, error) {
 			return "localhost:" + string(res[1]), nil
 		}
 	}
-	return "", errors.Errorf("no listening address found")
+	return "", errors.New("no listening address found")
 }

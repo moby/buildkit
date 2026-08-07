@@ -46,7 +46,7 @@ type cmOut struct {
 func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {
-		return nil, errors.Errorf("namespace required for test")
+		return nil, errors.New("namespace required for test")
 	}
 
 	if opt.snapshotterName == "" {

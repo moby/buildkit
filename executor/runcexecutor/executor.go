@@ -477,7 +477,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		return err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return errors.Errorf("unexpected data after JSON spec object")
+		return errors.New("unexpected data after JSON spec object")
 	}
 
 	if process.Meta.User != "" {
