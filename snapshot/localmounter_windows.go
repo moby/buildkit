@@ -79,11 +79,10 @@ func mountWithRetries(m mount.Mount, dir string, retries int) error {
 		if err == nil || i == retries {
 			return err
 		}
-		if strings.Contains(err.Error(), errStr) {
-			time.Sleep(time.Duration(i+1) * backoff)
-		} else {
+		if !strings.Contains(err.Error(), errStr) {
 			return err
 		}
+		time.Sleep(time.Duration(i+1) * backoff)
 	}
 
 	return err
