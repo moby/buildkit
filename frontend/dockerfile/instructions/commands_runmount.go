@@ -161,9 +161,8 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 				if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
 					m.Required = true
 					continue
-				} else {
-					return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 				}
+				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 			default:
 				// any other option requires a value.
 				return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
@@ -212,22 +211,20 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 			m.ReadOnly = !rw
 			roAuto = false
 		case "required":
-			if m.Type == MountTypeSecret || m.Type == MountTypeSSH {
-				m.Required, err = strconv.ParseBool(value)
-				if err != nil {
-					return nil, errors.Errorf("invalid value for %s: %s", key, value)
-				}
-			} else {
+			if m.Type != MountTypeSecret && m.Type != MountTypeSSH {
 				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 			}
+			m.Required, err = strconv.ParseBool(value)
+			if err != nil {
+				return nil, errors.Errorf("invalid value for %s: %s", key, value)
+			}
 		case "size":
-			if m.Type == MountTypeTmpfs {
-				m.SizeLimit, err = units.RAMInBytes(value)
-				if err != nil {
-					return nil, errors.Errorf("invalid value for %s: %s", key, value)
-				}
-			} else {
+			if m.Type != MountTypeTmpfs {
 				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
+			}
+			m.SizeLimit, err = units.RAMInBytes(value)
+			if err != nil {
+				return nil, errors.Errorf("invalid value for %s: %s", key, value)
 			}
 		case "id":
 			m.CacheID = value
@@ -280,11 +277,7 @@ func parseMount(val string, expander SingleWordExpander) (*Mount, error) {
 	}
 
 	if roAuto {
-		if m.Type == MountTypeCache || m.Type == MountTypeTmpfs {
-			m.ReadOnly = false
-		} else {
-			m.ReadOnly = true
-		}
+		m.ReadOnly = m.Type != MountTypeCache && m.Type != MountTypeTmpfs
 	}
 
 	if m.Type == MountTypeSecret {

@@ -126,10 +126,7 @@ func VerifyArmoredDetachedSignature(signedData io.Reader, signatureData, pubKeyD
 	if err := checkEntityUsableForSigning(signer, now, policy); err != nil {
 		return err
 	}
-	if err := checkCreationTime(sig.CreationTime, now); err != nil {
-		return err
-	}
-	return nil
+	return checkCreationTime(sig.CreationTime, now)
 }
 
 // VerifySignatureWithDigest verifies a parsed signature against a digest of

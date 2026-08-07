@@ -451,20 +451,19 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			mutable.equalImmutable = &immutableRef{cacheRecord: rec}
 			cm.records[id] = rec
 			return rec, nil
-		} else if IsNotFound(err) {
-			// The equal mutable for this ref is not found, check to see if our snapshot exists
-			if _, statErr := cm.Snapshotter.Stat(ctx, md.getSnapshotID()); statErr != nil {
-				// this ref's snapshot also doesn't exist, just remove this record
-				cm.MetadataStore.Clear(id)
-				return nil, errors.Wrap(errNotFound, id)
-			}
-			// Our snapshot exists, so there may have been a crash while finalizing this ref.
-			// Clear the equal mutable field and continue using this ref.
-			md.clearEqualMutable()
-			md.commitMetadata()
-		} else {
+		} else if !IsNotFound(err) {
 			return nil, err
 		}
+		// The equal mutable for this ref is not found, check to see if our snapshot exists
+		if _, statErr := cm.Snapshotter.Stat(ctx, md.getSnapshotID()); statErr != nil {
+			// this ref's snapshot also doesn't exist, just remove this record
+			cm.MetadataStore.Clear(id)
+			return nil, errors.Wrap(errNotFound, id)
+		}
+		// Our snapshot exists, so there may have been a crash while finalizing this ref.
+		// Clear the equal mutable field and continue using this ref.
+		md.clearEqualMutable()
+		md.commitMetadata()
 	}
 
 	rec := &cacheRecord{

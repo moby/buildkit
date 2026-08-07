@@ -23,20 +23,19 @@ func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 		backoff := time.Second
 		for {
 			descs, err := f(ctx, desc)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return nil, err
-				default:
-					if !retryError(err) {
-						return nil, err
-					}
-				}
-				if logger != nil {
-					logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
-				}
-			} else {
+			if err == nil {
 				return descs, nil
+			}
+			select {
+			case <-ctx.Done():
+				return nil, err
+			default:
+				if !retryError(err) {
+					return nil, err
+				}
+			}
+			if logger != nil {
+				logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
 			}
 			// backoff logic
 			if backoff >= MaxRetryBackoff {

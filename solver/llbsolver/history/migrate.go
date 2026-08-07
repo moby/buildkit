@@ -72,17 +72,13 @@ func (h *Queue) migrateV2() error {
 		return err
 	}
 
-	if err := h.opt.DB.Update(func(tx *bolt.Tx) error {
+	return h.opt.DB.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(versionBucket))
 		if err != nil {
 			return err
 		}
 		return b.Put([]byte("version"), []byte("2"))
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
 }
 
 func (h *Queue) blobRefs(ctx context.Context, dgst digest.Digest, detectSkipLayer bool) ([]digest.Digest, error) {

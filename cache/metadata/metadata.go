@@ -115,27 +115,23 @@ func (s *Store) Search(ctx context.Context, index string, prefix bool) ([]*Stora
 		}
 		c := b.Cursor()
 		k, _ := c.Seek([]byte(index))
-		for {
-			if k != nil && strings.HasPrefix(string(k), index) {
-				idx := strings.LastIndex(string(k), "::")
-				if idx == -1 {
-					continue
-				}
-				itemID := string(k[idx+2:])
-				k, _ = c.Next()
-				b := main.Bucket([]byte(itemID))
-				if b == nil {
-					bklog.G(ctx).Errorf("index pointing to missing record %s", itemID)
-					continue
-				}
-				si, err := newStorageItem(itemID, b, s)
-				if err != nil {
-					return err
-				}
-				out = append(out, si)
-			} else {
-				break
+		for k != nil && strings.HasPrefix(string(k), index) {
+			idx := strings.LastIndex(string(k), "::")
+			if idx == -1 {
+				continue
 			}
+			itemID := string(k[idx+2:])
+			k, _ = c.Next()
+			b := main.Bucket([]byte(itemID))
+			if b == nil {
+				bklog.G(ctx).Errorf("index pointing to missing record %s", itemID)
+				continue
+			}
+			si, err := newStorageItem(itemID, b, s)
+			if err != nil {
+				return err
+			}
+			out = append(out, si)
 		}
 		return nil
 	})
