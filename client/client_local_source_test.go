@@ -276,7 +276,7 @@ func testMetadataOnlyLocal(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	stats := parseFSMetadata(t, dt)
-	require.Equal(t, 10, len(stats))
+	require.Len(t, stats, 10)
 
 	require.Equal(t, "data", stats[0].Path)
 	require.Equal(t, "dir", stats[1].Path)
@@ -336,7 +336,7 @@ func testMetadataOnlyLocal(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	stats = parseFSMetadata(t, dt)
-	require.Equal(t, 8, len(stats))
+	require.Len(t, stats, 8)
 
 	require.Equal(t, "data", stats[0].Path)
 	require.Equal(t, "dir", stats[1].Path)

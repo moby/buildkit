@@ -57,15 +57,15 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 			require.NoError(t, err)
 			require.Equal(t, 2, index.SchemaVersion)
-			require.Equal(t, 1, len(index.Manifests))
+			require.Len(t, index.Manifests, 1)
 
 			var dockerMfst []struct {
 				RepoTags []string
 			}
 			err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(dockerMfst))
-			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
+			require.Len(t, dockerMfst, 1)
+			require.Len(t, dockerMfst[0].RepoTags, 1)
 			require.Equal(t, imageName, dockerMfst[0].RepoTags[0])
 		},
 		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
@@ -213,7 +213,7 @@ COPY foo /foo
 	for _, w := range warnings {
 		t.Logf("warning: %s", string(w.Short))
 	}
-	require.Len(t, warnings, 0)
+	require.Empty(t, warnings)
 }
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
@@ -358,7 +358,7 @@ func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	warnings = wc.wait()
-	require.Len(t, warnings, 0, warningsListOutput(warnings))
+	require.Empty(t, warnings, warningsListOutput(warnings))
 
 	frontend = func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
@@ -417,7 +417,7 @@ func testFrontendVerifyPlatforms(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	warnings = wc.wait()
 
-	require.Len(t, warnings, 0)
+	require.Empty(t, warnings)
 
 	wc = newWarningsCapture()
 	_, err = c.Build(sb.Context(), SolveOpt{

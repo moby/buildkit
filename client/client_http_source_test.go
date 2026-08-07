@@ -52,8 +52,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid response status 404")
+	require.ErrorContains(t, err, "invalid response status 404")
 
 	// first correct request
 	st = llb.HTTP(server.URL + "/foo")
@@ -87,7 +86,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("content1"), dt)
 
 	allReqs := server.Stats("/foo").Requests
-	require.Equal(t, 2, len(allReqs))
+	require.Len(t, allReqs, 2)
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "gzip", allReqs[0].Header.Get("Accept-Encoding"))
 	require.Equal(t, http.MethodHead, allReqs[1].Method)
@@ -130,7 +129,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, resp.Content, dt)
 
 	allReqs = server.Stats("/foo").Requests
-	require.Equal(t, 4, len(allReqs))
+	require.Len(t, allReqs, 4)
 	require.Equal(t, http.MethodHead, allReqs[2].Method)
 	require.Equal(t, "gzip", allReqs[2].Header.Get("Accept-Encoding"))
 	require.Equal(t, http.MethodGet, allReqs[3].Method)
@@ -211,7 +210,7 @@ func testBuildHTTPSourceAuthHeaderSecret(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	allReqs := server.Stats("/foo").Requests
-	require.Equal(t, 1, len(allReqs))
+	require.Len(t, allReqs, 1)
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "Bearer foo", allReqs[0].Header.Get("Authorization"))
 }
@@ -304,7 +303,7 @@ func testBuildHTTPSourceEtagScope(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, server.Stats("/two/foo").CachedRequests)
 
 	allReqs := server.Stats("/two/foo").Requests
-	require.Equal(t, 2, len(allReqs))
+	require.Len(t, allReqs, 2)
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "gzip", allReqs[0].Header.Get("Accept-Encoding"))
 	require.Equal(t, http.MethodHead, allReqs[1].Method)
@@ -346,7 +345,7 @@ func testBuildHTTPSourceHeader(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	allReqs := server.Stats("/foo").Requests
-	require.Equal(t, 1, len(allReqs))
+	require.Len(t, allReqs, 1)
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "application/vnd.foo", allReqs[0].Header.Get("accept"))
 	require.Equal(t, "fooagent", allReqs[0].Header.Get("user-agent"))
@@ -388,7 +387,7 @@ func testBuildHTTPSourceHostTokenSecret(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	allReqs := server.Stats("/foo").Requests
-	require.Equal(t, 1, len(allReqs))
+	require.Len(t, allReqs, 1)
 	require.Equal(t, http.MethodGet, allReqs[0].Method)
 	require.Equal(t, "Bearer 123456", allReqs[0].Header.Get("Authorization"))
 }
@@ -462,7 +461,6 @@ func testBuildHTTPSourcePGPSignatureVerify(t *testing.T, sb integration.Sandbox)
 			}),
 		)
 		err = solve(t, invalidState)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to verify pgp signature")
 	})
 
@@ -521,7 +519,6 @@ func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sa
 				},
 			},
 		}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "invalid response status 401")
 	}
 }

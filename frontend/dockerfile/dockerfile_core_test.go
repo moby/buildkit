@@ -293,7 +293,7 @@ COPY foo /
 	du2, err := c.DiskUsage(sb.Context())
 	require.NoError(t, err)
 
-	require.Equal(t, len(du), len(du2))
+	require.Len(t, du2, len(du))
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
@@ -365,7 +365,7 @@ EXPOSE 5000
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(ociimg.Config.ExposedPorts))
+	require.Len(t, ociimg.Config.ExposedPorts, 3)
 
 	var ports []string
 	for p := range ociimg.Config.ExposedPorts {
@@ -859,7 +859,5 @@ COPY --from=build C:\out C:\
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "target stage \"bulid\" could not be found (did you mean build?)")
+	require.ErrorContains(t, err, "target stage \"bulid\" could not be found (did you mean build?)")
 }

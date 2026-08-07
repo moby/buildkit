@@ -298,7 +298,7 @@ COPY Dockerfile Dockerfile
 		reqs, err := subrequests.Describe(ctx, c)
 		require.NoError(t, err)
 
-		require.Greater(t, len(reqs), 0)
+		require.NotEmpty(t, reqs)
 
 		hasDescribe := false
 
@@ -306,8 +306,8 @@ COPY Dockerfile Dockerfile
 			if req.Name == "frontend.subrequests.describe" {
 				hasDescribe = true
 				require.Equal(t, subrequests.RequestType("rpc"), req.Type)
-				require.NotEqual(t, "", req.Version)
-				require.Greater(t, len(req.Metadata), 0)
+				require.NotEmpty(t, req.Version)
+				require.NotEmpty(t, req.Metadata)
 				require.Equal(t, "result.json", req.Metadata[0].Name)
 			}
 		}

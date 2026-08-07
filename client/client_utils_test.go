@@ -67,7 +67,7 @@ loop0:
 
 	du, err := c.DiskUsage(sb.Context())
 	require.NoError(t, err)
-	require.Equal(t, 0, len(du))
+	require.Empty(t, du)
 
 	// examine contents of exported tars (requires containerd)
 	cdAddress := sb.ContainerdAddress()

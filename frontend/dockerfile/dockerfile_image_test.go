@@ -113,7 +113,7 @@ COPY foo .
 	require.NoError(t, err)
 
 	require.Equal(t, "layers", ociimg.RootFS.Type)
-	require.Equal(t, 1, len(ociimg.RootFS.DiffIDs))
+	require.Len(t, ociimg.RootFS.DiffIDs, 1)
 	v, ok := ociimg.Config.Labels["foo"]
 	require.True(t, ok)
 	require.Equal(t, "bar", v)
@@ -195,15 +195,15 @@ ENV foo=bar
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
-	require.NotEqual(t, "", ociimg.OS)
-	require.NotEqual(t, "", ociimg.Architecture)
-	require.NotEqual(t, "", ociimg.Config.WorkingDir)
+	require.NotEmpty(t, ociimg.OS)
+	require.NotEmpty(t, ociimg.Architecture)
+	require.NotEmpty(t, ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
-	require.Equal(t, 0, len(ociimg.RootFS.DiffIDs))
+	require.Empty(t, ociimg.RootFS.DiffIDs)
 
-	require.Equal(t, 1, len(ociimg.History))
+	require.Len(t, ociimg.History, 1)
 	require.Contains(t, ociimg.History[0].CreatedBy, "ENV foo=bar")
-	require.Equal(t, true, ociimg.History[0].EmptyLayer)
+	require.True(t, ociimg.History[0].EmptyLayer)
 
 	require.Contains(t, ociimg.Config.Env, "foo=bar")
 	require.Condition(t, func() bool {
@@ -269,7 +269,7 @@ EOF
 	require.NoError(t, err)
 
 	validateIdx := func(idx ocispecs.Index) {
-		require.Equal(t, 2, len(idx.Manifests))
+		require.Len(t, idx.Manifests, 2)
 
 		require.Equal(t, idx.Manifests[0].Digest, idx.Manifests[1].Digest)
 		require.Equal(t, idx.Manifests[0].Platform, idx.Manifests[1].Platform)
@@ -363,12 +363,12 @@ func testMultiNilRefsOCIExporter(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &idx)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(idx.Manifests))
+	require.Len(t, idx.Manifests, 1)
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
 	idx = ocispecs.Index{}
 	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(idx.Manifests))
+	require.Len(t, idx.Manifests, 2)
 }

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,7 +13,7 @@ func TestRmPathNonExistentFileAllowNotFoundFalse(t *testing.T) {
 	root := t.TempDir()
 	err := rmPath(root, "doesnt_exist", false)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestRmPathNonExistentFileAllowNotFoundTrue(t *testing.T) {

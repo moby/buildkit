@@ -173,7 +173,7 @@ func TestReferrersProviderBuffer(t *testing.T) {
 	require.Equal(t, int64(4), info.Size)
 
 	labels := info.Labels
-	require.Equal(t, 2, len(labels))
+	require.Len(t, labels, 2)
 	pfx := hello.Digest.Hex()[:12]
 	lbl1, ok := labels["containerd.io/gc.ref.content.buildkit."+pfx]
 	require.True(t, ok)
@@ -211,7 +211,7 @@ func TestReferrersProviderRefsBuffer(t *testing.T) {
 
 	refs, err := rpb.FetchReferrers(ctx, hello.Digest, remotes.WithReferrerArtifactTypes("type"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(refs))
+	require.Len(t, refs, 2)
 	require.Contains(t, refs, ref1)
 	require.Contains(t, refs, ref2)
 
@@ -232,7 +232,7 @@ func TestReferrersProviderRefsBuffer(t *testing.T) {
 
 	refs, err = rpb.FetchReferrers(ctx, hello.Digest, remotes.WithReferrerArtifactTypes("type"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(refs))
+	require.Len(t, refs, 2)
 	require.Contains(t, []digest.Digest{ref1.Digest, ref2.Digest}, refs[0].Digest)
 	require.Contains(t, []digest.Digest{ref1.Digest, ref2.Digest}, refs[1].Digest)
 
@@ -242,7 +242,7 @@ func TestReferrersProviderRefsBuffer(t *testing.T) {
 	require.NoError(t, err)
 	labels := info.Labels
 
-	require.Equal(t, 2, len(labels))
+	require.Len(t, labels, 2)
 	pfx := ref1.Digest.Hex()[:12]
 	lbl1, ok := labels["containerd.io/gc.ref.content.buildkit.refs."+pfx]
 	require.True(t, ok)
@@ -262,7 +262,7 @@ func TestReferrersProviderRefsBuffer(t *testing.T) {
 
 	refs, err = rpb.FetchReferrers(ctx, world.Digest, remotes.WithReferrerArtifactTypes("type"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(refs))
+	require.Empty(t, refs)
 
 	require.Equal(t, 2, rp.refsCalls)
 
@@ -273,14 +273,14 @@ func TestReferrersProviderRefsBuffer(t *testing.T) {
 
 	refs, err = rpb.FetchReferrers(ctx, world.Digest, remotes.WithReferrerArtifactTypes("type"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(refs))
+	require.Empty(t, refs)
 
 	require.Equal(t, 2, rp.refsCalls)
 
 	info, err = buf.Info(ctx, world.Digest)
 	require.NoError(t, err)
 	labels = info.Labels
-	require.Equal(t, 1, len(labels))
+	require.Len(t, labels, 1)
 
 	lbl1, ok = labels["buildkit/refs.null"]
 	require.True(t, ok)

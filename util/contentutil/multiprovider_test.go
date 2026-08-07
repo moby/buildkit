@@ -9,7 +9,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,5 +39,5 @@ func TestMultiProvider(t *testing.T) {
 
 	_, err = content.ReadBlob(ctx, mp, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo2"))})
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 }

@@ -55,10 +55,10 @@ func TestImplicitTargetPlatform(t *testing.T) {
 	// TargetPlatform is set
 	opt := ConvertOpt{TargetPlatform: &dummyPlatform}
 	result := buildPlatformOpt(&opt).implicitTarget
-	assert.Equal(t, false, result)
+	assert.False(t, result)
 
 	// TargetPlatform is not set
 	opt = ConvertOpt{TargetPlatform: nil}
 	result = buildPlatformOpt(&opt).implicitTarget
-	assert.Equal(t, true, result)
+	assert.True(t, result)
 }

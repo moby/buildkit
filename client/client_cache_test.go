@@ -198,7 +198,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -235,7 +235,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	require.Equal(t, dgst, dgst2)
 
@@ -273,7 +273,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2uncompress, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	// dgst2uncompress != dgst, because the compression type is different
 	unique2uncompress, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2uncompress, "/unique")
@@ -304,7 +304,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst3, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	// dgst3 != dgst, because inline cache is not exported for dgst3
 	unique3, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst3, "/unique")
@@ -474,15 +474,13 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &cc)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(cc.Layers))
-	require.Equal(t, 5, len(cc.Records))
+	require.Len(t, cc.Layers, 3)
+	require.Len(t, cc.Records, 5)
 
 	var runLayer *int
 	for i, l := range cc.Layers {
 		if l.ParentIndex != -1 {
-			if runLayer != nil {
-				t.Fatal("multiple RUN layers")
-			}
+			require.Nil(t, runLayer, "multiple RUN layers")
 			runLayer = &i
 		}
 	}
@@ -550,8 +548,8 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &cc2)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(cc2.Layers))
-	require.Equal(t, 5, len(cc2.Records))
+	require.Len(t, cc2.Layers, 1)
+	require.Len(t, cc2.Records, 5)
 
 	for i, r := range cc.Records {
 		require.Equal(t, cc2.Records[i].Digest, r.Digest)
@@ -697,8 +695,8 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 	for _, ignoreError := range ignoreErrorValues {
 		ignoreErrStr := strconv.FormatBool(ignoreError)
 		for n, test := range tests {
-			require.Equal(t, 1, len(test.Exports))
-			require.Equal(t, 1, len(test.CacheExports))
+			require.Len(t, test.Exports, 1)
+			require.Len(t, test.CacheExports, 1)
 			require.NotEmpty(t, test.CacheExports[0].Attrs)
 			test.CacheExports[0].Attrs["ignore-error"] = ignoreErrStr
 			testName := fmt.Sprintf("%s-%s", n, ignoreErrStr)
@@ -720,7 +718,7 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 				} else {
 					require.Error(t, err)
 					for _, errStr := range test.expectedErrors {
-						require.Contains(t, err.Error(), errStr)
+						require.ErrorContains(t, err, errStr)
 					}
 				}
 			})
@@ -788,7 +786,7 @@ func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
 	blobDir := filepath.Join(cacheDir, "blobs", "sha256")
 	entries1, err := os.ReadDir(blobDir)
 	require.NoError(t, err)
-	require.Greater(t, len(entries1), 0)
+	require.NotEmpty(t, entries1)
 
 	// Build 2: different build, export with reset=true
 	st2 := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo build2-different > /out2"`)).Root()
@@ -1579,7 +1577,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
 		sgzLayers = append(sgzLayers, layer)
 	}
-	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
+	require.NotEmpty(t, sgzLayers, "no layer can be used for checking lazypull")
 
 	// The topmost(last) layer created by `Run` shouldn't be lazy
 	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
@@ -1730,7 +1728,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -1749,7 +1747,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
 		sgzLayers = append(sgzLayers, layer)
 	}
-	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
+	require.NotEmpty(t, sgzLayers, "no layer can be used for checking lazypull")
 
 	// The topmost(last) layer created by `Run` shouldn't be lazy
 	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
@@ -1781,7 +1779,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
 	require.NoError(t, err)

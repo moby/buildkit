@@ -299,7 +299,7 @@ func testOnBuildNamedContext(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest.Hex()
 
 	store, err := local.NewStore(ocidir)

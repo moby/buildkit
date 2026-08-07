@@ -79,7 +79,7 @@ func TestGetSetSearch(t *testing.T) {
 
 	sis, err := s.All()
 	require.NoError(t, err)
-	require.Equal(t, 2, len(sis))
+	require.Len(t, sis, 2)
 
 	require.Equal(t, "foo", sis[0].ID())
 	require.Equal(t, "foo2", sis[1].ID())
@@ -98,7 +98,7 @@ func TestGetSetSearch(t *testing.T) {
 
 	sis, err = s.All()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(sis))
+	require.Len(t, sis, 1)
 
 	require.Equal(t, "foo2", sis[0].ID())
 
@@ -144,14 +144,14 @@ func TestIndexes(t *testing.T) {
 	ctx := context.Background()
 	sis, err := s.Search(ctx, "tag:baz", false)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(sis))
+	require.Len(t, sis, 2)
 
 	require.Equal(t, "foo1", sis[0].ID())
 	require.Equal(t, "foo3", sis[1].ID())
 
 	sis, err = s.Search(ctx, "tag:bax", false)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(sis))
+	require.Len(t, sis, 1)
 
 	require.Equal(t, "foo2", sis[0].ID())
 
@@ -160,7 +160,7 @@ func TestIndexes(t *testing.T) {
 
 	sis, err = s.Search(ctx, "tag:baz", false)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(sis))
+	require.Len(t, sis, 1)
 
 	require.Equal(t, "foo3", sis[0].ID())
 }

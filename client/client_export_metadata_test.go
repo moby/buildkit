@@ -167,7 +167,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(imgs.Images))
+	require.Len(t, imgs.Images, len(ps)*2)
 
 	var bases []*testutil.ImageInfo
 	for _, p := range ps {
@@ -176,9 +176,9 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	}
 
 	atts := imgs.Filter("unknown/unknown")
-	require.Equal(t, len(ps)*1, len(atts.Images))
+	require.Len(t, atts.Images, len(ps)*1)
 	for i, att := range atts.Images {
-		require.Equal(t, 1, len(att.LayersRaw))
+		require.Len(t, att.LayersRaw, 1)
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 
@@ -306,7 +306,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, len(ps)*2, len(imgs.Images))
+	require.Len(t, imgs.Images, len(ps)*2)
 
 	var bases []*testutil.ImageInfo
 	for _, p := range ps {
@@ -315,7 +315,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	}
 
 	atts := imgs.Filter("unknown/unknown")
-	require.Equal(t, len(ps), len(atts.Images))
+	require.Len(t, atts.Images, len(ps))
 	for i, att := range atts.Images {
 		var attest intoto.Statement
 		require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
@@ -443,7 +443,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	require.Equal(t, "generic index", imgs.Index.Annotations["gi"])
 	require.Equal(t, "generic index opt", imgs.Index.Annotations["gio"])
@@ -638,7 +638,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(imgs.Images))
+	require.Len(t, imgs.Images, 1)
 
 	target2 := registry + "/buildkit/testannotationsmedia:2"
 	_, err = c.Build(sb.Context(), SolveOpt{
@@ -659,7 +659,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	imgs2, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(imgs2.Images))
+	require.Len(t, imgs2.Images, 1)
 
 	require.Equal(t, "b", imgs.Images[0].Manifest.Annotations["a"])
 	require.Equal(t, "d", imgs2.Index.Annotations["c"])
@@ -806,7 +806,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 		imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 		require.NoError(t, err)
-		require.Equal(t, len(ps)*2, len(imgs.Images))
+		require.Len(t, imgs.Images, len(ps)*2)
 
 		var bases []*testutil.ImageInfo
 		for _, p := range ps {
@@ -814,19 +814,19 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 			img := imgs.Find(pk)
 			require.NotNil(t, img)
 			require.Equal(t, pk, platforms.Format(*img.Desc.Platform))
-			require.Equal(t, 1, len(img.Layers))
+			require.Len(t, img.Layers, 1)
 			require.Equal(t, fmt.Appendf(nil, "hello %s!", pk), img.Layers[0]["greeting"].Data)
 			bases = append(bases, img)
 		}
 
 		atts := imgs.Filter("unknown/unknown")
-		require.Equal(t, len(ps), len(atts.Images))
+		require.Len(t, atts.Images, len(ps))
 		for i, att := range atts.Images {
 			require.Equal(t, ocispecs.MediaTypeImageManifest, att.Desc.MediaType)
 			require.Equal(t, "unknown/unknown", platforms.Format(*att.Desc.Platform))
 			require.Equal(t, attestation.DockerAnnotationReferenceTypeDefault, att.Desc.Annotations[attestation.DockerAnnotationReferenceType])
 			require.Equal(t, bases[i].Desc.Digest.String(), att.Desc.Annotations[attestation.DockerAnnotationReferenceDigest])
-			require.Equal(t, 2, len(att.Layers))
+			require.Len(t, att.Layers, 2)
 
 			if expectedOCIArtifact {
 				subject := att.Manifest.Subject
@@ -844,8 +844,8 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 
 				// image config is not included in the OCI artifact
 				require.Equal(t, "unknown/unknown", att.Img.OS+"/"+att.Img.Architecture)
-				require.Equal(t, len(att.Layers), len(att.Img.RootFS.DiffIDs))
-				require.Equal(t, 0, len(att.Img.History))
+				require.Len(t, att.Img.RootFS.DiffIDs, len(att.Layers))
+				require.Empty(t, att.Img.History)
 			}
 
 			var attest intoto.Statement
@@ -1153,7 +1153,7 @@ func testImageResolveAttestationChainRequiresNetwork(t *testing.T, sb integratio
 		var sigMfst ocispecs.Manifest
 		err = json.Unmarshal(ac.Blobs[ac.SignatureManifests[0]].Data, &sigMfst)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(sigMfst.Layers))
+		require.Len(t, sigMfst.Layers, 1)
 		sigLayer := sigMfst.Layers[0]
 		sigDesc := ac.Blobs[digest.Digest(sigLayer.Digest)]
 		require.Equal(t, sigLayer.Digest, sigDesc.Descriptor.Digest)
@@ -1419,7 +1419,7 @@ EOF
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	// test the frontend builtin scanner
 	target = registry + "/buildkit/testsbom2:latest"
@@ -1444,7 +1444,7 @@ EOF
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att := imgs.Find("unknown/unknown")
 	attest := intoto.Statement{}
@@ -1476,7 +1476,7 @@ EOF
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
@@ -1508,7 +1508,7 @@ EOF
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
@@ -1540,7 +1540,7 @@ EOF
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
@@ -1574,7 +1574,7 @@ EOF
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att = imgs.Find("unknown/unknown")
 	attest = intoto.Statement{}
@@ -1731,7 +1731,7 @@ EOF
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	var img *testutil.ImageInfo
 	for _, candidate := range imgs.Images {
@@ -1885,7 +1885,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	att := imgs.Find("unknown/unknown")
 	attest := struct {
@@ -2092,7 +2092,7 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 
 	img, err := client.GetImage(ctx, name)
 	require.NoError(t, err)
-	require.Equal(t, tm, img.Metadata().CreatedAt)
+	require.WithinDuration(t, tm, img.Metadata().CreatedAt, 0)
 
 	err = client.ImageService().Delete(ctx, name, images.SynchronousDelete())
 	require.NoError(t, err)
@@ -2150,7 +2150,7 @@ func testSourceDateEpochLayerTimestamps(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	tms := tmsX.FromImage
 
-	require.Equal(t, 3, len(tms))
+	require.Len(t, tms, 3)
 
 	expected := tm.UTC().Format(time.RFC3339Nano)
 	require.Equal(t, expected, tms[0])
@@ -2262,7 +2262,7 @@ func testSourceDateEpochReset(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	tms := tmsX.FromImage
 
-	require.Equal(t, 3, len(tms))
+	require.Len(t, tms, 3)
 
 	expected := tm.UTC().Format(time.RFC3339Nano)
 	require.NotEqual(t, expected, tms[0])
@@ -2324,7 +2324,7 @@ func testSourceDateEpochTarExporter(t *testing.T, sb integration.Sandbox) {
 	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(m))
+	require.Len(t, m, 2)
 
 	require.Equal(t, tm.Format(time.RFC3339), m["foo"].Header.ModTime.Format(time.RFC3339))
 	require.Equal(t, tm.Format(time.RFC3339), m["bar"].Header.ModTime.Format(time.RFC3339))

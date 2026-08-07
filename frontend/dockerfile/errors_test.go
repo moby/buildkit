@@ -94,12 +94,12 @@ env bar=baz`,
 			require.Error(t, err)
 
 			srcs := errdefs.Sources(err)
-			require.Equal(t, 1, len(srcs))
+			require.Len(t, srcs, 1)
 
 			require.Equal(t, "Dockerfile", srcs[0].Info.Filename)
 			require.Equal(t, "Dockerfile", srcs[0].Info.Language)
 			require.Equal(t, tc.dockerfile, string(srcs[0].Info.Data))
-			require.Equal(t, len(tc.errorLine), len(srcs[0].Ranges))
+			require.Len(t, srcs[0].Ranges, len(tc.errorLine))
 			require.NotNil(t, srcs[0].Info.Definition)
 
 		next:

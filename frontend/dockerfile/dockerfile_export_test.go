@@ -68,7 +68,7 @@ COPY foo foo
 	require.NoError(t, err)
 
 	mi, ok := m["foo"]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "data", string(mi.Data))
 }
 
@@ -116,7 +116,7 @@ FROM stage-$TARGETOS
 	require.NoError(t, err)
 
 	mi, ok := m["forlinux"]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "data", string(mi.Data))
 
 	// repeat multi-platform
@@ -142,11 +142,11 @@ FROM stage-$TARGETOS
 	require.NoError(t, err)
 
 	mi, ok = m["linux_amd64/forlinux"]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "data", string(mi.Data))
 
 	mi, ok = m["darwin_amd64/fordarwin"]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "data2", string(mi.Data))
 }
 
@@ -248,7 +248,7 @@ COPY arch-$TARGETARCH whoami
 	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(idx.Manifests))
+	require.Len(t, idx.Manifests, 3)
 
 	for i, exp := range []struct {
 		p    string
@@ -267,7 +267,7 @@ COPY arch-$TARGETARCH whoami
 			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
-			require.Equal(t, 1, len(mfst.Layers))
+			require.Len(t, mfst.Layers, 1)
 
 			m2, err := testutil.ReadTarToMap(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[0].Digest.Hex()].Data, true)
 			require.NoError(t, err)

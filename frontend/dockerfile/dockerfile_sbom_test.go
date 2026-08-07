@@ -108,14 +108,14 @@ EOF
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 	require.NotNil(t, img)
 	require.Equal(t, []byte("data\n"), img.Layers[0]["foo"].Data)
 
 	att := imgs.Find("unknown/unknown")
-	require.Equal(t, 1, len(att.LayersRaw))
+	require.Len(t, att.LayersRaw, 1)
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
@@ -229,13 +229,13 @@ FROM base
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 	require.NotNil(t, img)
 
 	att := imgs.Find("unknown/unknown")
-	require.Equal(t, 1, len(att.LayersRaw))
+	require.Len(t, att.LayersRaw, 1)
 	var attest intoto.Statement
 	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
 	require.Subset(t, attest.Predicate, map[string]any{"name": "core"})
@@ -292,13 +292,13 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.NoError(t, err)
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 	require.NotNil(t, img)
 
 	att = imgs.Find("unknown/unknown")
-	require.Equal(t, 4, len(att.LayersRaw))
+	require.Len(t, att.LayersRaw, 4)
 	extraCount := 0
 	for _, l := range att.LayersRaw {
 		var attest intoto.Statement
@@ -342,11 +342,11 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	require.NoError(t, err)
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	img = imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 	require.NotNil(t, img)
 
 	att = imgs.Find("unknown/unknown")
-	require.Equal(t, 1, len(att.LayersRaw))
+	require.Len(t, att.LayersRaw, 1)
 }

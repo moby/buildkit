@@ -59,7 +59,7 @@ WORKDIR /
 
 	fi, err := os.Lstat(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, true, fi.IsDir())
+	require.True(t, fi.IsDir())
 }
 
 // testWorkdirSourceDateEpochReproducible ensures that WORKDIR is reproducible with SOURCE_DATE_EPOCH.

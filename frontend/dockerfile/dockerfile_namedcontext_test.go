@@ -78,7 +78,7 @@ COPY --from=base /out /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 
@@ -157,7 +157,7 @@ COPY --from=base /env_foobar /
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "env_foobar"))
 	require.NoError(t, err)
@@ -445,7 +445,7 @@ EOF
 	}
 
 	require.NoError(t, err)
-	require.Equal(t, 1, len(fileNames))
+	require.Len(t, fileNames, 1)
 	require.Equal(t, "out", fileNames[0])
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
@@ -513,11 +513,11 @@ COPY --from=base /o* /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 
 	_, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
@@ -595,7 +595,7 @@ func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest.Hex()
 
 	store, err := local.NewStore(ocidir)
@@ -668,17 +668,17 @@ COPY --from=imported /test/outfoo /
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 	require.Equal(t, []byte("first"+newLine), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 	require.Equal(t, []byte("second"+newLine), dt)
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "outfoo"))
 	require.NoError(t, err)
-	require.Greater(t, len(dt), 0)
+	require.NotEmpty(t, dt)
 	require.Equal(t, []byte("bar"+newLine), dt)
 }
 
@@ -743,7 +743,7 @@ ENV foo=bar
 	var index ocispecs.Index
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest := index.Manifests[0].Digest.Hex()
 
 	store, err := local.NewStore(ocidir)
@@ -785,7 +785,7 @@ FROM nonexistent AS base
 
 	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(index.Manifests))
+	require.Len(t, index.Manifests, 1)
 	digest = index.Manifests[0].Digest.Hex()
 
 	var mfst ocispecs.Manifest

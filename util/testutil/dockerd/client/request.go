@@ -1,10 +1,8 @@
-//nolint:forbidigo
 package client
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -127,11 +125,11 @@ func (cli *Client) checkResponseErr(serverResp *http.Response) error {
 			return err
 		}
 		if bodyR.N == 0 {
-			return fmt.Errorf("request returned %s with a message (> %d bytes) for API route and version %s, check if the server supports the requested API version", statusMsg, bodyMax, reqURL)
+			return errors.Errorf("request returned %s with a message (> %d bytes) for API route and version %s, check if the server supports the requested API version", statusMsg, bodyMax, reqURL)
 		}
 	}
 	if len(body) == 0 {
-		return fmt.Errorf("request returned %s for API route and version %s, check if the server supports the requested API version", statusMsg, reqURL)
+		return errors.Errorf("request returned %s for API route and version %s, check if the server supports the requested API version", statusMsg, reqURL)
 	}
 
 	var daemonErr error

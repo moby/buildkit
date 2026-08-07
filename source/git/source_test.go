@@ -98,9 +98,9 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -289,7 +289,7 @@ func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 	}
 
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, shaLen, len(sha))
+	require.Len(t, sha, shaLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
 
@@ -305,9 +305,9 @@ func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, shaLen, len(pin1))
+	require.Len(t, pin1, shaLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 	}
 
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, expSHALen, len(sha))
+	require.Len(t, sha, expSHALen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: sha, KeepGitDir: keepGitDir}
 
@@ -426,9 +426,9 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -547,7 +547,6 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 	gStale, err := gs.Resolve(ctx, idStale, nil, nil)
 	require.NoError(t, err)
 	_, _, _, _, err = gStale.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "expected checksum to match")
 
 	// Fetch the old commit by checksum with FetchByCommit and the same
@@ -657,7 +656,6 @@ func testFetchByCommitRequiresChecksum(t *testing.T, format string) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 	_, _, _, _, err = g.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "fetch-by-commit")
 }
 
@@ -817,7 +815,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 			expLen = 64
 		}
 		sha := strings.TrimSpace(string(out))
-		require.Equal(t, expLen, len(sha))
+		require.Len(t, sha, expLen)
 
 		switch checksumMode {
 		case testChecksumModeValid:
@@ -854,9 +852,9 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -961,7 +959,7 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 		expLen = 64
 	}
 	sha := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(sha))
+	require.Len(t, sha, expLen)
 
 	gs := setupGitSource(t, t.TempDir())
 
@@ -975,7 +973,7 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 	require.True(t, done)
 
 	require.GreaterOrEqual(t, len(key1), expLen+4)
-	require.Equal(t, expLen, len(pin1))
+	require.Len(t, pin1, expLen)
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -990,7 +988,7 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 	require.True(t, done)
 
 	require.GreaterOrEqual(t, len(key1), expLen+4)
-	require.Equal(t, expLen, len(pin1))
+	require.Len(t, pin1, expLen)
 
 	ref, err = g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -1034,7 +1032,7 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 		expLen = 64
 	}
 	shaTag := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaTag))
+	require.Len(t, shaTag, expLen)
 
 	// make sure this is an annotated tag
 	cmd = exec.CommandContext(context.TODO(), "git", "cat-file", "-t", shaTag)
@@ -1052,7 +1050,7 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	require.NoError(t, err)
 
 	shaCommit := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaCommit))
+	require.Len(t, shaCommit, expLen)
 
 	require.NotEqual(t, shaTag, shaCommit)
 
@@ -1076,9 +1074,9 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 		if keepGitDir {
 			require.GreaterOrEqual(t, len(key), expLen+4)
 		} else {
-			require.Equal(t, expLen, len(key))
+			require.Len(t, key, expLen)
 		}
-		require.Equal(t, expLen, len(pin))
+		require.Len(t, pin, expLen)
 
 		require.Equal(t, shaTag, pin)
 
@@ -1153,7 +1151,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 		expLen = 64
 	}
 	shaTag := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaTag))
+	require.Len(t, shaTag, expLen)
 
 	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3^{}")
 	cmd.Dir = repo.mainPath
@@ -1161,7 +1159,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 	out, err = cmd.Output()
 	require.NoError(t, err)
 	shaTagCommit := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaTagCommit))
+	require.Len(t, shaTagCommit, expLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: "v1.2.3", KeepGitDir: keepGitDir}
 	gs := setupGitSource(t, t.TempDir())
@@ -1261,7 +1259,7 @@ func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
 		expLen = 64
 	}
 	shaMaster := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaMaster))
+	require.Len(t, shaMaster, expLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
 	gs := setupGitSource(t, t.TempDir())
@@ -1355,7 +1353,7 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 		expLen = 64
 	}
 	shaFeature := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaFeature))
+	require.Len(t, shaFeature, expLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: keepGitDir}
 	gs := setupGitSource(t, t.TempDir())
@@ -1403,7 +1401,6 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 	require.Error(t, err, string(out))
 
 	_, err = g.Snapshot(ctx, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "fetched ref feature does not match expected commit "+shaFeature)
 }
 
@@ -1440,7 +1437,7 @@ func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
 		expLen = 64
 	}
 	shaTag := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaTag))
+	require.Len(t, shaTag, expLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: shaTag, KeepGitDir: keepGitDir}
 	gs := setupGitSource(t, t.TempDir())
@@ -1470,7 +1467,7 @@ func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
 	require.NoError(t, err)
 
 	shaTagMutated := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaTagMutated))
+	require.Len(t, shaTagMutated, expLen)
 	require.NotEqual(t, shaTag, shaTagMutated)
 
 	id = &GitIdentifier{Remote: repo.mainURL, Ref: shaTagMutated, KeepGitDir: keepGitDir}
@@ -1526,7 +1523,7 @@ func testFetchMutatedBranch(t *testing.T, format string, keepGitDir bool) {
 		expLen = 64
 	}
 	shaBranch := strings.TrimSpace(string(out))
-	require.Equal(t, expLen, len(shaBranch))
+	require.Len(t, shaBranch, expLen)
 
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: keepGitDir}
 	gs := setupGitSource(t, t.TempDir())
@@ -1622,9 +1619,9 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 	if keepGitDir {
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -1639,9 +1636,9 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 	if keepGitDir {
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin2))
+	require.Len(t, pin2, expPinLen)
 
 	require.Equal(t, pin1, pin2)
 	if !keepGitDir {
@@ -1767,7 +1764,7 @@ func testResolveMetadataObject(t *testing.T, keepGitDir bool, format string) {
 	require.NotNil(t, commitTime)
 	require.WithinDuration(t, time.Now(), *commitTime, 5*time.Minute)
 
-	require.Equal(t, 1, len(commit.Parents))
+	require.Len(t, commit.Parents, 1)
 	require.Len(t, commit.Tree, len(md.Checksum))
 }
 
@@ -1837,18 +1834,18 @@ func testMultipleRepos(t *testing.T, keepGitDir bool, format string) {
 	if keepGitDir {
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	key2, pin2, _, _, err := g2.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	if keepGitDir {
 		require.GreaterOrEqual(t, len(key2), expLen2)
 	} else {
-		require.Equal(t, expLen2, len(key2))
+		require.Len(t, key2, expLen2)
 	}
-	require.Equal(t, 40, len(pin2))
+	require.Len(t, pin2, 40)
 
 	require.NotEqual(t, key1, key2)
 	require.NotEqual(t, pin1, pin2)
@@ -1954,7 +1951,7 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool, format string) {
 		expPinLen = 64
 	}
 	require.GreaterOrEqual(t, len(key1), expLen)
-	require.Equal(t, expPinLen, len(pin1))
+	require.Len(t, pin1, expPinLen)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -2183,7 +2180,7 @@ func testVerifySignatures(t *testing.T, keepGitDir bool, format string) {
 	if format == "sha256" {
 		expLen = 64
 	}
-	require.Equal(t, expLen, len(pin))
+	require.Len(t, pin, expLen)
 
 	id = &GitIdentifier{
 		Remote:     repo.mainURL,
@@ -2218,7 +2215,7 @@ func testVerifySignatures(t *testing.T, keepGitDir bool, format string) {
 	_, pin, _, done, err = gsi.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.True(t, done)
-	require.Equal(t, expLen, len(pin))
+	require.Len(t, pin, expLen)
 
 	// but not when signed tag is required
 	id = &GitIdentifier{
@@ -2254,7 +2251,7 @@ func testVerifySignatures(t *testing.T, keepGitDir bool, format string) {
 	_, pin, _, done, err = gsi.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.True(t, done)
-	require.Equal(t, expLen, len(pin))
+	require.Len(t, pin, expLen)
 
 	// repeat three last checks via ResolveSourceMetadata
 	id = &GitIdentifier{
@@ -2343,9 +2340,9 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 		expLen += 4
 		require.GreaterOrEqual(t, len(key1), expLen)
 	} else {
-		require.Equal(t, expLen, len(key1))
+		require.Len(t, key1, expLen)
 	}
-	require.Equal(t, 40, len(pin1))
+	require.Len(t, pin1, 40)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -2362,7 +2359,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	fis, err := os.ReadDir(dir)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(fis))
+	require.Len(t, fis, 1)
 
 	dt, err := os.ReadFile(filepath.Join(dir, "bar"))
 	require.NoError(t, err)

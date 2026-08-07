@@ -224,7 +224,7 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 		mfst, err := images.Manifest(ctx, contentutil.FromFetcher(fetcher), desc, platforms.Any())
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(mfst.Layers))
+		require.Len(t, mfst.Layers, 2)
 		require.Equal(t, images.MediaTypeDockerSchema2LayerForeign, mfst.Layers[0].MediaType)
 		require.Len(t, mfst.Layers[0].URLs, 1)
 		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
@@ -272,9 +272,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 		mfst, err := images.Manifest(ctx, contentutil.FromFetcher(fetcher), desc, platforms.Any())
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(mfst.Layers))
+		require.Len(t, mfst.Layers, 2)
 		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
-		require.Len(t, mfst.Layers[0].URLs, 0)
+		require.Empty(t, mfst.Layers[0].URLs)
 		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
 
 		rc, err := fetcher.Fetch(ctx, ocispecs.Descriptor{Digest: mfst.Layers[0].Digest, Size: mfst.Layers[0].Size})
@@ -339,7 +339,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(mfst.Layers))
+		require.Len(t, mfst.Layers, 1)
 		require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 	}
 
@@ -408,7 +408,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(mfst.Layers))
+	require.Len(t, mfst.Layers, 2)
 	require.Equal(t, ocispecs.MediaTypeImageLayer, mfst.Layers[0].MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
@@ -453,7 +453,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(mfst.Layers))
+	require.Len(t, mfst.Layers, 2)
 	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
@@ -695,11 +695,11 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
-	require.NotEqual(t, "", ociimg.OS)
-	require.NotEqual(t, "", ociimg.Architecture)
-	require.NotEqual(t, "", ociimg.Config.WorkingDir)
+	require.NotEmpty(t, ociimg.OS)
+	require.NotEmpty(t, ociimg.Architecture)
+	require.NotEmpty(t, ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
-	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
+	require.Len(t, ociimg.RootFS.DiffIDs, 3)
 	require.NotNil(t, ociimg.Created)
 	require.Less(t, time.Since(*ociimg.Created), 2*time.Minute)
 	require.Condition(t, func() bool {
@@ -711,7 +711,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 		return false
 	})
 
-	require.Equal(t, 3, len(ociimg.History))
+	require.Len(t, ociimg.History, 3)
 	require.Contains(t, ociimg.History[0].CreatedBy, "foo/sub/bar")
 	require.Contains(t, ociimg.History[1].CreatedBy, "true")
 	require.Contains(t, ociimg.History[2].CreatedBy, "foo/sub/baz")
@@ -731,7 +731,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, ocispecs.MediaTypeImageManifest, mfst.MediaType)
-	require.Equal(t, 3, len(mfst.Layers))
+	require.Len(t, mfst.Layers, 3)
 	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[0].MediaType)
 	require.Equal(t, ocispecs.MediaTypeImageLayerGzip, mfst.Layers[1].MediaType)
 
@@ -873,7 +873,7 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(mfst.Layers))
+	require.Len(t, mfst.Layers, 2)
 
 	hasLabel := func(dgst digest.Digest) bool {
 		for k, v := range info.Labels {
@@ -903,20 +903,19 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 	// layers should be deleted
 	_, err = store.Info(ctx, mfst.Layers[1].Digest)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 
 	// config should be deleted
 	_, err = store.Info(ctx, mfst.Config.Digest)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 
 	// buildkit contentstore still has the layer because it is multi-ns
 	bkstore := proxy.NewContentStore(c.ContentClient())
 
 	// layer should be deleted as not kept by history
 	_, err = bkstore.Info(ctx, mfst.Layers[1].Digest)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not found")
+	require.ErrorContains(t, err, "not found")
 
 	// config should still be there
 	_, err = bkstore.Info(ctx, img.Metadata().Target.Digest)
@@ -1326,7 +1325,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 			require.Equal(t, 2, index.SchemaVersion)
 			require.Equal(t, tc.indexMediaType, index.MediaType)
-			require.Equal(t, 1, len(index.Manifests))
+			require.Len(t, index.Manifests, 1)
 			require.Equal(t, tc.manifestMediaType, index.Manifests[0].MediaType)
 
 			var mfst ocispecs.Manifest
@@ -1334,7 +1333,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 			require.Equal(t, tc.manifestMediaType, mfst.MediaType)
 			require.Equal(t, tc.configMediaType, mfst.Config.MediaType)
-			require.Equal(t, 2, len(mfst.Layers))
+			require.Len(t, mfst.Layers, 2)
 			for _, layer := range mfst.Layers {
 				require.Equal(t, tc.layerMediaType, layer.MediaType)
 			}
@@ -1343,7 +1342,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Config.Digest.Hex()].Data, &ociimg)
 			require.NoError(t, err)
 			require.Equal(t, "layers", ociimg.RootFS.Type)
-			require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+			require.Len(t, ociimg.RootFS.DiffIDs, 2)
 
 			_, ok = m[ocispecs.ImageBlobsDir+"/sha256/"+mfst.Layers[0].Digest.Hex()]
 			require.True(t, ok)
@@ -1361,12 +1360,12 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			}
 			err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(dockerMfst))
+			require.Len(t, dockerMfst, 1)
 
 			_, ok = m[dockerMfst[0].Config]
 			require.True(t, ok)
-			require.Equal(t, 2, len(dockerMfst[0].Layers))
-			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
+			require.Len(t, dockerMfst[0].Layers, 2)
+			require.Len(t, dockerMfst[0].RepoTags, 1)
 			require.Equal(t, target, dockerMfst[0].RepoTags[0])
 
 			for _, l := range dockerMfst[0].Layers {
@@ -1606,8 +1605,7 @@ func testPullWithDigestCheck(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
+	require.ErrorContains(t, err, fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
 }
 
 // testPullZstdImage verifies pulling and re-exporting a Zstd-compressed image.
@@ -1752,7 +1750,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
 	require.Equal(t, ocispecs.MediaTypeImageManifest, desc.MediaType)
-	require.Greater(t, desc.Size, int64(0))
+	require.Positive(t, desc.Size)
 }
 
 func testPushProgressSameVertex(t *testing.T, sb integration.Sandbox) {
@@ -1924,7 +1922,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	unique, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
@@ -1943,7 +1941,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 		require.ErrorIs(t, err, cerrdefs.ErrNotFound, "unexpected error %v", err)
 		sgzLayers = append(sgzLayers, layer)
 	}
-	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
+	require.NotEmpty(t, sgzLayers, "no layer can be used for checking lazypull")
 
 	// The topmost(last) layer created by `Run` shouldn't be lazy
 	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
@@ -1967,7 +1965,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	unique2, err := readFileInImage(sb.Context(), t, c, target+"@"+dgst2, "/unique")
 	require.NoError(t, err)

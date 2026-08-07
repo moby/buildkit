@@ -602,7 +602,7 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		require.NotNil(t, md.Git)
 		require.Equal(t, "refs/heads/v2", md.Git.Ref) // default to branch head
 		require.Equal(t, commitHEAD, md.Git.Checksum)
-		require.Equal(t, "", md.Git.CommitChecksum) // not annotated tag
+		require.Empty(t, md.Git.CommitChecksum) // not annotated tag
 		require.Equal(t, id, md.Op.Identifier)
 		require.Equal(t, server.URL+"/.git", md.Op.Attrs["git.fullurl"])
 		require.Nil(t, md.Git.CommitObject)

@@ -90,116 +90,77 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 	keepSlash := false
 	// Fails if not C drive.
 	_, err := CheckSystemDriveAndRemoveDriveLetter(`d:\`, "windows", keepSlash)
-	if err == nil || err.Error() != "The specified path is not on the system drive (C:)" {
-		t.Fatalf("Expected error for d:")
-	}
+	require.EqualError(t, err, "The specified path is not on the system drive (C:)", "Expected error for d:")
 
 	var path string
 
 	// Single character is unchanged
-	if path, err = CheckSystemDriveAndRemoveDriveLetter("z", "windows", keepSlash); err != nil {
-		t.Fatalf("Single character should pass")
-	}
-	if path != "z" {
-		t.Fatalf("Single character should be unchanged")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter("z", "windows", keepSlash)
+	require.NoErrorf(t, err, "Single character should pass")
+	require.Equalf(t, "z", path, "Single character should be unchanged")
 
 	// Two characters without colon is unchanged
-	if path, err = CheckSystemDriveAndRemoveDriveLetter("AB", "windows", keepSlash); err != nil {
-		t.Fatalf("2 characters without colon should pass")
-	}
-	if path != "AB" {
-		t.Fatalf("2 characters without colon should be unchanged")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter("AB", "windows", keepSlash)
+	require.NoErrorf(t, err, "2 characters without colon should pass")
+	require.Equalf(t, "AB", path, "2 characters without colon should be unchanged")
 
 	// Abs path without drive letter
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`\l`, "windows", keepSlash); err != nil {
-		t.Fatalf("abs path no drive letter should pass")
-	}
-	if path != `/l` {
-		t.Fatalf("abs path without drive letter should be unchanged")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`\l`, "windows", keepSlash)
+	require.NoErrorf(t, err, "abs path no drive letter should pass")
+	require.Equalf(t, `/l`, path, "abs path without drive letter should be unchanged")
 
 	// Abs path without drive letter, linux style
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`/l`, "windows", keepSlash); err != nil {
-		t.Fatalf("abs path no drive letter linux style should pass")
-	}
-	if path != `/l` {
-		t.Fatalf("abs path without drive letter linux failed %s", path)
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`/l`, "windows", keepSlash)
+	require.NoErrorf(t, err, "abs path no drive letter linux style should pass")
+	require.Equalf(t, `/l`, path, "abs path without drive letter linux failed %s", path)
 
 	// Drive-colon should be stripped
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:\`, "windows", keepSlash); err != nil {
-		t.Fatalf("An absolute path should pass")
-	}
-	if path != `/` {
-		t.Fatalf(`An absolute path should have been shortened to \ %s`, path)
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`c:\`, "windows", keepSlash)
+	require.NoErrorf(t, err, "An absolute path should pass")
+	require.Equalf(t, `/`, path, `An absolute path should have been shortened to \ %s`, path)
 
 	// Verify with a linux-style path
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:/`, "windows", keepSlash); err != nil {
-		t.Fatalf("An absolute path should pass")
-	}
-	if path != `/` {
-		t.Fatalf(`A linux style absolute path should have been shortened to \ %s`, path)
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`c:/`, "windows", keepSlash)
+	require.NoErrorf(t, err, "An absolute path should pass")
+	require.Equalf(t, `/`, path, `A linux style absolute path should have been shortened to \ %s`, path)
 
 	// Failure on c:
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`c:`, "windows", keepSlash); err == nil {
-		t.Fatalf("c: should fail")
-	}
-	if err.Error() != `No relative path specified in "c:"` {
-		t.Fatalf(path, err)
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`c:`, "windows", keepSlash)
+	require.Errorf(t, err, "c: should fail")
+	require.Equalf(t, `No relative path specified in "c:"`, err.Error(), path)
 
 	// Failure on d:
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(`d:`, "windows", keepSlash); err == nil {
-		t.Fatalf("c: should fail")
-	}
-	if err.Error() != `No relative path specified in "d:"` {
-		t.Fatalf(path, err)
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(`d:`, "windows", keepSlash)
+	require.Errorf(t, err, "c: should fail")
+	require.Equalf(t, `No relative path specified in "d:"`, err.Error(), path)
 
 	// UNC path should fail.
-	if _, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`, "windows", keepSlash); err == nil {
-		t.Fatalf("UNC path should fail")
-	}
+	_, err = CheckSystemDriveAndRemoveDriveLetter(`\\.\C$\test`, "windows", keepSlash)
+	require.Errorf(t, err, "UNC path should fail")
 
 	// also testing for keepSlash = true
 	keepSlash = true
 	origPath := "\\a\\b\\..\\c\\"
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "windows", keepSlash); err != nil {
-		t.Fatalf("windows relative paths should be cleaned and should pass")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "windows", keepSlash)
+	require.NoErrorf(t, err, "windows relative paths should be cleaned and should pass")
 	// When input OS is Windows, the path should be properly cleaned
-	if path != "/a/c/" {
-		t.Fatalf("Path was not cleaned successfully")
-	}
+	require.Equalf(t, "/a/c/", path, "Path was not cleaned successfully")
 
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "windows", false); err != nil {
-		t.Fatalf("windows relative paths should be cleaned and should pass [keepSlash = false]")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "windows", false)
+	require.NoErrorf(t, err, "windows relative paths should be cleaned and should pass [keepSlash = false]")
 	// When input OS is Windows, the path should be properly cleaned
-	if path != "/a/c" {
-		t.Fatalf("Path was not cleaned successfully [keepSlash = false]")
-	}
+	require.Equalf(t, "/a/c", path, "Path was not cleaned successfully [keepSlash = false]")
 
 	// windows-style relative paths on linux
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "linux", keepSlash); err != nil {
-		t.Fatalf("windows style relative paths should be considered a valid path element in linux and should pass")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "linux", keepSlash)
+	require.NoErrorf(t, err, "windows style relative paths should be considered a valid path element in linux and should pass")
 	// When input OS is Linux, this is a valid path element name.
-	if path != "\\a\\b\\..\\c\\" {
-		t.Fatalf("Path was not cleaned successfully")
-	}
+	require.Equalf(t, "\\a\\b\\..\\c\\", path, "Path was not cleaned successfully")
 
-	if path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "linux", false); err != nil {
-		t.Fatalf("windows style relative paths should be considered a valid path element in linux and should pass")
-	}
+	path, err = CheckSystemDriveAndRemoveDriveLetter(origPath, "linux", false)
+	require.NoErrorf(t, err, "windows style relative paths should be considered a valid path element in linux and should pass")
 	// When input OS is Linux, this is a valid path element name.
-	if path != "\\a\\b\\..\\c\\" {
-		t.Fatalf("Path was not cleaned successfully [keepSlash = false]")
-	}
+	require.Equalf(t, "\\a\\b\\..\\c\\", path, "Path was not cleaned successfully [keepSlash = false]")
 }
 
 // TestNormalizeWorkdirWindows tests NormalizeWorkdir

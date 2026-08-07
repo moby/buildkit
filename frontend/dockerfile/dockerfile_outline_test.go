@@ -132,15 +132,15 @@ FROM second
 		require.Equal(t, "target", outline.Name)
 		require.Equal(t, "defines build target", outline.Description)
 
-		require.Equal(t, 1, len(outline.Sources))
+		require.Len(t, outline.Sources, 1)
 		require.Equal(t, dockerfile, outline.Sources[0])
 
-		require.Equal(t, 7, len(outline.Args))
+		require.Len(t, outline.Args, 7)
 
 		arg := outline.Args[0]
 		require.Equal(t, "inherited", arg.Name)
 		require.Equal(t, integration.UnixOrWindows("box", "server"), arg.Value)
-		require.Equal(t, "", arg.Description)
+		require.Empty(t, arg.Description)
 		require.Equal(t, int32(0), arg.Location.SourceIndex)
 		require.Equal(t, int32(2), arg.Location.Ranges[0].Start.Line)
 
@@ -153,7 +153,7 @@ FROM second
 		arg = outline.Args[2]
 		require.Equal(t, "FOO", arg.Name)
 		require.Equal(t, "123", arg.Value)
-		require.Equal(t, "", arg.Description)
+		require.Empty(t, arg.Description)
 		require.Equal(t, int32(10), arg.Location.Ranges[0].Start.Line)
 
 		arg = outline.Args[3]
@@ -167,13 +167,13 @@ FROM second
 
 		arg = outline.Args[5]
 		require.Equal(t, "password", arg.Name)
-		require.Equal(t, "", arg.Value)
-		require.Equal(t, "", arg.Description)
+		require.Empty(t, arg.Value)
+		require.Empty(t, arg.Description)
 		require.Equal(t, int32(22), arg.Location.Ranges[0].Start.Line)
 
 		arg = outline.Args[6]
 		require.Equal(t, "alternate_password", arg.Name)
-		require.Equal(t, "", arg.Value)
+		require.Empty(t, arg.Value)
 		require.Equal(t, "will show up in the outline", arg.Description)
 		require.Equal(t, int32(25), arg.Location.Ranges[0].Start.Line)
 
@@ -277,34 +277,34 @@ FROM second
 		outline, err := unmarshalOutline(res)
 		require.NoError(t, err)
 
-		require.Equal(t, 1, len(outline.Sources))
+		require.Len(t, outline.Sources, 1)
 		require.Equal(t, dockerfile, outline.Sources[0])
 
-		require.Equal(t, 2, len(outline.Secrets))
+		require.Len(t, outline.Secrets, 2)
 
 		secret := outline.Secrets[0]
 		require.Equal(t, "passwd", secret.Name)
-		require.Equal(t, true, secret.Required)
+		require.True(t, secret.Required)
 		require.Equal(t, int32(0), secret.Location.SourceIndex)
 		require.Equal(t, int32(3), secret.Location.Ranges[0].Start.Line)
 
 		secret = outline.Secrets[1]
 		require.Equal(t, "second678", secret.Name)
-		require.Equal(t, false, secret.Required)
+		require.False(t, secret.Required)
 		require.Equal(t, int32(0), secret.Location.SourceIndex)
 		require.Equal(t, int32(10), secret.Location.Ranges[0].Start.Line)
 
-		require.Equal(t, 2, len(outline.SSH))
+		require.Len(t, outline.SSH, 2)
 
 		ssh := outline.SSH[0]
 		require.Equal(t, "default", ssh.Name)
-		require.Equal(t, false, ssh.Required)
+		require.False(t, ssh.Required)
 		require.Equal(t, int32(0), ssh.Location.SourceIndex)
 		require.Equal(t, int32(3), ssh.Location.Ranges[0].Start.Line)
 
 		ssh = outline.SSH[1]
 		require.Equal(t, "ssh3", ssh.Name)
-		require.Equal(t, true, ssh.Required)
+		require.True(t, ssh.Required)
 		require.Equal(t, int32(0), ssh.Location.SourceIndex)
 		require.Equal(t, int32(14), ssh.Location.Ranges[0].Start.Line)
 
@@ -434,7 +434,7 @@ COPY Dockerfile Dockerfile
 		reqs, err := subrequests.Describe(ctx, c)
 		require.NoError(t, err)
 
-		require.Greater(t, len(reqs), 0)
+		require.NotEmpty(t, reqs)
 
 		hasOutline := false
 
@@ -444,7 +444,7 @@ COPY Dockerfile Dockerfile
 			}
 			hasOutline = true
 			require.Equal(t, subrequests.RequestType("rpc"), req.Type)
-			require.NotEqual(t, "", req.Version)
+			require.NotEmpty(t, req.Version)
 		}
 		require.True(t, hasOutline)
 

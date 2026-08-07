@@ -77,39 +77,39 @@ FROM second AS binary
 		list, err := unmarshalTargets(res)
 		require.NoError(t, err)
 
-		require.Equal(t, 1, len(list.Sources))
+		require.Len(t, list.Sources, 1)
 		require.Equal(t, dockerfile, list.Sources[0])
 
-		require.Equal(t, 4, len(list.Targets))
+		require.Len(t, list.Targets, 4)
 
 		target := list.Targets[0]
 		require.Equal(t, "build", target.Name)
 		require.Equal(t, baseImage1, target.Base)
 		require.Equal(t, "defines stage for compiling the binary", target.Description)
-		require.Equal(t, false, target.Default)
+		require.False(t, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
 		require.Equal(t, int32(3), target.Location.Ranges[0].Start.Line)
 
 		target = list.Targets[1]
 		require.Equal(t, "second", target.Name)
-		require.Equal(t, "", target.Description)
+		require.Empty(t, target.Description)
 		require.Equal(t, baseImage2, target.Base)
-		require.Equal(t, false, target.Default)
+		require.False(t, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
 		require.Equal(t, int32(6), target.Location.Ranges[0].Start.Line)
 
 		target = list.Targets[2]
-		require.Equal(t, "", target.Name)
-		require.Equal(t, "", target.Description)
+		require.Empty(t, target.Name)
+		require.Empty(t, target.Description)
 		require.Equal(t, baseImage1, target.Base)
-		require.Equal(t, false, target.Default)
+		require.False(t, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
 		require.Equal(t, int32(9), target.Location.Ranges[0].Start.Line)
 
 		target = list.Targets[3]
 		require.Equal(t, "binary", target.Name)
 		require.Equal(t, "returns the compiled binary", target.Description)
-		require.Equal(t, true, target.Default)
+		require.True(t, target.Default)
 		require.Equal(t, int32(0), target.Location.SourceIndex)
 		require.Equal(t, int32(13), target.Location.Ranges[0].Start.Line)
 
@@ -160,7 +160,7 @@ COPY Dockerfile Dockerfile
 		reqs, err := subrequests.Describe(ctx, c)
 		require.NoError(t, err)
 
-		require.Greater(t, len(reqs), 0)
+		require.NotEmpty(t, reqs)
 
 		hasTargets := false
 
@@ -170,7 +170,7 @@ COPY Dockerfile Dockerfile
 			}
 			hasTargets = true
 			require.Equal(t, subrequests.RequestType("rpc"), req.Type)
-			require.NotEqual(t, "", req.Version)
+			require.NotEmpty(t, req.Version)
 		}
 		require.True(t, hasTargets)
 

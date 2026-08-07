@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // This test file contains tests that are required in continuity project.
@@ -48,9 +49,7 @@ func TestSimpleDiff(t *testing.T) {
 		Add("/root/.bashrc"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 func TestRenameDiff(t *testing.T) {
@@ -73,9 +72,7 @@ func TestRenameDiff(t *testing.T) {
 		Add("/dir2/f1"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff, "redirect_dir=off"); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff, "redirect_dir=off"), "Failed diff with base")
 }
 
 type applyFn func(root string) error
@@ -108,9 +105,7 @@ func TestEmptyFileDiff(t *testing.T) {
 	l2 := fstest.Apply()
 	diff := []TestChange{}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestNestedDeletion is a test ported from
@@ -132,9 +127,7 @@ func TestNestedDeletion(t *testing.T) {
 		Delete("/d1"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestDirectoryReplace is a test ported from
@@ -157,9 +150,7 @@ func TestDirectoryReplace(t *testing.T) {
 		Modify("/dir1/f2"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestRemoveDirectoryTree is a test ported from
@@ -178,9 +169,7 @@ func TestRemoveDirectoryTree(t *testing.T) {
 		Delete("/dir1"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestRemoveDirectoryTreeWithDash is a test ported from
@@ -201,9 +190,7 @@ func TestRemoveDirectoryTreeWithDash(t *testing.T) {
 		Delete("/dir1"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestFileReplace is a test ported from
@@ -224,9 +211,7 @@ func TestFileReplace(t *testing.T) {
 		Add("/dir1/dir2/f1"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestParentDirectoryPermission is a test ported from
@@ -253,9 +238,7 @@ func TestParentDirectoryPermission(t *testing.T) {
 		Add("/dir3/f"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestUpdateWithSameTime is a test ported from
@@ -305,9 +288,7 @@ func TestUpdateWithSameTime(t *testing.T) {
 		Modify("/file-truncated-time-3"),
 	}
 
-	if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-		t.Fatalf("Failed diff with base: %+v", err)
-	}
+	require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 }
 
 // TestLchtimes is a test ported from
@@ -328,9 +309,7 @@ func TestLchtimes(t *testing.T) {
 		)
 		l2 := fstest.Apply() // empty
 		diff := []TestChange{}
-		if err := testDiffWithBase(t, l1, l2, diff); err != nil {
-			t.Fatalf("Failed diff with base: %+v", err)
-		}
+		require.NoErrorf(t, testDiffWithBase(t, l1, l2, diff), "Failed diff with base")
 	}
 }
 

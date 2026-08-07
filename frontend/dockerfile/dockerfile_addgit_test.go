@@ -242,8 +242,7 @@ RUN [ ! -d /nogitdir/.git ]
 			dockerui.DefaultLocalNameContext:    dir5,
 		},
 	}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "expected checksum to match")
+	require.ErrorContains(t, err, "expected checksum to match")
 
 	//  checksum is garbage
 	dockerfile6, err := applyTemplate(`
@@ -266,9 +265,8 @@ RUN [ ! -d /nogitdir/.git ]
 			dockerui.DefaultLocalNameContext:    dir6,
 		},
 	}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid checksum")
-	require.Contains(t, err.Error(), "expected hex commit hash")
+	require.ErrorContains(t, err, "invalid checksum")
+	require.ErrorContains(t, err, "expected hex commit hash")
 }
 
 // testAddGitChecksumCache verifies that adding --checksum to a Git ADD does not
@@ -657,8 +655,7 @@ COPY foo out
 				},
 			}, nil)
 			if tc.expectErr != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectErr)
+				require.ErrorContains(t, err, tc.expectErr)
 				return
 			}
 			require.NoError(t, err)
@@ -708,8 +705,7 @@ FROM main
 				},
 			}, nil)
 			if tc.expectErr != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectErr)
+				require.ErrorContains(t, err, tc.expectErr)
 				return
 			}
 			require.NoError(t, err)

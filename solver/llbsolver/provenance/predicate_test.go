@@ -30,7 +30,7 @@ func TestSLSAMaterialsImageBlobPURL(t *testing.T) {
 	require.Equal(t, packageurl.TypeDocker, p.Type)
 	require.Equal(t, "example.com/ns", p.Namespace)
 	require.Equal(t, "repo", p.Name)
-	require.Equal(t, "", p.Version)
+	require.Empty(t, p.Version)
 
 	q := p.Qualifiers.Map()
 	require.Equal(t, "blob", q["ref_type"])
@@ -333,7 +333,7 @@ func TestNewPredicateKeepsContextSubdir(t *testing.T) {
 	pr, err := NewPredicate(c)
 	require.NoError(t, err)
 
-	require.Equal(t, "", pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
+	require.Empty(t, pr.BuildDefinition.ExternalParameters.ConfigSource.URI)
 	require.Equal(t, "src", pr.BuildDefinition.ExternalParameters.Request.Args["contextsubdir"])
 }
 

@@ -154,7 +154,7 @@ func TestWithRemovedMounts(t *testing.T) {
 	oldLen := len(s.Mounts)
 	err := withRemovedMount("/run")(appcontext.Context(), nil, nil, &s)
 	require.NoError(t, err)
-	assert.Equal(t, oldLen-1, len(s.Mounts))
+	assert.Len(t, s.Mounts, oldLen-1)
 }
 
 func TestDedupMounts(t *testing.T) {
@@ -183,7 +183,7 @@ func TestDedupMounts(t *testing.T) {
 
 	mntsLen := len(s.Mounts)
 	s.Mounts = dedupMounts(s.Mounts)
-	require.Equal(t, mntsLen-2, len(s.Mounts))
+	require.Len(t, s.Mounts, mntsLen-2)
 	assert.Equal(t, specs.Mount{
 		Destination: "/dev/shm",
 		Type:        "tmpfs",

@@ -120,7 +120,7 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 	ast := result.AST
 	require.Equal(t, 5, ast.StartLine)
 	require.Equal(t, 31, ast.EndLine)
-	require.Equal(t, 3, len(ast.Children))
+	require.Len(t, ast.Children, 3)
 	expected := [][]int{
 		{5, 5},
 		{11, 12},
@@ -162,7 +162,7 @@ RUN indented \
 	result, err := Parse(dockerfile)
 	require.NoError(t, err)
 	warnings := result.Warnings
-	require.Equal(t, 2, len(warnings))
+	require.Len(t, warnings, 2)
 	require.Contains(t, warnings[0].Short, "Empty continuation line found in")
 	require.Contains(t, warnings[0].Short, "RUN something     following     more")
 	require.Contains(t, warnings[1].Short, "RUN another     thing")

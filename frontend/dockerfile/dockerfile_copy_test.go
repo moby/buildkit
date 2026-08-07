@@ -41,7 +41,6 @@ COPY --from=$FOO . .
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
 }
 
@@ -595,7 +594,7 @@ COPY . /
 	fi, err := os.Lstat(filepath.Join(destDir, "socket.sock"))
 	require.NoError(t, err)
 	// make sure socket is converted to regular file.
-	require.Equal(t, true, fi.Mode().IsRegular())
+	require.True(t, fi.Mode().IsRegular())
 }
 
 // #1197

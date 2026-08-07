@@ -21,16 +21,16 @@ func TestImageMetaResolver(t *testing.T) {
 	}
 	st := Image("alpine", WithMetaResolver(tr))
 
-	require.Equal(t, false, tr.called)
+	require.False(t, tr.called)
 
 	def, err := st.Marshal(context.TODO(), LinuxPpc64le)
 	require.NoError(t, err)
 
-	require.Equal(t, true, tr.called)
+	require.True(t, tr.called)
 	require.Equal(t, "linux/ppc64le", tr.platform)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 2, len(arr))
+	require.Len(t, arr, 2)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
@@ -55,7 +55,7 @@ func TestImageResolveDigest(t *testing.T) {
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
-	require.Equal(t, 2, len(arr))
+	require.Len(t, arr, 2)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)

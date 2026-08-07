@@ -63,18 +63,15 @@ func TestImageBlobInvalid(t *testing.T) {
 
 	s := ImageBlob("myuser/myrepo:foo@" + string(dgst))
 	_, err := s.Marshal(ctx)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "tagged image reference not allowed")
+	require.ErrorContains(t, err, "tagged image reference not allowed")
 
 	s = ImageBlob("myuser/myrepo")
 	_, err = s.Marshal(ctx)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "checksum required in blob reference")
+	require.ErrorContains(t, err, "checksum required in blob reference")
 
 	s = ImageBlob("myuser/myrepo@sha256:invalid")
 	_, err = s.Marshal(ctx)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid reference format")
+	require.ErrorContains(t, err, "invalid reference format")
 }
 
 func TestImageBlobSource(t *testing.T) {
@@ -89,16 +86,16 @@ func TestImageBlobSource(t *testing.T) {
 
 	m, arr := parseDef(t, def.Def)
 	_ = m
-	require.Equal(t, 2, len(arr))
+	require.Len(t, arr, 2)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 
 	vtx, ok := m[dgst]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Nil(t, vtx.Platform)
 
 	require.Equal(t, "docker-image+blob://docker.io/myuser/myrepo@"+string(blobDgst), src.Source.Identifier)
@@ -116,16 +113,16 @@ func TestOCILayoutBlobSource(t *testing.T) {
 
 	m, arr := parseDef(t, def.Def)
 	_ = m
-	require.Equal(t, 2, len(arr))
+	require.Len(t, arr, 2)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 
 	vtx, ok := m[dgst]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Nil(t, vtx.Platform)
 
 	require.Equal(t, "oci-layout+blob://docker.io/myrepo/blob@"+string(blobDgst), src.Source.Identifier)
@@ -149,11 +146,11 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	def, err := s.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(def.Def))
+	require.Len(t, def.Def, 2)
 	dgst := digest.FromBytes(def.Def[0])
 
-	require.Equal(t, 2, len(def.Source.Infos))
-	require.Equal(t, 1, len(def.Source.Locations))
+	require.Len(t, def.Source.Infos, 2)
+	require.Len(t, def.Source.Locations, 1)
 
 	require.Equal(t, "foo", def.Source.Infos[0].Filename)
 	require.Equal(t, "lang1", def.Source.Infos[0].Language)
@@ -166,18 +163,18 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Nil(t, def.Source.Infos[1].Definition)
 
 	require.NotNil(t, def.Source.Locations[dgst.String()])
-	require.Equal(t, 3, len(def.Source.Locations[dgst.String()].Locations))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations, 3)
 
 	require.Equal(t, int32(0), def.Source.Locations[dgst.String()].Locations[0].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[0].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[0].Ranges, 1)
 	require.Equal(t, int32(7), def.Source.Locations[dgst.String()].Locations[0].Ranges[0].Start.Line)
 
 	require.Equal(t, int32(1), def.Source.Locations[dgst.String()].Locations[1].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[1].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[1].Ranges, 1)
 	require.Equal(t, int32(8), def.Source.Locations[dgst.String()].Locations[1].Ranges[0].Start.Line)
 
 	require.Equal(t, int32(0), def.Source.Locations[dgst.String()].Locations[2].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[2].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[2].Ranges, 1)
 	require.Equal(t, int32(9), def.Source.Locations[dgst.String()].Locations[2].Ranges[0].Start.Line)
 
 	s = Merge([]State{s, Image("myimage",
@@ -185,11 +182,11 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	)})
 	def, err = s.Marshal(context.TODO())
 	require.NoError(t, err)
-	require.Equal(t, 3, len(def.Def))
+	require.Len(t, def.Def, 3)
 	dgst = digest.FromBytes(def.Def[0])
 
-	require.Equal(t, 2, len(def.Source.Infos))
-	require.Equal(t, 2, len(def.Source.Locations))
+	require.Len(t, def.Source.Infos, 2)
+	require.Len(t, def.Source.Locations, 2)
 
 	require.Equal(t, "foo", def.Source.Infos[0].Filename)
 	require.Equal(t, []byte("data1"), def.Source.Infos[0].Data)
@@ -200,22 +197,22 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Nil(t, def.Source.Infos[1].Definition)
 
 	require.NotNil(t, def.Source.Locations[dgst.String()])
-	require.Equal(t, 4, len(def.Source.Locations[dgst.String()].Locations))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations, 4)
 
 	require.Equal(t, int32(0), def.Source.Locations[dgst.String()].Locations[0].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[0].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[0].Ranges, 1)
 	require.Equal(t, int32(7), def.Source.Locations[dgst.String()].Locations[0].Ranges[0].Start.Line)
 
 	require.Equal(t, int32(1), def.Source.Locations[dgst.String()].Locations[1].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[1].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[1].Ranges, 1)
 	require.Equal(t, int32(8), def.Source.Locations[dgst.String()].Locations[1].Ranges[0].Start.Line)
 
 	require.Equal(t, int32(0), def.Source.Locations[dgst.String()].Locations[2].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[2].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[2].Ranges, 1)
 	require.Equal(t, int32(9), def.Source.Locations[dgst.String()].Locations[2].Ranges[0].Start.Line)
 
 	require.Equal(t, int32(0), def.Source.Locations[dgst.String()].Locations[3].SourceIndex)
-	require.Equal(t, 1, len(def.Source.Locations[dgst.String()].Locations[3].Ranges))
+	require.Len(t, def.Source.Locations[dgst.String()].Locations[3].Ranges, 1)
 	require.Equal(t, int32(10), def.Source.Locations[dgst.String()].Locations[3].Ranges[0].Start.Line)
 }
 
@@ -234,62 +231,62 @@ func TestPlatformFromImage(t *testing.T) {
 
 	m, arr := parseDef(t, def.Def)
 	_ = m
-	require.Equal(t, 8, len(arr))
+	require.Len(t, arr, 8)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 
 	vtx, ok := m[dgst]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
 
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	f, ok := vtx.Op.(*pb.Op_File)
-	require.Equal(t, true, ok)
-	require.Equal(t, 1, len(f.File.Actions))
+	require.True(t, ok)
+	require.Len(t, f.File.Actions, 1)
 	require.Nil(t, vtx.Platform)
 
 	mainVtx := vtx
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "docker-image://docker.io/library/destimage:latest", src.Source.Identifier)
 	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
 
 	vtx, ok = m[mainVtx.Inputs[1].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	f, ok = vtx.Op.(*pb.Op_File)
-	require.Equal(t, true, ok)
-	require.Equal(t, 2, len(f.File.Actions))
+	require.True(t, ok)
+	require.Len(t, f.File.Actions, 2)
 	require.Nil(t, vtx.Platform)
 
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	src, ok = vtx.Op.(*pb.Op_Source)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "docker-image://docker.io/library/srcimage:latest", src.Source.Identifier)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 }
@@ -308,40 +305,40 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 
 	m, arr := parseDef(t, def.Def)
 	_ = m
-	require.Equal(t, 5, len(arr))
+	require.Len(t, arr, 5)
 
 	dgst, idx := last(t, arr)
 	require.Equal(t, 0, idx)
 
 	vtx, ok := m[dgst]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Exec)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	_, ok = vtx.Op.(*pb.Op_Merge)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Nil(t, vtx.Platform)
 
 	mainVtx := vtx
 	vtx, ok = m[vtx.Inputs[0].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	src, ok := vtx.Op.(*pb.Op_Source)
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 	require.Equal(t, "docker-image://docker.io/library/srcimage:latest", src.Source.Identifier)
 	require.Equal(t, "s390x", vtx.Platform.Architecture)
 
 	vtx, ok = m[mainVtx.Inputs[1].Digest]
-	require.Equal(t, true, ok)
+	require.True(t, ok)
 
 	f, ok := vtx.Op.(*pb.Op_File)
-	require.Equal(t, true, ok)
-	require.Equal(t, 2, len(f.File.Actions))
+	require.True(t, ok)
+	require.Len(t, f.File.Actions, 2)
 	require.Nil(t, vtx.Platform)
 }
 

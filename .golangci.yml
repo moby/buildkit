@@ -92,11 +92,7 @@ linters:
       checks:
         - all
     testifylint:
-      disable:
-        - empty
-        - bool-compare
-        - len
-        - negative-positive
+      enable-all: true
   exclusions:
     generated: lax
     presets:

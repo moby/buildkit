@@ -137,7 +137,7 @@ func TestMergeRelaxed(t *testing.T) {
 		a := &pb.LinuxResources{CpusetCpus: "0-3"}
 		b := &pb.LinuxResources{CpusetCpus: ""}
 		result := mergeRelaxed(a, b)
-		require.Equal(t, "", result.CpusetCpus)
+		require.Empty(t, result.CpusetCpus)
 	})
 
 	t.Run("cpuset subset is absorbed by superset", func(t *testing.T) {

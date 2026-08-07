@@ -74,8 +74,8 @@ RUN ls
 `
 	ref, cmdline, _, ok = DetectSyntax([]byte(dt))
 	require.False(t, ok)
-	require.Equal(t, "", ref)
-	require.Equal(t, "", cmdline)
+	require.Empty(t, ref)
+	require.Empty(t, cmdline)
 
 	dt = `//syntax=foo
 //key=value`
@@ -153,8 +153,8 @@ RUN ls
 `
 	ref, cmdline, _, ok = ParseDirective("check", []byte(dt))
 	require.False(t, ok)
-	require.Equal(t, "", ref)
-	require.Equal(t, "", cmdline)
+	require.Empty(t, ref)
+	require.Empty(t, cmdline)
 
 	dt = `//check=skip=all
 //key=value`

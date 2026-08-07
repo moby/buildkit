@@ -54,9 +54,9 @@ mirrors = ["https://url/", "https://url/path/"]
 	cfg, err := config.Load(bytes.NewBuffer([]byte(testConfig)))
 	require.NoError(t, err)
 
-	require.NotEqual(t, 0, len(cfg.Registries))
+	require.NotEmpty(t, cfg.Registries)
 	for _, registry := range cfg.Registries {
-		require.NotEqual(t, 0, len(registry.Mirrors))
+		require.NotEmpty(t, registry.Mirrors)
 		for _, m := range registry.Mirrors {
 			test := tests[m]
 			h := newMirrorRegistryHost(m)

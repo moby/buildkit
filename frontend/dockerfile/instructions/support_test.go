@@ -1,6 +1,10 @@
 package instructions
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 type testCase struct {
 	name       string
@@ -52,14 +56,10 @@ func TestHandleJSONArgs(t *testing.T) {
 	for _, test := range testCases {
 		arguments := handleJSONArgs(test.args, test.attributes)
 
-		if len(arguments) != len(test.expected) {
-			t.Fatalf("In test \"%s\": length of returned slice is incorrect. Expected: %d, got: %d", test.name, len(test.expected), len(arguments))
-		}
+		require.Lenf(t, arguments, len(test.expected), "In test \"%s\": length of returned slice is incorrect. Expected: %d, got: %d", test.name, len(test.expected), len(arguments))
 
 		for i := range test.expected {
-			if arguments[i] != test.expected[i] {
-				t.Fatalf("In test \"%s\": element as position %d is incorrect. Expected: %s, got: %s", test.name, i, test.expected[i], arguments[i])
-			}
+			require.Equalf(t, arguments[i], test.expected[i], "In test \"%s\": element as position %d is incorrect. Expected: %s, got: %s", test.name, i, test.expected[i], arguments[i])
 		}
 	}
 }

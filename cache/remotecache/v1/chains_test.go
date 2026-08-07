@@ -49,8 +49,8 @@ func TestSimpleMarshal(t *testing.T) {
 	cfg, _, err := cc.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(cfg.Layers))
-	require.Equal(t, 3, len(cfg.Records))
+	require.Len(t, cfg.Layers, 2)
+	require.Len(t, cfg.Records, 3)
 
 	require.Equal(t, cfg.Layers[0].Blob, dgst("d0"))
 	require.Equal(t, -1, cfg.Layers[0].ParentIndex)
@@ -58,19 +58,19 @@ func TestSimpleMarshal(t *testing.T) {
 	require.Equal(t, 0, cfg.Layers[1].ParentIndex)
 
 	require.Equal(t, cfg.Records[0].Digest, outputKey(dgst("baz"), 0))
-	require.Equal(t, 2, len(cfg.Records[0].Inputs))
-	require.Equal(t, 1, len(cfg.Records[0].Results))
+	require.Len(t, cfg.Records[0].Inputs, 2)
+	require.Len(t, cfg.Records[0].Results, 1)
 
 	require.Equal(t, cfg.Records[1].Digest, outputKey(dgst("foo"), 0))
-	require.Equal(t, 0, len(cfg.Records[1].Inputs))
-	require.Equal(t, 0, len(cfg.Records[1].Results))
+	require.Empty(t, cfg.Records[1].Inputs)
+	require.Empty(t, cfg.Records[1].Results)
 
 	require.Equal(t, cfg.Records[2].Digest, outputKey(dgst("bar"), 1))
-	require.Equal(t, 0, len(cfg.Records[2].Inputs))
-	require.Equal(t, 0, len(cfg.Records[2].Results))
+	require.Empty(t, cfg.Records[2].Inputs)
+	require.Empty(t, cfg.Records[2].Results)
 
 	require.Equal(t, 1, cfg.Records[0].Results[0].LayerIndex)
-	require.Equal(t, "", cfg.Records[0].Inputs[0][0].Selector)
+	require.Empty(t, cfg.Records[0].Inputs[0][0].Selector)
 	require.Equal(t, 1, cfg.Records[0].Inputs[0][0].LinkIndex)
 	require.Equal(t, "sel0", cfg.Records[0].Inputs[1][0].Selector)
 	require.Equal(t, 2, cfg.Records[0].Inputs[1][0].LinkIndex)
@@ -102,8 +102,8 @@ func TestSimpleMarshal(t *testing.T) {
 	cfg, _, err = cc.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(cfg.Layers))
-	require.Equal(t, 4, len(cfg.Records))
+	require.Len(t, cfg.Layers, 2)
+	require.Len(t, cfg.Records, 4)
 }
 
 func TestMarshalLayerMediaTypes(t *testing.T) {

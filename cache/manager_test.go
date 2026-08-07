@@ -190,7 +190,7 @@ func TestSharableMountPoolCleanup(t *testing.T) {
 
 	files, err := os.ReadDir(mountPoolDir)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(files))
+	require.Empty(t, files)
 }
 
 func TestManager(t *testing.T) {
@@ -232,14 +232,14 @@ func TestManager(t *testing.T) {
 
 	fi, err := os.Stat(target)
 	require.NoError(t, err)
-	require.Equal(t, true, fi.IsDir())
+	require.True(t, fi.IsDir())
 
 	err = lm.Unmount()
 	require.NoError(t, err)
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, ErrLocked))
+	require.ErrorIs(t, err, ErrLocked)
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
@@ -250,7 +250,7 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, ErrLocked))
+	require.ErrorIs(t, err, ErrLocked)
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -275,11 +275,11 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	_, err = cm.GetMutable(ctx, snap.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errInvalid))
+	require.ErrorIs(t, err, errInvalid)
 
 	snap, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
@@ -317,14 +317,14 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
 
-	require.Equal(t, 2, len(buf.all))
+	require.Len(t, buf.all, 2)
 
 	err = cm.Close()
 	require.NoError(t, err)
 
 	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(dirs))
+	require.Empty(t, dirs)
 }
 
 func TestLazyGetByBlob(t *testing.T) {
@@ -468,7 +468,7 @@ func TestSnapshotExtract(t *testing.T) {
 	snap, err := cm.GetByBlob(ctx, desc, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, false, !snap.(*immutableRef).getBlobOnly())
+	require.True(t, snap.(*immutableRef).getBlobOnly())
 
 	b2, desc2, err := mapToBlob(map[string]string{"foo": "bar123"}, true)
 	require.NoError(t, err)
@@ -483,23 +483,23 @@ func TestSnapshotExtract(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(len(b2)), size)
 
-	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
+	require.True(t, snap2.(*immutableRef).getBlobOnly())
 
 	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(dirs))
+	require.Empty(t, dirs)
 
 	checkNumBlobs(ctx, t, co.cs, 2)
 
 	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, true, !snap.(*immutableRef).getBlobOnly())
-	require.Equal(t, true, !snap2.(*immutableRef).getBlobOnly())
+	require.False(t, snap.(*immutableRef).getBlobOnly())
+	require.False(t, snap2.(*immutableRef).getBlobOnly())
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	buf := pruneResultBuffer()
 	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
@@ -508,11 +508,11 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	require.Equal(t, 0, len(buf.all))
+	require.Empty(t, buf.all)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	checkNumBlobs(ctx, t, co.cs, 2)
 
@@ -530,7 +530,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	snap, err = cm.Get(ctx, id, nil)
 	require.NoError(t, err)
@@ -549,11 +549,11 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
-	require.Equal(t, 1, len(buf.all))
+	require.Len(t, buf.all, 1)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(dirs))
+	require.Len(t, dirs, 1)
 
 	checkNumBlobs(ctx, t, co.cs, 1)
 
@@ -569,7 +569,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(dirs))
+	require.Empty(t, dirs)
 
 	checkNumBlobs(ctx, t, co.cs, 0)
 }
@@ -632,7 +632,7 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap.Release(context.TODO())
 	require.NoError(t, err)
 
-	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
+	require.True(t, snap2.(*immutableRef).getBlobOnly())
 
 	size, err := snap2.(*immutableRef).size(ctx)
 	require.NoError(t, err)
@@ -640,15 +640,15 @@ func TestExtractOnMutable(t *testing.T) {
 
 	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(dirs))
+	require.Len(t, dirs, 1)
 
 	checkNumBlobs(ctx, t, co.cs, 2)
 
 	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, true, !snap.(*immutableRef).getBlobOnly())
-	require.Equal(t, true, !snap2.(*immutableRef).getBlobOnly())
+	require.False(t, snap.(*immutableRef).getBlobOnly())
+	require.False(t, snap2.(*immutableRef).getBlobOnly())
 
 	buf := pruneResultBuffer()
 	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
@@ -657,11 +657,11 @@ func TestExtractOnMutable(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	require.Equal(t, 0, len(buf.all))
+	require.Empty(t, buf.all)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	err = snap2.Release(context.TODO())
 	require.NoError(t, err)
@@ -675,11 +675,11 @@ func TestExtractOnMutable(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
 
-	require.Equal(t, 2, len(buf.all))
+	require.Len(t, buf.all, 2)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(dirs))
+	require.Empty(t, dirs)
 
 	checkNumBlobs(ctx, t, co.cs, 0)
 }
@@ -716,11 +716,11 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	snapRef := snap.(*immutableRef)
-	require.Equal(t, "", string(snapRef.getDiffID()))
-	require.Equal(t, "", string(snapRef.getBlob()))
-	require.Equal(t, "", string(snapRef.getChainID()))
-	require.Equal(t, "", string(snapRef.getBlobChainID()))
-	require.Equal(t, true, !snapRef.getBlobOnly())
+	require.Empty(t, string(snapRef.getDiffID()))
+	require.Empty(t, string(snapRef.getBlob()))
+	require.Empty(t, string(snapRef.getChainID()))
+	require.Empty(t, string(snapRef.getBlobChainID()))
+	require.False(t, snapRef.getBlobOnly())
 
 	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
 	require.NoError(t, err)
@@ -752,7 +752,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, snapRef.getDiffID(), snapRef.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(desc.Digest+" "+snapRef.getDiffID())), snapRef.getBlobChainID())
 	require.Equal(t, snap.ID(), snapRef.getSnapshotID())
-	require.Equal(t, true, !snapRef.getBlobOnly())
+	require.False(t, snapRef.getBlobOnly())
 
 	active, err = cm.New(ctx, snap, nil)
 	require.NoError(t, err)
@@ -778,7 +778,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef2.getDiffID())), snapRef2.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc2.Digest+" "+snapRef2.getDiffID())))), snapRef2.getBlobChainID())
 	require.Equal(t, snap2.ID(), snapRef2.getSnapshotID())
-	require.Equal(t, true, !snapRef2.getBlobOnly())
+	require.False(t, snapRef2.getBlobOnly())
 
 	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"}, true)
 	require.NoError(t, err)
@@ -796,7 +796,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef3.getDiffID())), snapRef3.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc3.Digest+" "+snapRef3.getDiffID())))), snapRef3.getBlobChainID())
 	require.Equal(t, string(snapRef3.getChainID()), snapRef3.getSnapshotID())
-	require.Equal(t, false, !snapRef3.getBlobOnly())
+	require.True(t, snapRef3.getBlobOnly())
 
 	// snap4 is same as snap2
 	snap4, err := cm.GetByBlob(ctx, desc2, snap)
@@ -842,7 +842,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getChainID()+" "+snapRef6.getDiffID())), snapRef6.getChainID())
 	require.Equal(t, digest.FromBytes([]byte(snapRef3.getBlobChainID()+" "+digest.FromBytes([]byte(snapRef6.getBlob()+" "+snapRef6.getDiffID())))), snapRef6.getBlobChainID())
 	require.Equal(t, string(snapRef6.getChainID()), snapRef6.getSnapshotID())
-	require.Equal(t, false, !snapRef6.getBlobOnly())
+	require.True(t, snapRef6.getBlobOnly())
 
 	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
@@ -894,7 +894,7 @@ func TestPrune(t *testing.T) {
 
 	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	// prune with keeping refs does nothing
 	buf := pruneResultBuffer()
@@ -903,11 +903,11 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
-	require.Equal(t, 0, len(buf.all))
+	require.Empty(t, buf.all)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 2, len(dirs))
+	require.Len(t, dirs, 2)
 
 	err = snap2.Release(ctx)
 	require.NoError(t, err)
@@ -921,11 +921,11 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
-	require.Equal(t, 1, len(buf.all))
+	require.Len(t, buf.all, 1)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 1, len(dirs))
+	require.Len(t, dirs, 1)
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -948,7 +948,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
-	require.Equal(t, 0, len(buf.all))
+	require.Empty(t, buf.all)
 
 	// releasing last reference
 	err = snap2.Release(ctx)
@@ -961,11 +961,11 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
-	require.Equal(t, 2, len(buf.all))
+	require.Len(t, buf.all, 2)
 
 	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
-	require.Equal(t, 0, len(dirs))
+	require.Empty(t, dirs)
 }
 
 func TestLazyCommit(t *testing.T) {
@@ -998,7 +998,7 @@ func TestLazyCommit(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, ErrLocked))
+	require.ErrorIs(t, err, ErrLocked)
 
 	// immutable refs still work
 	snap2, err := cm.Get(ctx, snap.ID(), nil)
@@ -1019,7 +1019,7 @@ func TestLazyCommit(t *testing.T) {
 	// active can't be get while immutable is held
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, ErrLocked))
+	require.ErrorIs(t, err, ErrLocked)
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -1032,7 +1032,7 @@ func TestLazyCommit(t *testing.T) {
 	// because ref was took mutable old immutable are cleared
 	_, err = cm.Get(ctx, snap.ID(), nil)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	snap, err = active2.Commit(ctx)
 	require.NoError(t, err)
@@ -1047,7 +1047,7 @@ func TestLazyCommit(t *testing.T) {
 	// mutable is gone after finalize
 	_, err = cm.GetMutable(ctx, active2.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	// immutable still works
 	snap2, err = cm.Get(ctx, snap.ID(), nil)
@@ -1090,7 +1090,7 @@ func TestLazyCommit(t *testing.T) {
 
 	_, err = cm.Get(ctx, snap.ID(), nil)
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	snap, err = active.Commit(ctx)
 	require.NoError(t, err)
@@ -1120,7 +1120,7 @@ func TestLazyCommit(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 }
 
 func TestLoopLeaseContent(t *testing.T) {
@@ -1177,8 +1177,8 @@ func TestLoopLeaseContent(t *testing.T) {
 	for _, compressionType := range compressionLoop {
 		remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(remotes))
-		require.Equal(t, 1, len(remotes[0].Descriptors))
+		require.Len(t, remotes, 1)
+		require.Len(t, remotes[0].Descriptors, 1)
 
 		desc := remotes[0].Descriptors[0]
 		chain = append(chain, desc)
@@ -1186,7 +1186,7 @@ func TestLoopLeaseContent(t *testing.T) {
 		require.NoError(t, err)
 		allRefs = append(allRefs, ref)
 	}
-	require.Equal(t, len(compressionLoop), len(chain))
+	require.Len(t, chain, len(compressionLoop))
 	require.NoError(t, ref.(*immutableRef).linkBlob(ctx, chain[0])) // This creates a loop
 
 	// Make sure a loop is created
@@ -1214,7 +1214,7 @@ func TestLoopLeaseContent(t *testing.T) {
 			require.NoError(t, err)
 			children = append(children, cDesc)
 		}
-		require.Equal(t, 1, len(children), "previous=%v, cur=%v, labels: %+v", previous, cur, info.Labels)
+		require.Len(t, children, 1, "previous=%v, cur=%v, labels: %+v", previous, cur, info.Labels)
 		previous = cur.Digest
 		cur = children[0]
 		if _, ok := visited[cur.Digest]; ok {
@@ -1222,7 +1222,7 @@ func TestLoopLeaseContent(t *testing.T) {
 		}
 		gotChain = append(gotChain, cur.Digest)
 	}
-	require.Equal(t, len(chain), len(gotChain))
+	require.Len(t, gotChain, len(chain))
 
 	// Prune all refs
 	require.NoError(t, done(ctx))
@@ -1374,21 +1374,21 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		for _, compressionType := range append([]compression.Type{testCase.a}, testCase.aVariants...) {
 			remotes, err := aRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(remotes))
-			require.Equal(t, 1, len(remotes[0].Descriptors))
+			require.Len(t, remotes, 1)
+			require.Len(t, remotes[0].Descriptors, 1)
 			if compressionType == testCase.b {
 				bDesc = remotes[0].Descriptors[0]
 			}
 		}
-		require.NotEqual(t, "", bDesc.Digest, "compression B must be chosen from the variants of A")
+		require.NotEmpty(t, bDesc.Digest, "compression B must be chosen from the variants of A")
 		bRef, err := cm.GetByBlob(ctx, bDesc, nil, descHandlers)
 		require.NoError(t, err)
 		defer bRef.Release(ctx)
 		for _, compressionType := range append([]compression.Type{testCase.b}, testCase.bVariants...) {
 			remotes, err := bRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
 			require.NoError(t, err)
-			require.Equal(t, 1, len(remotes))
-			require.Equal(t, 1, len(remotes[0].Descriptors))
+			require.Len(t, remotes, 1)
+			require.Len(t, remotes[0].Descriptors, 1)
 		}
 
 		// check if all compression variables are available on the both refs
@@ -1454,7 +1454,7 @@ func ensurePrune(ctx context.Context, t *testing.T, cm Manager, pruneNum, maxRet
 		time.Sleep(100 * time.Millisecond)
 		t.Logf("Retrying to prune (%v)", i)
 	}
-	require.Equal(t, true, sum >= pruneNum, "actual=%v, expected=%v", sum, pruneNum)
+	require.GreaterOrEqual(t, sum, pruneNum, "actual=%v, expected=%v", sum, pruneNum)
 }
 
 func getCompressor(w io.Writer, compressionType compression.Type, customized bool) (io.WriteCloser, error) {
@@ -1738,7 +1738,7 @@ func TestGetRemotes(t *testing.T) {
 				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil)
 				testMu.RUnlock()
 				require.NoError(t, err)
-				require.Equal(t, 1, len(remotes))
+				require.Len(t, remotes, 1)
 				remote := remotes[0]
 				refChain := ir.layerChain()
 				for i, desc := range remote.Descriptors {
@@ -1764,7 +1764,7 @@ func TestGetRemotes(t *testing.T) {
 					}
 					variantsMapMu.Unlock()
 
-					require.Equal(t, len(remote.Descriptors), len(variantsMap[ir.ID()]))
+					require.Len(t, variantsMap[ir.ID()], len(remote.Descriptors))
 
 					variantsMapMu.Lock()
 					if variantsMap[ir.ID()][i] == nil {
@@ -1830,15 +1830,15 @@ func TestGetRemotes(t *testing.T) {
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
 				require.NoError(t, err)
-				require.Greater(t, len(remotes), 0, "for %s : %d", compressionType, len(remotes))
+				require.NotEmpty(t, remotes, "for %s : %d", compressionType, len(remotes))
 				gotMain, gotVariants := remotes[0], remotes[1:]
 
 				// Check the main blob is compatible with all == false
 				mainOnly, err := ir.GetRemotes(egctx, false, refCfg, false, nil)
 				require.NoError(t, err)
-				require.Equal(t, 1, len(mainOnly))
+				require.Len(t, mainOnly, 1)
 				mainRemote := mainOnly[0]
-				require.Equal(t, len(mainRemote.Descriptors), len(gotMain.Descriptors))
+				require.Len(t, gotMain.Descriptors, len(mainRemote.Descriptors))
 				for i := range mainRemote.Descriptors {
 					require.Equal(t, mainRemote.Descriptors[i].Digest, gotMain.Descriptors[i].Digest)
 				}
@@ -1855,7 +1855,7 @@ func TestGetRemotes(t *testing.T) {
 func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVariants, idx int, remotes []*solver.Remote, expectCompression *compression.Type) {
 	if idx < 0 {
 		for _, r := range remotes {
-			require.Equal(t, 0, len(r.Descriptors))
+			require.Empty(t, r.Descriptors)
 		}
 		return
 	}
@@ -1901,7 +1901,7 @@ func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVari
 		require.True(t, ok, "idx = %d, compression = %q, want = %+v, got = %+v", idx, c, d, got)
 		delete(got, d.Digest)
 	}
-	require.Equal(t, 0, len(got))
+	require.Empty(t, got)
 }
 
 // Make sure that media type and urls are persisted for non-distributable blobs.
@@ -1966,7 +1966,7 @@ func TestNondistributableBlobs(t *testing.T) {
 	desc2 = remotes[0].Descriptors[0]
 
 	require.Equal(t, ocispecs.MediaTypeImageLayer, desc2.MediaType)
-	require.Len(t, desc2.URLs, 0)
+	require.Empty(t, desc2.URLs)
 }
 
 func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {

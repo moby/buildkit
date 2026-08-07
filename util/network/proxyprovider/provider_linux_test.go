@@ -342,7 +342,7 @@ func TestProxyHandlerPolicyRedactsCredentialsInErrors(t *testing.T) {
 	require.ErrorIs(t, err, sourcepolicy.ErrSourceDenied)
 	require.NotContains(t, err.Error(), "user")
 	require.NotContains(t, err.Error(), "pass")
-	require.Contains(t, err.Error(), "https://xxxxx:xxxxx@example.com/path")
+	require.ErrorContains(t, err, "https://xxxxx:xxxxx@example.com/path")
 }
 
 func TestProxyHandlerRejectsConvertedNonGetRequest(t *testing.T) {
@@ -353,8 +353,7 @@ func TestProxyHandlerRejectsConvertedNonGetRequest(t *testing.T) {
 	})
 
 	_, err := handler.check(t.Context(), http.MethodPost, "https://example.com/file")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "conversion is only supported for GET")
+	require.ErrorContains(t, err, "conversion is only supported for GET")
 }
 
 func TestProxyHandlerRejectsConvertedAttrs(t *testing.T) {
@@ -368,8 +367,7 @@ func TestProxyHandlerRejectsConvertedAttrs(t *testing.T) {
 	})
 
 	_, err := handler.check(t.Context(), http.MethodGet, "https://example.com/file")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "proxy conversion only supports URL updates")
+	require.ErrorContains(t, err, "proxy conversion only supports URL updates")
 }
 
 func TestCertForHostUsesCachedValidCertificate(t *testing.T) {

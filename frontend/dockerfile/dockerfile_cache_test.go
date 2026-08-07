@@ -260,7 +260,7 @@ COPY --from=base /arch /
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(imgs.Images))
+	require.Len(t, imgs.Images, 2)
 
 	// Windows layers: nanoserver adds 1 base OS layer (shifting indices by +1)
 	// and tar entries are nested under "Files/".
@@ -307,7 +307,7 @@ COPY --from=base /arch /
 		imgs, err = testutil.ReadImages(sb.Context(), provider, desc2)
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(imgs.Images))
+		require.Len(t, imgs.Images, 2)
 
 		require.Equal(t, arch2, strings.TrimSpace(string(imgs.Find(platform2).Layers[archLayerIdx][archKey].Data)))
 		dtamd2 := imgs.Find(platform1).Layers[uniqueLayerIdx][uniqueKey].Data
@@ -940,7 +940,7 @@ loop0:
 
 	du, err := c.DiskUsage(sb.Context())
 	require.NoError(t, err)
-	require.Equal(t, 0, len(du))
+	require.Empty(t, du)
 
 	// examine contents of exported tars (requires containerd)
 	cdAddress := sb.ContainerdAddress()

@@ -345,11 +345,11 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 
 	pid2Cancel(errors.WithStack(context.Canceled))
 	<-pid2Done
-	require.Contains(t, pid2Err.Error(), "exit code: 137", "pid2 exits with sigkill")
+	require.ErrorContains(t, pid2Err, "exit code: 137", "pid2 exits with sigkill")
 
 	pid1Cancel(errors.WithStack(context.Canceled))
 	<-pid1Done
-	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
+	require.ErrorContains(t, pid1Err, "exit code: 137", "pid1 exits with sigkill")
 }
 
 func execMount(m cache.Mountable) executor.Mount {
