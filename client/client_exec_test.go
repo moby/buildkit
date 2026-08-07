@@ -308,7 +308,6 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 1")
 
 	// empty exit codes, equivalent to [0]
@@ -335,7 +334,6 @@ func testRunValidExitCodes(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 0")
 }
 
@@ -427,7 +425,6 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		_, err = c.Solve(sb.Context(), def, SolveOpt{
 			AllowedEntitlements: []string{entitlements.EntitlementSecurityInsecure.String()},
 		}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "security.insecure is not allowed")
 	}
 	if secMode == securityInsecure {
@@ -438,7 +435,6 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "security.insecure is not allowed")
 	}
 
@@ -485,7 +481,6 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 	require.True(t, foundExec)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid security mode")
 }
 
@@ -528,7 +523,6 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 
 	if secMode == securitySandbox {
-		require.Error(t, err)
 		require.ErrorContains(t, err, "did not complete successfully")
 		require.ErrorContains(t, err, "mkdir "+cg)
 	} else {

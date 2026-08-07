@@ -63,7 +63,6 @@ func TestPassthroughEmptyID(t *testing.T) {
 	t.Parallel()
 
 	_, err := Image("example.com/base:latest").Requires("", Image("example.com/dep:latest")).Marshal(t.Context())
-	require.Error(t, err)
 	require.ErrorContains(t, err, "passthrough requires an id")
 }
 

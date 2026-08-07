@@ -128,7 +128,6 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "unknown flag: --mont")
 	require.ErrorContains(t, err, "did you mean mount?")
 
@@ -154,7 +153,6 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "unexpected key 'typ'")
 	require.ErrorContains(t, err, "did you mean type?")
 
@@ -180,7 +178,6 @@ RUN --mont=target=/mytmp,type=tmpfs echo 1
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "unsupported mount type \"tmp\"")
 	require.ErrorContains(t, err, "did you mean tmpfs?")
 }
@@ -535,7 +532,6 @@ RUN --mount=from=$ttt,type=cache,target=/tmp dir
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "'from' doesn't support variable expansion, define alias stage instead")
 }
 

@@ -49,8 +49,7 @@ func TestFromGRPCPreserveUnknownTypes(t *testing.T) {
 	}
 
 	assertErrorProperties := func(t *testing.T, err error) {
-		require.Error(t, err)
-		assert.EqualError(t, err, fmt.Sprintf("%s: %s", errCode, errMessage))
+		require.EqualError(t, err, fmt.Sprintf("%s: %s", errCode, errMessage))
 
 		st, ok := status.FromError(err)
 		require.True(t, ok)

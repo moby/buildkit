@@ -94,7 +94,6 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, context.Canceled.Error())
 
 	inputW.Close()

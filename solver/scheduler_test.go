@@ -1272,7 +1272,6 @@ func TestErrorReturns(t *testing.T) {
 	}
 
 	_, err = j0.Build(ctx, g0)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "error-from-test")
 
 	require.NoError(t, j0.Discard())
@@ -1354,7 +1353,6 @@ func TestErrorReturns(t *testing.T) {
 	}
 
 	_, err = j2.Build(ctx, g2)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "exec-error-from-test")
 
 	require.NoError(t, j2.Discard())
@@ -3543,7 +3541,6 @@ func TestUnknownBuildID(t *testing.T) {
 	defer s.Close()
 
 	_, err := s.Get(identity.NewID())
-	require.Error(t, err)
 	require.ErrorContains(t, err, "no such job")
 }
 

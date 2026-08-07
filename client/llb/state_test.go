@@ -63,17 +63,14 @@ func TestImageBlobInvalid(t *testing.T) {
 
 	s := ImageBlob("myuser/myrepo:foo@" + string(dgst))
 	_, err := s.Marshal(ctx)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "tagged image reference not allowed")
 
 	s = ImageBlob("myuser/myrepo")
 	_, err = s.Marshal(ctx)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "checksum required in blob reference")
 
 	s = ImageBlob("myuser/myrepo@sha256:invalid")
 	_, err = s.Marshal(ctx)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid reference format")
 }
 

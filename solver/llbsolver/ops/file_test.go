@@ -211,7 +211,6 @@ func TestInvalidNoOutput(t *testing.T) {
 	s, rb := newTestFileSolver()
 	outs, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
 	rb.checkReleased(t, outs)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "no outputs specified")
 }
 
@@ -247,7 +246,6 @@ func TestInvalidDuplicateOutput(t *testing.T) {
 
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "duplicate output")
 	rb.checkReleased(t, nil)
 }
@@ -273,7 +271,6 @@ func TestActionInvalidIndex(t *testing.T) {
 
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "loop from index")
 	rb.checkReleased(t, nil)
 }
@@ -310,7 +307,6 @@ func TestActionLoop(t *testing.T) {
 
 	s, rb := newTestFileSolver()
 	_, err := s.Solve(t.Context(), []fileoptypes.Ref{}, fo.Actions, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "loop from index")
 	rb.checkReleased(t, nil)
 }

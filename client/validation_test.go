@@ -60,7 +60,6 @@ func testValidateNullConfig(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, "", b, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid null image config for export")
 }
 
@@ -107,7 +106,6 @@ func testValidateInvalidConfig(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, "", b, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid image config: os and architecture must be specified together")
 }
 
@@ -146,7 +144,6 @@ func testValidatePlatformsEmpty(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, "", b, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid empty platforms index for exporter")
 }
 
@@ -214,7 +211,6 @@ func testValidatePlatformsInvalid(t *testing.T, sb integration.Sandbox) {
 					},
 				},
 			}, "", b, nil)
-			require.Error(t, err)
 			require.ErrorContains(t, err, tc.exp)
 		})
 	}
@@ -308,12 +304,10 @@ func testValidateSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			_, err = c.Build(ctx, SolveOpt{
 				SourcePolicy: tc.value,
 			}, "", b, nil)
-			require.Error(t, err)
 			require.ErrorContains(t, err, tc.exp)
 
 			viaFrontend = true
 			_, err = c.Build(ctx, SolveOpt{}, "", b, nil)
-			require.Error(t, err)
 			require.ErrorContains(t, err, tc.exp)
 		})
 	}

@@ -859,7 +859,5 @@ COPY --from=build C:\out C:\
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-
-	require.Error(t, err)
 	require.ErrorContains(t, err, "target stage \"bulid\" could not be found (did you mean build?)")
 }

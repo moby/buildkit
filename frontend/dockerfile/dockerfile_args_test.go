@@ -74,8 +74,6 @@ FROM %s
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
-
 	require.ErrorContains(t, err, "FOO: custom error")
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -114,8 +112,6 @@ ARG BAR=${FOO:?"foo missing"}
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
-
 	require.ErrorContains(t, err, "FOO: foo missing")
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{

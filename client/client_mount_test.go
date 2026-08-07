@@ -891,7 +891,6 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "no SSH key ")
 
 	// custom ID not exposed
@@ -902,7 +901,6 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Session: []session.Attachable{ssh},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "unset ssh forward key customID")
 
 	// missing custom ID ignored on optional

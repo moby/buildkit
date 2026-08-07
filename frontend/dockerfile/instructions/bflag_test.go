@@ -9,7 +9,6 @@ import (
 )
 
 func TestBuilderFlags(t *testing.T) {
-
 	// ---
 
 	bf := NewBFlags()
@@ -28,7 +27,7 @@ func TestBuilderFlags(t *testing.T) {
 	flStr1 := bf.AddString("str1", "")
 	flBool1 := bf.AddBool("bool1", false)
 	bf.Args = []string{}
-	require.NoErrorf(t, bf.Parse(), "Test3 of %q was supposed to work: %s", bf.Args)
+	require.NoErrorf(t, bf.Parse(), "Test3 of %q was supposed to work", bf.Args)
 
 	require.False(t, flStr1.IsUsed(), "Test3 - str1 was not used!")
 	require.False(t, flBool1.IsUsed(), "Test3 - bool1 was not used!")

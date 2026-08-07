@@ -146,7 +146,6 @@ devices:
 			},
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "requested by the build but not allowed")
 }
 

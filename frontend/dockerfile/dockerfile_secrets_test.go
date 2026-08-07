@@ -91,7 +91,6 @@ func testSecretRequiredWithoutValue(t *testing.T, sb integration.Sandbox) {
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "secret mysecret: not found")
 }
 

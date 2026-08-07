@@ -242,7 +242,6 @@ RUN [ ! -d /nogitdir/.git ]
 			dockerui.DefaultLocalNameContext:    dir5,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "expected checksum to match")
 
 	//  checksum is garbage
@@ -266,7 +265,6 @@ RUN [ ! -d /nogitdir/.git ]
 			dockerui.DefaultLocalNameContext:    dir6,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid checksum")
 	require.ErrorContains(t, err, "expected hex commit hash")
 }
@@ -657,7 +655,6 @@ COPY foo out
 				},
 			}, nil)
 			if tc.expectErr != "" {
-				require.Error(t, err)
 				require.ErrorContains(t, err, tc.expectErr)
 				return
 			}
@@ -708,7 +705,6 @@ FROM main
 				},
 			}, nil)
 			if tc.expectErr != "" {
-				require.Error(t, err)
 				require.ErrorContains(t, err, tc.expectErr)
 				return
 			}

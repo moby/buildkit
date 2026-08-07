@@ -353,7 +353,6 @@ func TestProxyHandlerRejectsConvertedNonGetRequest(t *testing.T) {
 	})
 
 	_, err := handler.check(t.Context(), http.MethodPost, "https://example.com/file")
-	require.Error(t, err)
 	require.ErrorContains(t, err, "conversion is only supported for GET")
 }
 
@@ -368,7 +367,6 @@ func TestProxyHandlerRejectsConvertedAttrs(t *testing.T) {
 	})
 
 	_, err := handler.check(t.Context(), http.MethodGet, "https://example.com/file")
-	require.Error(t, err)
 	require.ErrorContains(t, err, "proxy conversion only supports URL updates")
 }
 

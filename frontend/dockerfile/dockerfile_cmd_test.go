@@ -312,7 +312,6 @@ RUN ["echo", "hello"]this is invalid
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "this is invalid")
 
 	workers.CheckFeatureCompat(t, sb,
@@ -442,8 +441,6 @@ FNTRYPOINT ["cmd", "/c", "echo invalidinstruction"]
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-
-	require.Error(t, err)
 	require.ErrorContains(t, err, "unknown instruction: FNTRYPOINT")
 	require.ErrorContains(t, err, "did you mean ENTRYPOINT?")
 }

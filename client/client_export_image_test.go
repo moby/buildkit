@@ -915,7 +915,6 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	// layer should be deleted as not kept by history
 	_, err = bkstore.Info(ctx, mfst.Layers[1].Digest)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "not found")
 
 	// config should still be there
@@ -1606,7 +1605,6 @@ func testPullWithDigestCheck(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
 }
 

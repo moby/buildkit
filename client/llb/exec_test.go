@@ -13,8 +13,6 @@ func TestTmpfsMountError(t *testing.T) {
 
 	st := Image("foo").Run(Shlex("args")).AddMount("/tmp", Scratch(), Tmpfs())
 	_, err := st.Marshal(context.TODO())
-
-	require.Error(t, err)
 	require.ErrorContains(t, err, "can't be used as a parent")
 
 	st = Image("foo").Run(Shlex("args"), AddMount("/tmp", Scratch(), Tmpfs())).Root()
@@ -23,7 +21,6 @@ func TestTmpfsMountError(t *testing.T) {
 
 	st = Image("foo").Run(Shlex("args"), AddMount("/tmp", Image("bar"), Tmpfs())).Root()
 	_, err = st.Marshal(context.TODO())
-	require.Error(t, err)
 	require.ErrorContains(t, err, "must use scratch")
 }
 
@@ -34,7 +31,6 @@ func TestInvalidSecurityModeMarshalError(t *testing.T) {
 		Run(Shlex("true"), Security(pb.SecurityMode(2))).Root()
 
 	_, err := st.Marshal(context.TODO())
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid security mode")
 }
 

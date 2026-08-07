@@ -227,7 +227,6 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 		// Currently disabled globally by default
 		// AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementNetworkHost},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "network.host is not allowed")
 }
 

@@ -253,7 +253,6 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "invalid layer limit")
 }
 

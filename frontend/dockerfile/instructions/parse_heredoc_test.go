@@ -27,7 +27,6 @@ func TestErrorCasesHeredoc(t *testing.T) {
 		require.NoErrorf(t, err, "Error when parsing Dockerfile")
 		n := ast.AST.Children[0]
 		_, err = ParseInstruction(n)
-		require.Error(t, err)
 		require.ErrorContains(t, err, c.expectedError)
 	}
 }
