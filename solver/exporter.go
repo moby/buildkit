@@ -151,12 +151,11 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	v := e.record
 	for exportRecord && addRecord {
 		if v == nil {
-			if i < len(records) {
-				v = records[i]
-				i++
-			} else {
+			if i >= len(records) {
 				break
 			}
+			v = records[i]
+			i++
 		}
 		cm := v.cacheManager
 		key := cm.getID(v.key)

@@ -51,13 +51,12 @@ func subFrames(a, b []*Frame) int {
 		if j < 0 {
 			break
 		}
-		if a[i].Equal(b[j]) {
-			idx++
-			i--
-			j--
-		} else {
+		if !a[i].Equal(b[j]) {
 			break
 		}
+		idx++
+		i--
+		j--
 	}
 	return idx
 }

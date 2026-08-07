@@ -178,11 +178,7 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 
 	var remoteRef cache.MutableRef
 	for _, si := range sis {
-		if reset {
-			if err := si.clearGitRemote(); err != nil {
-				bklog.G(ctx).Warnf("failed to clear git remote metadata for %s %s: %v", urlutil.RedactCredentials(remote), si.ID(), err)
-			}
-		} else {
+		if !reset {
 			remoteRef, err = gs.cache.GetMutable(ctx, si.ID())
 			if err != nil {
 				if errors.Is(err, cache.ErrLocked) {
@@ -193,6 +189,9 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 				return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
 			}
 			break
+		}
+		if err := si.clearGitRemote(); err != nil {
+			bklog.G(ctx).Warnf("failed to clear git remote metadata for %s %s: %v", urlutil.RedactCredentials(remote), si.ID(), err)
 		}
 	}
 
@@ -811,12 +810,11 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	if err != nil {
 		var wce *wouldClobberExistingTagError
 		var ulre *unableToUpdateLocalRefError
-		if errors.As(err, &wce) || errors.As(err, &ulre) {
-			repo, err = gs.tryRemoteFetch(ctx, jobCtx, g, true)
-			if err != nil {
-				return nil, err
-			}
-		} else {
+		if !errors.As(err, &wce) && !errors.As(err, &ulre) {
+			return nil, err
+		}
+		repo, err = gs.tryRemoteFetch(ctx, jobCtx, g, true)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1127,13 +1125,13 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 				if err != nil {
 					return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
 				}
-				if _, err := git.Run(ctx, "cat-file", "-e", gs.cacheCommit); err == nil {
-					// force the ref to point to the commit that the cache key points to
-					if _, err := git.Run(ctx, "update-ref", uptRef, gs.cacheCommit, "--no-deref"); err != nil {
-						return nil, err
-					}
-				} else {
+				_, err := git.Run(ctx, "cat-file", "-e", gs.cacheCommit)
+				if err != nil {
 					return nil, errors.Errorf("fetched ref %s does not match expected commit %s and commit can not be found in the repository", ref, gs.cacheCommit)
+				}
+				// force the ref to point to the commit that the cache key points to
+				if _, err := git.Run(ctx, "update-ref", uptRef, gs.cacheCommit, "--no-deref"); err != nil {
+					return nil, err
 				}
 			}
 		}

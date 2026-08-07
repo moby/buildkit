@@ -370,10 +370,7 @@ type RunCommand struct {
 }
 
 func (c *RunCommand) Expand(expander SingleWordExpander) error {
-	if err := setMountState(c, expander); err != nil {
-		return err
-	}
-	return nil
+	return setMountState(c, expander)
 }
 
 // CmdCommand sets the default command to run in the container on start.

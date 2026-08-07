@@ -177,11 +177,10 @@ func (ap *authProvider) tlsConfig(host string) (*tls.Config, error) {
 	if len(c.RootCAs) > 0 {
 		systemPool, err := x509.SystemCertPool()
 		if err != nil {
-			if runtime.GOOS == "windows" {
-				systemPool = x509.NewCertPool()
-			} else {
+			if runtime.GOOS != "windows" {
 				return nil, errors.Wrapf(err, "unable to get system cert pool")
 			}
+			systemPool = x509.NewCertPool()
 		}
 		tc.RootCAs = systemPool
 	}

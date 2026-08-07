@@ -869,11 +869,10 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 
 	if refID != "" {
 		ref, err := hs.cache.Get(ctx, refID, nil)
-		if err != nil {
-			bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", refID, hs.src.URL)
-		} else {
+		if err == nil {
 			return ref, nil
 		}
+		bklog.G(ctx).WithError(err).Warnf("failed to get HTTP snapshot for ref %s (%s)", refID, hs.src.URL)
 	}
 
 	var g session.Group

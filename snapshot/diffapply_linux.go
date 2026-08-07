@@ -627,11 +627,11 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 					return errors.Wrapf(err, "failed to join %s and %s", d.upperBindSource, c.subPath)
 				}
 				c.srcPath = srcPath
-				if fi, err := os.Lstat(c.srcPath); err == nil {
-					srcfi = fi
-				} else {
+				fi, err := os.Lstat(c.srcPath)
+				if err != nil {
 					return errors.Wrap(err, "failed to stat underlying file from bind mount")
 				}
+				srcfi = fi
 			case !srcfi.IsDir() && len(d.upperOverlayDirs) > 0:
 				for i := range d.upperOverlayDirs {
 					dir := d.upperOverlayDirs[len(d.upperOverlayDirs)-1-i]
@@ -645,9 +645,8 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 						break
 					} else if errors.Is(err, unix.ENOENT) {
 						continue
-					} else {
-						return errors.Wrap(err, "failed to lstat when finding direct path of overlay file")
 					}
+					return errors.Wrap(err, "failed to lstat when finding direct path of overlay file")
 				}
 			default:
 				srcPath, err := safeJoin(d.upperRoot, subPath)
@@ -655,11 +654,11 @@ func (d *differ) doubleWalkingChanges(ctx context.Context, handle func(context.C
 					return errors.Wrapf(err, "failed to join %s and %s", d.upperRoot, subPath)
 				}
 				c.srcPath = srcPath
-				if fi, err := os.Lstat(c.srcPath); err == nil {
-					srcfi = fi
-				} else {
+				fi, err := os.Lstat(c.srcPath)
+				if err != nil {
 					return errors.Wrap(err, "failed to stat srcPath from differ")
 				}
+				srcfi = fi
 			}
 
 			var ok bool
