@@ -52,8 +52,7 @@ func (i *pushingIngester) Writer(ctx context.Context, opts ...content.WriterOpt)
 			i.mu.Unlock()
 			return nil, errors.Wrapf(cerrdefs.ErrUnavailable, "ref %v locked", wOpts.Desc.Digest)
 		}
-		_, ok := i.active[wOpts.Desc.Digest]
-		if !ok {
+		if _, ok := i.active[wOpts.Desc.Digest]; !ok {
 			break
 		}
 		i.c.Wait()
