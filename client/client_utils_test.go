@@ -84,7 +84,7 @@ loop0:
 				require.Equal(t, 0, count)
 			}
 		}
-		t.Logf("checkAllReleasable: skipping check for exported tars in non-containerd test")
+		t.Log("checkAllReleasable: skipping check for exported tars in non-containerd test")
 		return
 	}
 
@@ -222,7 +222,7 @@ func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
 		}
 		t.Logf("retrying prune(%d)", i)
 	}
-	t.Fatalf("failed to ensure prune")
+	t.Fatal("failed to ensure prune")
 }
 
 func fixedWriteCloser(wc io.WriteCloser) filesync.FileOutputFunc {
@@ -282,7 +282,7 @@ func readImageTimestamps(dt []byte) (*imageTimestamps, error) {
 	}
 
 	if _, ok := m["oci-layout"]; !ok {
-		return nil, errors.Errorf("no oci-layout")
+		return nil, errors.New("no oci-layout")
 	}
 
 	var index ocispecs.Index

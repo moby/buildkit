@@ -44,7 +44,7 @@ func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
 		return s.err
 	}
 	if s.id == "" {
-		return errors.Errorf("source identifier can't be empty")
+		return errors.New("source identifier can't be empty")
 	}
 	return nil
 }
@@ -140,9 +140,9 @@ func ImageBlob(ref string, opts ...ImageBlobOption) State {
 	r, err := reference.ParseNormalizedNamed(ref)
 	if err == nil {
 		if _, tagged := r.(reference.Tagged); tagged {
-			err = errors.Errorf("tagged image reference not allowed for blob reference")
+			err = errors.New("tagged image reference not allowed for blob reference")
 		} else if ref, ok := r.(reference.Digested); !ok {
-			err = errors.Errorf("checksum required in blob reference")
+			err = errors.New("checksum required in blob reference")
 		} else {
 			digested = ref
 		}
@@ -194,9 +194,9 @@ func OCILayoutBlob(ref string, opts ...ImageBlobOption) State {
 	r, err := reference.ParseNormalizedNamed(ref)
 	if err == nil {
 		if _, tagged := r.(reference.Tagged); tagged {
-			err = errors.Errorf("tagged image reference not allowed for blob reference")
+			err = errors.New("tagged image reference not allowed for blob reference")
 		} else if ref, ok := r.(reference.Digested); !ok {
-			err = errors.Errorf("checksum required in blob reference")
+			err = errors.New("checksum required in blob reference")
 		} else {
 			digested = ref
 		}

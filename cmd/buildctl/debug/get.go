@@ -23,7 +23,7 @@ var GetCommand = &cli.Command{
 func get(clicontext *cli.Command) error {
 	args := clicontext.Args()
 	if args.Len() == 0 {
-		return errors.Errorf("blob digest must be specified")
+		return errors.New("blob digest must be specified")
 	}
 
 	dgst, err := digest.Parse(args.First())

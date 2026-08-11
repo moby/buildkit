@@ -41,7 +41,7 @@ func main() {
 			groups := re.FindStringSubmatch(string(match))
 			stdout := bytes.NewBuffer(nil)
 			fmt.Fprintf(stdout, "<!---GENERATE_START %s-->\n", groups[1])
-			fmt.Fprintf(stdout, "```\n")
+			fmt.Fprint(stdout, "```\n")
 			cmd := exec.Cmd{
 				Path:   "/bin/sh",
 				Args:   []string{"sh", "-c", groups[1]},
@@ -57,8 +57,8 @@ func main() {
 				err = errors.Wrapf(err, "could not run command %s", groups[1])
 				return nil
 			}
-			fmt.Fprintf(stdout, "```\n")
-			fmt.Fprintf(stdout, "<!---GENERATE_END-->\n")
+			fmt.Fprint(stdout, "```\n")
+			fmt.Fprint(stdout, "<!---GENERATE_END-->\n")
 
 			return stdout.Bytes()
 		})

@@ -50,7 +50,7 @@ func (s *setup) Validate() error {
 		return err
 	}
 	if !b {
-		return errors.Errorf("no NVIDIA devices found")
+		return errors.New("no NVIDIA devices found")
 	}
 	return nil
 }
@@ -94,7 +94,7 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	} else if osr.ID != "debian" && osr.ID != "ubuntu" {
-		return errors.Errorf("NVIDIA setup is currently only supported on Debian/Ubuntu")
+		return errors.New("NVIDIA setup is currently only supported on Debian/Ubuntu")
 	}
 
 	needsDriver := true
@@ -107,9 +107,9 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	}
 	if needsDriver {
 		if hasWSLGPU() {
-			return errors.Errorf("NVIDIA drivers are required for WSL with non PCI-based GPUs")
+			return errors.New("NVIDIA drivers are required for WSL with non PCI-based GPUs")
 		}
-		return errors.Errorf("NVIDIA drivers are required. Try loading NVIDIA kernel module with \"modprobe nvidia\" command")
+		return errors.New("NVIDIA drivers are required. Try loading NVIDIA kernel module with \"modprobe nvidia\" command")
 	}
 
 	var dv string
@@ -151,7 +151,7 @@ func (s *setup) Run(ctx context.Context) (err error) {
 	}
 
 	if len(buf.Bytes()) == 0 {
-		return errors.Errorf("nvidia-ctk output is empty")
+		return errors.New("nvidia-ctk output is empty")
 	}
 
 	if err := os.WriteFile("/etc/cdi/nvidia.yaml", buf.Bytes(), 0644); err != nil {
@@ -200,7 +200,7 @@ func installPackages(ctx context.Context, osr *osrelease, dv string, pw progress
 	keyTarget := "/usr/share/keyrings/nvidia-cuda-keyring.gpg"
 
 	if _, err := os.Stat(keyTarget); err != nil {
-		fmt.Fprintf(newStream(pw, 2, dgst), "Downloading NVIDIA GPG key\n")
+		fmt.Fprint(newStream(pw, 2, dgst), "Downloading NVIDIA GPG key\n")
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, aptURL+"3bf863cc.pub", nil)
 		if err != nil {
@@ -254,7 +254,7 @@ func parseVersion(dt string) (string, error) {
 	re := regexp.MustCompile(`NVIDIA .* Kernel Module(?:[\s\w\d]+)?\s+(\d+\.\d+)`)
 	matches := re.FindStringSubmatch(dt)
 	if len(matches) < 2 {
-		return "", errors.Errorf("could not parse NVIDIA driver version")
+		return "", errors.New("could not parse NVIDIA driver version")
 	}
 	return matches[1], nil
 }
@@ -316,7 +316,7 @@ func getOSRelease() (*osrelease, error) {
 	}
 
 	if id == "" {
-		return nil, errors.Errorf("ID not found in /etc/os-release")
+		return nil, errors.New("ID not found in /etc/os-release")
 	}
 
 	return &osrelease{ID: id, VersionID: versionID}, nil

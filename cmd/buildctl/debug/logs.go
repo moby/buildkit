@@ -37,7 +37,7 @@ var LogsCommand = &cli.Command{
 func logs(clicontext *cli.Command) error {
 	args := clicontext.Args()
 	if args.Len() == 0 {
-		return errors.Errorf("build ref must be specified")
+		return errors.New("build ref must be specified")
 	}
 	ref := args.First()
 

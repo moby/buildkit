@@ -25,7 +25,7 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	}
 
 	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
-		t.Skipf("test requires cgroup v2")
+		t.Skip("test requires cgroup v2")
 	}
 
 	c, err := New(sb.Context(), sb.Address())
@@ -95,7 +95,7 @@ func testLinuxResources(t *testing.T, sb integration.Sandbox) {
 	}
 
 	if _, err := os.Lstat("/sys/fs/cgroup/cgroup.subtree_control"); os.IsNotExist(err) {
-		t.Skipf("test requires cgroup v2")
+		t.Skip("test requires cgroup v2")
 	}
 
 	c, err := New(sb.Context(), sb.Address())

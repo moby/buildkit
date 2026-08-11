@@ -93,7 +93,7 @@ func prune(clicontext *cli.Command) error {
 				if err := tmpl.Execute(clicontext.Root().Writer, du); err != nil {
 					panic(err)
 				}
-				if _, err = fmt.Fprintf(clicontext.Root().Writer, "\n"); err != nil {
+				if _, err = fmt.Fprint(clicontext.Root().Writer, "\n"); err != nil {
 					panic(err)
 				}
 			}

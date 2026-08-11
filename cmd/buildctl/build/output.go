@@ -101,7 +101,7 @@ func resolveExporterDest(exporter, dest string, attrs map[string]string) (filesy
 				return nil, "", errors.Wrapf(err, "invalid destination file: %s", dest)
 			}
 			if err == nil && fi.IsDir() {
-				return nil, "", errors.Errorf("destination file is a directory")
+				return nil, "", errors.New("destination file is a directory")
 			}
 			w, err := os.Create(dest)
 			return wrapWriter(w), "", err

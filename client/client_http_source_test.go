@@ -566,7 +566,7 @@ func testHTTPPruneAfterCacheKey(t *testing.T, sb integration.Sandbox) {
 						for _, entry := range du {
 							if entry.Description == "http url "+server.URL+"/foo" {
 								if !entry.InUse {
-									t.Logf("entry no longer in use, pruning")
+									t.Log("entry no longer in use, pruning")
 									err = c.Prune(ctx, nil)
 									assert.NoError(t, err)
 

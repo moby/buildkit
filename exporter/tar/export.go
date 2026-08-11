@@ -122,14 +122,14 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 	}
 
 	if _, ok := inp.Metadata[exptypes.ExporterPlatformsKey]; isMap && !ok {
-		return nil, nil, nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+		return nil, nil, nil, errors.New("unable to export multiple refs, missing platforms mapping")
 	}
 	p, err := exptypes.ParsePlatforms(inp.Metadata)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if !isMap && len(p.Platforms) > 1 {
-		return nil, nil, nil, errors.Errorf("unable to export multiple platforms without map")
+		return nil, nil, nil, errors.New("unable to export multiple platforms without map")
 	}
 
 	var fs fsutil.FS

@@ -18,7 +18,7 @@ func dispatchSecret(d *dispatchState, m *instructions.Mount, loc []parser.Range)
 
 	if id == "" {
 		if m.Target == "" {
-			return nil, errors.Errorf("one of source, target required")
+			return nil, errors.New("one of source, target required")
 		}
 		id = path.Base(m.Target)
 	}

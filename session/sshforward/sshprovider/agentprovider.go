@@ -139,7 +139,7 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 			continue
 		}
 		if raw {
-			return nil, errors.Errorf("raw mode only supported with socket paths")
+			return nil, errors.New("raw mode only supported with socket paths")
 		}
 
 		f, err := os.Open(p) //nolint:gosec // SSH key paths are explicit user inputs and may intentionally be symlinks.
@@ -159,7 +159,7 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 			// If parsing the file fails, check to see if it kind of looks like socket-shaped.
 			if runtime.GOOS == "windows" && strings.Contains(string(dt), "socket") {
 				if keys {
-					return nil, errors.Errorf("invalid combination of keys and sockets")
+					return nil, errors.New("invalid combination of keys and sockets")
 				}
 				socket = &socketDialer{path: p, dialer: unixSocketDialer}
 				continue
@@ -176,7 +176,7 @@ func toDialer(paths []string, raw bool) (func(context.Context) (net.Conn, error)
 
 	if socket != nil {
 		if keys {
-			return nil, errors.Errorf("invalid combination of keys and sockets")
+			return nil, errors.New("invalid combination of keys and sockets")
 		}
 		if raw {
 			return func(ctx context.Context) (net.Conn, error) {
@@ -203,21 +203,21 @@ type readOnlyAgent struct {
 }
 
 func (a *readOnlyAgent) Add(_ agent.AddedKey) error {
-	return errors.Errorf("adding new keys not allowed by buildkit")
+	return errors.New("adding new keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Remove(_ ssh.PublicKey) error {
-	return errors.Errorf("removing keys not allowed by buildkit")
+	return errors.New("removing keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) RemoveAll() error {
-	return errors.Errorf("removing keys not allowed by buildkit")
+	return errors.New("removing keys not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Lock(_ []byte) error {
-	return errors.Errorf("locking agent not allowed by buildkit")
+	return errors.New("locking agent not allowed by buildkit")
 }
 
 func (a *readOnlyAgent) Extension(_ string, _ []byte) ([]byte, error) {
-	return nil, errors.Errorf("extensions not allowed by buildkit")
+	return nil, errors.New("extensions not allowed by buildkit")
 }

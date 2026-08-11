@@ -871,7 +871,7 @@ COPY --from=build /foo /out /
 
 		dt, ok := res.Metadata["containerimage.config"]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 
 		dt, err = json.Marshal(map[string][]byte{
@@ -1048,7 +1048,7 @@ COPY --from=build /foo /out /
 
 		dt, ok := res.Metadata["containerimage.config/"+platform1]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 		dt, err = json.Marshal(map[string][]byte{
 			"containerimage.config": dt,
@@ -1060,7 +1060,7 @@ COPY --from=build /foo /out /
 
 		dt, ok = res.Metadata["containerimage.config/"+platform2]
 		if !ok {
-			return nil, errors.Errorf("no containerimage.config in metadata")
+			return nil, errors.New("no containerimage.config in metadata")
 		}
 		dt, err = json.Marshal(map[string][]byte{
 			"containerimage.config": dt,
