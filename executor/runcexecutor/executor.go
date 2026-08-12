@@ -277,7 +277,6 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
-	defer executor.MountStubsCleaner(context.WithoutCancel(ctx), rootFSPath, mounts, meta.RemoveMountStubsRecursive)()
 	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
 		cleanProxyCA, err := executor.InjectProxyCA(rootFSPath, proxyNS.ProxyCACert())
 		if err != nil {
@@ -339,6 +338,8 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 			return nil, err
 		}
 	}
+
+	defer executor.MountStubsCleanerForSpec(context.WithoutCancel(ctx), rootFSPath, spec.Mounts, meta.RemoveMountStubsRecursive)()
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
 		return nil, errors.WithStack(err)
