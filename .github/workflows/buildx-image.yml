@@ -37,6 +37,9 @@ env:
 jobs:
   create:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read # same as global permission
+      id-token: write # for logging in to Docker Hub with GitHub OIDC
     strategy:
       fail-fast: false
       matrix:
