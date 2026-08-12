@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
@@ -1134,8 +1135,115 @@ func diffOpTestCases() (tests []integration.Test) {
 			},
 		}
 	}()...)
+	tests = append(tests, integration.TestFuncs(testMissingMaterializedLowerSnapshot)...)
 
 	return tests
+}
+
+func testMissingMaterializedLowerSnapshot(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMergeDiff)
+
+	containerdAddress := sb.ContainerdAddress()
+	if containerdAddress == "" {
+		t.Skip("test requires a containerd worker")
+	}
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	ctd, err := newContainerd(containerdAddress)
+	require.NoError(t, err)
+	defer ctd.Close()
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	workerInfos, err := c.ListWorkers(sb.Context())
+	require.NoError(t, err)
+	require.Len(t, workerInfos, 1)
+	snapshotterName := workerInfos[0].Labels["org.mobyproject.buildkit.worker.snapshotter"]
+	require.NotEmpty(t, snapshotterName)
+	snapshotter := ctd.SnapshotService(snapshotterName)
+	before, err := snapshotInfoMap(ctx, snapshotter)
+	require.NoError(t, err)
+
+	lower := llb.Image("busybox:latest")
+	upper := llb.Image("alpine:latest")
+	materializedLower := lower.File(llb.Mkfile("/issue6977", 0o644, []byte("materialize lower")))
+	def, err := materializedLower.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	afterLower, err := snapshotInfoMap(ctx, snapshotter)
+	require.NoError(t, err)
+	lowerSnapshot := newCommittedRootSnapshot(t, before, afterLower)
+
+	// Simulate the inconsistent state from #6977: BuildKit still has the cache
+	// metadata and layer blob, but containerd has lost the materialized snapshot.
+	require.NoError(t, removeSnapshotTree(ctx, snapshotter, lowerSnapshot))
+	_, err = snapshotter.Stat(ctx, lowerSnapshot)
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
+
+	solveStateToLocalDir(sb.Context(), t, c, llb.Diff(lower, upper))
+	_, err = snapshotter.Stat(ctx, lowerSnapshot)
+	require.NoError(t, err)
+}
+
+func snapshotInfoMap(ctx context.Context, snapshotter snapshots.Snapshotter) (map[string]snapshots.Info, error) {
+	infos := map[string]snapshots.Info{}
+	err := snapshotter.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
+		infos[info.Name] = info
+		return nil
+	})
+	return infos, errors.WithStack(err)
+}
+
+func newCommittedRootSnapshot(t *testing.T, before, after map[string]snapshots.Info) string {
+	t.Helper()
+
+	newSnapshots := map[string]snapshots.Info{}
+	for name, info := range after {
+		if _, ok := before[name]; ok || info.Kind != snapshots.KindCommitted {
+			continue
+		}
+		newSnapshots[name] = info
+	}
+
+	var roots []string
+	for name, info := range newSnapshots {
+		if _, parentIsNew := newSnapshots[info.Parent]; !parentIsNew {
+			roots = append(roots, name)
+		}
+	}
+	require.Len(t, roots, 1, "expected one newly materialized root snapshot")
+	return roots[0]
+}
+
+func removeSnapshotTree(ctx context.Context, snapshotter snapshots.Snapshotter, name string) error {
+	infos, err := snapshotInfoMap(ctx, snapshotter)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	children := map[string][]string{}
+	for child, info := range infos {
+		children[info.Parent] = append(children[info.Parent], child)
+	}
+
+	var remove func(string) error
+	remove = func(name string) error {
+		for _, child := range children[name] {
+			if err := remove(child); err != nil {
+				return err
+			}
+		}
+		if err := snapshotter.Remove(ctx, name); err != nil && !cerrdefs.IsNotFound(err) {
+			return errors.WithStack(err)
+		}
+		return nil
+	}
+	return remove(name)
 }
 
 // contents lets you create fstest.Appliers using the sandbox, which
