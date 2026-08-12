@@ -91,6 +91,8 @@ linters:
     staticcheck:
       checks:
         - all
+        # Produces false positives for shared callers of platform-specific unsupported stubs.
+        - -SA4023
     testifylint:
       disable:
         - empty

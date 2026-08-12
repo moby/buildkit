@@ -327,12 +327,12 @@ func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
 	}
 
 	return &executor.Mount{
-			Src:      &bind{dir},
-			Dest:     "/run/config/buildkit/metadata",
-			Readonly: true,
-		}, func() {
-			os.RemoveAll(dir)
-		}, nil
+		Src:      &bind{dir},
+		Dest:     "/run/config/buildkit/metadata",
+		Readonly: true,
+	}, func() {
+		os.RemoveAll(dir)
+	}, nil
 }
 
 type bind struct {
