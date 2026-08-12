@@ -31,3 +31,19 @@ func TestUnpackSkipsSameOwnerOnWindows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "content", string(dt))
 }
+
+func TestUnpackRejectsWindowsVolumePath(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "dest")
+	require.NoError(t, os.Mkdir(dest, 0o755))
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	writeTarFile(t, tw, filepath.VolumeName(parent)+`/pwned`, "pwned")
+	require.NoError(t, tw.Close())
+
+	require.Error(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()))
+
+	_, err := os.Stat(filepath.Join(dest, "pwned"))
+	require.True(t, os.IsNotExist(err), "volume-qualified archive path was extracted")
+}
