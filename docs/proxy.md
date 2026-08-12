@@ -95,17 +95,46 @@ system trust store pass through the BuildKit proxy.
 
 ## Upstream proxies
 
-The BuildKit proxy can chain requests through an upstream proxy using Go's
-standard proxy environment handling, including HTTP(S) and SOCKS5 proxy URLs.
+To use an upstream proxy, set `HTTP_PROXY` and/or `HTTPS_PROXY` in the
+`buildkitd` environment and enable proxy networking:
 
-The internal proxy inherits `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` from
-the `buildkitd` environment. These settings apply to all proxy-network execs;
-proxy settings passed to an individual exec do not change upstream routing.
-The proxy URL values injected into each process still point to BuildKit's
-internal proxy. `NO_PROXY` applies to the connection from the BuildKit proxy to
-the destination, so matching requests connect directly. An invalid upstream
-proxy URL prevents proxy-network execs from starting rather than falling back
-to a direct connection.
+```bash
+HTTP_PROXY=http://proxy.example:3128 \
+HTTPS_PROXY=http://proxy.example:3128 \
+NO_PROXY=localhost,127.0.0.1,.example.internal \
+buildkitd --proxy-network
+```
+
+BuildKit uses Go's standard proxy environment handling:
+
+| Variable pair | Purpose |
+| --- | --- |
+| `HTTP_PROXY`, `http_proxy` | Selects the upstream proxy for HTTP destinations. |
+| `HTTPS_PROXY`, `https_proxy` | Selects the upstream proxy for HTTPS destinations. |
+| `NO_PROXY`, `no_proxy` | Lists destinations that bypass the upstream proxy. |
+
+For each pair, BuildKit uses the uppercase variable when it is non-empty and
+falls back to the lowercase variable. The HTTP and HTTPS settings are
+independent: `HTTP_PROXY` and `http_proxy` do not apply to HTTPS destinations.
+
+BuildKit injects `ALL_PROXY` and `all_proxy` into proxy-network execs. It does
+not read these variables from the `buildkitd` environment when it configures
+upstream routing.
+
+Proxy values can be complete `http://`, `https://`, `socks5://`, or
+`socks5h://` URLs. A bare `host[:port]` uses HTTP.
+
+`NO_PROXY` is a comma-separated list of domain names, IP addresses, and CIDR
+prefixes. Domain names and IP addresses can include a port. When a destination
+matches the list, BuildKit's proxy connects to it directly. A value of `*`
+makes direct connections to all destinations. `NO_PROXY` controls how the
+BuildKit proxy reaches the destination. It does not change the proxy variables
+in the exec.
+
+These settings apply to all proxy-network execs. Proxy settings passed to an
+individual exec do not change upstream routing because its proxy variables
+point to BuildKit's internal proxy. If an upstream proxy URL is invalid, the
+proxy-network exec fails to start instead of connecting directly.
 
 ## Request capture and logs
 
