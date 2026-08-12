@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/sys/user"
@@ -42,38 +41,8 @@ func unpack(ctx context.Context, srcRoot string, src string, destRoot string, de
 	}
 	defer rdr.Close()
 
-	opts := []archive.ApplyOpt{
-		// Disable containerd's image-layer whiteout conversion for Dockerfile ADD
-		// archives, where .wh.* entries should be extracted as files.
-		archive.WithConvertWhiteout(func(_ *tar.Header, _ string) (bool, error) {
-			return true, nil
-		}),
-		archive.WithFilter(ownerMapper(u, idmap)),
-	}
-	opts = append(opts, unpackPlatformApplyOpts()...)
-
-	_, err = archive.Apply(ctx, dest, rdr, opts...)
+	err = applyRootArchive(ctx, dest, rdr, u, idmap, unpackNoSameOwner())
 	return true, err
-}
-
-func ownerMapper(u *copy.User, idmap *user.IdentityMapping) archive.Filter {
-	return func(hdr *tar.Header) (bool, error) {
-		uid, gid := hdr.Uid, hdr.Gid
-		// Match go-archive behavior: remap archive header IDs first, then let
-		// explicit --chown values override the header ownership.
-		if idmap != nil {
-			var err error
-			uid, gid, err = idmap.ToHost(uid, gid)
-			if err != nil {
-				return false, err
-			}
-		}
-		if u != nil {
-			uid, gid = u.UID, u.GID
-		}
-		hdr.Uid, hdr.Gid = uid, gid
-		return true, nil
-	}
 }
 
 func isArchivePath(path string) bool {
