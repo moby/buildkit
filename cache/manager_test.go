@@ -2664,9 +2664,15 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor,
 	if !compress {
 		return mapToBlobWithCompression(m, nil)
 	}
-	return mapToBlobWithCompression(m, func(w io.Writer) (io.WriteCloser, string, error) {
-		return gzip.NewWriter(w), ocispecs.MediaTypeImageLayerGzip, nil
-	})
+	return mapToBlobWithCompression(m, gzipBlobWriter)
+}
+
+func gzipBlobWriter(w io.Writer) (io.WriteCloser, string, error) {
+	// Go 1.27 changed compress/flate output in CL 707355 for golang/go#75532.
+	// Use BuildKit's pinned Go 1.26 encoder when calculating expected digests.
+	compressor, _ := compression.Gzip.Compress(context.Background(), compression.New(compression.Gzip))
+	wc, err := compressor(w, ocispecs.MediaTypeImageLayerGzip)
+	return wc, ocispecs.MediaTypeImageLayerGzip, err
 }
 
 func mapToBlobWithCompression(m map[string]string, compress func(io.Writer) (io.WriteCloser, string, error)) ([]byte, ocispecs.Descriptor, error) {
@@ -2718,7 +2724,11 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 
 	var dest io.WriteCloser = &iohelper.NopWriteCloser{Writer: buf}
 	if compress {
-		dest = gzip.NewWriter(buf)
+		var err error
+		dest, _, err = gzipBlobWriter(buf)
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
 	}
 	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
 
