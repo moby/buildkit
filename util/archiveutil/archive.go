@@ -2,8 +2,16 @@ package archiveutil
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
+	"compress/bzip2"
+	"context"
 	"encoding/binary"
+	"io"
+	"os/exec"
+
+	cdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -28,6 +36,48 @@ var (
 	// See https://datatracker.ietf.org/doc/html/rfc8878#section-3.1.1.
 	zstdMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
 )
+
+type readCloser struct {
+	io.Reader
+	close func() error
+}
+
+func (r readCloser) Close() error {
+	if r.close != nil {
+		return r.close()
+	}
+	return nil
+}
+
+// DecompressStream decompresses Docker-compatible archive streams.
+func DecompressStream(r io.Reader) (io.ReadCloser, error) {
+	buf := bufio.NewReaderSize(r, 32*1024)
+	bs, err := buf.Peek(10)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	switch {
+	case hasBzip2Prefix(bs):
+		return readCloser{Reader: bzip2.NewReader(buf)}, nil
+	case hasXZPrefix(bs):
+		ctx, cancel := context.WithCancelCause(context.Background())
+		xzReader, err := cmdStream(exec.CommandContext(ctx, "xz", "-d", "-c", "-q"), buf)
+		if err != nil {
+			cancel(err)
+			return nil, err
+		}
+		return readCloser{
+			Reader: xzReader,
+			close: func() error {
+				cancel(nil)
+				return xzReader.Close()
+			},
+		}, nil
+	default:
+		return cdcompression.DecompressStream(buf)
+	}
+}
 
 // IsArchive reports whether header looks like a gzip, bzip2, xz, zstd, or
 // uncompressed tar archive. It does not validate the compressed contents.
@@ -62,4 +112,39 @@ func HasZstdPrefix(header []byte) bool {
 	// RFC 8878 section 3.1.2 defines skippable frame magic as 0x184D2A50 through 0x184D2A5F.
 	// See https://datatracker.ietf.org/doc/html/rfc8878#section-3.1.2.
 	return len(header) >= 8 && binary.LittleEndian.Uint32(header[:4])&zstdSkippableMagicMask == zstdSkippableMagicStart
+}
+
+func cmdStream(cmd *exec.Cmd, in io.Reader) (io.ReadCloser, error) {
+	reader, writer := io.Pipe()
+	cmd.Stdin = in
+	cmd.Stdout = writer
+
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := cmd.Wait(); err != nil {
+			if errBuf.Len() > 0 {
+				err = errors.Wrapf(err, "%s", errBuf.String())
+			}
+			writer.CloseWithError(err)
+		} else {
+			writer.Close()
+		}
+	}()
+
+	return readCloser{
+		Reader: reader,
+		close: func() error {
+			err := reader.Close()
+			<-done
+			return err
+		},
+	}, nil
 }
