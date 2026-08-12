@@ -2,18 +2,18 @@ package file
 
 import (
 	"archive/tar"
+	"context"
 	"os"
 	"time"
 
+	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/continuity/fs"
-	"github.com/moby/go-archive"
-	"github.com/moby/go-archive/chrootarchive"
-	"github.com/moby/go-archive/compression"
+	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/sys/user"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, u *copy.User, tm *time.Time, idmap *user.IdentityMapping) (bool, error) {
+func unpack(ctx context.Context, srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, u *copy.User, tm *time.Time, idmap *user.IdentityMapping) (bool, error) {
 	src, err := fs.RootPath(srcRoot, src)
 	if err != nil {
 		return false, err
@@ -36,19 +36,44 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 	}
 	defer file.Close()
 
-	opts := &archive.TarOptions{
-		BestEffortXattrs: true,
+	rdr, err := archiveutil.DecompressStream(file)
+	if err != nil {
+		return false, err
 	}
-	if idmap != nil {
-		opts.IDMap = *idmap
+	defer rdr.Close()
+
+	opts := []archive.ApplyOpt{
+		// Disable containerd's image-layer whiteout conversion for Dockerfile ADD
+		// archives, where .wh.* entries should be extracted as files.
+		archive.WithConvertWhiteout(func(_ *tar.Header, _ string) (bool, error) {
+			return true, nil
+		}),
+		archive.WithFilter(ownerMapper(u, idmap)),
 	}
-	if u != nil {
-		opts.ChownOpts = &archive.ChownOpts{
-			UID: u.UID,
-			GID: u.GID,
+	opts = append(opts, unpackPlatformApplyOpts()...)
+
+	_, err = archive.Apply(ctx, dest, rdr, opts...)
+	return true, err
+}
+
+func ownerMapper(u *copy.User, idmap *user.IdentityMapping) archive.Filter {
+	return func(hdr *tar.Header) (bool, error) {
+		uid, gid := hdr.Uid, hdr.Gid
+		// Match go-archive behavior: remap archive header IDs first, then let
+		// explicit --chown values override the header ownership.
+		if idmap != nil {
+			var err error
+			uid, gid, err = idmap.ToHost(uid, gid)
+			if err != nil {
+				return false, err
+			}
 		}
+		if u != nil {
+			uid, gid = u.UID, u.GID
+		}
+		hdr.Uid, hdr.Gid = uid, gid
+		return true, nil
 	}
-	return true, chrootarchive.Untar(file, dest, opts)
 }
 
 func isArchivePath(path string) bool {
@@ -64,7 +89,7 @@ func isArchivePath(path string) bool {
 		return false
 	}
 	defer file.Close()
-	rdr, err := compression.DecompressStream(file)
+	rdr, err := archiveutil.DecompressStream(file)
 	if err != nil {
 		return false
 	}

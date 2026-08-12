@@ -795,14 +795,6 @@ github.com/kylelemons/godebug/pretty
 # github.com/moby/docker-image-spec v1.3.1
 ## explicit; go 1.18
 github.com/moby/docker-image-spec/specs-go/v1
-# github.com/moby/go-archive v0.2.0
-## explicit; go 1.23.0
-github.com/moby/go-archive
-github.com/moby/go-archive/chrootarchive
-github.com/moby/go-archive/compression
-github.com/moby/go-archive/internal/mounttree
-github.com/moby/go-archive/internal/unshare
-github.com/moby/go-archive/tarheader
 # github.com/moby/locker v1.0.1
 ## explicit; go 1.13
 github.com/moby/locker
@@ -823,9 +815,6 @@ github.com/moby/profiles/seccomp
 # github.com/moby/sys/capability v0.4.0
 ## explicit; go 1.21
 github.com/moby/sys/capability
-# github.com/moby/sys/mount v0.3.5
-## explicit; go 1.18
-github.com/moby/sys/mount
 # github.com/moby/sys/mountinfo v0.7.2
 ## explicit; go 1.17
 github.com/moby/sys/mountinfo

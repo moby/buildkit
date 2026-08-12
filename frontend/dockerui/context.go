@@ -19,8 +19,8 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
-	archivecompression "github.com/moby/go-archive/compression"
 	"github.com/pkg/errors"
 )
 
@@ -224,7 +224,7 @@ func archiveMaxTimeFromHTTPArchive(ctx context.Context, bctx *buildContext) (*ti
 	if err != nil {
 		return nil, err
 	}
-	rc, err := archivecompression.DecompressStream(bytes.NewReader(dt))
+	rc, err := archiveutil.DecompressStream(bytes.NewReader(dt))
 	if err != nil {
 		return nil, err
 	}
@@ -339,11 +339,9 @@ func isArchive(header []byte) bool {
 		{0x42, 0x5A, 0x68},                   // bzip2
 		{0x1F, 0x8B, 0x08},                   // gzip
 		{0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00}, // xz
+		{0x28, 0xB5, 0x2F, 0xFD},             // zstd
 	} {
-		if len(header) < len(m) {
-			continue
-		}
-		if bytes.Equal(m, header[:len(m)]) {
+		if bytes.HasPrefix(header, m) {
 			return true
 		}
 	}
