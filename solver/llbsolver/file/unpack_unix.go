@@ -2,8 +2,18 @@
 
 package file
 
-import "github.com/containerd/containerd/v2/pkg/archive"
+import (
+	"archive/tar"
+	"os"
+)
 
-func unpackPlatformApplyOpts() []archive.ApplyOpt {
-	return nil
+func unpackNoSameOwner() bool {
+	return false
+}
+
+func applyRootOwner(root *os.Root, name string, hdr *tar.Header, noSameOwner bool) error {
+	if noSameOwner {
+		return nil
+	}
+	return root.Lchown(name, hdr.Uid, hdr.Gid)
 }
