@@ -2,10 +2,15 @@
 
 package file
 
-import "github.com/containerd/containerd/v2/pkg/archive"
+import (
+	"archive/tar"
+	"os"
+)
 
-func unpackPlatformApplyOpts() []archive.ApplyOpt {
-	// Windows does not support lchown. The old go-archive path skipped ownership
-	// changes on Windows while still extracting the archive contents.
-	return []archive.ApplyOpt{archive.WithNoSameOwner()}
+func unpackNoSameOwner() bool {
+	return true
+}
+
+func applyRootOwner(*os.Root, string, *tar.Header, bool) error {
+	return nil
 }
