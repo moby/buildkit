@@ -65,6 +65,7 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # maxAge is the maximum age of history entries to keep, in seconds.
   maxAge = 172800
   # maxEntries is the maximum number of history entries to keep.
+  # Setting this value to 0 disables build history.
   maxEntries = 50
 
 [worker.oci]

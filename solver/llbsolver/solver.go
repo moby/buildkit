@@ -281,7 +281,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		defer s.gatewayForwarder.UnregisterBuild(context.Background(), id)
 	}
 
-	if !internal {
+	if !internal && s.history.Enabled() {
 		rec, err1 := s.recordBuildHistory(ctx, id, req, exp, j, usage)
 		if err1 != nil {
 			defer j.CloseProgress()
@@ -290,6 +290,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		defer func() {
 			err = rec(context.WithoutCancel(ctx), resProv, descrefs, err)
 		}()
+	} else if !internal {
+		defer j.CloseProgress()
 	}
 
 	if fwd != nil {

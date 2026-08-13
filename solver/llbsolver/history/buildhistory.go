@@ -77,6 +77,12 @@ type StatusImportResult struct {
 	NumWarnings       int
 }
 
+// Enabled reports whether completed build history should be recorded.
+// A configured maximum of zero disables history recording entirely.
+func (h *Queue) Enabled() bool {
+	return h.opt.CleanConfig.MaxEntries != 0
+}
+
 func NewQueue(opt QueueOpt) (*Queue, error) {
 	if opt.CleanConfig == nil {
 		opt.CleanConfig = &config.HistoryConfig{
