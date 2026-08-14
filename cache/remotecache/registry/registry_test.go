@@ -85,7 +85,7 @@ func TestRegistryCacheProviderUsesCurrentSession(t *testing.T) {
 
 	sessionB := startAuthSession(t, sm, u.Host, "session-b", "password-b")
 	defer sessionB.Close()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), time.Second, nil)
 	defer cancel()
 
 	currentProvider := contentutil.ProviderForSession(multiProvider, session.NewGroup(sessionB.ID()))
@@ -114,7 +114,7 @@ func startAuthSession(t *testing.T, sm *session.Manager, host, username, passwor
 		})
 	}()
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), time.Second, nil)
 	defer cancel()
 	_, err = sm.Get(ctx, s.ID(), false)
 	require.NoError(t, err)
