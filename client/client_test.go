@@ -168,6 +168,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_image_source_test.go
 	testClientGatewayCanceledCredentialsCallbackReturns,
+	testBuildWithInvalidChainID,
 	testPullWithLayerLimit,
 	testValidateDigestOrigin,
 

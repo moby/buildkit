@@ -1409,10 +1409,14 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	if err != nil {
 		return err
 	}
-	_, err = sr.cm.Applier.Apply(ctx, desc, mounts)
+	applied, err := sr.cm.Applier.Apply(ctx, desc, mounts)
 	if err != nil {
 		unmount()
 		return err
+	}
+	if applied.Digest != sr.getDiffID() {
+		unmount()
+		return errors.Errorf("failed to verify layer %s: expected diffID %s, got %s", desc.Digest, sr.getDiffID(), applied.Digest)
 	}
 
 	if err := unmount(); err != nil {
