@@ -145,6 +145,23 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 						return errors.Errorf("invalid device entitlement config %T", ent)
 					}
 				}
+				if cdiManager == nil {
+					for _, d := range device {
+						if d == nil || d.Optional {
+							continue
+						}
+						step := "exec"
+						if op.Exec.Meta != nil && len(op.Exec.Meta.Args) > 0 {
+							step = strings.Join(op.Exec.Meta.Args, " ")
+						}
+						if name := opt.Description["llb.customname"]; name != "" {
+							step = name
+						}
+						return errors.Errorf("CDI device %q is required by step %q, but CDI device support is disabled", d.Name, step)
+					}
+					op.Exec.CdiDevices = nil
+					return nil
+				}
 				if cfg != nil && cfg.All {
 					return nil
 				}
