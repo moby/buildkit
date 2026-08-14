@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
@@ -141,7 +142,20 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	if err != nil {
 		return nil, err
 	}
-	chainID := diffID
+	layerIdentity := diffID
+	if cm.Snapshotter.Name() == "stargz" {
+		if tocDigestStr, ok := desc.Annotations[estargz.TOCJSONDigestAnnotation]; ok {
+			// Stargz snapshots can stay lazy, so unlazyLayer may never verify
+			// the real DiffID. Keep the DiffID intact, but bind the shared
+			// snapshot key to the TOC digest verified by stargz-snapshotter.
+			tocDigest, err := digest.Parse(tocDigestStr)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse stargz TOC digest %q for %s", tocDigestStr, desc.Digest)
+			}
+			layerIdentity = imagespecidentity.ChainID([]digest.Digest{diffID, tocDigest})
+		}
+	}
+	chainID := layerIdentity
 	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
 	descHandlers := descHandlersOf(opts...)
@@ -202,6 +216,12 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			}
 		}
 		if ref == nil {
+			continue
+		}
+		// Blob-chain inputs are not necessarily verified by lazy snapshotters.
+		// Only reuse a record with the same snapshot-sharing identity.
+		if ref.getChainID() != chainID {
+			go ref.Release(context.WithoutCancel(ctx))
 			continue
 		}
 		if p != nil {
@@ -295,6 +315,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	}
 
 	rec.queueDiffID(diffID)
+	rec.queueLayerIdentity(layerIdentity)
 	rec.queueBlob(desc.Digest)
 	rec.queueChainID(chainID)
 	rec.queueBlobChainID(blobChainID)

@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/platforms"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -273,9 +274,6 @@ func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
 func testBuildWithInvalidChainID(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	requiresLinux(t)
-	if sb.Snapshotter() == "stargz" {
-		t.Skip("stargz does not eagerly apply layers")
-	}
 
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -366,6 +364,22 @@ func testBuildWithInvalidChainID(t *testing.T, sb integration.Sandbox) {
 		Digest:    digest.FromBytes(modifiedLayerData),
 		Size:      int64(len(modifiedLayerData)),
 	}
+	if sb.Snapshotter() == "stargz" {
+		esgzR, err := estargz.Build(io.NewSectionReader(bytes.NewReader(modifiedLayerData), 0, int64(len(modifiedLayerData))))
+		require.NoError(t, err)
+		defer esgzR.Close()
+
+		modifiedLayerData, err = io.ReadAll(esgzR)
+		require.NoError(t, err)
+		modifiedLayerDesc = ocispecs.Descriptor{
+			MediaType: ocispecs.MediaTypeImageLayerGzip,
+			Digest:    digest.FromBytes(modifiedLayerData),
+			Size:      int64(len(modifiedLayerData)),
+			Annotations: map[string]string{
+				estargz.TOCJSONDigestAnnotation: esgzR.TOCDigest().String(),
+			},
+		}
+	}
 	ingester, ok := pusher.(content.Ingester)
 	require.True(t, ok)
 	err = content.WriteBlob(ctx, ingester, "invalid-chainid-layer", bytes.NewReader(modifiedLayerData), modifiedLayerDesc)
@@ -397,8 +411,30 @@ func testBuildWithInvalidChainID(t *testing.T, sb integration.Sandbox) {
 	def, err = llb.Image(modifiedTarget).Run(llb.Shlex("true")).Marshal(sb.Context())
 	require.NoError(t, err)
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	if sb.Snapshotter() == "stargz" {
+		require.NoError(t, err)
+	} else {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to verify layer")
+	}
+
+	def, err = llb.Image(originalTarget).Run(llb.Shlex(`/bin/sh -c "echo hello"`)).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to verify layer")
+	require.True(t, errors.Is(err, os.ErrNotExist))
 }
 
 func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
