@@ -51,6 +51,7 @@ import (
 	"github.com/moby/buildkit/util/overlay"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
+	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -354,16 +355,20 @@ func TestLazyGetByBlob(t *testing.T) {
 	// different digests (due to different compression) and make sure GetByBlob still works
 	_, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
 	require.NoError(t, err)
+	tocDigest := digest.FromBytes([]byte("toc"))
+	desc.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest.String()
 	descHandlers := DescHandlers(make(map[digest.Digest]*DescHandler))
 	descHandlers[desc.Digest] = &DescHandler{}
 	diffID, err := diffIDFromDescriptor(desc)
 	require.NoError(t, err)
 
-	_, err = cm.GetByBlob(ctx, desc, nil, descHandlers)
+	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
 	require.NoError(t, err)
 
 	_, desc2, err := mapToBlob(map[string]string{"foo": "bar"}, false)
 	require.NoError(t, err)
+	tocDigest2 := digest.FromBytes([]byte("toc2"))
+	desc2.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest2.String()
 	descHandlers2 := DescHandlers(make(map[digest.Digest]*DescHandler))
 	descHandlers2[desc2.Digest] = &DescHandler{}
 	diffID2, err := diffIDFromDescriptor(desc2)
@@ -372,8 +377,79 @@ func TestLazyGetByBlob(t *testing.T) {
 	require.NotEqual(t, desc.Digest, desc2.Digest)
 	require.Equal(t, diffID, diffID2)
 
-	_, err = cm.GetByBlob(ctx, desc2, nil, descHandlers2)
+	ref2, err := cm.GetByBlob(ctx, desc2, nil, descHandlers2)
 	require.NoError(t, err)
+
+	nativeRef := ref.(*immutableRef)
+	nativeRef2 := ref2.(*immutableRef)
+	require.Equal(t, nativeRef.getChainID(), nativeRef2.getChainID())
+	require.Equal(t, nativeRef.getSnapshotID(), nativeRef2.getSnapshotID())
+
+	stargzCO, stargzCleanup, err := newCacheManager(ctx, t, cmOpt{
+		snapshotterName: "stargz",
+	})
+	require.NoError(t, err)
+	t.Cleanup(stargzCleanup)
+	stargzCM := stargzCO.manager
+
+	ref, err = stargzCM.GetByBlob(ctx, desc, nil, descHandlers)
+	require.NoError(t, err)
+	ref2, err = stargzCM.GetByBlob(ctx, desc2, nil, descHandlers2)
+	require.NoError(t, err)
+
+	stargzRef := ref.(*immutableRef)
+	stargzRef2 := ref2.(*immutableRef)
+	require.Equal(t, diffID, stargzRef.getDiffID())
+	require.Equal(t, diffID2, stargzRef2.getDiffID())
+	require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID, tocDigest}), stargzRef.getChainID())
+	require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID2, tocDigest2}), stargzRef2.getChainID())
+	require.NotEqual(t, stargzRef.getChainID(), stargzRef2.getChainID())
+	require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
+}
+
+func TestGetByBlobRejectsBlobChainWithDifferentTOC(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		snapshotterName: "stargz",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	blobDigest := digest.FromBytes([]byte("advertised blob"))
+	diffID := digest.FromBytes([]byte("advertised diffID"))
+	tocDigest := digest.FromBytes([]byte("toc"))
+	tocDigest2 := digest.FromBytes([]byte("toc2"))
+	desc := ocispecs.Descriptor{
+		Digest: blobDigest,
+		Annotations: map[string]string{
+			labels.LabelUncompressed:        diffID.String(),
+			estargz.TOCJSONDigestAnnotation: tocDigest.String(),
+		},
+	}
+	desc2 := ocispecs.Descriptor{
+		Digest: blobDigest,
+		Annotations: map[string]string{
+			labels.LabelUncompressed:        diffID.String(),
+			estargz.TOCJSONDigestAnnotation: tocDigest2.String(),
+		},
+	}
+	descHandlers := DescHandlers{
+		blobDigest: &DescHandler{},
+	}
+
+	ref, err := co.manager.GetByBlob(ctx, desc, nil, descHandlers)
+	require.NoError(t, err)
+	ref2, err := co.manager.GetByBlob(ctx, desc2, nil, descHandlers)
+	require.NoError(t, err)
+
+	stargzRef := ref.(*immutableRef)
+	stargzRef2 := ref2.(*immutableRef)
+	require.Equal(t, stargzRef.getBlobChainID(), stargzRef2.getBlobChainID())
+	require.NotEqual(t, stargzRef.ID(), stargzRef2.ID())
+	require.NotEqual(t, stargzRef.getChainID(), stargzRef2.getChainID())
+	require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
 }
 
 func TestMergeBlobchainID(t *testing.T) {
@@ -441,6 +517,109 @@ func TestMergeBlobchainID(t *testing.T) {
 	blobRef, err := cm.GetByBlob(ctx, descs[len(descs)-1], curBlob, descHandlers)
 	require.NoError(t, err)
 	require.Equal(t, mergeRef.ID(), blobRef.ID())
+}
+
+func TestMergeChainIDIncludesStargzTOC(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "stargz",
+	})
+	require.NoError(t, err)
+	firstCleanup := cleanup
+	firstCleanupDone := false
+	t.Cleanup(func() {
+		if !firstCleanupDone {
+			firstCleanup()
+		}
+	})
+
+	baseBlob, baseDesc, err := mapToBlob(map[string]string{"base": "base"}, true)
+	require.NoError(t, err)
+	attackerBlob, attackerDesc, err := mapToBlob(map[string]string{"proof": "attacker"}, true)
+	require.NoError(t, err)
+	_, victimDesc, err := mapToBlob(map[string]string{"proof": "victim"}, true)
+	require.NoError(t, err)
+
+	layerDiffID := digest.Digest(victimDesc.Annotations[labels.LabelUncompressed])
+	tocDigest := digest.FromBytes([]byte("attacker TOC"))
+	attackerDesc.Annotations[labels.LabelUncompressed] = layerDiffID.String()
+	attackerDesc.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest.String()
+	victimDesc.Digest = attackerDesc.Digest
+	victimDesc.Size = attackerDesc.Size
+	victimDesc.MediaType = attackerDesc.MediaType
+
+	contentBuffer := contentutil.NewBuffer()
+	for _, blob := range [][]byte{baseBlob, attackerBlob} {
+		cw, err := contentBuffer.Writer(ctx)
+		require.NoError(t, err)
+		_, err = cw.Write(blob)
+		require.NoError(t, err)
+		require.NoError(t, cw.Commit(ctx, 0, cw.Digest()))
+	}
+	descHandler := &DescHandler{
+		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+	}
+	descHandlers := DescHandlers{
+		baseDesc.Digest:     descHandler,
+		attackerDesc.Digest: descHandler,
+	}
+
+	base, err := co.manager.GetByBlob(ctx, baseDesc, nil, descHandlers, CachePolicyRetain)
+	require.NoError(t, err)
+	attacker, err := co.manager.GetByBlob(ctx, attackerDesc, base, descHandlers, CachePolicyRetain)
+	require.NoError(t, err)
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "base", bytes.NewReader(baseBlob), baseDesc))
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "attacker", bytes.NewReader(attackerBlob), attackerDesc))
+	baseID := base.ID()
+	attackerID := attacker.ID()
+
+	firstCleanup()
+	firstCleanupDone = true
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "stargz",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	base, err = co.manager.Get(ctx, baseID, nil, descHandlers)
+	require.NoError(t, err)
+	attacker, err = co.manager.Get(ctx, attackerID, nil, descHandlers)
+	require.NoError(t, err)
+
+	diff, err := co.manager.Diff(ctx, base, attacker, nil)
+	require.NoError(t, err)
+	merged, err := co.manager.Merge(ctx, []ImmutableRef{base, diff}, nil)
+	require.NoError(t, err)
+	_, err = merged.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil)
+	require.NoError(t, err)
+
+	baseDiffID := digest.Digest(baseDesc.Annotations[labels.LabelUncompressed])
+	attackerIdentity := imagespecidentity.ChainID([]digest.Digest{layerDiffID, tocDigest})
+	expectedMergeChainID := imagespecidentity.ChainID([]digest.Digest{baseDiffID, attackerIdentity})
+	require.Equal(t, attackerIdentity, attacker.(*immutableRef).getLayerIdentity())
+	require.Equal(t, expectedMergeChainID, attacker.(*immutableRef).getChainID())
+	require.Equal(t, expectedMergeChainID, diff.(*immutableRef).getChainID())
+	require.Equal(t, expectedMergeChainID, merged.(*immutableRef).getChainID())
+
+	victim, err := co.manager.GetByBlob(ctx, victimDesc, base, descHandlers)
+	require.NoError(t, err)
+	require.Equal(t, merged.(*immutableRef).getBlobChainID(), victim.(*immutableRef).getBlobChainID())
+	require.NotEqual(t, merged.ID(), victim.ID())
+	require.NotEqual(t, merged.(*immutableRef).getChainID(), victim.(*immutableRef).getChainID())
+	require.NotEqual(t, merged.(*immutableRef).getSnapshotID(), victim.(*immutableRef).getSnapshotID())
 }
 
 func TestSnapshotExtract(t *testing.T) {
@@ -803,6 +982,7 @@ func TestSetBlob(t *testing.T) {
 
 	snapRef = snap.(*immutableRef)
 	require.Equal(t, desc.Annotations[labels.LabelUncompressed], string(snapRef.getDiffID()))
+	require.Equal(t, snapRef.getDiffID(), snapRef.getLayerIdentity())
 	require.Equal(t, desc.Digest, snapRef.getBlob())
 	require.Equal(t, desc.MediaType, snapRef.getMediaType())
 	require.Equal(t, snapRef.getDiffID(), snapRef.getChainID())
