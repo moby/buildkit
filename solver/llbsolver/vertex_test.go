@@ -190,6 +190,47 @@ func TestWithProxyNetworkHostEgressRequiresEntitlement(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidateEntitlementsRejectsDevicesWhenCDIDisabled(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.CdiDevices = []*pb.CDIDevice{
+			{Name: "example.invalid/device=optional", Optional: true},
+			{Name: "example.invalid/device=required"},
+		}
+	})
+	setExecCustomName(t, def, "RUN --device=example.invalid/device=required true")
+
+	for _, tt := range []struct {
+		name         string
+		entitlements entitlements.Set
+	}{
+		{
+			name:         "no device entitlement",
+			entitlements: entitlements.Set{},
+		},
+		{
+			name: "unrestricted device entitlement",
+			entitlements: entitlements.Set{
+				entitlements.EntitlementDevice: &entitlements.DevicesConfig{All: true},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(t.Context(), def, nil, ValidateEntitlements(tt.entitlements, nil))
+			require.EqualError(t, err, `CDI device "example.invalid/device=required" is required by step "RUN --device=example.invalid/device=required true", but CDI device support is disabled`)
+		})
+	}
+}
+
+func TestValidateEntitlementsDropsOptionalDevicesWhenCDIDisabled(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.CdiDevices = []*pb.CDIDevice{{Name: "example.invalid/device=optional", Optional: true}}
+	})
+
+	edge, err := Load(t.Context(), def, nil, ValidateEntitlements(entitlements.Set{}, nil))
+	require.NoError(t, err)
+	require.Empty(t, requireVertexOp(t, edge.Vertex).GetExec().CdiDevices)
+}
+
 func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
 	s := &Solver{proxyNetwork: true}
 
@@ -292,6 +333,24 @@ func marshalTestOp(t *testing.T, op *pb.Op) (digest.Digest, []byte) {
 	dt, err := op.Marshal()
 	require.NoError(t, err)
 	return digest.FromBytes(dt), dt
+}
+
+func setExecCustomName(t *testing.T, def *pb.Definition, name string) {
+	t.Helper()
+	for _, dt := range def.Def {
+		op := new(pb.Op)
+		require.NoError(t, op.Unmarshal(dt))
+		if op.GetExec() == nil {
+			continue
+		}
+		def.Metadata = map[string]*pb.OpMetadata{
+			digest.FromBytes(dt).String(): {
+				Description: map[string]string{"llb.customname": name},
+			},
+		}
+		return
+	}
+	require.FailNow(t, "definition does not contain an exec op")
 }
 
 func requireVertexOp(t *testing.T, v interface{ Sys() any }) *pb.Op {
