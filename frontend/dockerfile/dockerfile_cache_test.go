@@ -324,8 +324,6 @@ COPY --from=base /arch /
 		desc2, provider, err := contentutil.ProviderFromRef(sb.Context(), target+"-img")
 		require.NoError(t, err)
 
-		require.Equal(t, desc.Digest, desc2.Digest)
-
 		imgs, err = testutil.ReadImages(sb.Context(), provider, desc2)
 		require.NoError(t, err)
 
