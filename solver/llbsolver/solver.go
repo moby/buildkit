@@ -291,7 +291,13 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			err = rec(context.WithoutCancel(ctx), resProv, descrefs, err)
 		}()
 	} else if !internal {
-		defer j.CloseProgress()
+		startedAt := time.Now()
+		defer func() {
+			j.CloseProgress()
+			if s.metrics != nil && s.metrics.enabled {
+				s.recordBuildCompletionWithoutHistory(context.WithoutCancel(ctx), j, startedAt, err)
+			}
+		}()
 	}
 
 	if fwd != nil {

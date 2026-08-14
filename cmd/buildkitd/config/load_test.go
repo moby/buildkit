@@ -151,3 +151,30 @@ searchDomains=["example.com"]
 	require.Equal(t, []string{"example.com"}, cfg.DNS.SearchDomains)
 	require.Equal(t, []string{"edns0"}, cfg.DNS.Options)
 }
+
+func TestLoadHistoryMaxEntries(t *testing.T) {
+	tests := []struct {
+		name    string
+		toml    string
+		wantSet bool
+		want    int64
+	}{
+		{name: "unset", toml: "[history]\nmaxAge = 172800\n"},
+		{name: "disabled", toml: "[history]\nmaxEntries = 0\n", wantSet: true, want: 0},
+		{name: "configured", toml: "[history]\nmaxEntries = 12\n", wantSet: true, want: 12},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := Load(bytes.NewBufferString(tc.toml))
+			require.NoError(t, err)
+			require.NotNil(t, cfg.History)
+			if tc.wantSet {
+				require.NotNil(t, cfg.History.MaxEntries)
+				require.Equal(t, tc.want, *cfg.History.MaxEntries)
+			} else {
+				require.Nil(t, cfg.History.MaxEntries)
+			}
+		})
+	}
+}
