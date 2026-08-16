@@ -1,7 +1,6 @@
 package sourcepolicy
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -125,7 +124,7 @@ func TestMutate(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, tc := range testCases {
 		op := tc.op
 		t.Run(op.String(), func(t *testing.T) {

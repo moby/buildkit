@@ -1,7 +1,6 @@
 package llb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +26,7 @@ func TestRelativeWd(t *testing.T) {
 
 func getDirHelper(t *testing.T, s State) string {
 	t.Helper()
-	v, err := s.GetDir(context.TODO())
+	v, err := s.GetDir(t.Context())
 	require.NoError(t, err)
 	return v
 }

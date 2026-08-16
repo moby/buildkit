@@ -33,7 +33,7 @@ func TestGitCLIConfigEnv(t *testing.T) {
 			got = append([]string(nil), cmd.Env...)
 			return nil
 		}))
-		_, err := cli.Run(context.Background(), "status")
+		_, err := cli.Run(t.Context(), "status")
 		require.NoError(t, err)
 		require.Contains(t, got, "GIT_CONFIG_NOSYSTEM=1")
 		require.Contains(t, got, "HOME="+os.DevNull)
@@ -54,7 +54,7 @@ func TestGitCLIConfigEnv(t *testing.T) {
 				return nil
 			}),
 		)
-		_, err := cli.Run(context.Background(), "status")
+		_, err := cli.Run(t.Context(), "status")
 		require.NoError(t, err)
 		require.NotContains(t, got, "GIT_CONFIG_NOSYSTEM=1")
 		require.NotContains(t, got, "HOME="+os.DevNull)

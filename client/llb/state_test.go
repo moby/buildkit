@@ -1,7 +1,6 @@
 package llb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -57,7 +56,7 @@ func TestFormattingPatterns(t *testing.T) {
 
 func TestImageBlobInvalid(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	dgst := digest.FromBytes([]byte("foo"))
 
@@ -79,7 +78,7 @@ func TestImageBlobInvalid(t *testing.T) {
 
 func TestImageBlobSource(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	blobDgst := digest.FromBytes([]byte("foo"))
 
@@ -106,7 +105,7 @@ func TestImageBlobSource(t *testing.T) {
 
 func TestOCILayoutBlobSource(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	blobDgst := digest.FromBytes([]byte("foo"))
 
@@ -146,7 +145,7 @@ func TestStateSourceMapMarshal(t *testing.T) {
 		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 9}}}),
 	)
 
-	def, err := s.Marshal(context.TODO())
+	def, err := s.Marshal(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(def.Def))
@@ -183,7 +182,7 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	s = Merge([]State{s, Image("myimage",
 		sm1.Location([]*pb.Range{{Start: &pb.Position{Line: 10}}}),
 	)})
-	def, err = s.Marshal(context.TODO())
+	def, err = s.Marshal(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, 3, len(def.Def))
 	dgst = digest.FromBytes(def.Def[0])
@@ -229,7 +228,7 @@ func TestPlatformFromImage(t *testing.T) {
 
 	dest := Image("destimage").File(Copy(s, "/", "/")).Run(Args([]string{"afterfile"}))
 
-	def, err := dest.Marshal(context.TODO(), LinuxPpc64le)
+	def, err := dest.Marshal(t.Context(), LinuxPpc64le)
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
@@ -303,7 +302,7 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 
 	dest := Merge([]State{s, s2}).Run(Args([]string{"aftermerge"}))
 
-	def, err := dest.Marshal(context.TODO(), LinuxPpc64le)
+	def, err := dest.Marshal(t.Context(), LinuxPpc64le)
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
@@ -347,7 +346,7 @@ func TestPlatformFromImageWithMerge(t *testing.T) {
 
 func getEnvHelper(t *testing.T, s State, k string) (string, bool) {
 	t.Helper()
-	v, ok, err := s.GetEnv(context.TODO(), k)
+	v, ok, err := s.GetEnv(t.Context(), k)
 	require.NoError(t, err)
 	return v, ok
 }

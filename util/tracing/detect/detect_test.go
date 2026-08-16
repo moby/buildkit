@@ -1,7 +1,6 @@
 package detect
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,8 +26,8 @@ func TestDetectExporterIgnoreErrors(t *testing.T) {
 			t.Setenv("OTEL_METRICS_EXPORTER", "invalid")
 			t.Setenv("OTEL_IGNORE_ERROR", tc.ignoreErrors)
 
-			spanExp, spanErr := NewSpanExporter(context.Background())
-			metricExp, metricErr := NewMetricExporter(context.Background())
+			spanExp, spanErr := NewSpanExporter(t.Context())
+			metricExp, metricErr := NewMetricExporter(t.Context())
 			if tc.wantErr {
 				require.Error(t, spanErr)
 				require.Error(t, metricErr)

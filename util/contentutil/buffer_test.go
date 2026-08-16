@@ -2,7 +2,6 @@ package contentutil
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"testing"
 
@@ -17,7 +16,7 @@ import (
 
 func TestReadWrite(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	b := NewBuffer()
 
@@ -47,7 +46,7 @@ func TestReadWrite(t *testing.T) {
 
 func TestReaderAt(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	b := NewBuffer()
 
@@ -75,7 +74,7 @@ func TestReaderAt(t *testing.T) {
 
 func TestLabels(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	b := NewBuffer()
 

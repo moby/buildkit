@@ -65,7 +65,7 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 	)
 	require.NoError(t, err)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -105,10 +105,10 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 	err = runInDir(localBare, fmt.Sprintf("git fetch %s +refs/*:refs/*", bundlePath))
 	require.NoError(t, err)
 	//nolint:gosec // Test-controlled temp dir and commit SHA are not attacker input.
-	cmd = exec.CommandContext(context.TODO(), "git", "--git-dir="+localBare, "cat-file", "-e", headSha+"^{commit}")
+	cmd = exec.CommandContext(t.Context(), "git", "--git-dir="+localBare, "cat-file", "-e", headSha+"^{commit}")
 	require.NoError(t, cmd.Run(), "bundle does not contain expected commit")
 	//nolint:gosec // Test-controlled temp dir is not attacker input.
-	cmd = exec.CommandContext(context.TODO(), "git", "--git-dir="+localBare, "rev-parse", "--verify", "refs/heads/master")
+	cmd = exec.CommandContext(t.Context(), "git", "--git-dir="+localBare, "rev-parse", "--verify", "refs/heads/master")
 	masterOut, err := cmd.CombinedOutput()
 	require.NoError(t, err, "bundle should carry user's ref refs/heads/master; output=%q", string(masterOut))
 	require.Equal(t, headSha, strings.TrimSpace(string(masterOut)))
@@ -205,7 +205,7 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 		// llb.Git should produce a checkout whose .git carries
 		// refs/heads/master, either loose or packed.
 		//nolint:gosec // Test-controlled export dir is not attacker input.
-		cmd := exec.CommandContext(context.TODO(), "git",
+		cmd := exec.CommandContext(t.Context(), "git",
 			"--git-dir="+filepath.Join(destDir, ".git"),
 			"rev-parse", "--verify", "refs/heads/master")
 		refOut, err := cmd.CombinedOutput()
@@ -214,7 +214,7 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 
 		// HEAD must point at the pinned commit.
 		//nolint:gosec // Test-controlled export dir is not attacker input.
-		cmd = exec.CommandContext(context.TODO(), "git",
+		cmd = exec.CommandContext(t.Context(), "git",
 			"--git-dir="+filepath.Join(destDir, ".git"),
 			"rev-parse", "HEAD")
 		gotOut, err := cmd.CombinedOutput()
@@ -319,7 +319,7 @@ func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 	)
 	require.NoError(t, err)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -456,13 +456,13 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 	err = runInDir(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v0.1")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	commitTag := strings.TrimSpace(string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1^{commit}")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v0.1^{commit}")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -567,19 +567,19 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 	err = runInDir(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 	cmd.Dir = gitDir
 	out, err := cmd.Output()
 	require.NoError(t, err)
 	commitHEAD := strings.TrimSpace(string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v0.1")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)
 	commitTag := strings.TrimSpace(string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.1^{commit}")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v0.1^{commit}")
 	cmd.Dir = gitDir
 	out, err = cmd.Output()
 	require.NoError(t, err)

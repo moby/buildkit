@@ -98,7 +98,7 @@ func TestRawProvider(t *testing.T) {
 
 	client := sshforward.NewSSHClient(c)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err = client.CheckAgent(ctx, &sshforward.CheckAgentRequest{ID: "does-not-exist"})
 	require.ErrorContains(t, err, "does-not-exis")

@@ -3,7 +3,6 @@
 package file
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +11,7 @@ import (
 )
 
 func TestPlatformCopy_RootOnlyProtectedExcludes(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	srcRoot := t.TempDir()
 	destRoot := t.TempDir()

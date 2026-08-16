@@ -39,7 +39,7 @@ func Tmpdir(t *testing.T, appliers ...fstest.Applier) *TmpDirWithName {
 	// appliers might contain fstest.CreateSocket. If the test name is too long,
 	// t.TempDir() could return a path that is longer than 108 characters. This
 	// would result in "bind: invalid argument" when we listen on the socket.
-	tmpdir, err := os.MkdirTemp("", "buildkit")
+	tmpdir, err := os.MkdirTemp("", "buildkit") //nolint:usetesting // see comment above
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

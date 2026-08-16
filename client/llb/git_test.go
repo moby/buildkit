@@ -1,7 +1,6 @@
 package llb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -122,7 +121,7 @@ func TestGit(t *testing.T) {
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := tc.st
-			def, err := st.Marshal(context.TODO())
+			def, err := st.Marshal(t.Context())
 
 			require.NoError(t, err)
 

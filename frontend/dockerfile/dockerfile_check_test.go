@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"regexp"
 	"runtime"
 	"slices"
@@ -1618,10 +1617,6 @@ EXPOSE 127.0.0.1:80:80 [::1]:8080:8080 5000:5000 8000
 }
 
 func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestParams) {
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
 	var warnings []expectedLintWarning
 	if lintTest.UnmarshalWarnings != nil {
 		warnings = lintTest.UnmarshalWarnings
@@ -1682,7 +1677,7 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 		return nil, nil
 	}
 
-	_, err = lintTest.Client.Build(sb.Context(), client.SolveOpt{
+	_, err := lintTest.Client.Build(sb.Context(), client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: lintTest.TmpDir,
 			dockerui.DefaultLocalNameContext:    lintTest.TmpDir,

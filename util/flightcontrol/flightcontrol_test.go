@@ -16,7 +16,7 @@ import (
 func TestNoCancel(t *testing.T) {
 	t.Parallel()
 	g := &Group[string]{}
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	var r1, r2 string
 	var counter int64
 	f := testFunc(100*time.Millisecond, "bar", &counter)
@@ -46,7 +46,7 @@ func TestNoCancel(t *testing.T) {
 func TestCancelOne(t *testing.T) {
 	t.Parallel()
 	g := &Group[string]{}
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	var r1, r2 string
 	var counter int64
 	f := testFunc(100*time.Millisecond, "bar", &counter)
@@ -88,7 +88,7 @@ func TestCancelRace(t *testing.T) {
 	// t.Parallel() // disabled for better timing consistency. works with parallel as well
 
 	g := &Group[struct{}]{}
-	ctx, cancel := context.WithCancelCause(context.Background())
+	ctx, cancel := context.WithCancelCause(t.Context())
 
 	kick := make(chan struct{})
 	wait := make(chan struct{})
@@ -129,7 +129,7 @@ func TestCancelRace(t *testing.T) {
 		<-kick
 		cancel(errors.WithStack(context.Canceled))
 		time.Sleep(5 * time.Millisecond)
-		_, err := g.Do(context.Background(), "foo", f)
+		_, err := g.Do(t.Context(), "foo", f)
 		assert.NoError(t, err)
 	}()
 
@@ -142,7 +142,7 @@ func TestCancelRace(t *testing.T) {
 func TestCancelBoth(t *testing.T) {
 	t.Parallel()
 	g := &Group[string]{}
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	var r1, r2 string
 	var counter int64
 	f := testFunc(200*time.Millisecond, "bar", &counter)
@@ -189,11 +189,11 @@ func TestCancelBoth(t *testing.T) {
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "", r2)
 	assert.Equal(t, int64(1), counter)
-	ret1, err := g.Do(context.TODO(), "foo", f)
+	ret1, err := g.Do(t.Context(), "foo", f)
 	require.NoError(t, err)
 	assert.Equal(t, "bar", ret1)
 
-	ret1, err = g.Do(context.TODO(), "abc", f)
+	ret1, err = g.Do(t.Context(), "abc", f)
 	require.NoError(t, err)
 	assert.Equal(t, "bar", ret1)
 
@@ -211,7 +211,7 @@ func TestContention(t *testing.T) {
 
 	for range threads {
 		for range perthread {
-			_, err := g.Do(context.TODO(), "foo", func(ctx context.Context) (int, error) {
+			_, err := g.Do(t.Context(), "foo", func(ctx context.Context) (int, error) {
 				time.Sleep(time.Microsecond)
 				return 0, nil
 			})
@@ -226,7 +226,7 @@ func TestContention(t *testing.T) {
 func TestMassiveParallel(t *testing.T) {
 	var retryCount int64
 	g := &Group[string]{}
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	for range 1000 {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {

@@ -1,7 +1,6 @@
 package metadata
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -141,7 +140,7 @@ func TestIndexes(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	sis, err := s.Search(ctx, "tag:baz", false)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(sis))

@@ -41,7 +41,7 @@ func TestExportSpansDropsExpiredRequest(t *testing.T) {
 		},
 	})
 
-	e.exportSpans(context.Background(), exportRequest{
+	e.exportSpans(t.Context(), exportRequest{
 		deadline: time.Now().Add(-time.Millisecond),
 		spans:    testSpans,
 	})
@@ -55,7 +55,7 @@ func TestShutdownReturnsWhenExportBlocks(t *testing.T) {
 	exportDone := make(chan struct{})
 	var exportStartedOnce sync.Once
 
-	e, err := New(context.Background(), testExporter{
+	e, err := New(t.Context(), testExporter{
 		exportSpans: func(context.Context, []sdktrace.ReadOnlySpan) error {
 			exportStartedOnce.Do(func() {
 				close(exportStarted)
@@ -67,10 +67,10 @@ func TestShutdownReturnsWhenExportBlocks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, e.ExportSpans(context.Background(), testSpans))
+	require.NoError(t, e.ExportSpans(t.Context(), testSpans))
 	requireCloses(t, exportStarted)
 
-	ctx, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, context.DeadlineExceeded)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 50*time.Millisecond, context.DeadlineExceeded)
 	defer cancel()
 
 	start := time.Now()
@@ -86,7 +86,7 @@ func TestShutdownReturnsWhenExportBlocks(t *testing.T) {
 func TestShutdownPassesContextToExporterShutdown(t *testing.T) {
 	shutdownStarted := make(chan struct{})
 
-	e, err := New(context.Background(), testExporter{
+	e, err := New(t.Context(), testExporter{
 		shutdown: func(ctx context.Context) error {
 			close(shutdownStarted)
 			<-ctx.Done()
@@ -95,7 +95,7 @@ func TestShutdownPassesContextToExporterShutdown(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeoutCause(context.Background(), 50*time.Millisecond, context.DeadlineExceeded)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 50*time.Millisecond, context.DeadlineExceeded)
 	defer cancel()
 
 	errCh := make(chan error, 1)
@@ -116,7 +116,7 @@ func TestShutdownPassesContextToExporterShutdown(t *testing.T) {
 func TestShutdownDrainsPendingExports(t *testing.T) {
 	var exports atomic.Int64
 	var shutdowns atomic.Int64
-	e, err := New(context.Background(), testExporter{
+	e, err := New(t.Context(), testExporter{
 		exportSpans: func(context.Context, []sdktrace.ReadOnlySpan) error {
 			exports.Add(1)
 			return nil
@@ -128,10 +128,10 @@ func TestShutdownDrainsPendingExports(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, e.ExportSpans(context.Background(), testSpans))
-	require.NoError(t, e.ExportSpans(context.Background(), testSpans))
-	require.NoError(t, e.ExportSpans(context.Background(), testSpans))
-	require.NoError(t, e.Shutdown(context.Background()))
+	require.NoError(t, e.ExportSpans(t.Context(), testSpans))
+	require.NoError(t, e.ExportSpans(t.Context(), testSpans))
+	require.NoError(t, e.ExportSpans(t.Context(), testSpans))
+	require.NoError(t, e.Shutdown(t.Context()))
 
 	require.Equal(t, int64(3), exports.Load())
 	require.Equal(t, int64(1), shutdowns.Load())

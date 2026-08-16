@@ -1,7 +1,6 @@
 package cachedigest
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -38,7 +37,7 @@ func TestFromBytesAndGet(t *testing.T) {
 
 	db.Wait()
 
-	gotType, frames, err := db.Get(context.Background(), dgst.String())
+	gotType, frames, err := db.Get(t.Context(), dgst.String())
 	require.NoError(t, err)
 	require.Equal(t, typ, gotType)
 
@@ -51,7 +50,7 @@ func TestFromBytesAndGet(t *testing.T) {
 	}
 	require.True(t, foundData, "should find data frame")
 
-	_, _, err = db.Get(context.Background(), digest.FromBytes([]byte("notfound")).String())
+	_, _, err = db.Get(t.Context(), digest.FromBytes([]byte("notfound")).String())
 	require.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -83,7 +82,7 @@ func TestNewHashAndGet(t *testing.T) {
 	expectedHash := digest.FromBytes(expectedConcat)
 	require.Equal(t, expectedHash, sum, "digest sum should match expected value")
 
-	gotType, frames, err := db.Get(context.Background(), sum.String())
+	gotType, frames, err := db.Get(t.Context(), sum.String())
 	require.NoError(t, err)
 	require.Equal(t, TypeStringList, gotType)
 
@@ -171,7 +170,7 @@ func TestAll(t *testing.T) {
 		frames []Frame
 	})
 
-	err := db.All(context.TODO(), func(key string, typ Type, frames []Frame) error {
+	err := db.All(t.Context(), func(key string, typ Type, frames []Frame) error {
 		found[key] = struct {
 			typ    Type
 			frames []Frame

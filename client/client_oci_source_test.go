@@ -150,9 +150,7 @@ func testNoTarOCIIndexMediaType(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	outDir := filepath.Join(destDir, "out.d")
 	require.NoError(t, err)
@@ -197,9 +195,7 @@ func testOCIIndexMediatype(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	destDir := t.TempDir()
 
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
@@ -339,7 +335,7 @@ func testOCILayoutBlobSource(t *testing.T, sb integration.Sandbox) {
 func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := New(t.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -502,7 +498,7 @@ func testOCILayoutPlatformSource(t *testing.T, sb integration.Sandbox) {
 
 func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := New(t.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -577,12 +573,12 @@ func testOCILayoutSource(t *testing.T, sb integration.Sandbox) {
 	csID := "my-content-store"
 	st = llb.OCILayout(fmt.Sprintf("not/real@%s", digest), llb.OCIStore("", csID))
 
-	def, err = st.Marshal(context.TODO())
+	def, err = st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	destDir := t.TempDir()
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(t.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type:      ExporterLocal,

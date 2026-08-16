@@ -37,5 +37,5 @@ func runApplyMainFlags(t *testing.T, args []string, cfg *config.Config) error {
 			return applyMainFlags(cmd, cfg, nil)
 		},
 	}
-	return cmd.Run(context.Background(), append([]string{"buildkitd"}, args...))
+	return cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
 }

@@ -10,8 +10,8 @@ import (
 
 func TestContextWithCaller(t *testing.T) {
 	t.Run("caller close cancels derived context", func(t *testing.T) {
-		callerCtx, callerCancel := context.WithCancelCause(context.Background())
-		ctx := contextWithCaller(context.Background(), callerCtx)
+		callerCtx, callerCancel := context.WithCancelCause(t.Context())
+		ctx := contextWithCaller(t.Context(), callerCtx)
 
 		callerCancel(context.DeadlineExceeded)
 
@@ -24,8 +24,8 @@ func TestContextWithCaller(t *testing.T) {
 	})
 
 	t.Run("request close cancels derived context", func(t *testing.T) {
-		baseCtx, cancel := context.WithCancelCause(context.Background())
-		ctx := contextWithCaller(baseCtx, context.Background())
+		baseCtx, cancel := context.WithCancelCause(t.Context())
+		ctx := contextWithCaller(baseCtx, t.Context())
 		cancel(context.Canceled)
 
 		select {

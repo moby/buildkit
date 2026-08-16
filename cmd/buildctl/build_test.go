@@ -109,7 +109,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit")
 
 	img, err := client.GetImage(ctx, imageName)
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		defer client.Close()
 
-		ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+		ctx := namespaces.WithNamespace(t.Context(), "buildkit")
 
 		img, err := client.GetImage(ctx, imageName)
 		require.NoError(t, err)

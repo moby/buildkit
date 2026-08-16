@@ -75,7 +75,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		snapshotterName: ctdSnapshotter,
 	})
-	if err := mdb.Init(context.TODO()); err != nil {
+	if err := mdb.Init(t.Context()); err != nil {
 		return nil, nil, err
 	}
 
@@ -112,7 +112,7 @@ func TestMerge(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
+			ctx, sn, err := newSnapshotter(t.Context(), t, snName)
 			require.NoError(t, err)
 
 			ts := time.Unix(0, 0)
@@ -315,7 +315,7 @@ func TestHardlinks(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
+			ctx, sn, err := newSnapshotter(t.Context(), t, snName)
 			require.NoError(t, err)
 
 			base1Snap := committedKey(ctx, t, sn, identity.NewID(), "",
@@ -377,7 +377,7 @@ func TestMergeFileCapabilities(t *testing.T) {
 		t.Run(snName, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
+			ctx, sn, err := newSnapshotter(t.Context(), t, snName)
 			require.NoError(t, err)
 
 			setCaps := "cap_net_bind_service=+ep"
@@ -413,7 +413,7 @@ func TestUsage(t *testing.T) {
 				requireRoot(t)
 			}
 
-			ctx, sn, err := newSnapshotter(context.Background(), t, snName)
+			ctx, sn, err := newSnapshotter(t.Context(), t, snName)
 			require.NoError(t, err)
 
 			const direntByteSize = 4096

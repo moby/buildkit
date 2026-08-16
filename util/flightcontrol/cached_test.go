@@ -12,7 +12,7 @@ import (
 func TestCached(t *testing.T) {
 	var g CachedGroup[int]
 
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	v, err := g.Do(ctx, "11", func(ctx context.Context) (int, error) {
 		return 1, nil
@@ -55,7 +55,7 @@ func TestCachedError(t *testing.T) {
 	var g CachedGroup[string]
 	g.CacheError = true
 
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	_, err := g.Do(ctx, "11", func(ctx context.Context) (string, error) {
 		return "", errors.New("first error")
@@ -70,7 +70,7 @@ func TestCachedError(t *testing.T) {
 	require.ErrorContains(t, err, "first error")
 
 	// context errors are never cached
-	ctx, cancel := context.WithTimeoutCause(context.TODO(), 10*time.Millisecond, nil)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 10*time.Millisecond, nil)
 	defer cancel()
 	_, err = g.Do(ctx, "22", func(ctx context.Context) (string, error) {
 		select {

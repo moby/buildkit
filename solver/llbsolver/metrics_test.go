@@ -1,7 +1,6 @@
 package llbsolver
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -32,7 +31,7 @@ func newTestMetrics(t *testing.T) (*buildMetrics, *sdkmetric.ManualReader) {
 func collect(t *testing.T, reader *sdkmetric.ManualReader) map[string]metricdata.Aggregation {
 	t.Helper()
 	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &rm))
+	require.NoError(t, reader.Collect(t.Context(), &rm))
 	out := map[string]metricdata.Aggregation{}
 	for _, sm := range rm.ScopeMetrics {
 		for _, m := range sm.Metrics {
@@ -83,7 +82,7 @@ func TestRecordBuildCompletion_Success(t *testing.T) {
 		NumWarnings:       1,
 	}
 
-	bm.recordBuildCompletion(context.Background(), rec)
+	bm.recordBuildCompletion(t.Context(), rec)
 	got := collect(t, reader)
 
 	builds := findCounterPoint(t, got["buildkit.builds"], map[string]string{
@@ -123,7 +122,7 @@ func TestRecordBuildCompletion_FailureGRPCCodes(t *testing.T) {
 				CompletedAt: timestamppb.New(start.Add(time.Second)),
 				Error:       &rpcstatus.Status{Code: int32(tc.code), Message: "ignored: must not appear as a label"},
 			}
-			bm.recordBuildCompletion(context.Background(), rec)
+			bm.recordBuildCompletion(t.Context(), rec)
 
 			builds := findCounterPoint(t, collect(t, reader)["buildkit.builds"], map[string]string{
 				"status":     "failure",
@@ -145,7 +144,7 @@ func TestRecordBuildCompletion_StepCounters(t *testing.T) {
 		NumTotalSteps:     10,
 		NumWarnings:       2,
 	}
-	bm.recordBuildCompletion(context.Background(), rec)
+	bm.recordBuildCompletion(t.Context(), rec)
 
 	steps := collect(t, reader)["buildkit.builds.steps"]
 	for kind, want := range map[string]int64{
@@ -164,12 +163,12 @@ func TestRecordBuildCompletion_NilSafe(t *testing.T) {
 	// at solver/llbsolver/history.go do not have to guard the call.
 	var bm *buildMetrics
 	require.NotPanics(t, func() {
-		bm.recordBuildCompletion(context.Background(), &controlapi.BuildHistoryRecord{})
+		bm.recordBuildCompletion(t.Context(), &controlapi.BuildHistoryRecord{})
 	})
 
 	bm, _ = newTestMetrics(t)
 	require.NotPanics(t, func() {
-		bm.recordBuildCompletion(context.Background(), nil)
+		bm.recordBuildCompletion(t.Context(), nil)
 	})
 }
 
@@ -181,7 +180,7 @@ func TestNewBuildMetrics_NilProviderUsesNoop(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, bm)
 	require.NotPanics(t, func() {
-		bm.recordBuildCompletion(context.Background(), &controlapi.BuildHistoryRecord{
+		bm.recordBuildCompletion(t.Context(), &controlapi.BuildHistoryRecord{
 			CreatedAt:   timestamppb.Now(),
 			CompletedAt: timestamppb.Now(),
 		})

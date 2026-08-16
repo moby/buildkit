@@ -15,7 +15,7 @@ import (
 
 func TestFetcher(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	b0 := NewBuffer()
 
@@ -50,7 +50,7 @@ func TestFetcher(t *testing.T) {
 
 func TestSlowFetch(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	f := &dummySlowFetcher{}
 	p := FromFetcher(f)

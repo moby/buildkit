@@ -10,7 +10,7 @@ import (
 )
 
 func TestAsyncNonBlocking(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	wait := make(chan struct{})
 	ran := make(chan struct{})

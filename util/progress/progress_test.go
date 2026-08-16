@@ -17,11 +17,11 @@ import (
 
 func TestProgress(t *testing.T) {
 	t.Parallel()
-	s, err := calc(context.TODO(), 4, "calc")
+	s, err := calc(t.Context(), 4, "calc")
 	require.NoError(t, err)
 	assert.Equal(t, 10, s)
 
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 
 	pr, ctx, cancelProgress := NewContext(ctx)
 	var trace trace
@@ -50,7 +50,7 @@ func TestProgress(t *testing.T) {
 
 func TestProgressNested(t *testing.T) {
 	t.Parallel()
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	pr, ctx, cancelProgress := NewContext(ctx)
 	var trace trace
 	eg.Go(func() error {

@@ -105,7 +105,7 @@ RUN --mount=type=ssh apk update \
 	defer c.Close()
 
 	// not using t.TempDir() here because the path ends up longer than the unix socket max length
-	tmpDir, err := os.MkdirTemp("", "buildkit-ssh-test-")
+	tmpDir, err := os.MkdirTemp("", "buildkit-ssh-test-") //nolint:usetesting // see comment above
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		os.RemoveAll(tmpDir)
