@@ -68,6 +68,9 @@ type cmOut struct {
 	manager Manager
 	lm      leases.Manager
 	cs      content.Store
+	// testSnapshotter bypasses the namespaced wrapper and must only be used by
+	// tests that need to simulate out-of-band snapshotter changes.
+	testSnapshotter snapshots.Snapshotter
 }
 
 func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, cleanup func(), err error) {
@@ -144,8 +147,9 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, c
 		return md.Close()
 	})
 
+	metadataSnapshotter := mdb.Snapshotter(opt.snapshotterName)
 	cm, err := NewManager(ManagerOpt{
-		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
+		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, metadataSnapshotter), nil),
 		MetadataStore:  md,
 		ContentStore:   store,
 		LeaseManager:   lm,
@@ -163,9 +167,10 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, c
 	})
 
 	return &cmOut{
-		manager: cm,
-		lm:      lm,
-		cs:      store,
+		manager:         cm,
+		lm:              lm,
+		cs:              store,
+		testSnapshotter: metadataSnapshotter,
 	}, cleanup, nil
 }
 
@@ -572,6 +577,56 @@ func TestSnapshotExtract(t *testing.T) {
 	require.Equal(t, 0, len(dirs))
 
 	checkNumBlobs(ctx, t, co.cs, 0)
+}
+
+func TestMissingMaterializedLowerDiffExtract(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	var refs []ImmutableRef
+	for i, files := range []map[string]string{
+		{"lower": "lower"},
+		{"upper": "upper"},
+	} {
+		blob, desc, err := mapToBlob(files, true)
+		require.NoError(t, err)
+		require.NoError(t, content.WriteBlob(ctx, co.cs, fmt.Sprintf("missing-snapshot-%d", i), bytes.NewBuffer(blob), desc))
+
+		ref, err := cm.GetByBlob(ctx, desc, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, ref.Release(context.WithoutCancel(ctx)))
+		})
+		refs = append(refs, ref)
+	}
+
+	require.NoError(t, refs[0].Extract(ctx, nil))
+	require.NoError(t, refs[1].Extract(ctx, nil))
+	require.False(t, refs[0].(*immutableRef).getBlobOnly())
+	diff, err := cm.Diff(ctx, refs[0], refs[1], nil)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, diff.Release(context.WithoutCancel(ctx)))
+	})
+
+	lowerID := refs[0].(*immutableRef).getSnapshotID()
+	require.NoError(t, co.testSnapshotter.Remove(ctx, lowerID))
+
+	_, err = co.testSnapshotter.Stat(ctx, lowerID)
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
+
+	require.NoError(t, diff.Extract(ctx, nil))
+	_, err = co.testSnapshotter.Stat(ctx, lowerID)
+	require.NoError(t, err)
 }
 
 func TestExtractOnMutable(t *testing.T) {
