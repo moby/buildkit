@@ -23,8 +23,7 @@ func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorag
 	cc.computeIDs()
 
 	for it := range cc.leaves() {
-		visited := make(map[*item]*itemWithOutgoingLinks)
-		if _, err := addItemToStorage(storage, it, visited); err != nil {
+		if _, err := addItemToStorage(storage, it); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -39,30 +38,34 @@ func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorag
 	return storage, results, nil
 }
 
-func addItemToStorage(k *cacheKeyStorage, it *item, visited map[*item]*itemWithOutgoingLinks) (*itemWithOutgoingLinks, error) {
-	if v, ok := visited[it]; ok {
-		return v, nil
-	}
-	visited[it] = nil
-
+func addItemToStorage(k *cacheKeyStorage, it *item) (*itemWithOutgoingLinks, error) {
 	if id, ok := k.byItem[it]; ok {
-		if id == "" {
-			return nil, errors.New("invalid loop")
-		}
 		return k.byID[id], nil
 	}
 
+	// it.id is already final at this point (computeIDs runs before this
+	// function is ever called), so it's safe to register this item's
+	// storage entry - and make it visible to other callers - before
+	// recursing into its own dependencies below. Merge ops can coincidentally
+	// produce byte-identical content at more than one point in the same
+	// chain, which makes the dependency graph loop back on itself; if a
+	// reentrant call for the same item arrives while we're still walking
+	// its parents, it now gets this same, real (if not yet fully populated)
+	// entry back and can append its link to it, rather than getting nil and
+	// silently dropping the link.
 	id := it.id
-	k.byItem[it] = ""
+	itl := &itemWithOutgoingLinks{
+		item:  it,
+		links: map[nlink][]string{},
+	}
+	k.byItem[it] = id
+	k.byID[id] = itl
 
 	for i, m := range it.parents {
 		for l := range m {
-			src, err := addItemToStorage(k, l.src, visited)
+			src, err := addItemToStorage(k, l.src)
 			if err != nil {
 				return nil, err
-			}
-			if src == nil {
-				continue
 			}
 			cl := nlink{
 				input:    i,
@@ -72,15 +75,6 @@ func addItemToStorage(k *cacheKeyStorage, it *item, visited map[*item]*itemWithO
 			src.links[cl] = append(src.links[cl], id)
 		}
 	}
-
-	k.byItem[it] = id
-
-	itl := &itemWithOutgoingLinks{
-		item:  it,
-		links: map[nlink][]string{},
-	}
-
-	k.byID[id] = itl
 
 	seen := map[string]struct{}{}
 	for _, res := range it.results {
@@ -96,7 +90,6 @@ func addItemToStorage(k *cacheKeyStorage, it *item, visited map[*item]*itemWithO
 		}
 		ids[id] = struct{}{}
 	}
-	visited[it] = itl
 	return itl, nil
 }
 
