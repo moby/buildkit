@@ -180,7 +180,7 @@ jobs:
       -
         name: Generate annotations
         if: always()
-        uses: crazy-max/.github/.github/actions/gotest-annotations@46267a6e61cd56aac2fc79943df180152f4c89d6 # v1.10.1
+        uses: crazy-max/.github/.github/actions/gotest-annotations@f91220cba053bd54299ba645a599ee8ed436f222 # v1.11.0
         with:
           directory: ./bin/testreports
       -
