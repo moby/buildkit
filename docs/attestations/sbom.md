@@ -198,3 +198,7 @@ The exact output will depend on the generator you use, however, generally:
 Entries in the `files` and `packages` will contain a `comment` field that
 contains the `sha256` digest of the layer which introduced it if that layer is
 present in the final image.
+
+Generated SBOM attestation files are limited to 40 MiB before they are
+attached to the exported image. Large SPDX JSON documents can approach this
+limit because SPDX includes detailed file, package, and relationship metadata.
