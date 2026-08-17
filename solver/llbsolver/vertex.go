@@ -20,6 +20,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const proxyNetworkCacheSalt = "\x00buildkit.proxy-network.v1"
+
 type vertex struct {
 	sys     any
 	options solver.VertexOptions
@@ -331,7 +333,7 @@ func recomputeDigests(ctx context.Context, all map[digest.Digest]*op, visited ma
 		return "", err
 	}
 	if op.ProxyNetwork {
-		dt = append(dt, []byte("\x00buildkit.proxy-network.v0")...)
+		dt = append(dt, []byte(proxyNetworkCacheSalt)...)
 	}
 
 	newDgst := digest.FromBytes(dt)
