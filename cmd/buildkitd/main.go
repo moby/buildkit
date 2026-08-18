@@ -326,7 +326,7 @@ func main() {
 				if *v <= 0 {
 					return errors.Errorf("maxRegistryConcurrency must be greater than zero; set to %d in the configuration file", *v)
 				}
-				limited.SetMaxConcurrency(*v)
+				limited.SetMaxConcurrency(int64(*v))
 			}
 		}
 
