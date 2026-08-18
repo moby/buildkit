@@ -85,6 +85,10 @@ The contents of each layer will be a blob dependent on its `mediaType`.
   target manifest described in the [Attestation Manifest Descriptor](#attestation-manifest-descriptor),
   or some object within.
 
+BuildKit limits each attestation file read from a build result to 40 MiB
+before wrapping it as an in-toto statement. This protects exporters from
+unbounded reads of frontend-provided attestation files.
+
 ### Attestation Manifest Descriptor
 
 Attestation manifests are attached to the root [image index](https://github.com/opencontainers/image-spec/blob/main/image-index.md),
