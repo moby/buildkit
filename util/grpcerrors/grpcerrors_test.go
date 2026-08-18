@@ -216,7 +216,7 @@ func TestToGRPCMessage(t *testing.T) {
 		encoded := grpcerrors.ToGRPC(t.Context(), joined)
 		decoded := grpcerrors.FromGRPC(encoded)
 
-		assert.ErrorContains(t, decoded, wrapped.Error()) //nolint:testifylint // error is not critical
+		require.ErrorContains(t, decoded, wrapped.Error()) //nolint:testifylint // error is not critical
 		assert.ErrorContains(t, decoded, anotherErr.Error())
 	})
 }

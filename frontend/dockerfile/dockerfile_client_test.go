@@ -320,7 +320,6 @@ COPY Dockerfile Dockerfile
 			},
 			Frontend: "dockerfile.v0",
 		})
-		require.Error(t, err)
 		var reqErr *errdefs.UnsupportedSubrequestError
 		require.ErrorAs(t, err, &reqErr)
 		require.Equal(t, "frontend.subrequests.notexist", reqErr.GetName())
@@ -331,7 +330,6 @@ COPY Dockerfile Dockerfile
 			},
 			Frontend: "dockerfile.v0",
 		})
-		require.Error(t, err)
 		var capErr *errdefs.UnsupportedFrontendCapError
 		require.ErrorAs(t, err, &capErr)
 		require.Equal(t, "moby.buildkit.frontend.notexistcap", capErr.GetName())

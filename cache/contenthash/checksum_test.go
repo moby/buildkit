@@ -512,12 +512,10 @@ func TestSymlinksNoFollow(t *testing.T) {
 	require.Equal(t, expectedSym, dgst)
 
 	_, err = cc.Checksum(t.Context(), ref, "foo/ghi", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil) // same because broken symlink
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	_, err = cc.Checksum(t.Context(), ref, "y1", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	dgst, err = cc.Checksum(t.Context(), ref, "sym", ChecksumOpts{}, nil)
 	require.NoError(t, err)
@@ -611,8 +609,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	require.Equal(t, dgstFileData0, dgst)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0/ghi", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	dgst, err = cc.Checksum(t.Context(), ref, "/", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
@@ -1062,12 +1059,10 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0/abc", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	err = ref.Release(t.Context())
 	require.NoError(t, err)

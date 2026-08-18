@@ -52,7 +52,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 			"/foo: no such file or directory",
 			winErrMsgs[i],
 		)
-		require.Contains(t, err.Error(), errMsg)
+		require.ErrorContains(t, err, errMsg)
 
 		imgName := integration.UnixOrWindows(
 			"busybox:latest",
@@ -514,7 +514,7 @@ func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
 		"bar: no such file",
 		"bar: The system cannot find the file specified",
 	)
-	require.Contains(t, err.Error(), errStr)
+	require.ErrorContains(t, err, errStr)
 }
 
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
@@ -690,7 +690,7 @@ func testFileOpSymlink(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, linkGroup, header.Gid)
 
 	// ensure it was timestamped properly
-	require.Equal(t, dummyTime, header.ModTime)
+	require.WithinDuration(t, dummyTime, header.ModTime, 0)
 }
 
 // #2490

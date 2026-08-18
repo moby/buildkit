@@ -10,7 +10,6 @@ import (
 
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,7 +72,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	require.True(t, ok)
 	f1, ok := m["foo1"]
 	require.True(t, ok)
-	require.True(t, f0.CreatedAt.Before(f1.CreatedAt), "f0.CreatedAt %v was not Before f1.CreatedAt %v", f0.CreatedAt, f1.CreatedAt)
+	require.Less(t, f0.CreatedAt, f1.CreatedAt, "f0.CreatedAt %v was not Before f1.CreatedAt %v", f0.CreatedAt, f1.CreatedAt)
 
 	m = map[string]solver.CacheResult{}
 	err = st.WalkResults("bar", func(r solver.CacheResult) error {
@@ -99,12 +98,10 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	require.Equal(t, "foo1", res.ID)
 
 	_, err = st.Load("foo1", "foo1")
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
+	require.ErrorIs(t, err, solver.ErrNotFound)
 
 	_, err = st.Load("foo", "foo2")
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
+	require.ErrorIs(t, err, solver.ErrNotFound)
 }
 
 func testLinks(t *testing.T, st solver.CacheKeyStorage) {

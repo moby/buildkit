@@ -214,8 +214,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid response")
+	require.ErrorContains(t, err, "invalid response")
 }
 
 func TestHTTPCredentialsRedactedInError(t *testing.T) {
@@ -365,7 +364,6 @@ func TestHTTPSignatureVerification(t *testing.T) {
 		h, err := hs.Resolve(ctx, id, nil, nil)
 		require.NoError(t, err)
 		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to verify pgp signature")
 	})
 
@@ -395,7 +393,6 @@ func TestHTTPSignatureVerification(t *testing.T) {
 		h, err := hs.Resolve(ctx, id, nil, nil)
 		require.NoError(t, err)
 		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "requires both pubkey and signature")
 	})
 }

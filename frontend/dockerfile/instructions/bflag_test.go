@@ -4,27 +4,22 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuilderFlags(t *testing.T) {
-	var expected string
-	var err error
-
 	// ---
 
 	bf := NewBFlags()
 	bf.Args = []string{}
-	if err := bf.Parse(); err != nil {
-		t.Fatalf("Test1 of %q was supposed to work: %s", bf.Args, err)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test1 of %q was supposed to work", bf.Args)
 
 	// ---
 
 	bf = NewBFlags()
 	bf.Args = []string{"--"}
-	if err := bf.Parse(); err != nil {
-		t.Fatalf("Test2 of %q was supposed to work: %s", bf.Args, err)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test2 of %q was supposed to work", bf.Args)
 
 	// ---
 
@@ -32,16 +27,10 @@ func TestBuilderFlags(t *testing.T) {
 	flStr1 := bf.AddString("str1", "")
 	flBool1 := bf.AddBool("bool1", false)
 	bf.Args = []string{}
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test3 of %q was supposed to work: %s", bf.Args, err)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test3 of %q was supposed to work", bf.Args)
 
-	if flStr1.IsUsed() {
-		t.Fatal("Test3 - str1 was not used!")
-	}
-	if flBool1.IsUsed() {
-		t.Fatal("Test3 - bool1 was not used!")
-	}
+	require.False(t, flStr1.IsUsed(), "Test3 - str1 was not used!")
+	require.False(t, flBool1.IsUsed(), "Test3 - bool1 was not used!")
 
 	// ---
 
@@ -50,22 +39,12 @@ func TestBuilderFlags(t *testing.T) {
 	flBool1 = bf.AddBool("bool1", false)
 	bf.Args = []string{}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test4 of %q was supposed to work: %s", bf.Args, err)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test4 of %q was supposed to work", bf.Args)
 
-	if flStr1.Value != "HI" {
-		t.Fatal("Str1 was supposed to default to: HI")
-	}
-	if flBool1.IsTrue() {
-		t.Fatal("Bool1 was supposed to default to: false")
-	}
-	if flStr1.IsUsed() {
-		t.Fatal("Str1 was not used!")
-	}
-	if flBool1.IsUsed() {
-		t.Fatal("Bool1 was not used!")
-	}
+	require.Equal(t, "HI", flStr1.Value, "Str1 was supposed to default to: HI")
+	require.False(t, flBool1.IsTrue(), "Bool1 was supposed to default to: false")
+	require.False(t, flStr1.IsUsed(), "Str1 was not used!")
+	require.False(t, flBool1.IsUsed(), "Bool1 was not used!")
 
 	// ---
 
@@ -73,9 +52,7 @@ func TestBuilderFlags(t *testing.T) {
 	bf.AddString("str1", "HI")
 	bf.Args = []string{"--str1"}
 
-	if err = bf.Parse(); err == nil {
-		t.Fatalf("Test %q was supposed to fail", bf.Args)
-	}
+	require.Errorf(t, bf.Parse(), "Test %q was supposed to fail", bf.Args)
 
 	// ---
 
@@ -83,14 +60,8 @@ func TestBuilderFlags(t *testing.T) {
 	flStr1 = bf.AddString("str1", "HI")
 	bf.Args = []string{"--str1="}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	expected = ""
-	if flStr1.Value != expected {
-		t.Fatalf("Str1 (%q) should be: %q", flStr1.Value, expected)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.Emptyf(t, flStr1.Value, "Str1 (%q) should be: %q", flStr1.Value, "")
 
 	// ---
 
@@ -98,14 +69,8 @@ func TestBuilderFlags(t *testing.T) {
 	flStr1 = bf.AddString("str1", "HI")
 	bf.Args = []string{"--str1=BYE"}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	expected = "BYE"
-	if flStr1.Value != expected {
-		t.Fatalf("Str1 (%q) should be: %q", flStr1.Value, expected)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.Equalf(t, "BYE", flStr1.Value, "Str1 (%q) should be: %q", flStr1.Value, "BYE")
 
 	// ---
 
@@ -113,13 +78,8 @@ func TestBuilderFlags(t *testing.T) {
 	flBool1 = bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1"}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	if !flBool1.IsTrue() {
-		t.Fatal("Test-b1 Bool1 was supposed to be true")
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.True(t, flBool1.IsTrue(), "Test-b1 Bool1 was supposed to be true")
 
 	// ---
 
@@ -127,13 +87,8 @@ func TestBuilderFlags(t *testing.T) {
 	flBool1 = bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1=true"}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	if !flBool1.IsTrue() {
-		t.Fatal("Test-b2 Bool1 was supposed to be true")
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.True(t, flBool1.IsTrue(), "Test-b2 Bool1 was supposed to be true")
 
 	// ---
 
@@ -141,13 +96,8 @@ func TestBuilderFlags(t *testing.T) {
 	flBool1 = bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1=false"}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	if flBool1.IsTrue() {
-		t.Fatal("Test-b3 Bool1 was supposed to be false")
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.False(t, flBool1.IsTrue(), "Test-b3 Bool1 was supposed to be false")
 
 	// ---
 
@@ -155,9 +105,7 @@ func TestBuilderFlags(t *testing.T) {
 	bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1=false1"}
 
-	if err = bf.Parse(); err == nil {
-		t.Fatalf("Test %q was supposed to fail", bf.Args)
-	}
+	require.Errorf(t, bf.Parse(), "Test %q was supposed to fail", bf.Args)
 
 	// ---
 
@@ -165,9 +113,7 @@ func TestBuilderFlags(t *testing.T) {
 	bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool2"}
 
-	if err = bf.Parse(); err == nil {
-		t.Fatalf("Test %q was supposed to fail", bf.Args)
-	}
+	require.Errorf(t, bf.Parse(), "Test %q was supposed to fail", bf.Args)
 
 	// ---
 
@@ -176,16 +122,9 @@ func TestBuilderFlags(t *testing.T) {
 	flBool1 = bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1", "--str1=BYE"}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
-
-	if flStr1.Value != "BYE" {
-		t.Fatalf("Test %s, str1 should be BYE", bf.Args)
-	}
-	if !flBool1.IsTrue() {
-		t.Fatalf("Test %s, bool1 should be true", bf.Args)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
+	require.Equalf(t, "BYE", flStr1.Value, "Test %s, str1 should be BYE", bf.Args)
+	require.Truef(t, flBool1.IsTrue(), "Test %s, bool1 should be true", bf.Args)
 
 	// ---
 
@@ -202,14 +141,9 @@ func TestBuilderFlags(t *testing.T) {
 
 	bf.Args = []string{`--bool2=false`, `--bool3`, `--bool4=true`, `--bool5`, `--str2= `, `--str3=def3`, `--str4=my-val`}
 
-	if err = bf.Parse(); err != nil {
-		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
-	}
+	require.NoErrorf(t, bf.Parse(), "Test %q was supposed to work", bf.Args)
 	used := bf.Used()
 	slices.Sort(used)
-	expected = "bool2, bool3, bool4, bool5, str2, str3, str4"
 	actual := strings.Join(used, ", ")
-	if actual != expected {
-		t.Fatalf("Test %s, expected '%s', got '%s'", bf.Args, expected, actual)
-	}
+	require.Equalf(t, "bool2, bool3, bool4, bool5, str2, str3, str4", actual, "Test %s, expected '%s', got '%s'", bf.Args, "bool2, bool3, bool4, bool5, str2, str3, str4", actual)
 }

@@ -76,8 +76,7 @@ RUN --security=insecure ls -l /dev && dd if=/dev/zero of=disk.img bs=20M count=1
 	case securityInsecureGranted:
 		require.NoError(t, err)
 	case securityInsecureDenied:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "entitlement security.insecure is not allowed")
+		require.ErrorContains(t, err, "entitlement security.insecure is not allowed")
 	default:
 		require.Fail(t, "unexpected secmode")
 	}
@@ -114,8 +113,7 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 	case securityInsecureGranted:
 		require.NoError(t, err)
 	case securityInsecureDenied:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "entitlement security.insecure is not allowed")
+		require.ErrorContains(t, err, "entitlement security.insecure is not allowed")
 	default:
 		require.Fail(t, "unexpected secmode")
 	}
@@ -178,8 +176,7 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 	case securityInsecureGranted:
 		require.NoError(t, err)
 	case securityInsecureDenied:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "entitlement security.insecure is not allowed")
+		require.ErrorContains(t, err, "entitlement security.insecure is not allowed")
 	default:
 		require.Fail(t, "unexpected secmode")
 	}

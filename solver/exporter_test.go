@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCompareCacheRecord(t *testing.T) {
@@ -28,7 +30,5 @@ func TestCompareCacheRecord(t *testing.T) {
 		got = append(got, names[r])
 	}
 	want := []string{"c", "a", "b", "d", "nil", "nil"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("unexpected order: got %v, want %v", got, want)
-	}
+	require.Truef(t, slices.Equal(got, want), "unexpected order: got %v, want %v", got, want)
 }

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/moby/buildkit/session"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,10 +55,7 @@ func TestParseScopes(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			parsed := parseScopes(tc.input)
-			if !reflect.DeepEqual(parsed, tc.expected) {
-				t.Fatalf("expected %v, got %v", tc.expected, parsed)
-			}
+			require.Equal(t, tc.expected, parseScopes(tc.input))
 		})
 	}
 }
@@ -78,12 +75,10 @@ func TestBearerAuthFallsBackToAnonymousTokenWithoutSession(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(map[string]any{
+		assert.NoErrorf(t, json.NewEncoder(w).Encode(map[string]any{
 			"token":      "anonymous-token",
 			"expires_in": 60,
-		}); err != nil {
-			t.Errorf("failed to write token response: %v", err)
-		}
+		}), "failed to write token response")
 	}))
 	defer tokenServer.Close()
 
