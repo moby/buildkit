@@ -94,8 +94,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), context.Canceled.Error())
+	require.ErrorContains(t, err, context.Canceled.Error())
 
 	inputW.Close()
 	inputR.Close()
@@ -162,10 +161,10 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 
 		ctr.Release(ctx)
 		err = pid1.Wait()
-		require.Contains(t, err.Error(), context.Canceled.Error())
+		require.ErrorContains(t, err, context.Canceled.Error())
 
 		err = pid2.Wait()
-		require.Contains(t, err.Error(), context.Canceled.Error())
+		require.ErrorContains(t, err, context.Canceled.Error())
 
 		return &client.Result{}, nil
 	}
@@ -478,7 +477,6 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	require.Error(t, err)
 	var exitError *gatewayapi.ExitError
 	require.ErrorAs(t, err, &exitError)
 	require.Equal(t, uint32(99), exitError.ExitCode)
@@ -555,7 +553,6 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	require.Error(t, err)
 	var exitError *gatewayapi.ExitError
 	require.ErrorAs(t, err, &exitError)
 	require.Equal(t, uint32(137), exitError.ExitCode)
@@ -880,7 +877,6 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 					Evaluate:   true,
 					Definition: def.ToPB(),
 				})
-				require.Error(t, solveErr)
 
 				var se *errdefs.SolveError
 				require.ErrorAs(t, solveErr, &se)
@@ -1041,7 +1037,6 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 					Evaluate:   true,
 					Definition: def.ToPB(),
 				})
-				require.Error(t, err)
 
 				var se *errdefs.SolveError
 				require.ErrorAs(t, err, &se)
@@ -1155,7 +1150,6 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 			Evaluate:   true,
 			Definition: def.ToPB(),
 		})
-		require.Error(t, solveErr)
 
 		var se *errdefs.SolveError
 		require.ErrorAs(t, solveErr, &se)

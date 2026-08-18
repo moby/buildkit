@@ -139,8 +139,7 @@ func TestParseOptInterval(t *testing.T) {
 		Value:    "50ns",
 	}
 	_, err := parseOptInterval(flInterval)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "cannot be less than 1ms")
+	require.ErrorContains(t, err, "cannot be less than 1ms")
 
 	flInterval.Value = "0ms"
 	_, err = parseOptInterval(flInterval)
@@ -250,9 +249,7 @@ func TestErrorCases(t *testing.T) {
 		r := strings.NewReader(c.dockerfile)
 		ast, err := parser.Parse(r)
 
-		if err != nil {
-			t.Fatalf("Error when parsing Dockerfile: %s", err)
-		}
+		require.NoErrorf(t, err, "Error when parsing Dockerfile")
 		n := ast.AST.Children[0]
 		_, err = ParseInstruction(n)
 		require.ErrorContains(t, err, c.expectedError)

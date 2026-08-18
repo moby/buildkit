@@ -40,7 +40,6 @@ func TestCached(t *testing.T) {
 		return 0, errors.New("some error")
 	})
 
-	require.Error(t, err)
 	require.ErrorContains(t, err, "some error")
 
 	v, err = g.Do(ctx, "33", func(ctx context.Context) (int, error) {
@@ -60,13 +59,11 @@ func TestCachedError(t *testing.T) {
 	_, err := g.Do(ctx, "11", func(ctx context.Context) (string, error) {
 		return "", errors.New("first error")
 	})
-	require.Error(t, err)
 	require.ErrorContains(t, err, "first error")
 
 	_, err = g.Do(ctx, "11", func(ctx context.Context) (string, error) {
 		return "never-ran", nil
 	})
-	require.Error(t, err)
 	require.ErrorContains(t, err, "first error")
 
 	// context errors are never cached
@@ -80,7 +77,6 @@ func TestCachedError(t *testing.T) {
 			return "", errors.New("unexpected error")
 		}
 	})
-	require.Error(t, err)
 	require.ErrorContains(t, err, "context deadline exceeded")
 
 	select {

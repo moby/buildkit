@@ -1,6 +1,10 @@
 package urlutil
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestRedactCredentials(t *testing.T) {
 	cases := []struct {
@@ -36,9 +40,7 @@ func TestRedactCredentials(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			if g, w := RedactCredentials(tt.url), tt.want; g != w {
-				t.Fatalf("got: %q\nwant: %q", g, w)
-			}
+			require.Equal(t, tt.want, RedactCredentials(tt.url))
 		})
 	}
 }

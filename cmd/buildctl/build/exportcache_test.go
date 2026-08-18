@@ -46,8 +46,7 @@ func TestParseExportCache(t *testing.T) {
 		if tc.expectedErr == "" {
 			require.Equal(t, tc.expected, ex)
 		} else {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.expectedErr)
+			require.ErrorContains(t, err, tc.expectedErr)
 		}
 	}
 }

@@ -90,9 +90,8 @@ func TestRecordBuildCompletion_Success(t *testing.T) {
 	})
 	require.Equal(t, int64(1), builds.Value)
 	// On success, error_code must not be present at all.
-	if _, ok := builds.Attributes.Value("error_code"); ok {
-		t.Fatal("error_code attribute should be absent on success")
-	}
+	_, ok := builds.Attributes.Value("error_code")
+	require.False(t, ok, "error_code attribute should be absent on success")
 
 	hist, ok := got["buildkit.build.duration"].(metricdata.Histogram[float64])
 	require.True(t, ok, "expected Histogram[float64] for build.duration, got %T", got["buildkit.build.duration"])

@@ -438,7 +438,6 @@ func testExportLocalNoPlatformSplitOverwrite(t *testing.T, sb integration.Sandbo
 			},
 		},
 	}, "", frontend, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "cannot overwrite hello-linux from")
 	require.ErrorContains(t, err, "when split option is disabled")
 }

@@ -2090,7 +2090,7 @@ func testSourceDateEpochImageExporter(t *testing.T, sb integration.Sandbox) {
 
 	img, err := client.GetImage(ctx, name)
 	require.NoError(t, err)
-	require.Equal(t, tm, img.Metadata().CreatedAt)
+	require.WithinDuration(t, tm, img.Metadata().CreatedAt, 0)
 
 	err = client.ImageService().Delete(ctx, name, images.SynchronousDelete())
 	require.NoError(t, err)

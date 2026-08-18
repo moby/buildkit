@@ -2386,9 +2386,8 @@ ADD bar bar`)
 				require.Equal(t, r.Start.Line, r.End.Line, "step %s has range with multiple lines", id)
 
 				idx := r.Start.Line - 1
-				if idx < 0 || int(idx) >= len(lines) {
-					t.Fatalf("step %s has invalid range on line %d", id, idx)
-				}
+				require.GreaterOrEqualf(t, int(idx), 0, "step %s has invalid range on line %d", id, idx)
+				require.Lessf(t, int(idx), len(lines), "step %s has invalid range on line %d", id, idx)
 				lines[idx] = true
 			}
 		}

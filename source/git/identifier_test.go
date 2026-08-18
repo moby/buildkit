@@ -325,8 +325,7 @@ func TestIdentifierBundleValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			id, err := src.Identifier("git", tt.url, tt.attrs, nil)
 			if tt.wantErr != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.wantErr)
+				require.ErrorContains(t, err, tt.wantErr)
 				return
 			}
 			require.NoError(t, err)
