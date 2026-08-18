@@ -78,6 +78,8 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
 - [OpenTelemetry support](#opentelemetry-support)
+  - [Jaeger (legacy UDP)](#jaeger-legacy-udp)
+  - [OTLP exporter](#otlp-exporter)
 - [Running BuildKit without root privileges](#running-buildkit-without-root-privileges)
 - [Building multi-platform images](#building-multi-platform-images)
   - [Configuring `buildctl`](#configuring-buildctl)
@@ -808,9 +810,13 @@ docker run \
 ## OpenTelemetry support
 
 BuildKit supports [OpenTelemetry](https://opentelemetry.io/) for buildkitd gRPC
-API and buildctl commands. To capture the trace to
-[Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE`
-environment variable to the collection address.
+API and buildctl commands. Traces can be exported with the OpenTelemetry Protocol
+(OTLP, recommended) or with the legacy Jaeger UDP thrift exporter.
+
+### Jaeger (legacy UDP)
+
+To capture traces with a Jaeger all-in-one collector listening for thrift over UDP,
+set `JAEGER_TRACE` to the collection address:
 
 ```bash
 docker run -d -p6831:6831/udp -p16686:16686 jaegertracing/all-in-one:latest
@@ -822,6 +828,47 @@ export JAEGER_TRACE=0.0.0.0:6831
 > On Windows, if you are running Jaeger outside of a container, [`jaeger-all-in-one.exe`](https://www.jaegertracing.io/docs/1.57/getting-started/#all-in-one),
 > set the environment variable `setx -m JAEGER_TRACE "0.0.0.0:6831"`,
 > restart `buildkitd` in a new terminal and the traces will be collected automatically.
+
+### OTLP exporter
+
+BuildKit also supports the [OpenTelemetry Protocol (OTLP)](https://opentelemetry.io/docs/specs/otlp/).
+Enable it by setting `OTEL_TRACES_EXPORTER=otlp` (or by setting an OTLP endpoint;
+see below) and point the SDK at your collector.
+
+OTLP is enabled when any of the following is set:
+
+- `OTEL_TRACES_EXPORTER=otlp`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+
+The protocol defaults to gRPC. Override it with `OTEL_EXPORTER_OTLP_PROTOCOL` or
+`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` (`grpc` or `http/protobuf`).
+
+#### gRPC (default, port 4317)
+
+```bash
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+# restart buildkitd and buildctl so they pick up the variables
+```
+
+#### HTTP/protobuf (port 4318)
+
+```bash
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+# restart buildkitd and buildctl so they pick up the variables
+```
+
+Any OTLP-compatible backend works, including
+[Jaeger](https://www.jaegertracing.io/),
+[Grafana Tempo](https://grafana.com/oss/tempo/),
+[Datadog](https://www.datadoghq.com/), and
+[AWS X-Ray](https://aws.amazon.com/xray/).
+
+For the full set of supported environment variables, see the
+[OpenTelemetry SDK environment variable specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
 
 ## Running BuildKit without root privileges
 
