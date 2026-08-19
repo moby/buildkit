@@ -27,6 +27,7 @@ linters:
     - testifylint
     - unused
     - usestdlibvars
+    - usetesting
     - whitespace
   settings:
     depguard:
@@ -105,6 +106,9 @@ linters:
         - bool-compare
         - len
         - negative-positive
+    usetesting:
+      context-background: true
+      context-todo: true
   exclusions:
     generated: lax
     presets:

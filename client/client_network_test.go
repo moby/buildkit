@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -67,7 +66,7 @@ func testBridgeNetworkingDNSNoRootless(t *testing.T, sb integration.Sandbox) {
 		Marshal(sb.Context())
 	require.NoError(t, err)
 
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(t.Context())
 	eg.Go(func() error {
 		_, err := c.Solve(ctx, server, SolveOpt{}, nil)
 		return err

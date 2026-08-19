@@ -466,7 +466,7 @@ COPY myapp.Dockerfile /
 			)
 			require.NoError(t, err)
 
-			cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v1")
+			cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v1")
 			cmd.Dir = dir.Name
 			expectedGitSHA, err := cmd.Output()
 			require.NoError(t, err)

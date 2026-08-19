@@ -1,7 +1,6 @@
 package llbsolver
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"testing"
@@ -45,7 +44,7 @@ func TestRecomputeDigests(t *testing.T) {
 	}
 	visited := map[digest.Digest]digest.Digest{oldDigest: newDigest}
 
-	updated, err := recomputeDigests(context.Background(), all, visited, op2Digest)
+	updated, err := recomputeDigests(t.Context(), all, visited, op2Digest)
 	require.NoError(t, err)
 	require.Len(t, visited, 2)
 	require.Len(t, all, 2)
@@ -101,7 +100,7 @@ func TestIngestDigest(t *testing.T) {
 	fmt.Println(all, lastDgst)
 
 	visited := map[digest.Digest]digest.Digest{}
-	newDgst, err := recomputeDigests(context.Background(), all, visited, lastDgst)
+	newDgst, err := recomputeDigests(t.Context(), all, visited, lastDgst)
 	require.NoError(t, err)
 	require.Len(t, visited, 2)
 	require.Equal(t, op2Digest, newDgst)

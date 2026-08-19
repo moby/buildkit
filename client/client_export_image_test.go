@@ -366,7 +366,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	allCompressedTarget := registry + "/buildkit/build/exporter:withallcompressed"
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(t.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,

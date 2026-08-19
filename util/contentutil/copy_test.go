@@ -2,7 +2,6 @@ package contentutil
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -13,7 +12,7 @@ import (
 
 func TestCopy(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	b0 := NewBuffer()
 	b1 := NewBuffer()

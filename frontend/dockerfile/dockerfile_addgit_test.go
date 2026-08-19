@@ -2,7 +2,6 @@ package dockerfile
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -54,9 +53,7 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(gitDir)
+	gitDir := t.TempDir()
 	initOptions := ""
 	if format == "sha256" {
 		initOptions = " --object-format=sha256"
@@ -78,16 +75,16 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.3")...)
 	gitCommands = append(gitCommands, "git update-server-info")
-	err = runShell(gitDir, gitCommands...)
+	err := runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
 	commitHashV2 := strings.TrimSpace(string(commitHashB))
 
-	revParseCmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.3")
+	revParseCmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v0.0.3")
 	revParseCmd.Dir = gitDir
 	commitHashB, err = revParseCmd.Output()
 	require.NoError(t, err)
@@ -282,9 +279,7 @@ func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(gitDir)
+	gitDir := t.TempDir()
 	gitCommands := []string{
 		"git init",
 		"git config --local user.email test",
@@ -301,10 +296,10 @@ func testAddGitChecksumCache(t *testing.T, sb integration.Sandbox) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.1")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, "git update-server-info")
-	err = runShell(gitDir, gitCommands...)
+	err := runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
-	revParseCmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
+	revParseCmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v0.0.2")
 	revParseCmd.Dir = gitDir
 	commitHashB, err := revParseCmd.Output()
 	require.NoError(t, err)
@@ -458,7 +453,7 @@ COPY foo out
 	require.NoError(t, err)
 
 	// get commit SHA for v0.0.2
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v0.0.2")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v0.0.2")
 	cmd.Dir = gitDir
 	dt, err := cmd.CombinedOutput()
 	require.NoError(t, err)
@@ -466,7 +461,7 @@ COPY foo out
 	require.Len(t, commitHashV2, 40)
 
 	// get commit SHA for latest
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "latest")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "latest")
 	cmd.Dir = gitDir
 	dt, err = cmd.CombinedOutput()
 	require.NoError(t, err)

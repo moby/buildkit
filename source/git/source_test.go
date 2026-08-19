@@ -74,7 +74,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 
@@ -104,7 +104,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 
 	ref2, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref2.Release(context.TODO())
+	defer ref2.Release(t.Context())
 
 	require.Equal(t, ref1.ID(), ref2.ID())
 
@@ -155,7 +155,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
 
 	ref3, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref3.Release(context.TODO())
+	defer ref3.Release(t.Context())
 
 	mount, err = ref3.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -192,7 +192,7 @@ func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 	repo := setupGitRepo(t, format)
@@ -208,7 +208,7 @@ func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	runShell(t, repo.mainPath,
 		"git checkout feature",
@@ -228,7 +228,7 @@ func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
 
 	ref2, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref2.Release(context.TODO())
+	defer ref2.Release(t.Context())
 
 	mount, err := ref2.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -265,14 +265,14 @@ func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
 
 	repo := setupGitRepo(t, format)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "feature")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -311,7 +311,7 @@ func testFetchBySHA(t *testing.T, format string, keepGitDir bool) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -387,14 +387,14 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
 
 	repo := setupGitRepo(t, format)
 
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", ref)
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", ref)
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -432,7 +432,7 @@ func testFetchUnreferencedRefSha(t *testing.T, ref string, keepGitDir bool, form
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -474,13 +474,13 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 	repo := setupGitRepo(t, format)
 
 	// Capture the SHA of the current master branch (points at "third").
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "refs/heads/master")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "refs/heads/master")
 	cmd.Dir = repo.mainPath
 	out, err := cmd.Output()
 	require.NoError(t, err)
@@ -497,7 +497,7 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -519,7 +519,7 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 		"git add newfile",
 		"git commit -m moved",
 	)
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "refs/heads/master")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "refs/heads/master")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -570,7 +570,7 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 
 	ref2, err := gFbc.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref2.Release(context.TODO())
+	defer ref2.Release(t.Context())
 
 	// Snapshot is reused from the first fetch since the cache key matches.
 	require.Equal(t, ref1.ID(), ref2.ID())
@@ -607,7 +607,7 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 
 	ref3, err := gFresh.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref3.Release(context.TODO())
+	defer ref3.Release(t.Context())
 
 	require.NotEqual(t, ref1.ID(), ref3.ID())
 
@@ -632,7 +632,7 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 
 func gitRevParse(t *testing.T, workDir, rev string) string {
 	t.Helper()
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", rev)
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", rev)
 	cmd.Dir = workDir
 	out, err := cmd.Output()
 	require.NoError(t, err, "git rev-parse %s in %s", rev, workDir)
@@ -649,7 +649,7 @@ func testFetchByCommitRequiresChecksum(t *testing.T, format string) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 	gs := setupGitSource(t, t.TempDir())
 	repo := setupGitRepo(t, format)
 
@@ -796,7 +796,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -806,7 +806,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	id := &GitIdentifier{Remote: repo.mainURL, Ref: tag, KeepGitDir: keepGitDir}
 
 	if checksumMode != testChecksumModeNone {
-		cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", tag)
+		cmd := exec.CommandContext(t.Context(), "git", "rev-parse", tag)
 		cmd.Dir = repo.mainPath
 
 		out, err := cmd.Output()
@@ -860,7 +860,7 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -946,11 +946,11 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -979,7 +979,7 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 
 	id = &GitIdentifier{Remote: repo.mainURL, Ref: "refs/tags/v1.2.3", KeepGitDir: true}
 	g, err = gs.Resolve(ctx, id, nil, nil)
@@ -994,7 +994,7 @@ func testFetchAnnotatedTagAfterClone(t *testing.T, format string) {
 
 	ref, err = g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 }
 
 func TestFetchAnnotatedTagChecksumsSHA1(t *testing.T) {
@@ -1019,11 +1019,11 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1037,7 +1037,7 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	require.Equal(t, expLen, len(shaTag))
 
 	// make sure this is an annotated tag
-	cmd = exec.CommandContext(context.TODO(), "git", "cat-file", "-t", shaTag)
+	cmd = exec.CommandContext(t.Context(), "git", "cat-file", "-t", shaTag)
 	cmd.Dir = repo.mainPath
 
 	out, err = cmd.Output()
@@ -1045,7 +1045,7 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 	require.Equal(t, "tag\n", string(out))
 
 	// get commit that the tag points to
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3^{}")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3^{}")
 	cmd.Dir = repo.mainPath
 
 	out, err = cmd.Output()
@@ -1091,7 +1091,7 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 
 		ref, err := g.Snapshot(ctx, nil)
 		require.NoError(t, err)
-		ref.Release(context.TODO())
+		ref.Release(t.Context())
 
 		if keepGitDir {
 			mountable, err := ref.Mount(ctx, true, nil)
@@ -1102,14 +1102,14 @@ func testFetchAnnotatedTagChecksums(t *testing.T, format string, keepGitDir bool
 			require.NoError(t, err)
 			defer lm1.Unmount()
 
-			cmd = exec.CommandContext(context.TODO(), "git", "tag", "--points-at", "HEAD")
+			cmd = exec.CommandContext(t.Context(), "git", "tag", "--points-at", "HEAD")
 			cmd.Dir = dir
 
 			out, err = cmd.Output()
 			require.NoError(t, err)
 			require.Equal(t, "v1.2.3\n", string(out))
 
-			cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3")
+			cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3")
 			cmd.Dir = dir
 
 			out, err = cmd.Output()
@@ -1142,7 +1142,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1155,7 +1155,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 	shaTag := strings.TrimSpace(string(out))
 	require.Equal(t, expLen, len(shaTag))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3^{}")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3^{}")
 	cmd.Dir = repo.mainPath
 
 	out, err = cmd.Output()
@@ -1180,7 +1180,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 		require.Equal(t, shaTagCommit, key1)
 	}
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3-special")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3-special")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -1188,20 +1188,20 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 	require.NotEqual(t, shaTag, shaTagNew)
 
 	// delete tag v1.2.3
-	cmd = exec.CommandContext(context.TODO(), "git", "tag", "-d", "v1.2.3")
+	cmd = exec.CommandContext(t.Context(), "git", "tag", "-d", "v1.2.3")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
 	// recreate tag v1.2.3 to point to another commit
-	cmd = exec.CommandContext(context.TODO(), "git", "tag", "v1.2.3", shaTagNew)
+	cmd = exec.CommandContext(t.Context(), "git", "tag", "v1.2.3", shaTagNew)
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 
 	mount, err := ref.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1218,7 +1218,7 @@ func testFetchTagChangeRace(t *testing.T, format string, keepGitDir bool) {
 
 	if keepGitDir {
 		// read current HEAD commit
-		cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+		cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 		cmd.Dir = dir
 
 		out, err = cmd.Output()
@@ -1250,7 +1250,7 @@ func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "master")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "master")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1280,7 +1280,7 @@ func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
 		require.Equal(t, shaMaster, key1)
 	}
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "feature")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -1288,14 +1288,14 @@ func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
 	require.NotEqual(t, shaMaster, shaFeature)
 
 	// checkout feature as master
-	cmd = exec.CommandContext(context.TODO(), "git", "checkout", "-B", "master", "feature")
+	cmd = exec.CommandContext(t.Context(), "git", "checkout", "-B", "master", "feature")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 
 	mount, err := ref.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1312,7 +1312,7 @@ func testFetchBranchChangeRace(t *testing.T, format string, keepGitDir bool) {
 
 	if keepGitDir {
 		// read current HEAD commit
-		cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "HEAD")
+		cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
 		cmd.Dir = dir
 
 		out, err = cmd.Output()
@@ -1344,7 +1344,7 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "feature")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1374,7 +1374,7 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 		require.Equal(t, shaFeature, key1)
 	}
 
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "master")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "master")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.Output()
 	require.NoError(t, err)
@@ -1382,22 +1382,22 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 	require.NotEqual(t, shaMaster, shaFeature)
 
 	// change feature to point to master
-	cmd = exec.CommandContext(context.TODO(), "git", "branch", "-f", "feature", "master")
+	cmd = exec.CommandContext(t.Context(), "git", "branch", "-f", "feature", "master")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "reflog", "expire", "--expire-unreachable=now", "--expire=now", "--all")
+	cmd = exec.CommandContext(t.Context(), "git", "reflog", "expire", "--expire-unreachable=now", "--expire=now", "--all")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "gc", "--prune=now", "--aggressive")
+	cmd = exec.CommandContext(t.Context(), "git", "gc", "--prune=now", "--aggressive")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "cat-file", "-t", shaFeature)
+	cmd = exec.CommandContext(t.Context(), "git", "cat-file", "-t", shaFeature)
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.Error(t, err, string(out))
@@ -1429,7 +1429,7 @@ func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1454,16 +1454,16 @@ func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 
 	// mutate the tag to point to another commit
-	cmd = exec.CommandContext(context.TODO(), "git", "tag", "-f", "v1.2.3", "feature")
+	cmd = exec.CommandContext(t.Context(), "git", "tag", "-f", "v1.2.3", "feature")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
 	// verify that the tag now points to a different commit
-	cmd = exec.CommandContext(context.TODO(), "git", "rev-parse", "v1.2.3")
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "v1.2.3")
 	cmd.Dir = repo.mainPath
 
 	out, err = cmd.Output()
@@ -1488,7 +1488,7 @@ func testFetchMutatedTag(t *testing.T, format string, keepGitDir bool) {
 
 	ref, err = g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 }
 
 func TestFetchMutatedBranchSHA1(t *testing.T) {
@@ -1515,7 +1515,7 @@ func testFetchMutatedBranch(t *testing.T, format string, keepGitDir bool) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	repo := setupGitRepo(t, format)
-	cmd := exec.CommandContext(context.TODO(), "git", "rev-parse", "feature")
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "feature")
 	cmd.Dir = repo.mainPath
 
 	out, err := cmd.Output()
@@ -1540,15 +1540,15 @@ func testFetchMutatedBranch(t *testing.T, format string, keepGitDir bool) {
 
 	ref, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 
 	// mutate the branch to point to become parent dir
-	cmd = exec.CommandContext(context.TODO(), "git", "branch", "-D", "feature")
+	cmd = exec.CommandContext(t.Context(), "git", "branch", "-D", "feature")
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	cmd = exec.CommandContext(context.TODO(), "git", "branch", "feature/new", shaBranch)
+	cmd = exec.CommandContext(t.Context(), "git", "branch", "feature/new", shaBranch)
 	cmd.Dir = repo.mainPath
 	out, err = cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
@@ -1571,7 +1571,7 @@ func testFetchMutatedBranch(t *testing.T, format string, keepGitDir bool) {
 
 	ref, err = g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	ref.Release(context.TODO())
+	ref.Release(t.Context())
 }
 
 func TestMultipleTagAccessKeepGitDirSHA1(t *testing.T) {
@@ -1596,7 +1596,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -1628,7 +1628,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	id2 := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Ref: "a/v1.2.3-same"}
 	g2, err := gs.Resolve(ctx, id2, nil, nil)
@@ -1653,7 +1653,7 @@ func testMultipleTagAccess(t *testing.T, keepGitDir bool, format string) {
 
 	ref2, err := g2.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount1, err := ref2.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1707,7 +1707,7 @@ func testResolveMetadataObject(t *testing.T, keepGitDir bool, format string) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -1793,7 +1793,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool, format string) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -1855,7 +1855,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool, format string) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1867,7 +1867,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool, format string) {
 
 	ref2, err := g2.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref2.Release(context.TODO())
+	defer ref2.Release(t.Context())
 
 	mount, err = ref2.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1894,7 +1894,7 @@ func TestCredentialRedaction(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -1931,7 +1931,7 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool, format string) {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -1958,7 +1958,7 @@ func testSubmoduleSubdir(t *testing.T, keepGitDir bool, format string) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1996,7 +1996,7 @@ func testCheckSignatures(t *testing.T, keepGitDir bool, format string) {
 	}
 	t.Parallel()
 	requireSignFixtures(t)
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -2102,7 +2102,7 @@ func testVerifySignatures(t *testing.T, keepGitDir bool, format string) {
 	}
 	t.Parallel()
 	requireSignFixtures(t)
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	gs := setupGitSource(t, t.TempDir())
@@ -2311,7 +2311,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 
 	t.Parallel()
 
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 
@@ -2349,7 +2349,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer ref1.Release(context.TODO())
+	defer ref1.Release(t.Context())
 
 	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -2444,7 +2444,7 @@ func gitSnapshotMode(ctx context.Context, t *testing.T, gs *Source, id *GitIdent
 
 	ref, err := g.Snapshot(ctx, jobCtx)
 	require.NoError(t, err)
-	defer ref.Release(context.TODO())
+	defer ref.Release(t.Context())
 
 	mount, err := ref.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -2610,7 +2610,7 @@ func serveGitRepo(t *testing.T, root string) string {
 	t.Helper()
 	gitpath, err := exec.LookPath("git")
 	require.NoError(t, err)
-	gitversion, _ := exec.CommandContext(context.TODO(), gitpath, "version").CombinedOutput()
+	gitversion, _ := exec.CommandContext(t.Context(), gitpath, "version").CombinedOutput()
 	t.Logf("%s", gitversion) // E.g. "git version 2.30.2"
 
 	// Serve all repositories under root using the Smart HTTP protocol so
@@ -2658,9 +2658,9 @@ func runShellEnv(t *testing.T, dir string, env []string, cmds ...string) {
 	for _, args := range cmds {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			cmd = exec.CommandContext(context.TODO(), "powershell", "-command", args)
+			cmd = exec.CommandContext(t.Context(), "powershell", "-command", args)
 		} else {
-			cmd = exec.CommandContext(context.TODO(), "sh", "-c", args)
+			cmd = exec.CommandContext(t.Context(), "sh", "-c", args)
 		}
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), env...)
@@ -2767,7 +2767,7 @@ func TestBundleStagedRefShape(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 	ctx = logProgressStreams(ctx, t)
 
 	// Build a source-of-truth git repo with a single commit on master.
@@ -2894,7 +2894,7 @@ func TestDetectBundleSHA256(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	for _, format := range []string{"sha1", "sha256"} {
 		t.Run(format, func(t *testing.T) {
@@ -2944,7 +2944,7 @@ func TestCompatibility014FileModes(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 	repo := setupGitRepo(t, "sha1")
@@ -2963,7 +2963,7 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
 	}
 
 	t.Parallel()
-	ctx := logProgressStreams(context.Background(), t)
+	ctx := logProgressStreams(t.Context(), t)
 
 	gs := setupGitSource(t, t.TempDir())
 	repo := setupGitRepo(t, format)
@@ -2997,7 +2997,7 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
 
 	refCommit, err := gCommit.Snapshot(ctx, nil)
 	require.NoError(t, err)
-	defer refCommit.Release(context.TODO())
+	defer refCommit.Release(t.Context())
 
 	mount, err := refCommit.Mount(ctx, true, nil)
 	require.NoError(t, err)

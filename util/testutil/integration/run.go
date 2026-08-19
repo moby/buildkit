@@ -230,7 +230,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						if !strings.HasSuffix(fn, "NoParallel") && runtime.GOOS != "windows" {
 							t.Parallel()
 						}
-						require.NoError(t, sandboxLimiter.Acquire(context.TODO(), 1))
+						require.NoError(t, sandboxLimiter.Acquire(t.Context(), 1))
 						defer sandboxLimiter.Release(1)
 
 						ctx, cancel := context.WithCancelCause(ctx)
@@ -284,7 +284,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		localImageCache[host][to] = struct{}{}
 
 		// already exists check
-		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to); err == nil {
+		if _, _, err := docker.NewResolver(docker.ResolverOptions{}).Resolve(t.Context(), host+"/"+to); err == nil {
 			continue
 		}
 
@@ -316,7 +316,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 			}
 		}
 
-		desc, err = resolveDefaultPlatform(context.TODO(), provider, desc)
+		desc, err = resolveDefaultPlatform(t.Context(), provider, desc)
 		if err != nil {
 			return err
 		}
@@ -325,7 +325,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		if err != nil {
 			return err
 		}
-		if err := contentutil.CopyChain(context.TODO(), ingester, provider, desc); err != nil {
+		if err := contentutil.CopyChain(t.Context(), ingester, provider, desc); err != nil {
 			return err
 		}
 		t.Logf("copied %s to local mirror %s", from, host+"/"+to)

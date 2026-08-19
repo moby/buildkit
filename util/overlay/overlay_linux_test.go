@@ -3,7 +3,6 @@
 package overlay
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -344,7 +343,7 @@ func testDiffWithBase(t *testing.T, base, diff fstest.Applier, expected []TestCh
 	tupper := t.TempDir()
 	workdir := t.TempDir()
 
-	return mount.WithTempMount(context.Background(), []mount.Mount{
+	return mount.WithTempMount(t.Context(), []mount.Mount{
 		{
 			Type:    "overlay",
 			Source:  "overlay",
@@ -402,7 +401,7 @@ type TestChange struct {
 }
 
 func collectAndCheckChanges(t *testing.T, base, upperdir string, expected []TestChange) error {
-	ctx := context.Background()
+	ctx := t.Context()
 	changes := []TestChange{}
 
 	emptyLower := t.TempDir() // empty directory used for the lower of diff view

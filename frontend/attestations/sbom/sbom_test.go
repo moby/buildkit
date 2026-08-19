@@ -17,7 +17,7 @@ import (
 func TestScannerTmpMount(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg, err := json.Marshal(ocispecs.Image{
 		Config: ocispecs.ImageConfig{
 			Cmd: []string{"scan"},

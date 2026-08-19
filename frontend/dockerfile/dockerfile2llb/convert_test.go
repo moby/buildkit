@@ -2,7 +2,6 @@ package dockerfile2llb
 
 import (
 	"bytes"
-	"context"
 	"maps"
 	"testing"
 	"time"
@@ -110,7 +109,7 @@ RUN ls -l
 	res, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	require.NoError(t, err)
 
-	_, err = res.State.Marshal(context.TODO())
+	_, err = res.State.Marshal(t.Context())
 	require.NoError(t, err)
 }
 
@@ -304,18 +303,18 @@ func TestResolveSourceDateEpochValue(t *testing.T) {
 	globalArgs := &llb.EnvList{}
 	shlex := shell.NewLex('\\')
 
-	tm, err := resolveSourceDateEpochValue(context.Background(), "1700000501", ConvertOpt{}, nil, globalArgs, shlex)
+	tm, err := resolveSourceDateEpochValue(t.Context(), "1700000501", ConvertOpt{}, nil, globalArgs, shlex)
 	require.NoError(t, err)
 	require.NotNil(t, tm)
 	assert.Equal(t, time.Unix(1700000501, 0).UTC(), *tm)
 	assert.Equal(t, "1700000501", formatSourceDateEpochValue(tm))
 
-	tm, err = resolveSourceDateEpochValue(context.Background(), "context", ConvertOpt{}, nil, globalArgs, shlex)
+	tm, err = resolveSourceDateEpochValue(t.Context(), "context", ConvertOpt{}, nil, globalArgs, shlex)
 	require.NoError(t, err)
 	assert.Nil(t, tm)
 	assert.Empty(t, formatSourceDateEpochValue(tm))
 
-	_, err = resolveSourceDateEpochValue(context.Background(), "not-a-timestamp", ConvertOpt{}, nil, globalArgs, shlex)
+	_, err = resolveSourceDateEpochValue(t.Context(), "not-a-timestamp", ConvertOpt{}, nil, globalArgs, shlex)
 	require.ErrorContains(t, err, "invalid SOURCE_DATE_EPOCH")
 }
 
@@ -336,7 +335,7 @@ FROM scratch
 	require.NoError(t, err)
 
 	globalArgs := (&llb.EnvList{}).AddOrReplace("SOURCE_DATE_EPOCH", "mysource")
-	_, err = resolveSourceDateEpochValue(context.Background(), "mysource", ConvertOpt{}, stages, globalArgs, shell.NewLex('\\'))
+	_, err = resolveSourceDateEpochValue(t.Context(), "mysource", ConvertOpt{}, stages, globalArgs, shell.NewLex('\\'))
 	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage does not meet source-only requirements")
 }
 
@@ -359,7 +358,7 @@ ADD $URL /
 	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'))
 	require.NoError(t, err)
 	require.NotNil(t, state)
-	sourceOp, err := sourceOpFromState(context.Background(), state)
+	sourceOp, err := sourceOpFromState(t.Context(), state)
 	require.NoError(t, err)
 	require.NotNil(t, sourceOp)
 	assert.Equal(t, "src.tar", sourceOp.Attrs["http.filename"])
@@ -389,7 +388,7 @@ func TestSourceOpFromStateWrappedCopy(t *testing.T) {
 
 	st := llb.Scratch().File(llb.Copy(llb.HTTP("https://example.com/src.tar"), "src.tar", "/foo"))
 
-	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	sourceOp, err := sourceOpFromState(t.Context(), &st)
 	require.NoError(t, err)
 	require.NotNil(t, sourceOp)
 	assert.Equal(t, "https://example.com/src.tar", sourceOp.Identifier)
@@ -402,7 +401,7 @@ func TestSourceOpFromStateMultipleSourcesIgnored(t *testing.T) {
 		File(llb.Copy(llb.HTTP("https://example.com/src1.tar"), "src1.tar", "/foo")).
 		File(llb.Copy(llb.HTTP("https://example.com/src2.tar"), "src2.tar", "/bar"))
 
-	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	sourceOp, err := sourceOpFromState(t.Context(), &st)
 	require.NoError(t, err)
 	assert.Nil(t, sourceOp)
 }
@@ -412,12 +411,12 @@ func TestSourceStateFromSourceOpWrappedCopy(t *testing.T) {
 
 	st := llb.Scratch().File(llb.Copy(llb.HTTP("https://example.com/src.tar", llb.Filename("src.tar")), "src.tar", "/foo"))
 
-	sourceOp, err := sourceOpFromState(context.Background(), &st)
+	sourceOp, err := sourceOpFromState(t.Context(), &st)
 	require.NoError(t, err)
 	require.NotNil(t, sourceOp)
 
 	sourceState := llb.NewState(llb.NewSource(sourceOp.Identifier, maps.Clone(sourceOp.Attrs), llb.Constraints{}).Output())
-	rewrittenSourceOp, err := sourceOpFromState(context.Background(), &sourceState)
+	rewrittenSourceOp, err := sourceOpFromState(t.Context(), &sourceState)
 	require.NoError(t, err)
 	require.NotNil(t, rewrittenSourceOp)
 	assert.Equal(t, sourceOp.Identifier, rewrittenSourceOp.Identifier)

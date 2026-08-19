@@ -23,7 +23,7 @@ func TestImageMetaResolver(t *testing.T) {
 
 	require.Equal(t, false, tr.called)
 
-	def, err := st.Marshal(context.TODO(), LinuxPpc64le)
+	def, err := st.Marshal(t.Context(), LinuxPpc64le)
 	require.NoError(t, err)
 
 	require.Equal(t, true, tr.called)
@@ -38,7 +38,7 @@ func TestImageMetaResolver(t *testing.T) {
 
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest", arr[0].Op.(*pb.Op_Source).Source.GetIdentifier())
 
-	d, err := st.GetDir(context.TODO())
+	d, err := st.GetDir(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, "/bar", d)
 }
@@ -51,7 +51,7 @@ func TestImageResolveDigest(t *testing.T) {
 		dir:    "/foo",
 	}), ResolveDigest(true))
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	m, arr := parseDef(t, def.Def)
@@ -63,7 +63,7 @@ func TestImageResolveDigest(t *testing.T) {
 
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest@"+string(digest.FromBytes([]byte("bar"))), arr[0].Op.(*pb.Op_Source).Source.GetIdentifier())
 
-	d, err := st.GetDir(context.TODO())
+	d, err := st.GetDir(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, "/foo", d)
 }

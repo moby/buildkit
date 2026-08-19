@@ -41,7 +41,7 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	}()
 
 	listener := net.ListenConfig{}
-	l, err := listener.Listen(context.TODO(), "tcp", "localhost:0")
+	l, err := listener.Listen(t.Context(), "tcp", "localhost:0")
 	if err != nil {
 		return "", nil, err
 	}
@@ -57,7 +57,7 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	address = fmt.Sprintf("http://%s/%s", addr, opts.AccountName)
 
 	// start server
-	cmd := exec.CommandContext(context.TODO(), azuriteBin, "--disableProductStyleUrl", "--blobHost", host, "--blobPort", port, "--location", t.TempDir())
+	cmd := exec.CommandContext(t.Context(), azuriteBin, "--disableProductStyleUrl", "--blobHost", host, "--blobPort", port, "--location", t.TempDir())
 	cmd.Env = append(os.Environ(), []string{
 		"AZURITE_ACCOUNTS=" + opts.AccountName + ":" + opts.AccountKey,
 	}...)

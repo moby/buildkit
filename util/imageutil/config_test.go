@@ -18,7 +18,7 @@ import (
 )
 
 func TestConfigMultiplatform(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	cc := &testCache{}
 

@@ -3,7 +3,6 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -58,10 +57,6 @@ FROM second AS binary
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
 
 	called := false
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {

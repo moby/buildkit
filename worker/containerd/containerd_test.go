@@ -3,7 +3,6 @@
 package containerd
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/util/network/netproviders"
@@ -61,7 +60,7 @@ func testContainerdWorkerExec(t *testing.T, sb integration.Sandbox) {
 		t.Skip("requires root")
 	}
 	workerOpt := newWorkerOpt(t, sb.ContainerdAddress())
-	w, err := base.NewWorker(context.TODO(), workerOpt)
+	w, err := base.NewWorker(t.Context(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExec(t, w)
@@ -72,7 +71,7 @@ func testContainerdWorkerExecFailures(t *testing.T, sb integration.Sandbox) {
 		t.Skip("requires root")
 	}
 	workerOpt := newWorkerOpt(t, sb.ContainerdAddress())
-	w, err := base.NewWorker(context.TODO(), workerOpt)
+	w, err := base.NewWorker(t.Context(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExecFailures(t, w)
@@ -83,7 +82,7 @@ func testContainerdWorkerCancel(t *testing.T, sb integration.Sandbox) {
 		t.Skip("requires root")
 	}
 	workerOpt := newWorkerOpt(t, sb.ContainerdAddress())
-	w, err := base.NewWorker(context.TODO(), workerOpt)
+	w, err := base.NewWorker(t.Context(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerCancel(t, w)

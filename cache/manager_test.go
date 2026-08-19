@@ -129,7 +129,7 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, c
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		opt.snapshotterName: opt.snapshotter,
 	})
-	if err := mdb.Init(context.TODO()); err != nil {
+	if err := mdb.Init(t.Context()); err != nil {
 		return nil, nil, err
 	}
 
@@ -176,14 +176,15 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, c
 
 func TestSharableMountPoolCleanup(t *testing.T) {
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
 	// Emulate the situation where the pool dir is dirty
 	mountPoolDir := filepath.Join(tmpdir, "cachemounts")
 	require.NoError(t, os.MkdirAll(mountPoolDir, 0700))
-	_, err := os.MkdirTemp(mountPoolDir, "buildkit")
+	// not using t.TempDir() here because the dir must be created inside mountPoolDir
+	_, err := os.MkdirTemp(mountPoolDir, "buildkit") //nolint:usetesting
 	require.NoError(t, err)
 
 	// Initialize cache manager and check if pool is cleaned up
@@ -201,7 +202,7 @@ func TestSharableMountPoolCleanup(t *testing.T) {
 func TestManager(t *testing.T) {
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -334,7 +335,7 @@ func TestManager(t *testing.T) {
 
 func TestLazyGetByBlob(t *testing.T) {
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -377,7 +378,7 @@ func TestLazyGetByBlob(t *testing.T) {
 
 func TestMergeBlobchainID(t *testing.T) {
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -448,7 +449,7 @@ func TestSnapshotExtract(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -523,7 +524,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	id := snap.ID()
 
-	err = snap.Release(context.TODO())
+	err = snap.Release(t.Context())
 	require.NoError(t, err)
 
 	buf = pruneResultBuffer()
@@ -542,7 +543,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	err = snap2.Release(context.TODO())
+	err = snap2.Release(t.Context())
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 1, 1)
@@ -562,7 +563,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkNumBlobs(ctx, t, co.cs, 1)
 
-	err = snap.Release(context.TODO())
+	err = snap.Release(t.Context())
 	require.NoError(t, err)
 
 	buf = pruneResultBuffer()
@@ -635,7 +636,7 @@ func TestExtractOnMutable(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -676,7 +677,7 @@ func TestExtractOnMutable(t *testing.T) {
 	require.NoError(t, err)
 
 	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
-	done(context.TODO())
+	done(t.Context())
 	require.NoError(t, err)
 	err = snap.(*immutableRef).computeChainMetadata(leaseCtx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
@@ -684,7 +685,7 @@ func TestExtractOnMutable(t *testing.T) {
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
 	require.NoError(t, err)
 
-	err = snap.Release(context.TODO())
+	err = snap.Release(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
@@ -718,7 +719,7 @@ func TestExtractOnMutable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
-	err = snap2.Release(context.TODO())
+	err = snap2.Release(t.Context())
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 0, 2)
@@ -741,7 +742,7 @@ func TestExtractOnMutable(t *testing.T) {
 
 func TestSetBlob(t *testing.T) {
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -760,7 +761,7 @@ func TestSetBlob(t *testing.T) {
 
 	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
 	require.NoError(t, err)
-	defer done(context.TODO())
+	defer done(t.Context())
 
 	cm := co.manager
 
@@ -779,7 +780,7 @@ func TestSetBlob(t *testing.T) {
 
 	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
 	require.NoError(t, err)
-	defer clean(context.TODO())
+	defer clean(t.Context())
 
 	b, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
 	require.NoError(t, err)
@@ -907,14 +908,14 @@ func TestSetBlob(t *testing.T) {
 	}, snap3)
 	require.Error(t, err)
 
-	clean(context.TODO())
+	clean(t.Context())
 
 	// snap.SetBlob()
 }
 
 func TestPrune(t *testing.T) {
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1026,7 +1027,7 @@ func TestPrune(t *testing.T) {
 func TestLazyCommit(t *testing.T) {
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1185,7 +1186,7 @@ func TestLoopLeaseContent(t *testing.T) {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1300,7 +1301,7 @@ func TestSharingCompressionVariant(t *testing.T) {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1566,7 +1567,7 @@ func TestConversion(t *testing.T) {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1661,7 +1662,7 @@ func TestGetRemotes(t *testing.T) {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1678,7 +1679,7 @@ func TestGetRemotes(t *testing.T) {
 
 	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
 	require.NoError(t, err)
-	defer done(context.TODO())
+	defer done(t.Context())
 
 	contentBuffer := contentutil.NewBuffer()
 
@@ -1963,7 +1964,7 @@ func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVari
 func TestNondistributableBlobs(t *testing.T) {
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -1981,7 +1982,7 @@ func TestNondistributableBlobs(t *testing.T) {
 
 	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
 	require.NoError(t, err)
-	defer done(context.TODO())
+	defer done(t.Context())
 
 	contentBuffer := contentutil.NewBuffer()
 	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
@@ -2092,7 +2093,7 @@ func TestMergeOp(t *testing.T) {
 	// Tests for the fs merge logic are in client_test and snapshotter_test.
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -2210,7 +2211,7 @@ func TestDiffOp(t *testing.T) {
 	// Tests for the fs diff logic are in client_test and snapshotter_test.
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -2312,7 +2313,7 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	// removed and the immutable ref will continue to be usable.
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -2393,7 +2394,7 @@ func TestMountReadOnly(t *testing.T) {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -2459,7 +2460,7 @@ func TestLoadBrokenParents(t *testing.T) {
 	// of other parent refs
 	t.Parallel()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	tmpdir := t.TempDir()
 
@@ -2830,7 +2831,7 @@ func mapToSystemTarBlob(t *testing.T, m map[string]string) ([]byte, ocispecs.Des
 		}
 	}
 
-	cmd := exec.CommandContext(context.TODO(), "tar", "-C", tmpdir, "-c", ".")
+	cmd := exec.CommandContext(t.Context(), "tar", "-C", tmpdir, "-c", ".")
 	tarout, err := cmd.Output()
 	if err != nil {
 		return nil, ocispecs.Descriptor{}, err

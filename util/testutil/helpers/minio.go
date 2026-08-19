@@ -52,7 +52,7 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	}()
 
 	listener := net.ListenConfig{}
-	l, err := listener.Listen(context.TODO(), "tcp", "localhost:0")
+	l, err := listener.Listen(t.Context(), "tcp", "localhost:0")
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -64,7 +64,7 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	address = "http://" + addr
 
 	// start server
-	cmd := exec.CommandContext(context.TODO(), minioBin, "server", "--json", "--address", addr, t.TempDir())
+	cmd := exec.CommandContext(t.Context(), minioBin, "server", "--json", "--address", addr, t.TempDir())
 	cmd.Env = append(os.Environ(), []string{
 		"MINIO_ROOT_USER=" + opts.AccessKeyID,
 		"MINIO_ROOT_PASSWORD=" + opts.SecretAccessKey,
@@ -81,22 +81,22 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 
 	// create alias config
 	alias := randomString(10)
-	cmd = exec.CommandContext(context.TODO(), mcBin, "alias", "set", alias, address, opts.AccessKeyID, opts.SecretAccessKey)
+	cmd = exec.CommandContext(t.Context(), mcBin, "alias", "set", alias, address, opts.AccessKeyID, opts.SecretAccessKey)
 	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
 	deferF.Append(func() error {
-		return exec.CommandContext(context.TODO(), mcBin, "alias", "rm", alias).Run()
+		return exec.CommandContext(t.Context(), mcBin, "alias", "rm", alias).Run()
 	})
 
 	// create bucket
-	cmd = exec.CommandContext(context.TODO(), mcBin, "mb", "--region", opts.Region, fmt.Sprintf("%s/%s", alias, bucket)) // #nosec G204
+	cmd = exec.CommandContext(t.Context(), mcBin, "mb", "--region", opts.Region, fmt.Sprintf("%s/%s", alias, bucket)) // #nosec G204
 	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
 
 	// trace
-	cmd = exec.CommandContext(context.TODO(), mcBin, "admin", "trace", "--json", alias)
+	cmd = exec.CommandContext(t.Context(), mcBin, "admin", "trace", "--json", alias)
 	traceStop, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", "", nil, err

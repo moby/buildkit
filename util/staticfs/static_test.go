@@ -1,7 +1,6 @@
 package staticfs
 
 import (
-	"context"
 	"io"
 	iofs "io/fs"
 	"os"
@@ -29,7 +28,7 @@ func TestStatic(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 
 	var files []string
-	err = fs.Walk(context.TODO(), "", func(path string, entry iofs.DirEntry, err error) error {
+	err = fs.Walk(t.Context(), "", func(path string, entry iofs.DirEntry, err error) error {
 		require.NoError(t, err)
 		info, err := entry.Info()
 		require.NoError(t, err)

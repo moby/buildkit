@@ -1,7 +1,6 @@
 package sshprovider_test
 
 import (
-	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -41,7 +40,7 @@ func TestToAgentSource(t *testing.T) {
 
 	sockPath := filepath.Join(dir, "test.sock")
 	listener := net.ListenConfig{}
-	l, err := listener.Listen(context.TODO(), "unix", sockPath)
+	l, err := listener.Listen(t.Context(), "unix", sockPath)
 	require.NoError(t, err)
 	defer l.Close()
 

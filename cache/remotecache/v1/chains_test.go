@@ -1,7 +1,6 @@
 package cacheimport
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -46,7 +45,7 @@ func TestSimpleMarshal(t *testing.T) {
 
 	addRecords()
 
-	cfg, _, err := cc.Marshal(context.TODO())
+	cfg, _, err := cc.Marshal(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(cfg.Layers))
@@ -78,7 +77,7 @@ func TestSimpleMarshal(t *testing.T) {
 	// adding same info again doesn't produce anything extra
 	addRecords()
 
-	cfg2, descPairs, err := cc.Marshal(context.TODO())
+	cfg2, descPairs, err := cc.Marshal(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, cfg, cfg2)
@@ -91,7 +90,7 @@ func TestSimpleMarshal(t *testing.T) {
 	err = Parse(dt, descPairs, newChains)
 	require.NoError(t, err)
 
-	cfg3, _, err := cc.Marshal(context.TODO())
+	cfg3, _, err := cc.Marshal(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, cfg, cfg3)
 
@@ -99,7 +98,7 @@ func TestSimpleMarshal(t *testing.T) {
 	_, ok, err := cc.Add(outputKey(dgst("bay"), 0), nil, nil)
 	require.NoError(t, err)
 	require.True(t, ok)
-	cfg, _, err = cc.Marshal(context.TODO())
+	cfg, _, err = cc.Marshal(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, 2, len(cfg.Layers))

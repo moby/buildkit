@@ -27,7 +27,7 @@ func testLocalSourceDiffer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffType) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := New(t.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -43,12 +43,12 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 
 	st := llb.Local("mylocal"+string(d), llb.Differ(d, false))
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	destDir := t.TempDir()
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(t.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type:      ExporterLocal,
@@ -74,7 +74,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	err = syscall.UtimesNano(filepath.Join(dir.Name, "foo"), []syscall.Timespec{tv, tv})
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(t.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type:      ExporterLocal,
@@ -100,7 +100,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 // moby/buildkit#4831
 func testLocalSourceWithHardlinksFilter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := New(t.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -113,12 +113,12 @@ func testLocalSourceWithHardlinksFilter(t *testing.T, sb integration.Sandbox) {
 
 	st := llb.Local("mylocal", llb.FollowPaths([]string{"foo*"}))
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	destDir := t.TempDir()
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(t.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type:      ExporterLocal,

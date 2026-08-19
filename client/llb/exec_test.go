@@ -1,7 +1,6 @@
 package llb
 
 import (
-	"context"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -12,17 +11,17 @@ func TestTmpfsMountError(t *testing.T) {
 	t.Parallel()
 
 	st := Image("foo").Run(Shlex("args")).AddMount("/tmp", Scratch(), Tmpfs())
-	_, err := st.Marshal(context.TODO())
+	_, err := st.Marshal(t.Context())
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "can't be used as a parent")
 
 	st = Image("foo").Run(Shlex("args"), AddMount("/tmp", Scratch(), Tmpfs())).Root()
-	_, err = st.Marshal(context.TODO())
+	_, err = st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	st = Image("foo").Run(Shlex("args"), AddMount("/tmp", Image("bar"), Tmpfs())).Root()
-	_, err = st.Marshal(context.TODO())
+	_, err = st.Marshal(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must use scratch")
 }
@@ -33,7 +32,7 @@ func TestInvalidSecurityModeMarshalError(t *testing.T) {
 	st := Image("busybox:latest").
 		Run(Shlex("true"), Security(pb.SecurityMode(2))).Root()
 
-	_, err := st.Marshal(context.TODO())
+	_, err := st.Marshal(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid security mode")
 }
@@ -76,7 +75,7 @@ func TestLinuxResourcesMarshal(t *testing.T) {
 			CpusetMems("0"),
 		).Root()
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	// Resources should be in OpMetadata (not in the Op bytes / cache key)
@@ -110,13 +109,13 @@ func TestLinuxResourcesNotInCacheKey(t *testing.T) {
 	st3 := Image("busybox:latest").
 		Run(Shlex("echo hello")).Root()
 
-	def1, err := st1.Marshal(context.TODO())
+	def1, err := st1.Marshal(t.Context())
 	require.NoError(t, err)
 
-	def2, err := st2.Marshal(context.TODO())
+	def2, err := st2.Marshal(t.Context())
 	require.NoError(t, err)
 
-	def3, err := st3.Marshal(context.TODO())
+	def3, err := st3.Marshal(t.Context())
 	require.NoError(t, err)
 
 	// All three should produce the same definition bytes (same cache key)
@@ -135,7 +134,7 @@ func TestLinuxResourcesMerge(t *testing.T) {
 			CPUShares(512),
 		).Root()
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(t.Context())
 	require.NoError(t, err)
 
 	for _, md := range def.Metadata {
@@ -162,7 +161,7 @@ func TestExecOpMarshalConsistency(t *testing.T) {
 		).AddMount("/a", Scratch().File(Mkfile("file2", 0644, []byte("file2 contents"))))
 
 	for range 100 {
-		def, err := st.Marshal(context.TODO())
+		def, err := st.Marshal(t.Context())
 		require.NoError(t, err)
 
 		if prevDef != nil {

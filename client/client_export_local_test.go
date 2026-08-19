@@ -483,7 +483,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	def, err := llb.Scratch().File(llb.Mkfile("foo.txt", 0o755, nil)).Marshal(context.TODO())
+	def, err := llb.Scratch().File(llb.Mkfile("foo.txt", 0o755, nil)).Marshal(t.Context())
 	require.NoError(t, err)
 
 	destDir, destDir2 := t.TempDir(), t.TempDir()
@@ -605,7 +605,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows", "This test passed locally on windows, but failed on github action")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureOCILayout)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := New(t.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
