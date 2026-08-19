@@ -78,8 +78,6 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
 - [OpenTelemetry support](#opentelemetry-support)
-  - [Jaeger (legacy UDP)](#jaeger-legacy-udp)
-  - [OTLP exporter](#otlp-exporter)
 - [Running BuildKit without root privileges](#running-buildkit-without-root-privileges)
 - [Building multi-platform images](#building-multi-platform-images)
   - [Configuring `buildctl`](#configuring-buildctl)
@@ -810,65 +808,37 @@ docker run \
 ## OpenTelemetry support
 
 BuildKit supports [OpenTelemetry](https://opentelemetry.io/) for buildkitd gRPC
-API and buildctl commands. Traces can be exported with the OpenTelemetry Protocol
-(OTLP, recommended) or with the legacy Jaeger UDP thrift exporter.
+API and buildctl commands. BuildKit can export traces from `buildkitd` with the
+[OpenTelemetry Protocol (OTLP)](https://opentelemetry.io/docs/specs/otlp/).
+`buildctl` forwards its spans to `buildkitd`, so the exporter only needs to be
+configured for the daemon.
 
-### Jaeger (legacy UDP)
-
-To capture traces with a Jaeger all-in-one collector listening for thrift over UDP,
-set `JAEGER_TRACE` to the collection address:
+For example, start a Jaeger all-in-one collector with its OTLP gRPC endpoint and
+web interface exposed:
 
 ```bash
-docker run -d -p6831:6831/udp -p16686:16686 jaegertracing/all-in-one:latest
-export JAEGER_TRACE=0.0.0.0:6831
-# restart buildkitd and buildctl so they know JAEGER_TRACE
-# any buildctl command should be traced to http://127.0.0.1:16686/
+docker run -d -p4317:4317 -p16686:16686 jaegertracing/all-in-one:latest
 ```
 
-> On Windows, if you are running Jaeger outside of a container, [`jaeger-all-in-one.exe`](https://www.jaegertracing.io/docs/1.57/getting-started/#all-in-one),
-> set the environment variable `setx -m JAEGER_TRACE "0.0.0.0:6831"`,
-> restart `buildkitd` in a new terminal and the traces will be collected automatically.
-
-### OTLP exporter
-
-BuildKit also supports the [OpenTelemetry Protocol (OTLP)](https://opentelemetry.io/docs/specs/otlp/).
-Enable it by setting `OTEL_TRACES_EXPORTER=otlp` (or by setting an OTLP endpoint;
-see below) and point the SDK at your collector.
-
-OTLP is enabled when any of the following is set:
-
-- `OTEL_TRACES_EXPORTER=otlp`
-- `OTEL_EXPORTER_OTLP_ENDPOINT`
-- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-
-The protocol defaults to gRPC. Override it with `OTEL_EXPORTER_OTLP_PROTOCOL` or
-`OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` (`grpc` or `http/protobuf`).
-
-#### gRPC (default, port 4317)
+Configure the OTLP exporter in the environment used to start `buildkitd`:
 
 ```bash
 export OTEL_TRACES_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-# restart buildkitd and buildctl so they pick up the variables
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://127.0.0.1:4317
+# start or restart buildkitd from this environment
 ```
 
-#### HTTP/protobuf (port 4318)
+The endpoint is resolved from the network namespace where `buildkitd` runs. If
+the daemon runs in a container or on another host, replace `127.0.0.1` with an
+address that it can reach. After running a `buildctl` command, view its traces in
+the [Jaeger UI](http://127.0.0.1:16686/). Any OTLP-compatible collector or
+backend can be used instead of Jaeger.
 
-```bash
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-# restart buildkitd and buildctl so they pick up the variables
-```
-
-Any OTLP-compatible backend works, including
-[Jaeger](https://www.jaegertracing.io/),
-[Grafana Tempo](https://grafana.com/oss/tempo/),
-[Datadog](https://www.datadoghq.com/), and
-[AWS X-Ray](https://aws.amazon.com/xray/).
-
-For the full set of supported environment variables, see the
-[OpenTelemetry SDK environment variable specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/).
+The example uses OTLP over gRPC, BuildKit's default OTLP transport. For endpoint,
+TLS, and authentication settings supported by the OTLP gRPC exporter, see the
+[OpenTelemetry Go exporter documentation](https://pkg.go.dev/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc).
+BuildKit handles exporter selection separately and does not support every value
+defined by the general OpenTelemetry SDK environment-variable specification.
 
 ## Running BuildKit without root privileges
 
