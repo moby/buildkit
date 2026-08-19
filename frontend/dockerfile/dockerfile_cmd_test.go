@@ -360,7 +360,7 @@ ENTRYPOINT []random string
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)

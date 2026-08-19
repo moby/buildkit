@@ -104,7 +104,7 @@ EOF
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -225,7 +225,7 @@ FROM base
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -288,7 +288,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -338,7 +338,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)

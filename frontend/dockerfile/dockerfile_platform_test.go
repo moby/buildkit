@@ -226,7 +226,7 @@ EOF
 
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	info, err := testutil.ReadImages(ctx, provider, desc)
@@ -369,7 +369,7 @@ EOF
 
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	info, err := testutil.ReadImages(ctx, provider, desc)
@@ -417,7 +417,7 @@ EOF
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target2)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target2)
 	require.NoError(t, err)
 
 	info, err = testutil.ReadImages(ctx, provider, desc)

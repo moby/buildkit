@@ -162,7 +162,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -301,7 +301,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -439,7 +439,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -634,7 +634,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -655,7 +655,7 @@ func testExportAnnotationsMediaTypes(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target2)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target2)
 	require.NoError(t, err)
 	imgs2, err := testutil.ReadImages(sb.Context(), provider, desc)
 	require.NoError(t, err)
@@ -801,7 +801,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 		}, "", frontend, nil)
 		require.NoError(t, err)
 
-		desc, provider, err := contentutil.ProviderFromRef(targets[0])
+		desc, provider, err := contentutil.ProviderFromRef(sb.Context(), targets[0])
 		require.NoError(t, err)
 
 		imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -1414,7 +1414,7 @@ EOF
 	}, "", makeTargetFrontend(false), nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -1439,7 +1439,7 @@ EOF
 	}, "", makeTargetFrontend(true), nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
@@ -1471,7 +1471,7 @@ EOF
 	}, "", makeTargetFrontend(false), nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
@@ -1503,7 +1503,7 @@ EOF
 	}, "", makeTargetFrontend(true), nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
@@ -1535,7 +1535,7 @@ EOF
 	}, "", makeTargetFrontend(false), nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
@@ -1569,7 +1569,7 @@ EOF
 	}, "", makeTargetFrontend(false), nil)
 	require.NoError(t, err)
 
-	desc, provider, err = contentutil.ProviderFromRef(target)
+	desc, provider, err = contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
@@ -1726,7 +1726,7 @@ EOF
 	}, "", targetFrontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
@@ -1880,7 +1880,7 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(target)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
