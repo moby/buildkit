@@ -39,27 +39,15 @@ func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorag
 }
 
 func addItemToStorage(k *cacheKeyStorage, it *item) (*itemWithOutgoingLinks, error) {
+	// byItem is shared across all leaf traversals and must be the sole source
+	// of memoized items. A separate per-traversal map can retain a nil marker
+	// when this shortcut finds an item completed by an earlier traversal,
+	// causing a later reference to that item to silently lose its link.
 	if id, ok := k.byItem[it]; ok {
 		return k.byID[id], nil
 	}
 
-	// it.id is already final at this point (computeIDs runs before this
-	// function is ever called), so it's safe to register this item's
-	// storage entry - and make it visible to other callers - before
-	// recursing into its own dependencies below. Merge ops can coincidentally
-	// produce byte-identical content at more than one point in the same
-	// chain, which makes the dependency graph loop back on itself; if a
-	// reentrant call for the same item arrives while we're still walking
-	// its parents, it now gets this same, real (if not yet fully populated)
-	// entry back and can append its link to it, rather than getting nil and
-	// silently dropping the link.
 	id := it.id
-	itl := &itemWithOutgoingLinks{
-		item:  it,
-		links: map[nlink][]string{},
-	}
-	k.byItem[it] = id
-	k.byID[id] = itl
 
 	for i, m := range it.parents {
 		for l := range m {
@@ -75,6 +63,13 @@ func addItemToStorage(k *cacheKeyStorage, it *item) (*itemWithOutgoingLinks, err
 			src.links[cl] = append(src.links[cl], id)
 		}
 	}
+
+	itl := &itemWithOutgoingLinks{
+		item:  it,
+		links: map[nlink][]string{},
+	}
+	k.byItem[it] = id
+	k.byID[id] = itl
 
 	seen := map[string]struct{}{}
 	for _, res := range it.results {
