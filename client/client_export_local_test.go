@@ -677,7 +677,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	for {
 		ev, err := history.Recv()
 		if err != nil {
-			require.Equal(t, io.EOF, err)
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
 		require.Equal(t, ref, ev.Record.Ref)

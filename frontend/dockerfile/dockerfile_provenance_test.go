@@ -1400,7 +1400,7 @@ func testGatewayProvenanceDifferentCallbackInputProducer(t *testing.T, sb integr
 	case <-inputReady:
 	case err := <-firstBuildDone:
 		require.NoError(t, err)
-		require.FailNow(t, "producer build exited before returning an input")
+		t.Fatal("producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseProducer)
@@ -1560,7 +1560,7 @@ COPY --from=linked /innerseed /innerseed
 	case <-rootInputReady:
 	case err := <-rootProducerDone:
 		require.NoError(t, err)
-		require.FailNow(t, "root input producer build exited before returning an input")
+		t.Fatal("root input producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseRootProducer)
@@ -1680,7 +1680,7 @@ func testDockerfileProvenanceInputProducer(t *testing.T, sb integration.Sandbox)
 	case <-inputReady:
 	case err := <-producerDone:
 		require.NoError(t, err)
-		require.FailNow(t, "producer build exited before returning an input")
+		t.Fatal("producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseProducer)
@@ -2517,7 +2517,7 @@ COPY bar bar2
 	for {
 		ev, err := history.Recv()
 		if err != nil {
-			require.Equal(t, io.EOF, err)
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
 		require.Equal(t, ref, ev.Record.Ref)

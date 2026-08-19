@@ -87,7 +87,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 
 	// empty result
 	err = st.WalkResults("baz", func(r solver.CacheResult) error {
-		require.Fail(t, "unreachable")
+		t.Error("unreachable")
 		return nil
 	})
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.Equal(t, 0, len(m))
 
 	st.Walk(func(id string) error {
-		require.Fail(t, fmt.Sprintf("id %s should have been released", id))
+		t.Errorf("id %s should have been released", id)
 		return nil
 	})
 }
@@ -336,7 +336,7 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.False(t, st.Exists("foo"))
 
 	st.Walk(func(id string) error {
-		require.Fail(t, fmt.Sprintf("id %s should have been released", id))
+		t.Errorf("id %s should have been released", id)
 		return nil
 	})
 }

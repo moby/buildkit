@@ -460,7 +460,8 @@ func testBuildHTTPSourcePGPSignatureVerify(t *testing.T, sb integration.Sandbox)
 				Signature: sigData,
 			}),
 		)
-		require.ErrorContains(t, solve(t, invalidState), "failed to verify pgp signature")
+		err = solve(t, invalidState)
+		require.ErrorContains(t, err, "failed to verify pgp signature")
 	})
 
 	t.Run("concatenated-pubkeys-right-key-second", func(t *testing.T) {

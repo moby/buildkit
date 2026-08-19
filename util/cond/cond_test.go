@@ -4,8 +4,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestCondInitialWaitBlocks(t *testing.T) {
@@ -27,14 +25,14 @@ func TestCondInitialWaitBlocks(t *testing.T) {
 	select {
 	case <-time.After(50 * time.Millisecond):
 	case <-waited:
-		require.Fail(t, "wait should have blocked")
+		t.Error("wait should have blocked")
 	}
 
 	c.Signal()
 
 	select {
 	case <-time.After(300 * time.Millisecond):
-		require.Fail(t, "wait should have resumed")
+		t.Error("wait should have resumed")
 	case <-waited:
 	}
 
@@ -61,7 +59,7 @@ func TestInitialSignalDoesntBlock(t *testing.T) {
 
 	select {
 	case <-time.After(300 * time.Millisecond):
-		require.Fail(t, "wait should have resumed")
+		t.Error("wait should have resumed")
 	case <-waited:
 	}
 
@@ -74,7 +72,7 @@ func TestInitialSignalDoesntBlock(t *testing.T) {
 	select {
 	case <-time.After(50 * time.Millisecond):
 	case <-waited:
-		require.Fail(t, "wait should have blocked")
+		t.Error("wait should have blocked")
 	}
 
 	c.Signal()
@@ -103,7 +101,7 @@ func TestSignalBetweenWaits(t *testing.T) {
 	select {
 	case <-time.After(50 * time.Millisecond):
 	case <-waited:
-		require.Fail(t, "wait should have blocked")
+		t.Error("wait should have blocked")
 	}
 
 	c.Signal()

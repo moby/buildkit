@@ -975,7 +975,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 					Action: sourcepolicypb.PolicyAction_ALLOW,
 				}, nil, nil
 			default:
-				require.Fail(t, "too many calls for alpine")
+				t.Error("too many calls for alpine")
 			}
 		case "docker-image://docker.io/library/busybox:latest":
 			time.Sleep(200 * time.Millisecond)
@@ -1539,7 +1539,8 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 				require.NoError(t, pgpsign.VerifySignatureWithDigest(sig, keyring, responseDigest))
 				// Negative check: tampered digest must fail signature verification.
 				badDigest := tamperDigestHex(responseDigest)
-				require.ErrorContains(t, pgpsign.VerifySignatureWithDigest(sig, keyring, badDigest), "failed to verify signature with checksum digest")
+				err = pgpsign.VerifySignatureWithDigest(sig, keyring, badDigest)
+				require.ErrorContains(t, err, "failed to verify signature with checksum digest")
 				return &policysession.DecisionResponse{
 					Action: sourcepolicypb.PolicyAction_ALLOW,
 				}, nil, nil

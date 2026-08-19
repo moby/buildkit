@@ -53,6 +53,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/errgroup"
@@ -209,7 +210,7 @@ func TestManager(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
@@ -745,7 +746,7 @@ func TestSetBlob(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
@@ -918,7 +919,7 @@ func TestPrune(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
@@ -1030,7 +1031,7 @@ func TestLazyCommit(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
@@ -1798,7 +1799,7 @@ func TestGetRemotes(t *testing.T) {
 					case compression.Zstd:
 						require.Equal(t, ocispecs.MediaTypeImageLayerZstd, desc.MediaType)
 					default:
-						require.Fail(t, "unhandled media type", compressionType)
+						t.Errorf("unhandled media type %s", compressionType)
 					}
 					dgst := desc.Digest
 					require.Contains(t, expectedContent, dgst, "for %v", compressionType)
@@ -2310,7 +2311,7 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
@@ -2457,7 +2458,7 @@ func TestLoadBrokenParents(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{

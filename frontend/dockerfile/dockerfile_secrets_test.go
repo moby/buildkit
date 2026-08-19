@@ -161,7 +161,7 @@ RUN --mount=type=secret,id=mysecret,env=SECRET_ENV if %SECRET_ENV% NEQ pw (exit 
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.Fail(t, "timed out waiting for status")
+		t.Error("timed out waiting for status")
 	}
 
 	require.True(t, hasStatus)

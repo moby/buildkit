@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -459,7 +460,7 @@ func TestChecksumWildcardWithBadMountable(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -997,7 +998,7 @@ func TestHandleChange(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1075,7 +1076,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1126,7 +1127,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1319,7 +1320,7 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1438,7 +1439,7 @@ func TestChecksumUpdateDirectory(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)

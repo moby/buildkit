@@ -82,7 +82,7 @@ func TestCachedError(t *testing.T) {
 	select {
 	case <-ctx.Done():
 	default:
-		require.Fail(t, "expected context to be done")
+		t.Error("expected context to be done")
 	}
 
 	v, err := g.Do(ctx, "22", func(ctx context.Context) (string, error) {
