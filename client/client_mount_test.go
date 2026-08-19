@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -1053,7 +1054,7 @@ func makeSSHAgentSock(t *testing.T, agent agent.Agent) (p string, err error) {
 		return "", err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, l.Close())
+		assert.NoError(t, l.Close())
 	})
 
 	s := &server{l: l}

@@ -116,7 +116,7 @@ ENTRYPOINT my entrypoint
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
-	require.Equal(t, []string(nil), ociimg.Config.Cmd)
+	require.Nil(t, ociimg.Config.Cmd)
 	require.Equal(t, []string{"ls", "my entrypoint"}, ociimg.Config.Entrypoint)
 }
 

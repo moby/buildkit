@@ -459,7 +459,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "arm64 manifest descriptor", desc.Annotations["md"])
 			require.Equal(t, "arm64 manifest descriptor opt", desc.Annotations["mdo"])
 		default:
-			require.Fail(t, "unrecognized platform")
+			t.Error("unrecognized platform")
 		}
 	}
 
@@ -548,7 +548,7 @@ func testExportAnnotations(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, "arm64 manifest opt", mfst.Annotations["mo"])
 			require.Equal(t, "arm64 manifest descriptor opt", desc.Annotations["mdo"])
 		default:
-			require.Fail(t, "unrecognized platform")
+			t.Error("unrecognized platform")
 		}
 	}
 }

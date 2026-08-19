@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -515,7 +516,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	store, err := local.NewStore(tmpdir)
@@ -528,7 +529,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, db.Close())
+		assert.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
@@ -540,7 +541,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, md.Close())
+		assert.NoError(t, md.Close())
 	})
 
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
@@ -563,7 +564,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, cm.Close())
+		assert.NoError(t, cm.Close())
 	})
 
 	return cm, nil
