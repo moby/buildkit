@@ -586,7 +586,7 @@ func TestMissingMaterializedLowerDiffExtract(t *testing.T) {
 	}
 
 	t.Parallel()
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
 	co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
 	require.NoError(t, err)
