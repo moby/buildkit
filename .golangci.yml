@@ -93,6 +93,9 @@ linters:
       enable-all-rules: false
       enable-default-rules: true
       rules:
+        - name: context-as-argument
+          arguments:
+            - allow-types-before: "*testing.T"
         - name: errorf
         - name: if-return
         - name: unnecessary-format
