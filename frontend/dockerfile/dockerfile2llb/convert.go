@@ -1098,7 +1098,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c, opt.lint)
 	case *instructions.OnbuildCommand:
-		err = dispatchOnbuild(d, c)
+		dispatchOnbuild(d, c)
 	case *instructions.CmdCommand:
 		err = dispatchCmd(d, c, opt.lint)
 	case *instructions.EntrypointCommand:
@@ -1587,9 +1587,8 @@ func dispatchLabel(d *dispatchState, c *instructions.LabelCommand, lint *linter.
 	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
 }
 
-func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
+func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) {
 	d.image.Config.OnBuild = append(d.image.Config.OnBuild, c.Expression)
-	return nil
 }
 
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand, lint *linter.Linter) error {

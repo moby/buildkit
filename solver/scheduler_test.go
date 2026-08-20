@@ -3964,6 +3964,8 @@ func (v *vertexSum) Acquire(_ context.Context) (ReleaseFunc, error) {
 }
 
 // vtxAdd returns a vertex that outputs each input plus a constant
+//
+//nolint:unparam
 func vtxAdd(v int, opt vtxOpt) *vertexAdd {
 	if opt.cacheKeySeed == "" {
 		opt.cacheKeySeed = fmt.Sprintf("add-%d-%d", v, len(opt.inputs))
@@ -4108,6 +4110,7 @@ func unwrapInt(res Result) int {
 	return r.intValue
 }
 
+//nolint:unparam
 func blockingFuncion(i int) func(context.Context) error {
 	limit := int64(i)
 	block := make(chan struct{})

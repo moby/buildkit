@@ -34,6 +34,8 @@ func parseIgnore(_ string, _ *directives) (*Node, map[string]bool, error) {
 // statement with sub-statements.
 //
 // ONBUILD RUN foo bar -> (onbuild (run foo bar))
+//
+//nolint:unparam
 func parseSubCommand(rest string, d *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
@@ -197,11 +199,13 @@ func appendKeyValueNode(node, rootNode, prevNode *Node) (*Node, *Node) {
 	return rootNode, prevNode
 }
 
+//nolint:unparam
 func parseEnv(rest string, d *directives) (*Node, map[string]bool, error) {
 	node, err := parseNameVal(rest, "ENV", d)
 	return node, nil, err
 }
 
+//nolint:unparam
 func parseLabel(rest string, d *directives) (*Node, map[string]bool, error) {
 	node, err := parseNameVal(rest, commandLabel, d)
 	return node, nil, err
@@ -215,6 +219,8 @@ func parseLabel(rest string, d *directives) (*Node, map[string]bool, error) {
 // In addition, a keyword definition alone is of the form `keyword` like `name1`
 // above. And the assignments `name2=` and `name3=""` are equivalent and
 // assign an empty value to the respective keywords.
+//
+//nolint:unparam
 func parseNameOrNameVal(rest string, d *directives) (*Node, map[string]bool, error) {
 	words := parseWords(rest, d)
 	if len(words) == 0 {
@@ -265,6 +271,8 @@ func parseStringsWhitespaceDelimited(rest string, _ *directives) (*Node, map[str
 }
 
 // parseString just wraps the string in quotes and returns a working node.
+//
+//nolint:unparam
 func parseString(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil

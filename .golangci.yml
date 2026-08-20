@@ -26,6 +26,7 @@ linters:
     - staticcheck
     - testifylint
     - unused
+    - unparam
     - usestdlibvars
     - usetesting
     - whitespace

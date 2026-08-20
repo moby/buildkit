@@ -134,6 +134,7 @@ func (sw *streamWriter) Write(dt []byte) (int, error) {
 	return oldSize, nil
 }
 
+//nolint:unparam
 func (sw *streamWriter) write(dt []byte) (int, error) {
 	if len(dt) == 0 {
 		return 0, nil

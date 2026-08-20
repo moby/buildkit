@@ -380,6 +380,7 @@ type vertex struct {
 	hidden bool
 }
 
+//nolint:unparam
 func (v *vertex) update(c int) {
 	if v.count == 0 {
 		now := time.Now()
