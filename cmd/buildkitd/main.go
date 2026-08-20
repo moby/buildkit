@@ -445,9 +445,7 @@ func main() {
 		}
 
 		errCh := make(chan error, 1)
-		if err := serveGRPC(server, listeners, errCh); err != nil {
-			return err
-		}
+		serveGRPC(server, listeners, errCh)
 
 		select {
 		case serverErr := <-errCh:
@@ -523,7 +521,7 @@ func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 	return listeners, nil
 }
 
-func serveGRPC(server *grpc.Server, listeners []net.Listener, errCh chan error) error {
+func serveGRPC(server *grpc.Server, listeners []net.Listener, errCh chan error) {
 	if os.Getenv("NOTIFY_SOCKET") != "" {
 		notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyReady)
 		bklog.L.Debugf("SdNotifyReady notified=%v, err=%v", notified, notifyErr)
@@ -541,7 +539,6 @@ func serveGRPC(server *grpc.Server, listeners []net.Listener, errCh chan error) 
 	go func() {
 		errCh <- eg.Wait()
 	}()
-	return nil
 }
 
 func defaultConfigPath() string {

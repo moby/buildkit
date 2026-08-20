@@ -77,10 +77,7 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 
 	c.mu.Lock()
 	cRes, err := result.ConvertResult(res, func(r solver.ResultProxy) (client.Reference, error) {
-		rr, err := c.newRef(r, session.NewGroup(c.sid))
-		if err != nil {
-			return nil, err
-		}
+		rr := c.newRef(r, session.NewGroup(c.sid))
 		c.refs = append(c.refs, rr)
 		return rr, nil
 	})
@@ -333,8 +330,8 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	return ctr, nil
 }
 
-func (c *BridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
-	return &ref{resultProxy: r, session: s, c: c}, nil
+func (c *BridgeClient) newRef(r solver.ResultProxy, s session.Group) *ref {
+	return &ref{resultProxy: r, session: s, c: c}
 }
 
 type ref struct {

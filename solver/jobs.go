@@ -809,18 +809,18 @@ type withProvenance struct {
 	e Edge
 }
 
-func (wp *withProvenance) WalkProvenance(ctx context.Context, f func(ProvenanceProvider) error) error {
+func (wp *withProvenance) WalkProvenance(_ context.Context, f func(ProvenanceProvider) error) error {
 	if wp.j == nil {
 		return nil
 	}
 	wp.j.list.mu.RLock()
 	defer wp.j.list.mu.RUnlock()
 	m := map[digest.Digest]struct{}{}
-	return wp.j.walkProvenance(ctx, wp.e, f, m)
+	return wp.j.walkProvenance(wp.e, f, m)
 }
 
 // called with solver lock
-func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvider) error, visited map[digest.Digest]struct{}) error {
+func (j *Job) walkProvenance(e Edge, f func(ProvenanceProvider) error, visited map[digest.Digest]struct{}) error {
 	if _, ok := visited[e.Vertex.Digest()]; ok {
 		return nil
 	}
@@ -844,7 +844,7 @@ func (j *Job) walkProvenance(ctx context.Context, e Edge, f func(ProvenanceProvi
 		st.mu.Unlock()
 	}
 	for _, inp := range inputs {
-		if err := j.walkProvenance(ctx, inp, f, visited); err != nil {
+		if err := j.walkProvenance(inp, f, visited); err != nil {
 			return err
 		}
 	}

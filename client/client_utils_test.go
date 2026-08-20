@@ -249,6 +249,7 @@ func parseFSMetadata(t *testing.T, dt []byte) []fsutiltypes.Stat {
 	return m
 }
 
+//nolint:unparam
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
 	def, err := llb.Image(ref).Marshal(ctx)
 	if err != nil {

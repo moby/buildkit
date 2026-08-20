@@ -152,6 +152,7 @@ func (md *cacheMetadata) queueDescription(descr string) error {
 	return md.queueValue(keyDescription, descr, "")
 }
 
+//nolint:unparam
 func (md *cacheMetadata) queueCommitted(b bool) error {
 	return md.queueValue(keyCommitted, b, "")
 }
@@ -232,11 +233,10 @@ func (md *cacheMetadata) setEqualMutable(s string) error {
 	return md.queueValue(keyEqualMutable, s, "")
 }
 
-func (md *cacheMetadata) clearEqualMutable() error {
+func (md *cacheMetadata) clearEqualMutable() {
 	md.si.Queue(func(b *bolt.Bucket) error {
 		return md.si.SetValue(b, keyEqualMutable, nil)
 	})
-	return nil
 }
 
 func (md *cacheMetadata) queueDiffID(str digest.Digest) error {
