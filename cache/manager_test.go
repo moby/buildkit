@@ -602,7 +602,7 @@ func TestMissingMaterializedLowerDiffExtract(t *testing.T) {
 		ref, err := cm.GetByBlob(ctx, desc, nil)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			require.NoError(t, ref.Release(context.WithoutCancel(ctx)))
+			assert.NoError(t, ref.Release(context.WithoutCancel(ctx)))
 		})
 		refs = append(refs, ref)
 	}
@@ -613,7 +613,7 @@ func TestMissingMaterializedLowerDiffExtract(t *testing.T) {
 	diff, err := cm.Diff(ctx, refs[0], refs[1], nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, diff.Release(context.WithoutCancel(ctx)))
+		assert.NoError(t, diff.Release(context.WithoutCancel(ctx)))
 	})
 
 	lowerID := refs[0].(*immutableRef).getSnapshotID()
