@@ -175,6 +175,7 @@ In the above example, we define two:
 
 * `--opt target=foo` - build only until the dockerfile target stage `foo`, the equivalent of `docker buildx build --target=foo`.
 * `--opt build-arg:foo=bar` - set the build argument `foo` to `bar`.
+* `--opt build-arg:foo` - set the build argument `foo` to the value of `$foo` in the environment, the equivalent of `docker buildx build --build-arg foo`. If `foo` is not set in the environment the build argument is left unset, so any default given in the Dockerfile applies.
 
 In addition, the dockerfile front-end supports additional build contexts. These allow you to "alias" an image reference or name
 with something else entirely.
