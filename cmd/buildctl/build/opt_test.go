@@ -1,7 +1,6 @@
 package build
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -80,25 +79,16 @@ func TestParseOpt(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// SOURCE_DATE_EPOCH is propagated by loadOptEnv, and the cases
-			// below expect IMAGE to be unset unless the case sets it. Clear
-			// both so an ambient value cannot leak into the expectations.
-			for _, k := range []string{"SOURCE_DATE_EPOCH", "IMAGE"} {
-				if v, ok := os.LookupEnv(k); ok {
-					require.NoError(t, os.Unsetenv(k))
-					t.Cleanup(func() { os.Setenv(k, v) })
-				}
-			}
 			for k, v := range tc.env {
 				t.Setenv(k, v)
 			}
 			opt, err := ParseOpt(tc.opts)
 			if tc.expectedErr != "" {
 				require.EqualError(t, err, tc.expectedErr)
-				return
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, opt)
 			}
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, opt)
 		})
 	}
 }
