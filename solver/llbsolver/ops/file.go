@@ -52,7 +52,7 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *s
 	}, nil
 }
 
-func (f *fileOp) CacheMap(ctx context.Context, jobCtx solver.JobContext, index int) (*solver.CacheMap, bool, error) {
+func (f *fileOp) CacheMap(_ context.Context, _ solver.JobContext, _ int) (*solver.CacheMap, bool, error) {
 	selectors := map[int][]opsutils.Selector{}
 	invalidSelectors := map[int]struct{}{}
 

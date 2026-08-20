@@ -339,7 +339,7 @@ type bind struct {
 	dir string
 }
 
-func (b *bind) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (b *bind) Mount(_ context.Context, readonly bool) (snapshot.Mountable, error) {
 	return &bindMount{b.dir, readonly}, nil
 }
 
@@ -510,15 +510,15 @@ func (s *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
 
-func (s *conn) SetDeadline(t time.Time) error {
+func (s *conn) SetDeadline(_ time.Time) error {
 	return nil
 }
 
-func (s *conn) SetReadDeadline(t time.Time) error {
+func (s *conn) SetReadDeadline(_ time.Time) error {
 	return nil
 }
 
-func (s *conn) SetWriteDeadline(t time.Time) error {
+func (s *conn) SetWriteDeadline(_ time.Time) error {
 	return nil
 }
 
@@ -1028,7 +1028,7 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 	}, nil
 }
 
-func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
+func (lbf *llbBridgeForwarder) Return(_ context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
 	if in.Error != nil {
 		return lbf.setResult(nil, grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
@@ -1093,7 +1093,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	return lbf.setResult(r, nil)
 }
 
-func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {
+func (lbf *llbBridgeForwarder) Inputs(_ context.Context, _ *pb.InputsRequest) (*pb.InputsResponse, error) {
 	return &pb.InputsResponse{
 		Definitions: lbf.inputs,
 	}, nil

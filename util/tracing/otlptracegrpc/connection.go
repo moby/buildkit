@@ -61,7 +61,7 @@ func NewConnection(cc *grpc.ClientConn, handler func(cc *grpc.ClientConn)) *Conn
 	return c
 }
 
-func (c *Connection) StartConnection(ctx context.Context) error {
+func (c *Connection) StartConnection(_ context.Context) error {
 	c.stopCh = make(chan struct{})
 	c.disconnectedCh = make(chan bool, 1)
 	c.backgroundConnectionDoneCh = make(chan struct{})

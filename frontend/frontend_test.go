@@ -44,14 +44,14 @@ func testReturnNil(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+	frontend := func(_ context.Context, _ gateway.Client) (*gateway.Result, error) {
 		return nil, nil
 	}
 
 	_, err = c.Build(ctx, client.SolveOpt{}, "", frontend, nil)
 	require.NoError(t, err)
 
-	frontend = func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+	frontend = func(_ context.Context, _ gateway.Client) (*gateway.Result, error) {
 		return gateway.NewResult(), nil
 	}
 

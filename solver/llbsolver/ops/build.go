@@ -39,7 +39,7 @@ func NewBuildOp(v solver.Vertex, op *pb.Op_Build, b frontend.FrontendLLBBridge, 
 	}, nil
 }
 
-func (b *BuildOp) CacheMap(ctx context.Context, job solver.JobContext, index int) (*solver.CacheMap, bool, error) {
+func (b *BuildOp) CacheMap(_ context.Context, _ solver.JobContext, _ int) (*solver.CacheMap, bool, error) {
 	dt, err := json.Marshal(struct {
 		Type string
 		Exec *pb.BuildOp
@@ -161,7 +161,7 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 	return []solver.Result{r}, err
 }
 
-func (b *BuildOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
+func (b *BuildOp) Acquire(_ context.Context) (solver.ReleaseFunc, error) {
 	// buildOp itself does not count towards parallelism budget.
 	return func() {}, nil
 }

@@ -330,7 +330,7 @@ func (j *jobCtx) Session() session.Group {
 	return j.g
 }
 
-func (j *jobCtx) Cleanup(f func() error) error {
+func (j *jobCtx) Cleanup(_ func() error) error {
 	return errors.Errorf("cleanup not implemented for %T", j)
 }
 

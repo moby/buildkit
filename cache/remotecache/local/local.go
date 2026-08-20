@@ -124,6 +124,6 @@ type unlazyProvider struct {
 	s session.Group
 }
 
-func (p *unlazyProvider) UnlazySession(desc ocispecs.Descriptor) session.Group {
+func (p *unlazyProvider) UnlazySession(_ ocispecs.Descriptor) session.Group {
 	return p.s
 }

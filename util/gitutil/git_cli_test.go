@@ -29,7 +29,7 @@ func TestGitCLIConfigEnv(t *testing.T) {
 
 	t.Run("isolated by default", func(t *testing.T) {
 		var got []string
-		cli := NewGitCLI(WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+		cli := NewGitCLI(WithExec(func(_ context.Context, cmd *exec.Cmd) error {
 			got = append([]string(nil), cmd.Env...)
 			return nil
 		}))
@@ -49,7 +49,7 @@ func TestGitCLIConfigEnv(t *testing.T) {
 		var got []string
 		cli := NewGitCLI(
 			WithHostGitConfig(),
-			WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+			WithExec(func(_ context.Context, cmd *exec.Cmd) error {
 				got = append([]string(nil), cmd.Env...)
 				return nil
 			}),

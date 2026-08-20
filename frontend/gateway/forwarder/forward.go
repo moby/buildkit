@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
+func LLBBridgeToGatewayClient(_ context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
 	bc := &BridgeClient{
 		opts:              opts,
 		inputs:            inputs,
@@ -122,7 +122,7 @@ func (c *BridgeClient) BuildOpts() client.BuildOpts {
 	return c.buildOpts
 }
 
-func (c *BridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+func (c *BridgeClient) Inputs(_ context.Context) (map[string]llb.State, error) {
 	inputs := make(map[string]llb.State)
 	for key, def := range c.inputs {
 		defop, err := llb.NewDefinitionOp(def)

@@ -645,7 +645,7 @@ func (b *testFileBackend) Mkfile(_ context.Context, m, user, group fileoptypes.M
 	return nil
 }
 
-func (b *testFileBackend) Symlink(_ context.Context, m, user, group fileoptypes.Mount, a *pb.FileActionSymlink) error {
+func (b *testFileBackend) Symlink(_ context.Context, m, _, _ fileoptypes.Mount, a *pb.FileActionSymlink) error {
 	mm := m.(*testMount)
 	mm.id += "-symlink"
 	mm.chain = append(mm.chain, mod{symlink: a})
@@ -680,7 +680,7 @@ func (b *testFileRefBackend) NewRef(id string) *testFileRef {
 	return r
 }
 
-func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly bool, _ session.Group) (fileoptypes.Mount, error) {
+func (b *testFileRefBackend) Prepare(_ context.Context, ref fileoptypes.Ref, readonly bool, _ session.Group) (fileoptypes.Mount, error) {
 	var active *testFileRef
 	if ref == nil {
 		active = b.NewRef("scratch")

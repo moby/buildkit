@@ -952,7 +952,7 @@ func (j *Job) SetValue(key string, v any) {
 	j.values.Store(key, v)
 }
 
-func (j *Job) EachValue(ctx context.Context, key string, fn func(any) error) error {
+func (j *Job) EachValue(_ context.Context, key string, fn func(any) error) error {
 	v, ok := j.values.Load(key)
 	if ok {
 		return fn(v)

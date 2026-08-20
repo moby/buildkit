@@ -159,7 +159,7 @@ func DockerfileLint(ctx context.Context, dt []byte, opt ConvertOpt) (*lint.LintR
 	return results, nil
 }
 
-func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
+func ListTargets(_ context.Context, dt []byte) (*targets.List, error) {
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, err

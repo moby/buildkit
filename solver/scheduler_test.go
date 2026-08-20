@@ -586,7 +586,7 @@ func TestSingleCancelParallel(t *testing.T) {
 			Vertex: vtx(vtxOpt{
 				name:  "v2",
 				value: "result2",
-				cachePreFunc: func(ctx context.Context) error {
+				cachePreFunc: func(_ context.Context) error {
 					close(firstReady)
 					time.Sleep(200 * time.Millisecond)
 					cancel(errors.WithStack(context.Canceled))
@@ -1258,7 +1258,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v1",
 					cacheKeySeed: "seed1",
 					value:        "result1",
-					cachePreFunc: func(ctx context.Context) error {
+					cachePreFunc: func(_ context.Context) error {
 						return errors.New("error-from-test")
 					},
 				})},
@@ -1299,7 +1299,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v1",
 					cacheKeySeed: "seed1",
 					value:        "result1",
-					cachePreFunc: func(ctx context.Context) error {
+					cachePreFunc: func(_ context.Context) error {
 						return context.Canceled
 					},
 				})},
@@ -1345,7 +1345,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v2",
 					cacheKeySeed: "seed3",
 					value:        "result2",
-					execPreFunc: func(ctx context.Context) error {
+					execPreFunc: func(_ context.Context) error {
 						return errors.New("exec-error-from-test")
 					},
 				})},
@@ -3820,7 +3820,7 @@ func (v *vertex) cacheMap(ctx context.Context) error {
 	return nil
 }
 
-func (v *vertex) CacheMap(ctx context.Context, jobCtx JobContext, index int) (*CacheMap, bool, error) {
+func (v *vertex) CacheMap(ctx context.Context, _ JobContext, index int) (*CacheMap, bool, error) {
 	if index == 0 {
 		if err := v.cacheMap(ctx); err != nil {
 			return nil, false, err
@@ -3857,7 +3857,7 @@ func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	return nil
 }
 
-func (v *vertex) Exec(ctx context.Context, job JobContext, inputs []Result) (outputs []Result, err error) {
+func (v *vertex) Exec(ctx context.Context, _ JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3867,7 +3867,7 @@ func (v *vertex) Exec(ctx context.Context, job JobContext, inputs []Result) (out
 	return []Result{&dummyResult{id: identity.NewID(), value: v.opt.value}}, nil
 }
 
-func (v *vertex) Acquire(ctx context.Context) (ReleaseFunc, error) {
+func (v *vertex) Acquire(_ context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -3911,14 +3911,14 @@ func (v *vertexConst) Sys() any {
 	return v
 }
 
-func (v *vertexConst) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
+func (v *vertexConst) Exec(ctx context.Context, _ JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
 	return []Result{&dummyResult{id: identity.NewID(), intValue: v.value}}, nil
 }
 
-func (v *vertexConst) Acquire(ctx context.Context) (ReleaseFunc, error) {
+func (v *vertexConst) Acquire(_ context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -3944,7 +3944,7 @@ func (v *vertexSum) Sys() any {
 	return v
 }
 
-func (v *vertexSum) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSum) Exec(ctx context.Context, _ JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3959,7 +3959,7 @@ func (v *vertexSum) Exec(ctx context.Context, jobCtx JobContext, inputs []Result
 	return []Result{&dummyResult{id: identity.NewID(), intValue: s}}, nil
 }
 
-func (v *vertexSum) Acquire(ctx context.Context) (ReleaseFunc, error) {
+func (v *vertexSum) Acquire(_ context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -3985,7 +3985,7 @@ func (v *vertexAdd) Sys() any {
 	return v
 }
 
-func (v *vertexAdd) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
+func (v *vertexAdd) Exec(ctx context.Context, _ JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3999,7 +3999,7 @@ func (v *vertexAdd) Exec(ctx context.Context, jobCtx JobContext, inputs []Result
 	return outputs, nil
 }
 
-func (v *vertexAdd) Acquire(ctx context.Context) (ReleaseFunc, error) {
+func (v *vertexAdd) Acquire(_ context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -4025,7 +4025,7 @@ func (v *vertexSubBuild) Sys() any {
 	return v
 }
 
-func (v *vertexSubBuild) Exec(ctx context.Context, jobCtx JobContext, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSubBuild) Exec(ctx context.Context, _ JobContext, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -4036,7 +4036,7 @@ func (v *vertexSubBuild) Exec(ctx context.Context, jobCtx JobContext, inputs []R
 	return []Result{res}, nil
 }
 
-func (v *vertexSubBuild) Acquire(ctx context.Context) (ReleaseFunc, error) {
+func (v *vertexSubBuild) Acquire(_ context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -4138,7 +4138,7 @@ func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Res
 	return cm.CacheManager.Load(ctx, rec)
 }
 
-func digestFromResult(ctx context.Context, res Result, _ session.Group) (digest.Digest, error) {
+func digestFromResult(_ context.Context, res Result, _ session.Group) (digest.Digest, error) {
 	return digest.FromBytes([]byte(unwrap(res))), nil
 }
 
@@ -4148,7 +4148,7 @@ func testExporterOpts(all bool) CacheExportOpt {
 		mode = CacheExportModeMax
 	}
 	return CacheExportOpt{
-		ResolveRemotes: func(ctx context.Context, res Result) ([]*Remote, error) {
+		ResolveRemotes: func(_ context.Context, res Result) ([]*Remote, error) {
 			if dr, ok := res.Sys().(*dummyResult); ok {
 				return []*Remote{{Descriptors: []ocispecs.Descriptor{{
 					Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},

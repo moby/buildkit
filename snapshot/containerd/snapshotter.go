@@ -59,7 +59,7 @@ func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...sn
 	return s.Snapshotter.Commit(ctx, name, key, opts...)
 }
 
-func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
+func (s *nsSnapshotter) Remove(_ context.Context, _ string) error {
 	return errors.New("calling snapshotter.Remove is forbidden")
 }
 

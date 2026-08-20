@@ -39,7 +39,7 @@ type ociLayoutResolver struct {
 }
 
 // Fetcher returns a new fetcher for the provided reference.
-func (r *ociLayoutResolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, error) {
+func (r *ociLayoutResolver) Fetcher(_ context.Context, _ string) (remotes.Fetcher, error) {
 	return r, nil
 }
 

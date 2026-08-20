@@ -48,7 +48,7 @@ type fileStore struct {
 	m map[string]Source
 }
 
-func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
+func (fs *fileStore) GetSecret(_ context.Context, id string) ([]byte, error) {
 	v, ok := fs.m[id]
 	if !ok {
 		return nil, errors.WithStack(secrets.ErrNotFound)

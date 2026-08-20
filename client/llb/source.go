@@ -39,7 +39,7 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	return s
 }
 
-func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
+func (s *SourceOp) Validate(_ context.Context, _ *Constraints) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -275,7 +275,7 @@ func Image(ref string, opts ...ImageOption) State {
 				return st.WithImageConfig(dt)
 			})
 		}
-		return Scratch().Async(func(ctx context.Context, _ State, c *Constraints) (State, error) {
+		return Scratch().Async(func(_ context.Context, _ State, c *Constraints) (State, error) {
 			p := info.Platform
 			if p == nil {
 				p = c.Platform

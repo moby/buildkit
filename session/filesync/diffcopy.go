@@ -120,7 +120,7 @@ func syncTargetDiffCopy(ds grpc.ServerStream, dest string, deleteMode bool) erro
 		Filter: func() func(string, *fstypes.Stat) bool {
 			uid := os.Getuid()
 			gid := os.Getgid()
-			return func(p string, st *fstypes.Stat) bool {
+			return func(_ string, st *fstypes.Stat) bool {
 				st.Uid = uint32(uid)
 				st.Gid = uint32(gid)
 				return true

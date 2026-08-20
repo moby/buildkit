@@ -108,7 +108,7 @@ func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
 	return c2, nil
 }
 
-func (s socketDialer) Dial(ctx context.Context) (net.Conn, error) {
+func (s socketDialer) Dial(_ context.Context) (net.Conn, error) {
 	return s.dialer(s.path)
 }
 

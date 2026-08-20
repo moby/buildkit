@@ -207,7 +207,7 @@ func (p *provider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (cont
 // filterLayerBlobs causes layer blobs to be skipped for fetch, which is required to support lazy blobs.
 // It also stores the non-layer blobs (metadata) it encounters in the provided map.
 func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Locker) images.HandlerFunc {
-	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+	return func(_ context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
 		case
 			ocispecs.MediaTypeImageLayer,

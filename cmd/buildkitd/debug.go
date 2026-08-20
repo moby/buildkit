@@ -45,7 +45,7 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/cache/store", http.HandlerFunc(handleDebugCacheStore))
 	m.Handle("POST /debug/cache/load", http.HandlerFunc(handleCacheLoad))
 
-	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	m.Handle("/debug/gc", http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		runtime.GC()
 		bklog.G(req.Context()).Debugf("triggered GC from debug endpoint")
 	}))

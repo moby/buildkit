@@ -86,7 +86,7 @@ func (d *DB) saveFrames(key string, frames []Frame) {
 	})
 }
 
-func (d *DB) Get(ctx context.Context, dgst string) (Type, []Frame, error) {
+func (d *DB) Get(_ context.Context, dgst string) (Type, []Frame, error) {
 	if d.db == nil {
 		return "", nil, errors.WithStack(ErrNotFound)
 	}

@@ -1612,7 +1612,7 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 
 type badMountable struct{}
 
-func (bm *badMountable) Mount(ctx context.Context, readonly bool, _ session.Group) (snapshot.Mountable, error) {
+func (bm *badMountable) Mount(_ context.Context, _ bool, _ session.Group) (snapshot.Mountable, error) {
 	return nil, errors.New("tried to mount bad mountable")
 }
 

@@ -641,7 +641,7 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	return err
 }
 
-func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersRequest) (*controlapi.ListWorkersResponse, error) {
+func (c *Controller) ListWorkers(_ context.Context, r *controlapi.ListWorkersRequest) (*controlapi.ListWorkersResponse, error) {
 	resp := &controlapi.ListWorkersResponse{}
 	workers, err := c.opt.WorkerController.List(r.Filter...)
 	if err != nil {
@@ -660,7 +660,7 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 	return resp, nil
 }
 
-func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
+func (c *Controller) Info(_ context.Context, _ *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
 	buildkitVersion := toPBBuildkitVersion(client.BuildkitVersion{
 		Package:  version.Package,
 		Version:  version.Version,
@@ -827,19 +827,19 @@ type roContentStore struct {
 	content.Store
 }
 
-func (cs *roContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+func (cs *roContentStore) Writer(_ context.Context, _ ...content.WriterOpt) (content.Writer, error) {
 	return nil, errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Delete(ctx context.Context, dgst digest.Digest) error {
+func (cs *roContentStore) Delete(_ context.Context, _ digest.Digest) error {
 	return errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
+func (cs *roContentStore) Update(_ context.Context, _ content.Info, _ ...string) (content.Info, error) {
 	return content.Info{}, errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Abort(ctx context.Context, ref string) error {
+func (cs *roContentStore) Abort(_ context.Context, _ string) error {
 	return errors.Errorf("read-only content store")
 }
 

@@ -10,7 +10,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func (c zstdType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c zstdType) Compress(_ context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
 		var opts []zstd.EOption
 		if comp.Level != nil {
@@ -24,7 +24,7 @@ func (c zstdType) Decompress(ctx context.Context, cs content.Store, desc ocispec
 	return decompress(ctx, cs, desc)
 }
 
-func (c zstdType) NeedsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error) {
+func (c zstdType) NeedsConversion(_ context.Context, _ content.Store, desc ocispecs.Descriptor) (bool, error) {
 	if !images.IsLayerType(desc.MediaType) {
 		return false, nil
 	}
@@ -38,7 +38,7 @@ func (c zstdType) NeedsConversion(ctx context.Context, cs content.Store, desc oc
 	return true, nil
 }
 
-func (c zstdType) NeedsComputeDiffBySelf(comp Config) bool {
+func (c zstdType) NeedsComputeDiffBySelf(_ Config) bool {
 	return true
 }
 

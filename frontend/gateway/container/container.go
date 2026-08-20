@@ -168,7 +168,7 @@ type MountMutableRef struct {
 
 type MakeMutable func(m *opspb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error)
 
-func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manager, g session.Group, cwd string, mnts []*opspb.Mount, refs []*worker.WorkerRef, makeMutable MakeMutable, platform string) (p PreparedMounts, err error) {
+func PrepareMounts(ctx context.Context, mm *mounts.MountManager, _ cache.Manager, g session.Group, cwd string, mnts []*opspb.Mount, refs []*worker.WorkerRef, makeMutable MakeMutable, platform string) (p PreparedMounts, err error) {
 	// loop over all mounts, fill in mounts, root and outputs
 	for i, m := range mnts {
 		var (
@@ -428,7 +428,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*o
 	return out, nil
 }
 
-func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
+func (gwCtr *gatewayContainer) Release(_ context.Context) error {
 	gwCtr.mu.Lock()
 	defer gwCtr.mu.Unlock()
 	gwCtr.cancel(errors.WithStack(context.Canceled))
