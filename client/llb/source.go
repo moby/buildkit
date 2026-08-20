@@ -39,7 +39,7 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	return s
 }
 
-func (s *SourceOp) Validate(_ context.Context, _ *Constraints) error {
+func (s *SourceOp) Validate(context.Context, *Constraints) error {
 	if s.err != nil {
 		return s.err
 	}

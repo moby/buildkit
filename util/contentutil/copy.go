@@ -111,7 +111,7 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 	handlers := []images.Handler{
 		annotateDistributionSourceHandler(images.ChildrenHandler(provider), desc.Annotations),
 		filterHandler,
-		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func([]byte) {}),
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

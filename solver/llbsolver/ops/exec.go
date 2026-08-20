@@ -111,7 +111,7 @@ func checkShouldClearCacheOpts(m *pb.Mount) bool {
 	return true
 }
 
-func (e *ExecOp) CacheMap(_ context.Context, _ solver.JobContext, _ int) (*solver.CacheMap, bool, error) {
+func (e *ExecOp) CacheMap(context.Context, solver.JobContext, int) (*solver.CacheMap, bool, error) {
 	op := cloneExecOp(e.op)
 
 	for i := range op.Meta.ExtraHosts {

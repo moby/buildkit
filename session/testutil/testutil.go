@@ -48,13 +48,13 @@ func (s *sock) LocalAddr() net.Addr {
 func (s *sock) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
-func (s *sock) SetDeadline(_ time.Time) error {
+func (s *sock) SetDeadline(time.Time) error {
 	return nil
 }
-func (s *sock) SetReadDeadline(_ time.Time) error {
+func (s *sock) SetReadDeadline(time.Time) error {
 	return nil
 }
-func (s *sock) SetWriteDeadline(_ time.Time) error {
+func (s *sock) SetWriteDeadline(time.Time) error {
 	return nil
 }
 

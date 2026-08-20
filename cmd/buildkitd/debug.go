@@ -55,7 +55,7 @@ func setupDebugHandlers(addr string) error {
 	setupDebugFlight(m)
 
 	// setting debugaddr is opt-in. permission is defined by listener address
-	trace.AuthRequest = func(_ *http.Request) (bool, bool) {
+	trace.AuthRequest = func(*http.Request) (bool, bool) {
 		return true, true
 	}
 

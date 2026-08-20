@@ -34,7 +34,7 @@ func NewMergeOp(v solver.Vertex, op *pb.Op_Merge, w worker.Worker) (solver.Op, e
 	}, nil
 }
 
-func (m *mergeOp) CacheMap(_ context.Context, _ solver.JobContext, _ int) (*solver.CacheMap, bool, error) {
+func (m *mergeOp) CacheMap(context.Context, solver.JobContext, int) (*solver.CacheMap, bool, error) {
 	dt, err := json.Marshal(struct {
 		Type  string
 		Merge *pb.MergeOp
@@ -94,6 +94,6 @@ func (m *mergeOp) Exec(ctx context.Context, _ solver.JobContext, inputs []solver
 	return []solver.Result{worker.NewWorkerRefResult(mergedRef, m.worker)}, nil
 }
 
-func (m *mergeOp) Acquire(_ context.Context) (release solver.ReleaseFunc, err error) {
+func (m *mergeOp) Acquire(context.Context) (release solver.ReleaseFunc, err error) {
 	return func() {}, nil
 }

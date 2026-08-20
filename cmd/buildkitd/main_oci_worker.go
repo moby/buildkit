@@ -363,7 +363,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 		if _, err := os.Stat(address); os.IsNotExist(err) {
 			return snFactory, errors.Wrapf(err, "snapshotter doesn't exist on %q (Do not include 'unix://' prefix)", address)
 		}
-		snFactory.New = func(_ string) (ctdsnapshot.Snapshotter, error) {
+		snFactory.New = func(string) (ctdsnapshot.Snapshotter, error) {
 			backoffConfig := backoff.DefaultConfig
 			backoffConfig.MaxDelay = 3 * time.Second
 			connParams := grpc.ConnectParams{

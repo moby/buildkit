@@ -287,7 +287,7 @@ func TestCaptureURLNormalizesDefaultPort(t *testing.T) {
 }
 
 func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
-	original := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+	original := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("original upstream should not receive converted request")
 	}))
 	t.Cleanup(original.Close)

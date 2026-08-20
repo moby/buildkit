@@ -26,7 +26,7 @@ const (
 
 // ignore the current argument. This will still leave a command parsed, but
 // will not incorporate the arguments into the ast.
-func parseIgnore(_ string, _ *directives) (*Node, map[string]bool, error) {
+func parseIgnore(string, *directives) (*Node, map[string]bool, error) {
 	return &Node{}, nil, nil
 }
 

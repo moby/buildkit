@@ -1446,7 +1446,7 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
 	dialOpts := []grpc.DialOption{
-		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return stdioConn(), nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -1487,15 +1487,15 @@ func (s *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
 
-func (s *conn) SetDeadline(_ time.Time) error {
+func (s *conn) SetDeadline(time.Time) error {
 	return nil
 }
 
-func (s *conn) SetReadDeadline(_ time.Time) error {
+func (s *conn) SetReadDeadline(time.Time) error {
 	return nil
 }
 
-func (s *conn) SetWriteDeadline(_ time.Time) error {
+func (s *conn) SetWriteDeadline(time.Time) error {
 	return nil
 }
 

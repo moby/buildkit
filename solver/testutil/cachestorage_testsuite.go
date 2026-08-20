@@ -87,7 +87,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	require.True(t, ok)
 
 	// empty result
-	err = st.WalkResults("baz", func(_ solver.CacheResult) error {
+	err = st.WalkResults("baz", func(solver.CacheResult) error {
 		require.Fail(t, "unreachable")
 		return nil
 	})

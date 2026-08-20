@@ -11,6 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (sr *immutableRef) tryComputeOverlayBlob(_ context.Context, _, _ []mount.Mount, _ string, _ string, _ compression.Compressor) (_ ocispecs.Descriptor, ok bool, err error) {
+func (sr *immutableRef) tryComputeOverlayBlob(context.Context, []mount.Mount, []mount.Mount, string, string, compression.Compressor) (_ ocispecs.Descriptor, ok bool, err error) {
 	return ocispecs.Descriptor{}, true, errors.Errorf("overlayfs-based diff computing is unsupported")
 }

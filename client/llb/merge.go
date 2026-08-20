@@ -24,7 +24,7 @@ func NewMerge(inputs []State, c Constraints) *MergeOp {
 	return op
 }
 
-func (m *MergeOp) Validate(_ context.Context, _ *Constraints) error {
+func (m *MergeOp) Validate(context.Context, *Constraints) error {
 	if len(m.inputs) < 2 {
 		return errors.New("merge must have at least 2 inputs")
 	}

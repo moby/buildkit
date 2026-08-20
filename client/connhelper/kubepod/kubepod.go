@@ -24,7 +24,7 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 		return nil, err
 	}
 	return &connhelper.ConnectionHelper{
-		ContextDialer: func(_ context.Context, _ string) (net.Conn, error) {
+		ContextDialer: func(context.Context, string) (net.Conn, error) {
 			// using background context because context remains active for the duration of the process, after dial has completed
 			return commandconn.New(context.Background(), "kubectl", "--context="+sp.Context, "--namespace="+sp.Namespace,
 				"exec", "--container="+sp.Container, "-i", sp.Pod, "--", "buildctl", "dial-stdio")
