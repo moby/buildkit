@@ -402,7 +402,7 @@ func (f *builtinFrontend) DFCmdArgs(ctx, dockerfile string) (string, string) {
 	return dfCmdArgs(ctx, dockerfile, "--frontend dockerfile.v0")
 }
 
-func (f *builtinFrontend) RequiresBuildctl(_ *testing.T) {}
+func (f *builtinFrontend) RequiresBuildctl(*testing.T) {}
 
 type clientFrontend struct{}
 
@@ -419,7 +419,7 @@ func (f *clientFrontend) SolveGateway(ctx context.Context, c gateway.Client, req
 	return c.Solve(ctx, req)
 }
 
-func (f *clientFrontend) DFCmdArgs(_, _ string) (string, string) {
+func (f *clientFrontend) DFCmdArgs(string, string) (string, string) {
 	return "", ""
 }
 
@@ -455,7 +455,7 @@ func (f *gatewayFrontend) DFCmdArgs(ctx, dockerfile string) (string, string) {
 	return dfCmdArgs(ctx, dockerfile, "--frontend gateway.v0 --opt=source="+f.gw)
 }
 
-func (f *gatewayFrontend) RequiresBuildctl(_ *testing.T) {}
+func (f *gatewayFrontend) RequiresBuildctl(*testing.T) {}
 
 func getFrontend(t *testing.T, sb integration.Sandbox) frontend {
 	v := sb.Value("frontend")

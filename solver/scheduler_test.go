@@ -586,7 +586,7 @@ func TestSingleCancelParallel(t *testing.T) {
 			Vertex: vtx(vtxOpt{
 				name:  "v2",
 				value: "result2",
-				cachePreFunc: func(_ context.Context) error {
+				cachePreFunc: func(context.Context) error {
 					close(firstReady)
 					time.Sleep(200 * time.Millisecond)
 					cancel(errors.WithStack(context.Canceled))
@@ -1258,7 +1258,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v1",
 					cacheKeySeed: "seed1",
 					value:        "result1",
-					cachePreFunc: func(_ context.Context) error {
+					cachePreFunc: func(context.Context) error {
 						return errors.New("error-from-test")
 					},
 				})},
@@ -1299,7 +1299,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v1",
 					cacheKeySeed: "seed1",
 					value:        "result1",
-					cachePreFunc: func(_ context.Context) error {
+					cachePreFunc: func(context.Context) error {
 						return context.Canceled
 					},
 				})},
@@ -1345,7 +1345,7 @@ func TestErrorReturns(t *testing.T) {
 					name:         "v2",
 					cacheKeySeed: "seed3",
 					value:        "result2",
-					execPreFunc: func(_ context.Context) error {
+					execPreFunc: func(context.Context) error {
 						return errors.New("exec-error-from-test")
 					},
 				})},
@@ -3867,7 +3867,7 @@ func (v *vertex) Exec(ctx context.Context, _ JobContext, inputs []Result) (outpu
 	return []Result{&dummyResult{id: identity.NewID(), value: v.opt.value}}, nil
 }
 
-func (v *vertex) Acquire(_ context.Context) (ReleaseFunc, error) {
+func (v *vertex) Acquire(context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -3918,7 +3918,7 @@ func (v *vertexConst) Exec(ctx context.Context, _ JobContext, inputs []Result) (
 	return []Result{&dummyResult{id: identity.NewID(), intValue: v.value}}, nil
 }
 
-func (v *vertexConst) Acquire(_ context.Context) (ReleaseFunc, error) {
+func (v *vertexConst) Acquire(context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -3959,7 +3959,7 @@ func (v *vertexSum) Exec(ctx context.Context, _ JobContext, inputs []Result) (ou
 	return []Result{&dummyResult{id: identity.NewID(), intValue: s}}, nil
 }
 
-func (v *vertexSum) Acquire(_ context.Context) (ReleaseFunc, error) {
+func (v *vertexSum) Acquire(context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -4001,7 +4001,7 @@ func (v *vertexAdd) Exec(ctx context.Context, _ JobContext, inputs []Result) (ou
 	return outputs, nil
 }
 
-func (v *vertexAdd) Acquire(_ context.Context) (ReleaseFunc, error) {
+func (v *vertexAdd) Acquire(context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 
@@ -4038,7 +4038,7 @@ func (v *vertexSubBuild) Exec(ctx context.Context, _ JobContext, inputs []Result
 	return []Result{res}, nil
 }
 
-func (v *vertexSubBuild) Acquire(_ context.Context) (ReleaseFunc, error) {
+func (v *vertexSubBuild) Acquire(context.Context) (ReleaseFunc, error) {
 	return func() {}, nil
 }
 

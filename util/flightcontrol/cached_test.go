@@ -14,20 +14,20 @@ func TestCached(t *testing.T) {
 
 	ctx := t.Context()
 
-	v, err := g.Do(ctx, "11", func(_ context.Context) (int, error) {
+	v, err := g.Do(ctx, "11", func(context.Context) (int, error) {
 		return 1, nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, v)
 
-	v, err = g.Do(ctx, "22", func(_ context.Context) (int, error) {
+	v, err = g.Do(ctx, "22", func(context.Context) (int, error) {
 		return 2, nil
 	})
 	require.NoError(t, err)
 	require.Equal(t, 2, v)
 
 	didCall := false
-	v, err = g.Do(ctx, "11", func(_ context.Context) (int, error) {
+	v, err = g.Do(ctx, "11", func(context.Context) (int, error) {
 		didCall = true
 		return 3, nil
 	})
@@ -36,14 +36,14 @@ func TestCached(t *testing.T) {
 	require.Equal(t, false, didCall)
 
 	// by default, errors are not cached
-	_, err = g.Do(ctx, "33", func(_ context.Context) (int, error) {
+	_, err = g.Do(ctx, "33", func(context.Context) (int, error) {
 		return 0, errors.New("some error")
 	})
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "some error")
 
-	v, err = g.Do(ctx, "33", func(_ context.Context) (int, error) {
+	v, err = g.Do(ctx, "33", func(context.Context) (int, error) {
 		return 3, nil
 	})
 
@@ -57,13 +57,13 @@ func TestCachedError(t *testing.T) {
 
 	ctx := t.Context()
 
-	_, err := g.Do(ctx, "11", func(_ context.Context) (string, error) {
+	_, err := g.Do(ctx, "11", func(context.Context) (string, error) {
 		return "", errors.New("first error")
 	})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "first error")
 
-	_, err = g.Do(ctx, "11", func(_ context.Context) (string, error) {
+	_, err = g.Do(ctx, "11", func(context.Context) (string, error) {
 		return "never-ran", nil
 	})
 	require.Error(t, err)
@@ -89,7 +89,7 @@ func TestCachedError(t *testing.T) {
 		require.Fail(t, "expected context to be done")
 	}
 
-	v, err := g.Do(ctx, "22", func(_ context.Context) (string, error) {
+	v, err := g.Do(ctx, "22", func(context.Context) (string, error) {
 		return "did-run", nil
 	})
 	require.NoError(t, err)

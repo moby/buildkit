@@ -510,15 +510,15 @@ func (s *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
 
-func (s *conn) SetDeadline(_ time.Time) error {
+func (s *conn) SetDeadline(time.Time) error {
 	return nil
 }
 
-func (s *conn) SetReadDeadline(_ time.Time) error {
+func (s *conn) SetReadDeadline(time.Time) error {
 	return nil
 }
 
-func (s *conn) SetWriteDeadline(_ time.Time) error {
+func (s *conn) SetWriteDeadline(time.Time) error {
 	return nil
 }
 
@@ -1093,7 +1093,7 @@ func (lbf *llbBridgeForwarder) Return(_ context.Context, in *pb.ReturnRequest) (
 	return lbf.setResult(r, nil)
 }
 
-func (lbf *llbBridgeForwarder) Inputs(_ context.Context, _ *pb.InputsRequest) (*pb.InputsResponse, error) {
+func (lbf *llbBridgeForwarder) Inputs(context.Context, *pb.InputsRequest) (*pb.InputsResponse, error) {
 	return &pb.InputsResponse{
 		Definitions: lbf.inputs,
 	}, nil

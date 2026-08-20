@@ -313,7 +313,7 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 		return nil, err
 	}
 
-	if err := ce.cache.SaveMutable(ctx, ce.indexKey(), 15*time.Second, func(_ *actionscache.Entry) (actionscache.Blob, error) {
+	if err := ce.cache.SaveMutable(ctx, ce.indexKey(), 15*time.Second, func(*actionscache.Entry) (actionscache.Blob, error) {
 		return actionscache.NewBlob(dt), nil
 	}); err != nil {
 		return nil, err

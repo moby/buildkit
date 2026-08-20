@@ -23,7 +23,7 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 		return nil, err
 	}
 	return &connhelper.ConnectionHelper{
-		ContextDialer: func(_ context.Context, _ string) (net.Conn, error) {
+		ContextDialer: func(context.Context, string) (net.Conn, error) {
 			ctxFlags := []string{}
 			if sp.Context != "" {
 				ctxFlags = append(ctxFlags, "--context="+sp.Context)

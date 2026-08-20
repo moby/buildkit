@@ -37,7 +37,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkImageName := map[string]func(out, imageName string, exporterResponse map[string]string){
-		ExporterOCI: func(_, _ string, _ map[string]string) {
+		ExporterOCI: func(string, string, map[string]string) {
 			// Nothing to check
 		},
 		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
@@ -152,7 +152,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 						so.Exports[0].Attrs["name"] = "*"
 					}
 
-					frontend := func(_ context.Context, _ gateway.Client) (*gateway.Result, error) {
+					frontend := func(context.Context, gateway.Client) (*gateway.Result, error) {
 						res := gateway.NewResult()
 						res.AddMeta("image.name", []byte(feName))
 						return res, nil
@@ -221,7 +221,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	frontend := func(_ context.Context, _ gateway.Client) (*gateway.Result, error) {
+	frontend := func(context.Context, gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 		res.AddMeta("frontend.returned", []byte("true"))
 		res.AddMeta("not-frontend.not-returned", []byte("false"))

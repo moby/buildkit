@@ -179,10 +179,10 @@ func newDiscardDisplay() Display {
 	return Display{disp: &discardDisplay{}}
 }
 
-func (d *discardDisplay) init(_ *rate.Limiter)         {}
-func (d *discardDisplay) update(_ *client.SolveStatus) {}
-func (d *discardDisplay) refresh()                     {}
-func (d *discardDisplay) done()                        {}
+func (d *discardDisplay) init(*rate.Limiter)         {}
+func (d *discardDisplay) update(*client.SolveStatus) {}
+func (d *discardDisplay) refresh()                   {}
+func (d *discardDisplay) done()                      {}
 
 type consoleDisplay struct {
 	t              *trace
@@ -294,7 +294,7 @@ func newRawJSONDisplay(w io.Writer) Display {
 	}
 }
 
-func (d *rawJSONDisplay) init(_ *rate.Limiter) {
+func (d *rawJSONDisplay) init(*rate.Limiter) {
 	// Initialization parameters are ignored for this display.
 }
 

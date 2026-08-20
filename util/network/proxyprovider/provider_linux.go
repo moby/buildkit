@@ -155,7 +155,7 @@ func (p *provider) NewProxy(ctx context.Context, proxy *network.ProxyConfig) (_ 
 	return ns, nil
 }
 
-func (p *provider) newNS(_ context.Context) (_ *proxyNS, retErr error) {
+func (p *provider) newNS(context.Context) (_ *proxyNS, retErr error) {
 	n := p.next.Add(1)
 	id := identity.NewID()
 	nsPath, err := createNetNS(p.root, id+"-exec")

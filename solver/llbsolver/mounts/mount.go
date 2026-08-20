@@ -185,7 +185,7 @@ type sshMount struct {
 	idmap  *user.IdentityMapping
 }
 
-func (sm *sshMount) Mount(_ context.Context, _ bool, _ session.Group) (snapshot.Mountable, error) {
+func (sm *sshMount) Mount(context.Context, bool, session.Group) (snapshot.Mountable, error) {
 	return &sshMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 
@@ -272,7 +272,7 @@ type secretMount struct {
 	idmap *user.IdentityMapping
 }
 
-func (sm *secretMount) Mount(_ context.Context, _ bool, _ session.Group) (snapshot.Mountable, error) {
+func (sm *secretMount) Mount(context.Context, bool, session.Group) (snapshot.Mountable, error) {
 	return &secretMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 

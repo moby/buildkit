@@ -26,7 +26,7 @@ func NewDiff(lower, upper State, c Constraints) *DiffOp {
 	return op
 }
 
-func (m *DiffOp) Validate(_ context.Context, _ *Constraints) error {
+func (m *DiffOp) Validate(context.Context, *Constraints) error {
 	return nil
 }
 

@@ -1627,7 +1627,7 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 	return mnt, nil
 }
 
-func (sr *mutableRef) Commit(_ context.Context) (ImmutableRef, error) {
+func (sr *mutableRef) Commit(context.Context) (ImmutableRef, error) {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 

@@ -14,15 +14,15 @@ func serviceFlags() []cli.Flag {
 }
 
 // applyPlatformFlags applies platform-specific flags.
-func applyPlatformFlags(_ *cli.Command) {
+func applyPlatformFlags(*cli.Command) {
 }
 
 // registerUnregisterService is only relevant on Windows.
-func registerUnregisterService(_ string) (bool, error) {
+func registerUnregisterService(string) (bool, error) {
 	return false, nil
 }
 
 // launchService is only relevant on Windows.
-func launchService(_ *grpc.Server) error {
+func launchService(*grpc.Server) error {
 	return nil
 }

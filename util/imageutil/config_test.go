@@ -85,7 +85,7 @@ type testCache struct {
 	content map[digest.Digest]content.ReaderAt
 }
 
-func (testCache) Info(_ context.Context, _ digest.Digest) (content.Info, error) {
+func (testCache) Info(context.Context, digest.Digest) (content.Info, error) {
 	return content.Info{}, nil
 }
 
@@ -93,7 +93,7 @@ func (testCache) Update(context.Context, content.Info, ...string) (content.Info,
 	return content.Info{}, nil
 }
 
-func (*testCache) Writer(_ context.Context, _ ...content.WriterOpt) (content.Writer, error) {
+func (*testCache) Writer(context.Context, ...content.WriterOpt) (content.Writer, error) {
 	// This needs to be implemented because the content helpers will open a writer to use as a lock
 	return nopWriter{}, nil
 }
@@ -108,7 +108,7 @@ func (nopWriter) Close() error {
 	return nil
 }
 
-func (nopWriter) Commit(_ context.Context, _ int64, _ digest.Digest, _ ...content.Opt) error {
+func (nopWriter) Commit(context.Context, int64, digest.Digest, ...content.Opt) error {
 	return nil
 }
 
@@ -116,7 +116,7 @@ func (nopWriter) Status() (content.Status, error) {
 	return content.Status{}, nil
 }
 
-func (nopWriter) Truncate(_ int64) error {
+func (nopWriter) Truncate(int64) error {
 	return nil
 }
 
@@ -175,7 +175,7 @@ func (f fetcherFunc) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.Re
 	return f(ctx, desc)
 }
 
-func (r *testResolver) Fetcher(_ context.Context, _ string) (remotes.Fetcher, error) {
+func (r *testResolver) Fetcher(context.Context, string) (remotes.Fetcher, error) {
 	return fetcherFunc(func(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
 		ra, err := r.cc.ReaderAt(ctx, desc)
 		if err != nil {

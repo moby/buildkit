@@ -108,7 +108,7 @@ func (s source) agentDialer(ctx context.Context) (net.Conn, error) {
 	return c2, nil
 }
 
-func (s socketDialer) Dial(_ context.Context) (net.Conn, error) {
+func (s socketDialer) Dial(context.Context) (net.Conn, error) {
 	return s.dialer(s.path)
 }
 
@@ -202,11 +202,11 @@ type readOnlyAgent struct {
 	agent.ExtendedAgent
 }
 
-func (a *readOnlyAgent) Add(_ agent.AddedKey) error {
+func (a *readOnlyAgent) Add(agent.AddedKey) error {
 	return errors.New("adding new keys not allowed by buildkit")
 }
 
-func (a *readOnlyAgent) Remove(_ ssh.PublicKey) error {
+func (a *readOnlyAgent) Remove(ssh.PublicKey) error {
 	return errors.New("removing keys not allowed by buildkit")
 }
 
@@ -214,10 +214,10 @@ func (a *readOnlyAgent) RemoveAll() error {
 	return errors.New("removing keys not allowed by buildkit")
 }
 
-func (a *readOnlyAgent) Lock(_ []byte) error {
+func (a *readOnlyAgent) Lock([]byte) error {
 	return errors.New("locking agent not allowed by buildkit")
 }
 
-func (a *readOnlyAgent) Extension(_ string, _ []byte) ([]byte, error) {
+func (a *readOnlyAgent) Extension(string, []byte) ([]byte, error) {
 	return nil, errors.New("extensions not allowed by buildkit")
 }

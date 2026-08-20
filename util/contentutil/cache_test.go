@@ -397,7 +397,7 @@ func (p *cancelOnceProvider) ReaderAt(_ context.Context, desc ocispecs.Descripto
 	}, nil
 }
 
-func (p *cancelOnceProvider) FetchReferrers(_ context.Context, _ digest.Digest, _ ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
+func (p *cancelOnceProvider) FetchReferrers(context.Context, digest.Digest, ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
 	return nil, nil
 }
 

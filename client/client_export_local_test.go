@@ -933,7 +933,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:  ExporterTar,
 				Attrs: map[string]string{},
-				Output: func(_ map[string]string) (io.WriteCloser, error) {
+				Output: func(map[string]string) (io.WriteCloser, error) {
 					return &iohelper.NopWriteCloser{Writer: io.Discard}, nil
 				},
 			},

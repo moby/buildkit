@@ -130,7 +130,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	}
 
 	handlers := []images.Handler{
-		retryhandler.New(limited.FetchHandler(cache, fetcher, str), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(cache, fetcher, str), func([]byte) {}),
 		dslHandler,
 		children,
 	}

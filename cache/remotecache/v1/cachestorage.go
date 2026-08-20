@@ -146,14 +146,14 @@ func (cs *cacheKeyStorage) Load(id string, resultID string) (solver.CacheResult,
 	return res, nil
 }
 
-func (cs *cacheKeyStorage) AddResult(_ string, _ solver.CacheResult) error {
+func (cs *cacheKeyStorage) AddResult(string, solver.CacheResult) error {
 	return nil
 }
 
-func (cs *cacheKeyStorage) Release(_ string) error {
+func (cs *cacheKeyStorage) Release(string) error {
 	return nil
 }
-func (cs *cacheKeyStorage) AddLink(_ string, _ solver.CacheInfoLink, _ string) error {
+func (cs *cacheKeyStorage) AddLink(string, solver.CacheInfoLink, string) error {
 	return nil
 }
 
@@ -243,7 +243,7 @@ type cacheResultStorage struct {
 	byItem   map[*item]string
 }
 
-func (cs *cacheResultStorage) Save(_ solver.Result, _ time.Time) (solver.CacheResult, error) {
+func (cs *cacheResultStorage) Save(solver.Result, time.Time) (solver.CacheResult, error) {
 	return solver.CacheResult{}, errors.New("importer is immutable")
 }
 

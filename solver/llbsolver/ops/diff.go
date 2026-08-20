@@ -33,7 +33,7 @@ func NewDiffOp(v solver.Vertex, op *pb.Op_Diff, w worker.Worker) (solver.Op, err
 	}, nil
 }
 
-func (d *diffOp) CacheMap(_ context.Context, _ solver.JobContext, _ int) (*solver.CacheMap, bool, error) {
+func (d *diffOp) CacheMap(context.Context, solver.JobContext, int) (*solver.CacheMap, bool, error) {
 	dt, err := json.Marshal(struct {
 		Type string
 		Diff *pb.DiffOp
@@ -123,6 +123,6 @@ func (d *diffOp) Exec(ctx context.Context, _ solver.JobContext, inputs []solver.
 	return []solver.Result{worker.NewWorkerRefResult(diffRef, d.worker)}, nil
 }
 
-func (d *diffOp) Acquire(_ context.Context) (release solver.ReleaseFunc, err error) {
+func (d *diffOp) Acquire(context.Context) (release solver.ReleaseFunc, err error) {
 	return func() {}, nil
 }

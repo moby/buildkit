@@ -465,7 +465,7 @@ func main() {
 		return err
 	}
 
-	app.After = func(_ context.Context, _ *cli.Command) (err error) {
+	app.After = func(context.Context, *cli.Command) (err error) {
 		ctx, cancel := context.WithTimeoutCause(appcontext.Shutdown(), telemetryShutdownTimeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancel()
 

@@ -80,11 +80,11 @@ func (b *buffer) Update(_ context.Context, new content.Info, fieldpaths ...strin
 	return updated, nil
 }
 
-func (b *buffer) Walk(_ context.Context, _ content.WalkFunc, _ ...string) error {
+func (b *buffer) Walk(context.Context, content.WalkFunc, ...string) error {
 	return nil // not implemented
 }
 
-func (b *buffer) Delete(_ context.Context, _ digest.Digest) error {
+func (b *buffer) Delete(context.Context, digest.Digest) error {
 	return nil // not implemented
 }
 
@@ -120,11 +120,11 @@ func (b *buffer) Writer(_ context.Context, opts ...content.WriterOpt) (content.W
 	}, nil
 }
 
-func (b *buffer) Status(_ context.Context, _ string) (content.Status, error) {
+func (b *buffer) Status(context.Context, string) (content.Status, error) {
 	return content.Status{}, cerrdefs.ErrNotFound
 }
 
-func (b *buffer) ListStatuses(_ context.Context, _ ...string) ([]content.Status, error) {
+func (b *buffer) ListStatuses(context.Context, ...string) ([]content.Status, error) {
 	return nil, nil
 }
 

@@ -76,7 +76,7 @@ loop0:
 			if err := workers.HasFeatureCompat(t, sb, workers.FeatureContentCheck); err == nil {
 				store := proxy.NewContentStore(c.ContentClient())
 				count := 0
-				err := store.Walk(sb.Context(), func(_ content.Info) error {
+				err := store.Walk(sb.Context(), func(content.Info) error {
 					count++
 					return nil
 				})

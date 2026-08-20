@@ -10,7 +10,7 @@ import (
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func (c uncompressedType) Compress(_ context.Context, _ Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c uncompressedType) Compress(context.Context, Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
 		return &iohelper.NopWriteCloser{Writer: dest}, nil
 	}, nil
@@ -38,7 +38,7 @@ func (c uncompressedType) NeedsConversion(_ context.Context, _ content.Store, de
 	return true, nil
 }
 
-func (c uncompressedType) NeedsComputeDiffBySelf(_ Config) bool {
+func (c uncompressedType) NeedsComputeDiffBySelf(Config) bool {
 	return false
 }
 

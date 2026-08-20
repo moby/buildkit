@@ -660,7 +660,7 @@ func (c *Controller) ListWorkers(_ context.Context, r *controlapi.ListWorkersReq
 	return resp, nil
 }
 
-func (c *Controller) Info(_ context.Context, _ *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
+func (c *Controller) Info(context.Context, *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
 	buildkitVersion := toPBBuildkitVersion(client.BuildkitVersion{
 		Package:  version.Package,
 		Version:  version.Version,
@@ -827,19 +827,19 @@ type roContentStore struct {
 	content.Store
 }
 
-func (cs *roContentStore) Writer(_ context.Context, _ ...content.WriterOpt) (content.Writer, error) {
+func (cs *roContentStore) Writer(context.Context, ...content.WriterOpt) (content.Writer, error) {
 	return nil, errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Delete(_ context.Context, _ digest.Digest) error {
+func (cs *roContentStore) Delete(context.Context, digest.Digest) error {
 	return errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Update(_ context.Context, _ content.Info, _ ...string) (content.Info, error) {
+func (cs *roContentStore) Update(context.Context, content.Info, ...string) (content.Info, error) {
 	return content.Info{}, errors.Errorf("read-only content store")
 }
 
-func (cs *roContentStore) Abort(_ context.Context, _ string) error {
+func (cs *roContentStore) Abort(context.Context, string) error {
 	return errors.Errorf("read-only content store")
 }
 

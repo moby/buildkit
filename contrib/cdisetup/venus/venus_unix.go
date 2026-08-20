@@ -51,7 +51,7 @@ func (s *setup) Validate() error {
 	return nil
 }
 
-func (s *setup) Run(_ context.Context) error {
+func (s *setup) Run(context.Context) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}

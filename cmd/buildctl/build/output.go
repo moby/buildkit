@@ -68,7 +68,7 @@ func ParseOutput(exports []string) ([]client.ExportEntry, error) {
 // resolveExporterDest returns at most either one of io.WriteCloser (single file) or a string (directory path).
 func resolveExporterDest(exporter, dest string, attrs map[string]string) (filesync.FileOutputFunc, string, error) {
 	wrapWriter := func(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
-		return func(_ map[string]string) (io.WriteCloser, error) {
+		return func(map[string]string) (io.WriteCloser, error) {
 			return wc, nil
 		}
 	}

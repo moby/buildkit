@@ -37,7 +37,7 @@ type emulator struct {
 	idmap *user.IdentityMapping
 }
 
-func (e *emulator) Mount(_ context.Context, _ bool) (snapshot.Mountable, error) {
+func (e *emulator) Mount(context.Context, bool) (snapshot.Mountable, error) {
 	return &staticEmulatorMount{path: e.path, idmap: e.idmap}, nil
 }
 

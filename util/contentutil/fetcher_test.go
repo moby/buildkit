@@ -72,7 +72,7 @@ func TestSlowFetch(t *testing.T) {
 
 type dummySlowFetcher struct{}
 
-func (f *dummySlowFetcher) Fetch(_ context.Context, _ ocispecs.Descriptor) (io.ReadCloser, error) {
+func (f *dummySlowFetcher) Fetch(context.Context, ocispecs.Descriptor) (io.ReadCloser, error) {
 	return newSlowBuffer([]byte("foobar")), nil
 }
 

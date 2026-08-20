@@ -119,7 +119,7 @@ func (c *BridgeClient) BuildOpts() client.BuildOpts {
 	return c.buildOpts
 }
 
-func (c *BridgeClient) Inputs(_ context.Context) (map[string]llb.State, error) {
+func (c *BridgeClient) Inputs(context.Context) (map[string]llb.State, error) {
 	inputs := make(map[string]llb.State)
 	for key, def := range c.inputs {
 		defop, err := llb.NewDefinitionOp(def)

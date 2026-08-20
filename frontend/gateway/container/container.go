@@ -428,7 +428,7 @@ func (gwCtr *gatewayContainer) loadSecretEnv(ctx context.Context, secretEnv []*o
 	return out, nil
 }
 
-func (gwCtr *gatewayContainer) Release(_ context.Context) error {
+func (gwCtr *gatewayContainer) Release(context.Context) error {
 	gwCtr.mu.Lock()
 	defer gwCtr.mu.Unlock()
 	gwCtr.cancel(errors.WithStack(context.Canceled))

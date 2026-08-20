@@ -134,13 +134,13 @@ func (c *conn) LocalAddr() net.Addr {
 func (c *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
-func (c *conn) SetDeadline(_ time.Time) error {
+func (c *conn) SetDeadline(time.Time) error {
 	return nil
 }
-func (c *conn) SetReadDeadline(_ time.Time) error {
+func (c *conn) SetReadDeadline(time.Time) error {
 	return nil
 }
-func (c *conn) SetWriteDeadline(_ time.Time) error {
+func (c *conn) SetWriteDeadline(time.Time) error {
 	return nil
 }
 

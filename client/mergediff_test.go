@@ -1290,7 +1290,7 @@ func contentsOf(state llb.State) contents {
 }
 
 func apply(appliers ...fstest.Applier) contents {
-	return func(_ integration.Sandbox) fstest.Applier {
+	return func(integration.Sandbox) fstest.Applier {
 		return fstest.Apply(appliers...)
 	}
 }
@@ -1305,8 +1305,8 @@ func mergeContents(subContents ...contents) contents {
 	}
 }
 
-func empty(_ integration.Sandbox) fstest.Applier {
-	return applyFn(func(_ string) error {
+func empty(integration.Sandbox) fstest.Applier {
+	return applyFn(func(string) error {
 		return nil
 	})
 }

@@ -69,6 +69,6 @@ func (p *passthroughOp) Exec(_ context.Context, _ solver.JobContext, inputs []so
 	return outputs, nil
 }
 
-func (p *passthroughOp) Acquire(_ context.Context) (solver.ReleaseFunc, error) {
+func (p *passthroughOp) Acquire(context.Context) (solver.ReleaseFunc, error) {
 	return func() {}, nil
 }
