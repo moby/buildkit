@@ -158,14 +158,14 @@ func (cs *cacheKeyStorage) Load(id string, resultID string) (solver.CacheResult,
 	return res, nil
 }
 
-func (cs *cacheKeyStorage) AddResult(id string, res solver.CacheResult) error {
+func (cs *cacheKeyStorage) AddResult(_ string, _ solver.CacheResult) error {
 	return nil
 }
 
-func (cs *cacheKeyStorage) Release(resultID string) error {
+func (cs *cacheKeyStorage) Release(_ string) error {
 	return nil
 }
-func (cs *cacheKeyStorage) AddLink(id string, link solver.CacheInfoLink, target string) error {
+func (cs *cacheKeyStorage) AddLink(_ string, _ solver.CacheInfoLink, _ string) error {
 	return nil
 }
 
@@ -255,7 +255,7 @@ type cacheResultStorage struct {
 	byItem   map[*item]string
 }
 
-func (cs *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solver.CacheResult, error) {
+func (cs *cacheResultStorage) Save(_ solver.Result, _ time.Time) (solver.CacheResult, error) {
 	return solver.CacheResult{}, errors.New("importer is immutable")
 }
 
@@ -323,7 +323,7 @@ func (cs *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) 
 	return nil, errors.WithStack(solver.ErrNotFound)
 }
 
-func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopts *compression.Config, _ session.Group) ([]*solver.Remote, error) {
+func (cs *cacheResultStorage) LoadRemotes(_ context.Context, res solver.CacheResult, compressionopts *compression.Config, _ session.Group) ([]*solver.Remote, error) {
 	if it := cs.byResultID(res.ID); it != nil {
 		for _, r := range it.results {
 			if compressionopts == nil {
@@ -352,7 +352,7 @@ func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheR
 	return nil, errors.WithStack(solver.ErrNotFound)
 }
 
-func (cs *cacheResultStorage) Exists(ctx context.Context, id string) bool {
+func (cs *cacheResultStorage) Exists(_ context.Context, id string) bool {
 	return cs.byResultID(id) != nil
 }
 

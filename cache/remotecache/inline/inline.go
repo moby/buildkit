@@ -18,7 +18,7 @@ import (
 )
 
 func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
-	return func(ctx context.Context, _ session.Group, _ map[string]string) (remotecache.Exporter, error) {
+	return func(_ context.Context, _ session.Group, _ map[string]string) (remotecache.Exporter, error) {
 		return NewExporter(), nil
 	}
 }
@@ -43,7 +43,7 @@ func (ce *exporter) Config() remotecache.Config {
 	}
 }
 
-func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
+func (ce *exporter) Finalize(_ context.Context) (map[string]string, error) {
 	return nil, nil
 }
 

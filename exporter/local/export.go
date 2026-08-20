@@ -37,7 +37,7 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return le, nil
 }
 
-func (e *localExporter) Resolve(ctx context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
+func (e *localExporter) Resolve(_ context.Context, id int, opt map[string]string) (exporter.ExporterInstance, error) {
 	i := &localExporterInstance{
 		id:            id,
 		attrs:         opt,

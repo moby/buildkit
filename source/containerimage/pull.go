@@ -101,7 +101,7 @@ func (p *puller) CacheKey(ctx context.Context, jobCtx solver.JobContext, index i
 		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
 		p.Resolver = resolver
 		// OCILayout has no need for session
-		getResolver = func(g session.Group) remotes.Resolver { return resolver }
+		getResolver = func(_ session.Group) remotes.Resolver { return resolver }
 	default:
 	}
 
@@ -225,7 +225,7 @@ func (p *puller) Snapshot(ctx context.Context, jobCtx solver.JobContext) (ir cac
 		resolver := getOCILayoutResolver(p.store, p.SessionManager, g)
 		p.Resolver = resolver
 		// OCILayout has no need for session
-		getResolver = func(g session.Group) remotes.Resolver { return resolver }
+		getResolver = func(_ session.Group) remotes.Resolver { return resolver }
 	default:
 	}
 

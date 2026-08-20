@@ -28,7 +28,7 @@ func newStubProvider() *stubProvider {
 	return &stubProvider{}
 }
 
-func (p *stubProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (p *stubProvider) ReaderAt(_ context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	p.calls++
 	b, ok := p.data[desc.Digest]
 	if !ok {
@@ -37,7 +37,7 @@ func (p *stubProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (
 	return newBuf(b), nil
 }
 
-func (p *stubProvider) FetchReferrers(ctx context.Context, dgst digest.Digest, opts ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
+func (p *stubProvider) FetchReferrers(_ context.Context, dgst digest.Digest, _ ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
 	p.refsCalls++
 	refs, ok := p.refs[dgst]
 	if !ok {
@@ -378,7 +378,7 @@ type cancelOnceProvider struct {
 	closeCalls int
 }
 
-func (p *cancelOnceProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (p *cancelOnceProvider) ReaderAt(_ context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	p.calls++
 	if desc.Digest != digest.FromBytes(p.data) {
 		return nil, errors.Errorf("unexpected digest: %s", desc.Digest)
@@ -397,7 +397,7 @@ func (p *cancelOnceProvider) ReaderAt(ctx context.Context, desc ocispecs.Descrip
 	}, nil
 }
 
-func (p *cancelOnceProvider) FetchReferrers(ctx context.Context, dgst digest.Digest, opts ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
+func (p *cancelOnceProvider) FetchReferrers(_ context.Context, _ digest.Digest, _ ...remotes.FetchReferrersOpt) ([]ocispecs.Descriptor, error) {
 	return nil, nil
 }
 

@@ -211,7 +211,7 @@ func TestContention(t *testing.T) {
 
 	for range threads {
 		for range perthread {
-			_, err := g.Do(t.Context(), "foo", func(ctx context.Context) (int, error) {
+			_, err := g.Do(t.Context(), "foo", func(_ context.Context) (int, error) {
 				time.Sleep(time.Microsecond)
 				return 0, nil
 			})
@@ -229,7 +229,7 @@ func TestMassiveParallel(t *testing.T) {
 	eg, ctx := errgroup.WithContext(t.Context())
 	for range 1000 {
 		eg.Go(func() error {
-			_, err := g.Do(ctx, "key", func(ctx context.Context) (string, error) {
+			_, err := g.Do(ctx, "key", func(_ context.Context) (string, error) {
 				return "", errors.New("always fail")
 			})
 			if errors.Is(err, errRetryTimeout) {

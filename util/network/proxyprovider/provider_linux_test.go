@@ -233,7 +233,7 @@ func TestProxyHandlerCapturesRedirectMaterialAlias(t *testing.T) {
 }
 
 func TestProxyHandlerRedactsCapturedCredentials(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("secret ok"))
 	}))
 	t.Cleanup(upstream.Close)
@@ -287,7 +287,7 @@ func TestCaptureURLNormalizesDefaultPort(t *testing.T) {
 }
 
 func TestProxyHandlerAppliesPolicyConvert(t *testing.T) {
-	original := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	original := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("original upstream should not receive converted request")
 	}))
 	t.Cleanup(original.Close)

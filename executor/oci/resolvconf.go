@@ -66,7 +66,7 @@ func GetResolvConf(ctx context.Context, root *os.Root, idmap *user.IdentityMappi
 		name = "resolv-host.conf"
 	}
 
-	_, err := g.Do(ctx, root.Name()+"/"+name, func(ctx context.Context) (struct{}, error) {
+	_, err := g.Do(ctx, root.Name()+"/"+name, func(_ context.Context) (struct{}, error) {
 		generate := !notFirstRun
 		notFirstRun = true
 

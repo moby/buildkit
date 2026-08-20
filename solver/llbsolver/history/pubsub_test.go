@@ -52,7 +52,7 @@ func TestPubsubClose(t *testing.T) {
 	}
 }
 
-func TestPubsubCloseIdempotent(t *testing.T) {
+func TestPubsubCloseIdempotent(_ *testing.T) {
 	ps := &pubsub[int]{m: map[*channel[int]]struct{}{}}
 
 	sub := ps.Subscribe()

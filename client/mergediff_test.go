@@ -1192,7 +1192,7 @@ func testMissingMaterializedLowerSnapshot(t *testing.T, sb integration.Sandbox) 
 
 func snapshotInfoMap(ctx context.Context, snapshotter snapshots.Snapshotter) (map[string]snapshots.Info, error) {
 	infos := map[string]snapshots.Info{}
-	err := snapshotter.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
+	err := snapshotter.Walk(ctx, func(_ context.Context, info snapshots.Info) error {
 		infos[info.Name] = info
 		return nil
 	})
@@ -1290,7 +1290,7 @@ func contentsOf(state llb.State) contents {
 }
 
 func apply(appliers ...fstest.Applier) contents {
-	return func(sb integration.Sandbox) fstest.Applier {
+	return func(_ integration.Sandbox) fstest.Applier {
 		return fstest.Apply(appliers...)
 	}
 }
@@ -1305,8 +1305,8 @@ func mergeContents(subContents ...contents) contents {
 	}
 }
 
-func empty(sb integration.Sandbox) fstest.Applier {
-	return applyFn(func(root string) error {
+func empty(_ integration.Sandbox) fstest.Applier {
+	return applyFn(func(_ string) error {
 		return nil
 	})
 }

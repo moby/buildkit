@@ -39,7 +39,7 @@ type buffer struct {
 	refs    map[string]struct{}
 }
 
-func (b *buffer) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
+func (b *buffer) Info(_ context.Context, dgst digest.Digest) (content.Info, error) {
 	b.mu.Lock()
 	v, ok := b.infos[dgst]
 	b.mu.Unlock()
@@ -49,7 +49,7 @@ func (b *buffer) Info(ctx context.Context, dgst digest.Digest) (content.Info, er
 	return v, nil
 }
 
-func (b *buffer) Update(ctx context.Context, new content.Info, fieldpaths ...string) (content.Info, error) {
+func (b *buffer) Update(_ context.Context, new content.Info, fieldpaths ...string) (content.Info, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -80,15 +80,15 @@ func (b *buffer) Update(ctx context.Context, new content.Info, fieldpaths ...str
 	return updated, nil
 }
 
-func (b *buffer) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
+func (b *buffer) Walk(_ context.Context, _ content.WalkFunc, _ ...string) error {
 	return nil // not implemented
 }
 
-func (b *buffer) Delete(ctx context.Context, dgst digest.Digest) error {
+func (b *buffer) Delete(_ context.Context, _ digest.Digest) error {
 	return nil // not implemented
 }
 
-func (b *buffer) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+func (b *buffer) Writer(_ context.Context, opts ...content.WriterOpt) (content.Writer, error) {
 	var wOpts content.WriterOpts
 	for _, opt := range opts {
 		if err := opt(&wOpts); err != nil {
@@ -120,22 +120,22 @@ func (b *buffer) Writer(ctx context.Context, opts ...content.WriterOpt) (content
 	}, nil
 }
 
-func (b *buffer) Status(ctx context.Context, ref string) (content.Status, error) {
+func (b *buffer) Status(_ context.Context, _ string) (content.Status, error) {
 	return content.Status{}, cerrdefs.ErrNotFound
 }
 
-func (b *buffer) ListStatuses(ctx context.Context, filters ...string) ([]content.Status, error) {
+func (b *buffer) ListStatuses(_ context.Context, _ ...string) ([]content.Status, error) {
 	return nil, nil
 }
 
-func (b *buffer) Abort(ctx context.Context, ref string) error {
+func (b *buffer) Abort(_ context.Context, ref string) error {
 	b.mu.Lock()
 	delete(b.refs, ref)
 	b.mu.Unlock()
 	return nil
 }
 
-func (b *buffer) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (b *buffer) ReaderAt(_ context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	r, err := b.getBytesReader(desc.Digest)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ func (w *bufferedWriter) Digest() digest.Digest {
 	return w.digester.Digest()
 }
 
-func (w *bufferedWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opt ...content.Opt) error {
+func (w *bufferedWriter) Commit(_ context.Context, size int64, expected digest.Digest, _ ...content.Opt) error {
 	if w.buffer == nil {
 		return errors.New("can't commit already committed or closed")
 	}

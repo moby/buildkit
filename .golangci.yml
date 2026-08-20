@@ -96,6 +96,7 @@ linters:
         - name: errorf
         - name: if-return
         - name: unnecessary-format
+        - name: unused-parameter
         - name: use-errors-new
     staticcheck:
       checks:
@@ -126,9 +127,6 @@ linters:
       - linters:
           - revive
         text: superfluous-else
-      - linters:
-          - revive
-        text: unused-parameter
       - linters:
           - revive
         text: redefines-builtin-id

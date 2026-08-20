@@ -77,7 +77,7 @@ func (hs *Source) Schemes() []string {
 	return []string{srctypes.HTTPScheme, srctypes.HTTPSScheme}
 }
 
-func (hs *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (hs *Source) Identifier(scheme, ref string, attrs map[string]string, _ *pb.Platform) (source.Identifier, error) {
 	id, err := NewHTTPIdentifier(ref, scheme == "https")
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func (hs *Source) ResolveMetadata(ctx context.Context, id *HTTPIdentifier, sm *s
 	return hsh.resolveMetadata(ctx, jobCtx, opt)
 }
 
-func (hs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
+func (hs *Source) Resolve(_ context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	httpIdentifier, ok := id.(*HTTPIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid http identifier %v", id)
@@ -538,7 +538,7 @@ func (hs *httpSourceHandler) resolveMetadataRef(ctx context.Context, jobCtx solv
 	return out, nil
 }
 
-func (hs *httpSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
+func (hs *httpSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, _ int) (string, string, solver.CacheOpts, bool, error) {
 	md, err := hs.resolveMetadata(ctx, jobCtx, MetadataOpts{})
 	if err != nil {
 		return "", "", nil, false, err

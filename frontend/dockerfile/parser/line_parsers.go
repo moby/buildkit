@@ -26,7 +26,7 @@ const (
 
 // ignore the current argument. This will still leave a command parsed, but
 // will not incorporate the arguments into the ast.
-func parseIgnore(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseIgnore(_ string, _ *directives) (*Node, map[string]bool, error) {
 	return &Node{}, nil, nil
 }
 
@@ -241,7 +241,7 @@ func parseNameOrNameVal(rest string, d *directives) (*Node, map[string]bool, err
 
 // parses a whitespace-delimited set of arguments. The result is effectively a
 // linked list of string arguments.
-func parseStringsWhitespaceDelimited(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseStringsWhitespaceDelimited(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}
@@ -265,7 +265,7 @@ func parseStringsWhitespaceDelimited(rest string, d *directives) (*Node, map[str
 }
 
 // parseString just wraps the string in quotes and returns a working node.
-func parseString(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseString(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}
@@ -308,7 +308,7 @@ func parseJSON(rest string) (*Node, map[string]bool, error) {
 // parseMaybeJSON determines if the argument appears to be a JSON array. If
 // so, passes to parseJSON; if not, quotes the result and returns a single
 // node.
-func parseMaybeJSON(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseMaybeJSON(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}

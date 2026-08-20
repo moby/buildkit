@@ -165,7 +165,7 @@ func handleErr(debug bool, err error) {
 
 type skipErrors struct{}
 
-func (skipErrors) Handle(err error) {}
+func (skipErrors) Handle(_ error) {}
 
 func commandAction(fn func(*cli.Command) error) cli.ActionFunc {
 	return func(_ context.Context, cmd *cli.Command) error {
