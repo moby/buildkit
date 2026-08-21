@@ -67,9 +67,6 @@ func InjectProxyCA(rootfsPath string, caPEM []byte) (func() error, error) {
 		return func() error { return nil }, nil
 	}
 	next := append([]byte{}, original...)
-	if len(next) > 0 && next[len(next)-1] != '\n' {
-		next = append(next, '\n')
-	}
 	next = append(next, proxyCABegin...)
 	next = append(next, caPEM...)
 	if len(next) > 0 && next[len(next)-1] != '\n' {
