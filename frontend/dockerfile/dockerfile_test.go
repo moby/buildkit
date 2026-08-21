@@ -111,6 +111,7 @@ var allTests = integration.TestFuncs(
 	testCopyWildcards,
 	testCopyRelative,
 	testCopyUnicodePath,
+	testLocalUnicodeSharedKey,
 	testLocalCustomSessionID,
 
 	// dockerfile_core_test.go
