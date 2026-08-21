@@ -18,7 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
 	github.com/aws/smithy-go v1.27.4
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/containerd/accelerated-container-image v1.3.0
+	github.com/containerd/accelerated-container-image v1.4.3
 	github.com/containerd/console v1.0.5
 	github.com/containerd/containerd/api v1.11.1
 	github.com/containerd/containerd/v2 v2.3.3
