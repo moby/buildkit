@@ -938,6 +938,23 @@ an environment variable by setting the `env` option.
 | `uid`                          | User ID for secret file. Default `0`.                                                                           |
 | `gid`                          | Group ID for secret file. Default `0`.                                                                          |
 
+> [!NOTE]
+> On Windows containers, the secret is delivered as a single-file, read-only
+> bind mount (there is no `tmpfs`). An explicit `target` is required because
+> there is no default `/run/secrets/` location, e.g.
+> `--mount=type=secret,id=mysecret,target=C:/path/to/secret`. Use forward
+> slashes in the target: the Dockerfile escape character (default `\`) otherwise
+> consumes the backslashes during parsing. The `mode`, `uid`, and `gid` options
+> are not supported on Windows and are ignored. The secret is written to a
+> temporary file restricted (via an explicit ACL) to SYSTEM, the Administrators
+> group, and the BuildKit daemon account, then removed after the step; it is
+> written in clear text, so consider BitLocker for at-rest encryption. Because
+> the file is not granted to the container's default user, the `RUN` step must
+> execute as an administrator (e.g. `USER ContainerAdministrator`) to read the
+> secret. The secret value is not persisted in the image; however, an empty
+> placeholder directory may remain at the `target` path in the resulting
+> layer, which is an inherent property of Windows bind mounts.
+
 #### Example: access to S3
 
 ```dockerfile
