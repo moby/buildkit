@@ -25,6 +25,7 @@ var addGitTests = integration.TestFuncs(
 	testAddGitSHA256,
 	testAddGitChecksumCache,
 	testGitQueryString,
+	testGitAdviceBuildArg,
 )
 
 func init() {
@@ -714,6 +715,152 @@ FROM main
 			require.Equal(t, tc.expectOut, string(dt))
 		})
 	}
+}
+
+func testGitAdviceBuildArg(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
+	f := getFrontend(t, sb)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	const detachedHeadAdvice = "detached HEAD"
+
+	for _, tc := range []struct {
+		name       string
+		buildArg   string
+		wantAdvice bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name:       "enabled",
+			buildArg:   "1",
+			wantAdvice: true,
+		},
+	} {
+		t.Run("context_"+tc.name, func(t *testing.T) {
+			serverURL, closeServer := newGitAdviceHTTPRepo(t, map[string]string{
+				"Dockerfile": "FROM scratch\nCOPY .git/HEAD /head\n",
+				"unique":     "context " + tc.name,
+			})
+			defer closeServer()
+
+			dest := t.TempDir()
+			attrs := map[string]string{
+				"context": serverURL + "/.git?tag=v0.0.1&keep-git-dir=true",
+			}
+			if tc.buildArg != "" {
+				attrs["build-arg:BUILDKIT_GIT_ADVICE"] = tc.buildArg
+			}
+			logs := solveWithGitAdviceLogs(t, sb, f, c, client.SolveOpt{
+				FrontendAttrs: attrs,
+				Exports: []client.ExportEntry{
+					{
+						Type:      client.ExporterLocal,
+						OutputDir: dest,
+					},
+				},
+			})
+
+			_, err := os.ReadFile(filepath.Join(dest, "head"))
+			require.NoError(t, err)
+			if tc.wantAdvice {
+				require.Contains(t, logs, detachedHeadAdvice)
+			} else {
+				require.NotContains(t, logs, detachedHeadAdvice)
+			}
+		})
+
+		t.Run("add_"+tc.name, func(t *testing.T) {
+			serverURL, closeServer := newGitAdviceHTTPRepo(t, map[string]string{
+				"foo":    "bar\n",
+				"unique": "add " + tc.name,
+			})
+			defer closeServer()
+
+			dockerfile := fmt.Appendf(nil, "FROM scratch\nADD --keep-git-dir=true %s/.git#v0.0.1 /repo\n", serverURL)
+			dir := integration.Tmpdir(t,
+				fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			)
+
+			dest := t.TempDir()
+			attrs := map[string]string{}
+			if tc.buildArg != "" {
+				attrs["build-arg:BUILDKIT_GIT_ADVICE"] = tc.buildArg
+			}
+			logs := solveWithGitAdviceLogs(t, sb, f, c, client.SolveOpt{
+				FrontendAttrs: attrs,
+				Exports: []client.ExportEntry{
+					{
+						Type:      client.ExporterLocal,
+						OutputDir: dest,
+					},
+				},
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
+				},
+			})
+
+			dt, err := os.ReadFile(filepath.Join(dest, "repo", "foo"))
+			require.NoError(t, err)
+			require.Equal(t, "bar\n", string(dt))
+			if tc.wantAdvice {
+				require.Contains(t, logs, detachedHeadAdvice)
+			} else {
+				require.NotContains(t, logs, detachedHeadAdvice)
+			}
+		})
+	}
+}
+
+func newGitAdviceHTTPRepo(t *testing.T, files map[string]string) (string, func()) {
+	t.Helper()
+
+	gitDir := t.TempDir()
+	for name, data := range files {
+		p := filepath.Join(gitDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0700))
+		require.NoError(t, os.WriteFile(p, []byte(data), 0600))
+	}
+
+	err := runShell(gitDir,
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"git add .",
+		"git commit -m initial",
+		"git tag v0.0.1",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	return server.URL, server.Close
+}
+
+func solveWithGitAdviceLogs(t *testing.T, sb integration.Sandbox, f frontend, c *client.Client, opt client.SolveOpt) string {
+	t.Helper()
+
+	statusCh := make(chan *client.SolveStatus)
+	logsCh := make(chan string, 1)
+	go func() {
+		var logs bytes.Buffer
+		for status := range statusCh {
+			for _, l := range status.Logs {
+				logs.Write(l.Data)
+			}
+		}
+		logsCh <- logs.String()
+	}()
+
+	_, err := f.Solve(sb.Context(), c, opt, statusCh)
+	logs := <-logsCh
+	require.NoError(t, err)
+	return logs
 }
 
 func applyTemplate(tmpl string, x any) (string, error) {

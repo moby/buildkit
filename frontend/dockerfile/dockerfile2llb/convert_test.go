@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/appcontext"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	digest "github.com/opencontainers/go-digest"
@@ -355,13 +356,58 @@ ADD $URL /
 	require.NoError(t, err)
 	require.Len(t, stages, 1)
 
-	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'))
+	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false)
 	require.NoError(t, err)
 	require.NotNil(t, state)
 	sourceOp, err := sourceOpFromState(t.Context(), state)
 	require.NoError(t, err)
 	require.NotNil(t, sourceOp)
 	assert.Equal(t, "src.tar", sourceOp.Attrs["http.filename"])
+}
+
+func TestDockerfileGitAdviceBuildArgADD(t *testing.T) {
+	t.Parallel()
+
+	df := []byte(`
+FROM scratch
+ADD https://github.com/moby/buildkit.git#master /
+`)
+
+	for _, tc := range []struct {
+		name      string
+		gitAdvice bool
+		wantAttr  bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name:      "enabled",
+			gitAdvice: true,
+			wantAttr:  true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := Dockerfile2LLB(appcontext.Context(), df, ConvertOpt{
+				Config: dockerui.Config{
+					GitAdvice: tc.gitAdvice,
+				},
+			})
+			require.NoError(t, err)
+
+			sourceOp, err := sourceOpFromState(context.Background(), &res.State)
+			require.NoError(t, err)
+			require.NotNil(t, sourceOp)
+
+			if tc.wantAttr {
+				require.Equal(t, "true", sourceOp.Attrs[pb.AttrGitAdvice])
+			} else {
+				require.NotContains(t, sourceOp.Attrs, pb.AttrGitAdvice)
+			}
+		})
+	}
 }
 
 func TestSourceDateEpochStageSourceRequiresScratch(t *testing.T) {
@@ -379,7 +425,7 @@ ADD https://example.com/src.tar /
 	require.NoError(t, err)
 	require.Len(t, stages, 1)
 
-	_, err = sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'))
+	_, err = sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false)
 	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage must use FROM scratch")
 }
 
