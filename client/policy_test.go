@@ -696,12 +696,12 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 			source: func() (*opspb.SourceOp, sourceresolver.Opt) {
 				p := platforms.DefaultSpec()
 				return &opspb.SourceOp{
-						Identifier: "docker-image://docker.io/library/alpine:latest",
-					}, sourceresolver.Opt{
-						ImageOpt: &sourceresolver.ResolveImageOpt{
-							Platform: &p,
-						},
-					}
+					Identifier: "docker-image://docker.io/library/alpine:latest",
+				}, sourceresolver.Opt{
+					ImageOpt: &sourceresolver.ResolveImageOpt{
+						Platform: &p,
+					},
+				}
 			},
 			callbacks: []policysession.PolicyCallback{
 				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
