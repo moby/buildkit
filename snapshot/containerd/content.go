@@ -43,7 +43,7 @@ func (c *Store) Walk(ctx context.Context, fn content.WalkFunc, filters ...string
 	return c.Store.Walk(ctx, fn, filters...)
 }
 
-func (c *Store) Delete(ctx context.Context, dgst digest.Digest) error {
+func (c *Store) Delete(context.Context, digest.Digest) error {
 	return errors.New("contentstore.Delete usage is forbidden")
 }
 

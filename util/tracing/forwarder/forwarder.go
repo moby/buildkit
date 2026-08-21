@@ -56,7 +56,7 @@ func NewUnstarted(exp sdktrace.SpanExporter) *Exporter {
 }
 
 // Start marks the Exporter as started.
-func (e *Exporter) Start(ctx context.Context) error {
+func (e *Exporter) Start(context.Context) error {
 	err := errAlreadyStarted
 	e.startOnce.Do(func() {
 		e.mu.Lock()

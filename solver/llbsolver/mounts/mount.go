@@ -189,7 +189,7 @@ type sshMount struct {
 	idmap  *user.IdentityMapping
 }
 
-func (sm *sshMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+func (sm *sshMount) Mount(context.Context, bool, session.Group) (snapshot.Mountable, error) {
 	return &sshMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 
@@ -276,7 +276,7 @@ type secretMount struct {
 	idmap *user.IdentityMapping
 }
 
-func (sm *secretMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+func (sm *secretMount) Mount(context.Context, bool, session.Group) (snapshot.Mountable, error) {
 	return &secretMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 
@@ -395,7 +395,7 @@ type tmpfs struct {
 	opt   *pb.TmpfsOpt
 }
 
-func (f *tmpfs) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+func (f *tmpfs) Mount(_ context.Context, readonly bool, _ session.Group) (snapshot.Mountable, error) {
 	return &tmpfsMount{readonly: readonly, idmap: f.idmap, opt: f.opt}, nil
 }
 

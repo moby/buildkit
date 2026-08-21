@@ -7,7 +7,7 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func UnprivilegedMountFlags(path string) ([]string, error) {
+func UnprivilegedMountFlags(string) ([]string, error) {
 	return []string{}, nil
 }
 

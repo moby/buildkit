@@ -4,6 +4,6 @@ package git
 
 import "time"
 
-func lchtimes(_ string, _ time.Time) error {
+func lchtimes(string, time.Time) error {
 	return nil
 }

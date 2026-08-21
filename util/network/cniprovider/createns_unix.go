@@ -7,21 +7,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-func createNetNS(_ *cniProvider, _ string) (string, error) {
+func createNetNS(*cniProvider, string) (string, error) {
 	return "", errors.New("creating netns for cni not supported")
 }
 
-func setNetNS(_ *specs.Spec, _ string) error {
+func setNetNS(*specs.Spec, string) error {
 	return errors.New("enabling netns for cni not supported")
 }
 
-func unmountNetNS(_ string) error {
+func unmountNetNS(string) error {
 	return errors.New("unmounting netns for cni not supported")
 }
 
-func deleteNetNS(_ string) error {
+func deleteNetNS(string) error {
 	return errors.New("deleting netns for cni not supported")
 }
 
-func cleanOldNamespaces(_ *cniProvider) {
+func cleanOldNamespaces(*cniProvider) {
 }

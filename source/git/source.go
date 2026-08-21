@@ -94,7 +94,7 @@ func (gs *Source) Schemes() []string {
 	return []string{srctypes.GitScheme}
 }
 
-func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (gs *Source) Identifier(_, ref string, attrs map[string]string, _ *pb.Platform) (source.Identifier, error) {
 	id, err := NewGitIdentifier(ref)
 	if err != nil {
 		return nil, err
@@ -390,7 +390,7 @@ func verifyGitSignature(md *Metadata, opts *GitSignatureVerifyOptions) error {
 	})
 }
 
-func (gs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
+func (gs *Source) Resolve(_ context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	gitIdentifier, ok := id.(*GitIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid git identifier %v", id)
@@ -755,7 +755,7 @@ func (gs *gitSourceHandler) addGitObjectsToMetadata(ctx context.Context, jobCtx 
 	return nil
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, _ int) (string, string, solver.CacheOpts, bool, error) {
 	md, err := gs.resolveMetadata(ctx, jobCtx)
 	if err != nil {
 		return "", "", nil, false, err

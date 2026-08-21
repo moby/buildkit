@@ -410,7 +410,7 @@ func TestMergeBlobchainID(t *testing.T) {
 			err = cw.Commit(ctx, 0, cw.Digest())
 			require.NoError(t, err)
 			descHandlers[desc.Digest] = &DescHandler{
-				Provider: func(_ session.Group) content.Provider { return contentBuffer },
+				Provider: func(session.Group) content.Provider { return contentBuffer },
 			}
 			curBlob, err = cm.GetByBlob(ctx, desc, curBlob, descHandlers)
 			require.NoError(t, err)
@@ -1217,7 +1217,7 @@ func TestLoopLeaseContent(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, cw.Commit(ctx, 0, cw.Digest()))
 	descHandlers[orgDesc.Digest] = &DescHandler{
-		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+		Provider: func(session.Group) content.Provider { return contentBuffer },
 	}
 
 	// Create a compression loop
@@ -1419,7 +1419,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		require.NoError(t, err)
 		require.NoError(t, cw.Commit(ctx, 0, cw.Digest()))
 		descHandlers[aDesc.Digest] = &DescHandler{
-			Provider: func(_ session.Group) content.Provider { return contentBuffer },
+			Provider: func(session.Group) content.Provider { return contentBuffer },
 		}
 
 		// Create compression variants
@@ -1704,7 +1704,7 @@ func TestGetRemotes(t *testing.T) {
 		require.NoError(t, err)
 
 		descHandlers[desc.Digest] = &DescHandler{
-			Provider: func(_ session.Group) content.Provider { return contentBuffer },
+			Provider: func(session.Group) content.Provider { return contentBuffer },
 		}
 
 		uncompressedBlobBytes, uncompressedDesc, err := mapToBlob(blobmap, false)
@@ -2002,7 +2002,7 @@ func TestNondistributableBlobs(t *testing.T) {
 	require.NoError(t, err)
 
 	descHandlers[desc.Digest] = &DescHandler{
-		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+		Provider: func(session.Group) content.Provider { return contentBuffer },
 	}
 
 	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
@@ -2686,7 +2686,7 @@ func zstdBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
 
 func checkNumBlobs(ctx context.Context, t *testing.T, cs content.Store, expected int) {
 	c := 0
-	err := cs.Walk(ctx, func(_ content.Info) error {
+	err := cs.Walk(ctx, func(content.Info) error {
 		c++
 		return nil
 	})
