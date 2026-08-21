@@ -70,8 +70,8 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 	}
 
 	var ocidesc ocispecs.Descriptor
-	if err := mount.WithTempMount(ctx, lower, func(lowerRoot string) error {
-		return mount.WithTempMount(ctx, upper, func(upperRoot string) error {
+	if err := mount.WithReadonlyTempMount(ctx, lower, func(lowerRoot string) error {
+		return mount.WithReadonlyTempMount(ctx, upper, func(upperRoot string) error {
 			var newReference bool
 			if config.Reference == "" {
 				newReference = true

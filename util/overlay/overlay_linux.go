@@ -123,8 +123,8 @@ func WriteUpperdir(ctx context.Context, w io.Writer, upperdir string, lower []mo
 			Options: []string{fmt.Sprintf("lowerdir=%s", strings.Join([]string{upperdir, emptyLower}, ":"))},
 		},
 	}
-	return mount.WithTempMount(ctx, lower, func(lowerRoot string) error {
-		return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
+	return mount.WithReadonlyTempMount(ctx, lower, func(lowerRoot string) error {
+		return mount.WithReadonlyTempMount(ctx, upperView, func(upperViewRoot string) error {
 			cw := archive.NewChangeWriter(&cancellableWriter{ctx, w}, upperViewRoot)
 			if err := Changes(ctx, cw.HandleChange, upperdir, upperViewRoot, lowerRoot); err != nil {
 				if err2 := cw.Close(); err2 != nil {
