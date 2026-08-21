@@ -76,8 +76,10 @@ process:
 ```text
 HTTP_PROXY
 HTTPS_PROXY
+ALL_PROXY
 http_proxy
 https_proxy
+all_proxy
 NO_PROXY
 no_proxy
 ```
@@ -90,6 +92,49 @@ handled according to the exec network mode.
 BuildKit also injects a generated CA certificate into common Linux trust bundle
 locations for the duration of the exec. This lets HTTPS requests using the
 system trust store pass through the BuildKit proxy.
+
+## Upstream proxies
+
+To use an upstream proxy, set `HTTP_PROXY` and/or `HTTPS_PROXY` in the
+`buildkitd` environment and enable proxy networking:
+
+```bash
+HTTP_PROXY=http://proxy.example:3128 \
+HTTPS_PROXY=http://proxy.example:3128 \
+NO_PROXY=localhost,127.0.0.1,.example.internal \
+buildkitd --proxy-network
+```
+
+BuildKit uses Go's standard proxy environment handling:
+
+| Variable pair | Purpose |
+| --- | --- |
+| `HTTP_PROXY`, `http_proxy` | Selects the upstream proxy for HTTP destinations. |
+| `HTTPS_PROXY`, `https_proxy` | Selects the upstream proxy for HTTPS destinations. |
+| `NO_PROXY`, `no_proxy` | Lists destinations that bypass the upstream proxy. |
+
+For each pair, BuildKit uses the uppercase variable when it is non-empty and
+falls back to the lowercase variable. The HTTP and HTTPS settings are
+independent: `HTTP_PROXY` and `http_proxy` do not apply to HTTPS destinations.
+
+BuildKit injects `ALL_PROXY` and `all_proxy` into proxy-network execs. It does
+not read these variables from the `buildkitd` environment when it configures
+upstream routing.
+
+Proxy values can be complete `http://`, `https://`, `socks5://`, or
+`socks5h://` URLs. A bare `host[:port]` uses HTTP.
+
+`NO_PROXY` is a comma-separated list of domain names, IP addresses, and CIDR
+prefixes. Domain names and IP addresses can include a port. When a destination
+matches the list, BuildKit's proxy connects to it directly. A value of `*`
+makes direct connections to all destinations. `NO_PROXY` controls how the
+BuildKit proxy reaches the destination. It does not change the proxy variables
+in the exec.
+
+These settings apply to all proxy-network execs. Proxy settings passed to an
+individual exec do not change upstream routing because its proxy variables
+point to BuildKit's internal proxy. If an upstream proxy URL is invalid, the
+proxy-network exec fails to start instead of connecting directly.
 
 ## Request capture and logs
 
@@ -126,6 +171,6 @@ The current implementation is Linux-focused. Rootless workers also have the
 usual rootless networking limitations, where worker networking may behave like
 host networking.
 
-Applications that ignore `HTTP_PROXY` and `HTTPS_PROXY`, use custom trust
-stores, or open raw TCP connections cannot bypass the proxy. That traffic is
-blocked instead of being captured.
+Applications that ignore the injected proxy environment variables, use custom
+trust stores, or open raw TCP connections cannot bypass the proxy. That traffic
+is blocked instead of being captured.
