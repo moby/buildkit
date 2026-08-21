@@ -25,6 +25,5 @@ func TestSolveRejectsInvalidLocalExporterMode(t *testing.T) {
 			},
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, `invalid local exporter mode "backup"`)
 }

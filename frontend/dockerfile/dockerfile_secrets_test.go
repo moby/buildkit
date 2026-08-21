@@ -91,8 +91,7 @@ func testSecretRequiredWithoutValue(t *testing.T, sb integration.Sandbox) {
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "secret mysecret: not found")
+	require.ErrorContains(t, err, "secret mysecret: not found")
 }
 
 // testSecretAsEnviron verifies that a secret injected via env= is accessible
@@ -161,7 +160,7 @@ RUN --mount=type=secret,id=mysecret,env=SECRET_ENV if %SECRET_ENV% NEQ pw (exit 
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.Fail(t, "timed out waiting for status")
+		t.Error("timed out waiting for status")
 	}
 
 	require.True(t, hasStatus)

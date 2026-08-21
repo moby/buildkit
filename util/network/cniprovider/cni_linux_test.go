@@ -12,6 +12,7 @@ import (
 	"time"
 
 	netns "github.com/containernetworking/plugins/pkg/ns"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
 )
@@ -34,7 +35,7 @@ func createTestNetNS(t *testing.T) string {
 	}()
 	require.NoError(t, <-errCh)
 	t.Cleanup(func() {
-		require.NoError(t, unmountNetNS(nsPath))
+		assert.NoError(t, unmountNetNS(nsPath))
 	})
 	return nsPath
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
@@ -43,7 +44,7 @@ func Tmpdir(t *testing.T, appliers ...fstest.Applier) *TmpDirWithName {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		require.NoError(t, os.RemoveAll(tmpdir))
+		assert.NoError(t, os.RemoveAll(tmpdir))
 	})
 
 	err = fstest.Apply(appliers...).Apply(tmpdir)

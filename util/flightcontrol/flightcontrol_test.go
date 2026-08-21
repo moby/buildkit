@@ -53,8 +53,7 @@ func TestCancelOne(t *testing.T) {
 	ctx2, cancel := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
-		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r1 = ret1
 		}
@@ -134,8 +133,7 @@ func TestCancelRace(t *testing.T) {
 	}()
 
 	_, err := g.Do(ctx, "foo", f)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 	<-wait
 }
 
@@ -150,8 +148,7 @@ func TestCancelBoth(t *testing.T) {
 	ctx3, cancel3 := context.WithCancelCause(ctx)
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
-		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r1 = ret1
 		}
@@ -159,8 +156,7 @@ func TestCancelBoth(t *testing.T) {
 	})
 	eg.Go(func() error {
 		ret2, err := g.Do(ctx3, "foo", f)
-		require.Error(t, err)
-		require.Equal(t, true, errors.Is(err, context.Canceled))
+		require.ErrorIs(t, err, context.Canceled)
 		if err == nil {
 			r2 = ret2
 		}

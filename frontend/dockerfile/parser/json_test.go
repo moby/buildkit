@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var invalidJSONArraysOfStrings = []string{
@@ -30,28 +30,19 @@ var validJSONArraysOfStrings = map[string][]string{
 
 func TestJSONArraysOfStrings(t *testing.T) {
 	for json, expected := range validJSONArraysOfStrings {
-		if node, _, err := parseJSON(json); err != nil {
-			t.Fatalf("%q should be a valid JSON array of strings, but wasn't! (err: %q)", json, err)
-		} else {
-			i := 0
-			for node != nil {
-				if i >= len(expected) {
-					t.Fatalf("expected result is shorter than parsed result (%d vs %d+) in %q", len(expected), i+1, json)
-				}
-				if node.Value != expected[i] {
-					t.Fatalf("expected %q (not %q) in %q at pos %d", expected[i], node.Value, json, i)
-				}
-				node = node.Next
-				i++
-			}
-			if i != len(expected) {
-				t.Fatalf("expected result is longer than parsed result (%d vs %d) in %q", len(expected), i+1, json)
-			}
+		node, _, err := parseJSON(json)
+		require.NoErrorf(t, err, "%q should be a valid JSON array of strings, but wasn't! (err: %q)", json, err)
+		i := 0
+		for node != nil {
+			require.Lessf(t, i, len(expected), "expected result is shorter than parsed result (%d vs %d+) in %q", len(expected), i+1, json)
+			require.Equalf(t, node.Value, expected[i], "expected %q (not %q) in %q at pos %d", expected[i], node.Value, json, i)
+			node = node.Next
+			i++
 		}
+		require.Equalf(t, len(expected), i, "expected result is longer than parsed result (%d vs %d) in %q", len(expected), i+1, json)
 	}
 	for _, json := range invalidJSONArraysOfStrings {
-		if _, _, err := parseJSON(json); !errors.Is(err, errDockerfileNotStringArray) {
-			t.Fatalf("%q should be an invalid JSON array of strings, but wasn't!", json)
-		}
+		_, _, err := parseJSON(json)
+		require.ErrorIsf(t, err, errDockerfileNotStringArray, "%q should be an invalid JSON array of strings, but wasn't!", json)
 	}
 }

@@ -257,8 +257,8 @@ func TestExecOpContentCache(t *testing.T) {
 					require.NotZero(t, dep.ComputeDigestFunc)
 				}
 			} else {
-				require.False(t, ok)
 				require.ErrorContains(t, err, "invalid mount")
+				require.False(t, ok)
 			}
 		})
 	}

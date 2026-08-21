@@ -40,7 +40,7 @@ func TestStatic(t *testing.T) {
 			require.Equal(t, int64(9), info.Size())
 			require.Equal(t, os.FileMode(0444), info.Mode())
 		default:
-			require.Fail(t, "unexpected path", path)
+			t.Errorf("unexpected path %s", path)
 		}
 		files = append(files, path)
 		return nil

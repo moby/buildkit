@@ -52,8 +52,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid response status 404")
+	require.ErrorContains(t, err, "invalid response status 404")
 
 	// first correct request
 	st = llb.HTTP(server.URL + "/foo")
@@ -462,7 +461,6 @@ func testBuildHTTPSourcePGPSignatureVerify(t *testing.T, sb integration.Sandbox)
 			}),
 		)
 		err = solve(t, invalidState)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to verify pgp signature")
 	})
 
@@ -521,7 +519,6 @@ func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sa
 				},
 			},
 		}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "invalid response status 401")
 	}
 }
