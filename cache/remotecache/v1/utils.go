@@ -184,28 +184,35 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 	if _, ok := state.recordsByItem[it]; ok {
 		return nil
 	}
-	state.recordsByItem[it] = -1
 
-	rec := cacheimporttypes.CacheRecord{
+	// Reserve this item's record slot - and make it visible to other
+	// callers - before recursing into its own dependencies below, then
+	// mutate it in place from here on. Merge ops can coincidentally
+	// produce byte-identical content at more than one point in the same
+	// chain, which makes the dependency graph loop back on itself; if a
+	// reentrant call for the same item arrives while we're still walking
+	// its parents, it now gets this same, real (if not yet fully
+	// populated) record index back and can register its link to it,
+	// rather than getting a sentinel and silently dropping the link.
+	idx := len(state.records)
+	state.recordsByItem[it] = idx
+	state.records = append(state.records, cacheimporttypes.CacheRecord{
 		Digest: it.dgst,
 		Inputs: make([][]cacheimporttypes.CacheInput, len(it.parents)),
-	}
+	})
 
 	for i, m := range it.parents {
 		for l := range m {
 			if err := marshalItem(ctx, l.src, state); err != nil {
 				return err
 			}
-			idx, ok := state.recordsByItem[l.src]
+			srcIdx, ok := state.recordsByItem[l.src]
 			if !ok {
 				return errors.Errorf("invalid source record: %v", l.src)
 			}
-			if idx == -1 {
-				continue
-			}
-			rec.Inputs[i] = append(rec.Inputs[i], cacheimporttypes.CacheInput{
+			state.records[idx].Inputs[i] = append(state.records[idx].Inputs[i], cacheimporttypes.CacheInput{
 				Selector:  l.selector,
-				LinkIndex: idx,
+				LinkIndex: srcIdx,
 			})
 		}
 	}
@@ -213,16 +220,14 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 	if res := it.bestResult(); res != nil {
 		id := marshalRemote(ctx, res.Result, state)
 		if id != "" {
-			idx, ok := state.chainsByID[id]
+			layerIdx, ok := state.chainsByID[id]
 			if !ok {
 				return errors.New("parent chainid not found")
 			}
-			rec.Results = append(rec.Results, cacheimporttypes.CacheResult{LayerIndex: idx, CreatedAt: res.CreatedAt})
+			state.records[idx].Results = append(state.records[idx].Results, cacheimporttypes.CacheResult{LayerIndex: layerIdx, CreatedAt: res.CreatedAt})
 		}
 	}
 
-	state.recordsByItem[it] = len(state.records)
-	state.records = append(state.records, rec)
 	return nil
 }
 
