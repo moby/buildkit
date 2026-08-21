@@ -90,15 +90,15 @@ func (d *diffOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []so
 		if curInput >= len(inputs) {
 			return nil, errors.Errorf("invalid upper input index %d for diff op with %d inputs", curInput, len(inputs))
 		}
-		if upperInp := inputs[curInput]; upperInp != nil {
-			wref, ok := upperInp.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid upper reference for diff op %T", upperInp.Sys())
-			}
-			upperRef = wref.ImmutableRef
-		} else {
+		upperInp := inputs[curInput]
+		if upperInp == nil {
 			return nil, errors.New("invalid nil upper input for diff op")
 		}
+		wref, ok := upperInp.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid upper reference for diff op %T", upperInp.Sys())
+		}
+		upperRef = wref.ImmutableRef
 	}
 
 	if lowerRef == nil {

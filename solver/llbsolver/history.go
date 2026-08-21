@@ -315,17 +315,14 @@ func (s *Solver) recordBuildHistory(ctx context.Context, id string, req frontend
 				}
 				defer release()
 
-				if err := s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
+				return s.history.UpdateRef(context.TODO(), id, func(rec *controlapi.BuildHistoryRecord) error {
 					rec.Trace = &controlapi.Descriptor{
 						Digest:    string(desc.Digest),
 						MediaType: desc.MediaType,
 						Size:      desc.Size,
 					}
 					return nil
-				}); err != nil {
-					return err
-				}
-				return nil
+				})
 			}(); err != nil {
 				bklog.G(ctx).Errorf("failed to save trace for %s: %+v", id, err)
 			}
