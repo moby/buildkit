@@ -840,6 +840,10 @@ TLS, and authentication settings supported by the OTLP gRPC exporter, see the
 BuildKit handles exporter selection separately and does not support every value
 defined by the general OpenTelemetry SDK environment-variable specification.
 
+BuildKit also exports metrics through OpenTelemetry. See
+[`docs/metrics.md`](docs/metrics.md) for the available instruments and how to
+scrape them.
+
 ## Running BuildKit without root privileges
 
 Please refer to [`docs/rootless.md`](docs/rootless.md).
