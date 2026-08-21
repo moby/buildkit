@@ -1,0 +1,4 @@
+* text=lf
+
+# Binary files need to be listed explicitly as first rule makes all files text files
+*.gif binary
