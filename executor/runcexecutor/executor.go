@@ -213,7 +213,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		return nil, err
 	}
 	if proxyNS, ok := namespace.(network.ProxyNamespace); ok {
-		meta.Env = append(meta.Env, proxyNS.ProxyEnv()...)
+		meta.Env = executor.ReplaceEnv(meta.Env, proxyNS.ProxyEnv())
 	}
 	doReleaseNetwork := true
 	defer func() {
@@ -436,6 +436,7 @@ func exitError(ctx context.Context, cgroupPath string, err error, validExitCodes
 }
 
 func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) (err error) {
+	meta := process.Meta
 	// first verify the container is running, if we get an error assume the container
 	// is in the process of being created and check again every 100ms or until
 	// context is canceled.
@@ -479,9 +480,13 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return errors.New("unexpected data after JSON spec object")
 	}
+	if meta.Proxy != nil && len(meta.Env) > 0 {
+		meta.Env = executor.ReplaceEnv(meta.Env, network.FilterProxyEnv(spec.Process.Env))
+		process.Meta = meta
+	}
 
-	if process.Meta.User != "" {
-		uid, gid, sgids, err := oci.GetUser(state.Rootfs, process.Meta.User)
+	if meta.User != "" {
+		uid, gid, sgids, err := oci.GetUser(state.Rootfs, meta.User)
 		if err != nil {
 			return err
 		}
@@ -492,14 +497,14 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		}
 	}
 
-	spec.Process.Terminal = process.Meta.Tty
-	spec.Process.Args = process.Meta.Args
-	if process.Meta.Cwd != "" {
-		spec.Process.Cwd = process.Meta.Cwd
+	spec.Process.Terminal = meta.Tty
+	spec.Process.Args = meta.Args
+	if meta.Cwd != "" {
+		spec.Process.Cwd = meta.Cwd
 	}
 
-	if len(process.Meta.Env) > 0 {
-		spec.Process.Env = process.Meta.Env
+	if len(meta.Env) > 0 {
+		spec.Process.Env = meta.Env
 	}
 
 	err = w.exec(ctx, id, spec.Process, process, nil)
