@@ -2,18 +2,17 @@ package file
 
 import (
 	"archive/tar"
+	"context"
 	"os"
 	"time"
 
 	"github.com/containerd/continuity/fs"
-	"github.com/moby/go-archive"
-	"github.com/moby/go-archive/chrootarchive"
-	"github.com/moby/go-archive/compression"
+	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/sys/user"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, u *copy.User, tm *time.Time, idmap *user.IdentityMapping) (bool, error) {
+func unpack(ctx context.Context, srcRoot string, src string, destRoot string, dest string, ch copy.Chowner, u *copy.User, tm *time.Time, idmap *user.IdentityMapping) (bool, error) {
 	src, err := fs.RootPath(srcRoot, src)
 	if err != nil {
 		return false, err
@@ -36,19 +35,14 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 	}
 	defer file.Close()
 
-	opts := &archive.TarOptions{
-		BestEffortXattrs: true,
+	rdr, err := archiveutil.DecompressStream(file)
+	if err != nil {
+		return false, err
 	}
-	if idmap != nil {
-		opts.IDMap = *idmap
-	}
-	if u != nil {
-		opts.ChownOpts = &archive.ChownOpts{
-			UID: u.UID,
-			GID: u.GID,
-		}
-	}
-	return true, chrootarchive.Untar(file, dest, opts)
+	defer rdr.Close()
+
+	err = applyRootArchive(ctx, dest, rdr, u, idmap, unpackNoSameOwner())
+	return true, err
 }
 
 func isArchivePath(path string) bool {
@@ -64,7 +58,7 @@ func isArchivePath(path string) bool {
 		return false
 	}
 	defer file.Close()
-	rdr, err := compression.DecompressStream(file)
+	rdr, err := archiveutil.DecompressStream(file)
 	if err != nil {
 		return false
 	}
