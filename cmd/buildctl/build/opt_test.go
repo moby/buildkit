@@ -86,7 +86,7 @@ func TestParseOpt(t *testing.T) {
 			for _, k := range []string{"SOURCE_DATE_EPOCH", "IMAGE"} {
 				if v, ok := os.LookupEnv(k); ok {
 					require.NoError(t, os.Unsetenv(k))
-					t.Cleanup(func() { os.Setenv(k, v) })
+					t.Cleanup(func() { os.Setenv(k, v) }) //nolint:usetesting // cannot use t.Setenv for unsetting env-vars.
 				}
 			}
 			for k, v := range tc.env {
