@@ -335,9 +335,24 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	spec.Process.Terminal = meta.Tty
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
-		if err := rootlessspecconv.ToRootless(spec); err != nil {
+		var removedMounts []string
+		removedMounts, err = rootlessspecconv.ToRootless(spec)
+		if err != nil {
 			return nil, err
 		}
+		// The runtime no longer sets these mounts up, but a rootful build still gets
+		// their mount points left in the rootfs. Recreate them once the container is
+		// gone: creating them up front would turn a mount point that the image does
+		// not ship into a directory the build can write to. moby/buildkit#6686
+		var stubUID, stubGID int
+		if w.idmap != nil {
+			stubUID, stubGID = w.idmap.RootPair()
+		}
+		defer func() {
+			if err == nil {
+				err = executor.CreateMountStubs(rootFSPath, removedMounts, stubUID, stubGID)
+			}
+		}()
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {

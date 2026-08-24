@@ -188,6 +188,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testLLBMountPerformance,
 	testLockedCacheMounts,
 	testMountStubsDirectory,
+	testMountStubsRuntimeMountpoints,
 	testMountStubsTimestamp,
 	testMountWithNoSource,
 	testRawSocketMount,

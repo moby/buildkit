@@ -373,6 +373,91 @@ func testMountStubsDirectory(t *testing.T, sb integration.Sandbox) {
 	}, keys)
 }
 
+// testMountStubsRuntimeMountpoints verifies that an exec leaves behind the same
+// directories for the runtime's own mount points regardless of the worker. The runtime
+// creates /proc, /sys and /dev in the rootfs when the image does not ship them, and
+// unlike the mount stubs of the exec's own mounts these are not cleaned up again. The
+// rootless spec conversion drops the /sys mount, so without care a rootless worker
+// produces a different image than a rootful one for the same build.
+// https://github.com/moby/buildkit/issues/6686
+func testMountStubsRuntimeMountpoints(t *testing.T, sb integration.Sandbox) {
+	// Skipped on Windows because the runtime mount points and the stub cleanup behavior
+	// tied to them are Linux-specific.
+	integration.SkipOnPlatform(t, "windows", "Linux-specific runtime mount points")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// busybox ships /dev but neither /proc nor /sys, so dropping /dev leaves a base
+	// without any of the runtime mount points. Building the base from the image rather
+	// than assembling one keeps this independent of the image layout, which differs
+	// between platforms.
+	base := llb.Image("busybox:latest").File(llb.Rm("/dev"))
+
+	entries := func(t *testing.T, st llb.State) map[string]*testutil.TarItem {
+		t.Helper()
+		def, err := st.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		tarFile := filepath.Join(t.TempDir(), "out.tar")
+		tarFileW, err := os.Create(tarFile)
+		require.NoError(t, err)
+		defer tarFileW.Close()
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:   ExporterTar,
+					Output: fixedWriteCloser(tarFileW),
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+		tarFileW.Close()
+
+		dt, err := os.ReadFile(tarFile)
+		require.NoError(t, err)
+		m, err := testutil.ReadTarToMap(dt, false)
+		require.NoError(t, err)
+		return m
+	}
+
+	// A write into a mount point the image does not ship must not land in the layer
+	// either. Rootfully /sys is a read-only mount that rejects it, so rootlessly the
+	// mount point must not exist yet while the container runs.
+	execSt := base.Run(llb.Args([]string{"/bin/sh", "-c", "touch /sys/written || true"}))
+
+	before := entries(t, base)
+	after := entries(t, execSt.Root())
+
+	var added, removed []string
+	for k := range after {
+		if _, ok := before[k]; !ok {
+			added = append(added, k)
+		}
+	}
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			removed = append(removed, k)
+		}
+	}
+
+	// Nothing the exec wrote may survive, so the only entries it adds are the runtime's
+	// own mount points. /etc is not among them: the resolv.conf and hosts stubs are
+	// cleaned up again, and so is the /etc that would have been created to hold them.
+	require.ElementsMatch(t, []string{"dev/", "proc/", "sys/"}, added)
+	require.Empty(t, removed)
+
+	// Existing is not enough: a mount point that does not match what a rootful runtime
+	// creates still leaves the workers producing different images.
+	for _, p := range []string{"dev/", "proc/", "sys/"} {
+		hdr := after[p].Header
+		require.Equal(t, os.FileMode(0o755), hdr.FileInfo().Mode().Perm(), "mode of %q", p)
+		require.Equal(t, 0, hdr.Uid, "uid of %q", p)
+		require.Equal(t, 0, hdr.Gid, "gid of %q", p)
+	}
+}
+
 // testMountStubsTimestamp verifies that timestamps set on directories used as mount points
 // (and their parents) are preserved after the mount is removed.
 // https://github.com/moby/buildkit/issues/3148
