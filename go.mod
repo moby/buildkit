@@ -2,6 +2,9 @@ module github.com/moby/buildkit
 
 go 1.26.3
 
+// FIXME(thaJeztah): temporary replace, just for testing https://github.com/containerd/log/pull/22
+replace github.com/containerd/log => github.com/thaJeztah/log v0.0.0-20260823155049-2c1de810ab5d
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1
@@ -74,7 +77,7 @@ require (
 	github.com/prometheus/procfs v0.20.1
 	github.com/serialx/hashring v0.0.0-20200727003509-22c0c7ab6b1b
 	github.com/sigstore/sigstore-go v1.2.2
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.1
 	github.com/spdx/tools-golang v0.5.7
 	github.com/stretchr/testify v1.12.0
 	github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323

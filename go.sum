@@ -153,8 +153,6 @@ github.com/containerd/go-cni v1.1.13 h1:eFSGOKlhoYNxpJ51KRIMHZNlg5UgocXEIEBGkY7H
 github.com/containerd/go-cni v1.1.13/go.mod h1:nTieub0XDRmvCZ9VI/SBG6PyqT95N4FIhxsauF1vSBI=
 github.com/containerd/go-runc v1.1.0 h1:OX4f+/i2y5sUT7LhmcJH7GYrjjhHa1QI4e8yO0gGleA=
 github.com/containerd/go-runc v1.1.0/go.mod h1:xJv2hFF7GvHtTJd9JqTS2UVxMkULUYw4JN5XAUZqH5U=
-github.com/containerd/log v0.1.0 h1:TCJt7ioM2cr/tfR8GPbGf9/VRAX8D2B4PjzCpfX540I=
-github.com/containerd/log v0.1.0/go.mod h1:VRRf09a7mHDIRezVKTRCrOq78v577GXq3bSa3EhrzVo=
 github.com/containerd/nydus-snapshotter v0.15.15 h1:kVYbFpYA4K43qxGVoc/VBwRXLAVWn4X9mdwGrR+HsLk=
 github.com/containerd/nydus-snapshotter v0.15.15/go.mod h1:L96yO+4iE6qqDiqXKhxMXBoPeaE7JgzXir9yanUVuOY=
 github.com/containerd/platforms v1.0.0-rc.4 h1:M42JrUT4zfZTqtkUwkr0GzmUWbfyO5VO0Q5b3op97T4=
@@ -548,8 +546,8 @@ github.com/sigstore/sigstore/pkg/signature/kms/hashivault v1.10.8/go.mod h1:6IDF
 github.com/sigstore/timestamp-authority/v2 v2.1.2 h1:7DDhnknLL4w8VwomyvW2W8qblOS9LDR8oihna+jc7Ls=
 github.com/sigstore/timestamp-authority/v2 v2.1.2/go.mod h1:o6rAVZceFyejClIj/uStRNIemP16bVMZtbMmhk6pr0U=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
-github.com/sirupsen/logrus v1.9.4 h1:TsZE7l11zFCLZnZ+teH4Umoq5BhEIfIzfRDZ1Uzql2w=
-github.com/sirupsen/logrus v1.9.4/go.mod h1:ftWc9WdOfJ0a92nsE2jF5u5ZwH8Bv2zdeOC42RjbV2g=
+github.com/sirupsen/logrus v1.10.1 h1:xi4336Zh11WpU14fXR6I67V3yaTPQYwRx2WEtHbRg4Q=
+github.com/sirupsen/logrus v1.10.1/go.mod h1:vsQHnG7xzNsxk3NrwboUiWPnIC3dmbjcGPykD7+tiHk=
 github.com/spdx/tools-golang v0.5.7 h1:+sWcKGnhwp3vLdMqPcLdA6QK679vd86cK9hQWH3AwCg=
 github.com/spdx/tools-golang v0.5.7/go.mod h1:jg7w0LOpoNAw6OxKEzCoqPC2GCTj45LyTlVmXubDsYw=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
@@ -569,6 +567,8 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.12.0 h1:K6Mr6jO9JICuend/5xzTM03ydSV3vdNRYAdPSukj8uI=
 github.com/stretchr/testify v1.12.0/go.mod h1:bOYBZb5qJ00vPzWfIqBUZPaxK8jWiXc6d3ErP4Ca9Gw=
+github.com/thaJeztah/log v0.0.0-20260823155049-2c1de810ab5d h1:8EoDGPFOZNg7dUmHrrLlTI2OJ91MzzE1y5LstolbE6Y=
+github.com/thaJeztah/log v0.0.0-20260823155049-2c1de810ab5d/go.mod h1:7uX9CDcaAPmXe1eSa2tMptUb4fbuQH9BrO3+7L/ODm4=
 github.com/theupdateframework/go-tuf v0.7.0 h1:CqbQFrWo1ae3/I0UCblSbczevCCbS31Qvs5LdxRWqRI=
 github.com/theupdateframework/go-tuf v0.7.0/go.mod h1:uEB7WSY+7ZIugK6R1hiBMBjQftaFzn7ZCDJcp1tCUug=
 github.com/theupdateframework/go-tuf/v2 v2.4.2 h1:w7976/W8uTwlsegP5nRymlpjPgrwSh+AXUf85is6nJk=
