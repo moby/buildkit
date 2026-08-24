@@ -124,6 +124,11 @@ func init() {
 			Name:  "containerd-worker-selinux",
 			Usage: "apply SELinux labels",
 		},
+		&cli.BoolFlag{
+			Name:  "containerd-worker-hyperv-isolation",
+			Usage: "use Hyper-V isolation for Windows containers",
+			Value: defaultConf.Workers.Containerd.HyperVIsolation,
+		},
 		&cli.IntFlag{
 			Name:  "containerd-max-parallelism",
 			Usage: "limit the number of parallel build steps that can run at the same time",
@@ -265,6 +270,9 @@ func applyContainerdFlags(c *cli.Command, cfg *config.Config) error {
 	if c.IsSet("containerd-worker-selinux") {
 		cfg.Workers.Containerd.SELinux = c.Bool("containerd-worker-selinux")
 	}
+	if c.IsSet("containerd-worker-hyperv-isolation") {
+		cfg.Workers.Containerd.HyperVIsolation = c.Bool("containerd-worker-hyperv-isolation")
+	}
 	if c.IsSet("containerd-max-parallelism") {
 		cfg.Workers.Containerd.MaxParallelism = c.Int("containerd-max-parallelism")
 	}
@@ -355,6 +363,7 @@ func containerdWorkerInitializer(c *cli.Command, common workerInitializerOpt) ([
 		TraceSocket:     common.traceSocket,
 		Runtime:         runtime,
 		CDIManager:      cdiManager,
+		HyperVIsolation: cfg.HyperVIsolation,
 	}
 
 	opt, err := containerd.NewWorkerOpt(workerOpts, ctd.WithTimeout(60*time.Second))

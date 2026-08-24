@@ -45,6 +45,7 @@ type WorkerOptions struct {
 	TraceSocket     string
 	Runtime         *RuntimeInfo
 	CDIManager      *cdidevices.Manager
+	HyperVIsolation bool
 }
 
 // NewWorkerOpt creates a WorkerOpt.
@@ -152,6 +153,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		CDIManager:       workerOpts.CDIManager,
 		NetworkProviders: np,
 		ProxyProvider:    proxyProvider,
+		HyperVIsolation:  workerOpts.HyperVIsolation,
 	}
 
 	opt := base.WorkerOpt{

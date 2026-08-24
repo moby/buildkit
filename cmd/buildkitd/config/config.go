@@ -179,6 +179,9 @@ type ContainerdConfig struct {
 	DefaultCgroupParent string `toml:"defaultCgroupParent"`
 
 	Rootless bool `toml:"rootless"`
+
+	// HyperVIsolation enables Hyper-V isolation for Windows containers.
+	HyperVIsolation bool `toml:"hypervIsolation"`
 }
 
 type ContainerdRuntime struct {

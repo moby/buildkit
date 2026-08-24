@@ -80,6 +80,27 @@ You will be asked to restart your machine, do so, and then continue with the res
     time="2024-02-26T10:42:16+03:00" level=info msg="running server on //./pipe/buildkitd"
     ```
 
+    **Running `buildkitd` with Hyper-V isolation:**
+
+    Some Windows hosts cannot run process-isolated containers for a base image
+    when the container OS version does not match the host OS version. To make
+    all build containers created by the containerd worker use Hyper-V isolation,
+    start `buildkitd` with:
+
+    ```powershell
+    buildkitd --containerd-worker-hyperv-isolation
+    ```
+
+    The same setting can be configured in `buildkitd.toml`:
+
+    ```toml
+    [worker.containerd]
+      hypervIsolation = true
+    ```
+
+    Hyper-V isolation requires the `Microsoft-Hyper-V` and `Containers`
+    Windows features to be enabled.
+
     **Running `buildkitd` with the CNI:**
 
     Note that the above simple run will not have the networking bit setup;

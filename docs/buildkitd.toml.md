@@ -159,6 +159,8 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   cniPoolSize = 16
   # defaultCgroupParent sets the parent cgroup of all containers.
   defaultCgroupParent = "buildkit"
+  # hypervIsolation enables Hyper-V isolation for Windows containers.
+  hypervIsolation = false
 
   [worker.containerd.labels]
     "foo" = "bar"
