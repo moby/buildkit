@@ -138,15 +138,15 @@ func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 			return errors.Errorf("process exited while waiting for socket %s after %s: %s", address, time.Since(started), cmd.String())
 		}
 
-		if conn, err := dialPipe(address); err == nil {
+		conn, err := dialPipe(address)
+		if err == nil {
 			conn.Close()
 			if cmd != nil {
 				fmt.Fprintf(cmd.Stderr, "> socket ready %s after=%s %v %+v\n", address, time.Since(started), time.Now(), cmd.String())
 			}
 			break
-		} else {
-			lastErr = err
 		}
+		lastErr = err
 		i++
 		if time.Duration(i)*step > d {
 			return errors.Errorf("failed dialing socket %s after %s: %v", address, time.Since(started), lastErr)

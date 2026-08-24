@@ -116,10 +116,9 @@ func isValidRGB(s []string) bool {
 		ok := isValidRGBValue(num)
 		if ok {
 			continue
-		} else {
-			bklog.L.Warnf("A field in BUILDKIT_COLORS appears to contain an RGB value that is not within the valid range of 0-255: %s", strings.Join(s, ","))
-			return false
 		}
+		bklog.L.Warnf("A field in BUILDKIT_COLORS appears to contain an RGB value that is not within the valid range of 0-255: %s", strings.Join(s, ","))
+		return false
 	}
 	return true
 }

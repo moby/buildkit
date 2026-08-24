@@ -341,11 +341,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 	sr.queueMediaType(desc.MediaType)
 	sr.queueBlobSize(desc.Size)
 	sr.appendURLs(desc.URLs)
-	if err := sr.commitMetadata(); err != nil {
-		return err
-	}
-
-	return nil
+	return sr.commitMetadata()
 }
 
 func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[string]struct{}) error {
@@ -381,11 +377,11 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			} else {
 				return errors.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 			}
-			if parentBlobChainID := sr.layerParent.getBlobChainID(); parentBlobChainID != "" {
-				blobChainID = parentBlobChainID
-			} else {
+			parentBlobChainID := sr.layerParent.getBlobChainID()
+			if parentBlobChainID == "" {
 				return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 			}
+			blobChainID = parentBlobChainID
 		}
 		diffID := sr.getDiffID()
 		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
@@ -426,10 +422,7 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 
 	sr.queueChainID(chainID)
 	sr.queueBlobChainID(blobChainID)
-	if err := sr.commitMetadata(); err != nil {
-		return err
-	}
-	return nil
+	return sr.commitMetadata()
 }
 
 func isTypeWindows(sr *immutableRef) bool {

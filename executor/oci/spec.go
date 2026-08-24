@@ -163,11 +163,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	)
 
 	if cdiManager != nil {
-		if cdiOpts, err := generateCDIOpts(cdiManager, meta.CDIDevices); err == nil {
-			opts = append(opts, cdiOpts...)
-		} else {
+		cdiOpts, err := generateCDIOpts(cdiManager, meta.CDIDevices)
+		if err != nil {
 			return nil, nil, err
 		}
+		opts = append(opts, cdiOpts...)
 	}
 
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)

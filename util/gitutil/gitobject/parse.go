@@ -87,9 +87,8 @@ func Parse(raw []byte) (*GitObject, error) {
 				if v, ok := strings.CutPrefix(l, " "); ok {
 					sigLines = append(sigLines, v)
 					continue
-				} else {
-					inSig = false
 				}
+				inSig = false
 			}
 			signedDataLines = append(signedDataLines, l)
 			parts := strings.SplitN(l, " ", 2)
