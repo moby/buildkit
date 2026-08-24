@@ -54,6 +54,37 @@ func testClientCustomGRPCOpts(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, interceptedMethods, "/moby.buildkit.v1.Control/Solve")
 }
 
+func testBuildHistoryDisabled(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	successRef := identity.NewID()
+	successDef, err := llb.Scratch().File(llb.Mkfile("file", 0o644, nil)).Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), successDef, SolveOpt{Ref: successRef}, nil)
+	require.NoError(t, err)
+	requireNoBuildHistory(t, c, sb, successRef)
+
+	failureRef := identity.NewID()
+	failureDef, err := llb.Scratch().File(llb.Rm("missing")).Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), failureDef, SolveOpt{Ref: failureRef}, nil)
+	require.Error(t, err)
+	requireNoBuildHistory(t, c, sb, failureRef)
+}
+
+func requireNoBuildHistory(t *testing.T, c *Client, sb integration.Sandbox, ref string) {
+	t.Helper()
+	history, err := c.ControlClient().ListenBuildHistory(sb.Context(), &controlapi.BuildHistoryRequest{
+		Ref:       ref,
+		EarlyExit: true,
+	})
+	require.NoError(t, err)
+	_, err = history.Recv()
+	require.ErrorIs(t, err, io.EOF)
+}
+
 func testListenBuildHistoryExcludesSoftDeletedRecords(t *testing.T, sb integration.Sandbox) {
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -127,4 +158,10 @@ func testListenBuildHistoryExcludesSoftDeletedRecords(t *testing.T, sb integrati
 			break
 		}
 	}
+}
+
+type historyDisabled struct{}
+
+func (*historyDisabled) UpdateConfigFile(in string) (string, func() error) {
+	return in + "\n\n[history]\n  maxEntries = 0\n", nil
 }

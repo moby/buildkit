@@ -5,12 +5,17 @@ import (
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/progress"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -172,13 +177,55 @@ func TestRecordBuildCompletion_NilSafe(t *testing.T) {
 	})
 }
 
-func TestNewBuildMetrics_NilProviderUsesNoop(t *testing.T) {
-	// Passing a nil MeterProvider must succeed and produce a usable
-	// metrics struct. This keeps tests and alternative integrations
-	// from having to wire OTEL just to construct the solver.
+func TestRecordBuildCompletionWithoutHistory(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		attrs map[string]string
+	}{
+		{name: "success", attrs: map[string]string{"status": "success"}},
+		{name: "failure", err: status.Error(codes.ResourceExhausted, "failed"), attrs: map[string]string{
+			"status": "failure", "error_code": codes.ResourceExhausted.String(),
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			bm, reader := newTestMetrics(t)
+			j, err := solver.NewSolver(solver.SolverOpt{}).NewJob("metrics-without-history")
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, j.Discard()) })
+			completed := time.Now()
+			require.NoError(t, j.InContext(t.Context(), func(ctx context.Context, _ solver.JobContext) error {
+				pw, _, _ := progress.NewFromContext(ctx)
+				require.NoError(t, pw.Write("vertex", client.Vertex{
+					Digest: digest.FromString("vertex"), Cached: true, Completed: &completed,
+				}))
+				return pw.Close()
+			}))
+
+			s := &Solver{metrics: bm}
+			j.CloseProgress()
+			s.recordBuildCompletionWithoutHistory(t.Context(), j, time.Now().Add(-time.Second), tc.err)
+
+			got := collect(t, reader)
+			builds := findCounterPoint(t, got["buildkit.builds"], tc.attrs)
+			require.Equal(t, int64(1), builds.Value)
+			steps := got["buildkit.builds.steps"]
+			for _, kind := range []string{"cached", "completed", "total"} {
+				require.Equal(t, int64(1), findCounterPoint(t, steps, map[string]string{"kind": kind}).Value)
+			}
+		})
+	}
+}
+
+func TestNewBuildMetrics_NilProviderDisablesMetrics(t *testing.T) {
+	// Passing a nil MeterProvider must produce a disabled, nil-safe metrics
+	// struct so alternative integrations do not need to wire OTEL.
 	bm, err := newBuildMetrics(nil)
 	require.NoError(t, err)
 	require.NotNil(t, bm)
+	require.False(t, bm.enabled)
 	require.NotPanics(t, func() {
 		bm.recordBuildCompletion(t.Context(), &controlapi.BuildHistoryRecord{
 			CreatedAt:   timestamppb.Now(),

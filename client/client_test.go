@@ -320,6 +320,12 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
 
+	integration.Run(t, integration.TestFuncs(
+		testBuildHistoryDisabled,
+	), mirrors, integration.WithMatrix("history", map[string]any{
+		"disabled": &historyDisabled{},
+	}))
+
 	// the rest of the tests are meant for non-Windows, skipping on Windows.
 	integration.SkipOnPlatform(t, "windows")
 
