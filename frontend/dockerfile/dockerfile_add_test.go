@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/containerd/continuity/fs/fstest"
+	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/identity"
@@ -177,6 +178,37 @@ ADD t.tar.gz /
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
+	)
+
+	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
+	defer os.RemoveAll(trace)
+
+	destDir = t.TempDir()
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+
+	// add zstd tar
+	buf3 := bytes.NewBuffer(nil)
+	zw, err := zstd.NewWriter(buf3)
+	require.NoError(t, err)
+	_, err = zw.Write(buf.Bytes())
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	dockerfile = fmt.Appendf(nil, `
+FROM %s
+ADD t.tar.zst /
+`, baseImage)
+
+	dir = integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar.zst", buf3.Bytes(), 0600),
 	)
 
 	args, trace = f.DFCmdArgs(dir.Name, dir.Name)
