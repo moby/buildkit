@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/platforms"
+	"github.com/google/go-cmp/cmp"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -39,7 +40,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 )
 
@@ -731,14 +731,8 @@ func assertCompatibilityCase(t *testing.T, exporterType string, tc compatibility
 	exp, err := compatibilityExpectationFromGoldens(expectedManifestJSON, expectedConfigJSON)
 	require.NoError(t, err)
 
-	manifestDiff := ""
-	if normalizeJSON(expectedManifestJSON) != actual.ManifestJSON {
-		manifestDiff = unifiedDiff("golden-manifest", normalizeJSON(expectedManifestJSON), actual.ManifestJSON)
-	}
-	configDiff := ""
-	if normalizeJSON(expectedConfigJSON) != actual.ConfigJSON {
-		configDiff = unifiedDiff("golden-config", normalizeJSON(expectedConfigJSON), actual.ConfigJSON)
-	}
+	manifestDiff := cmp.Diff(normalizeJSON(expectedManifestJSON), actual.ManifestJSON)
+	configDiff := cmp.Diff(normalizeJSON(expectedConfigJSON), actual.ConfigJSON)
 
 	if exp.ManifestDigest != actual.ManifestDigest ||
 		exp.ConfigDigest != actual.ConfigDigest ||
@@ -907,20 +901,6 @@ func formatCompatibilityDebug(exporterType, caseName string, version int, attrs 
 	fmt.Fprintf(&b, "\nmanifest json:\n%s\n", actual.ManifestJSON)
 	fmt.Fprintf(&b, "\nconfig json:\n%s\n", actual.ConfigJSON)
 	return b.String()
-}
-
-func unifiedDiff(name, expected, actual string) string {
-	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-		A:        difflib.SplitLines(expected),
-		B:        difflib.SplitLines(actual),
-		FromFile: name + ".golden",
-		ToFile:   name + ".actual",
-		Context:  3,
-	})
-	if err != nil {
-		return fmt.Sprintf("failed to render diff: %v", err)
-	}
-	return diff
 }
 
 func normalizeJSON(dt []byte) string {
