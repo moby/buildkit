@@ -1,7 +1,9 @@
 package file
 
 import (
+	stderrors "errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -77,4 +79,18 @@ func TestRmPathRemovesSymlinkItself(t *testing.T) {
 
 	_, err = os.Stat(target)
 	require.NoError(t, err)
+}
+
+func TestArchivePathNeedsXz(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", root)
+
+	src := filepath.Join(root, "archive.tar.xz")
+	require.NoError(t, os.WriteFile(src, []byte{0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00}, 0o600))
+
+	ok, err := isArchivePath(src)
+	require.Error(t, err)
+	_, isExecErr := stderrors.AsType[*exec.Error](err)
+	require.True(t, isExecErr)
+	require.False(t, ok)
 }
