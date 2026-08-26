@@ -354,9 +354,9 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	if procInfo.Meta.Cwd == "" {
 		procInfo.Meta.Cwd = "/"
 	}
-	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", system.DefaultPathEnv(gwCtr.platform.OS))
+	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", system.DefaultPathEnv(gwCtr.platform.OS), gwCtr.platform.OS)
 	if req.Tty {
-		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "TERM", "xterm")
+		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "TERM", "xterm", gwCtr.platform.OS)
 	}
 
 	secretEnv, err := gwCtr.loadSecretEnv(ctx, req.SecretEnv)
@@ -644,9 +644,10 @@ func (gwProc *gatewayContainerProcess) Signal(ctx context.Context, sig syscall.S
 	return nil
 }
 
-func addDefaultEnvvar(env []string, k, v string) []string {
+func addDefaultEnvvar(env []string, k, v, targetOS string) []string {
 	for _, e := range env {
-		if strings.HasPrefix(e, k+"=") {
+		name, _, ok := strings.Cut(e, "=")
+		if ok && (name == k || targetOS == "windows" && strings.EqualFold(name, k)) {
 			return env
 		}
 	}
