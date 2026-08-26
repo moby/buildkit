@@ -6,6 +6,10 @@ type Config struct {
 	Builder  BuilderConfig   `json:"builder"`
 }
 
+type BuilderHistoryConfig struct {
+	MaxEntries *int64 `json:"maxEntries,omitempty"`
+}
+
 type BuilderEntitlements struct {
 	NetworkHost      bool `json:"network-host,omitempty"`
 	SecurityInsecure bool `json:"security-insecure,omitempty"`
@@ -14,4 +18,5 @@ type BuilderEntitlements struct {
 
 type BuilderConfig struct {
 	Entitlements BuilderEntitlements
+	History      *BuilderHistoryConfig `json:"history,omitempty"`
 }
