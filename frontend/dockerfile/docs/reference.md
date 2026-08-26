@@ -1458,9 +1458,9 @@ ADD arr[[]0].txt /dest/
 #### Adding local tar archives
 
 When using a local tar archive as the source for `ADD`, and the archive is in a
-recognized compression format (`gzip`, `bzip2` or `xz`, or uncompressed), the
-archive is decompressed and extracted into the specified destination. Local tar
-archives are extracted by default, see the [`ADD --unpack` flag].
+recognized compression format (`gzip`, `bzip2`, `xz` or `zstd`, or
+uncompressed), the archive is decompressed and extracted into the specified
+destination. Local tar archives are extracted by default, see the [`ADD --unpack` flag].
 
 When a directory is extracted, it has the same behavior as `tar -x`.
 The result is the union of:
@@ -1638,9 +1638,10 @@ ADD [--unpack=<bool>] <src> ... <dir>
 ```
 
 The `--unpack` flag controls whether or not to automatically unpack tar
-archives (including compressed formats like `gzip` or `bzip2`) when adding them
-to the image. Local tar archives are unpacked by default, whereas remote tar
-archives (where `src` is a URL) are downloaded without unpacking.
+archives (including compressed formats like `gzip`, `bzip2`, `xz` or `zstd`)
+when adding them to the image. Local tar archives are unpacked by default,
+whereas remote tar archives (where `src` is a URL) are downloaded without
+unpacking.
 
 ```dockerfile
 # syntax=docker/dockerfile:1
