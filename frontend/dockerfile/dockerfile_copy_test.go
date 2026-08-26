@@ -1246,6 +1246,50 @@ COPY test+aou.txt /
 	require.Equal(t, "baz", string(dt))
 }
 
+func testLocalUnicodeSharedKey(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(integration.UnixOrWindows(
+		`
+FROM scratch
+COPY foo /
+`,
+		`
+FROM nanoserver
+COPY foo /
+`,
+	))
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("contents"), 0600),
+	)
+	destDir := integration.Tmpdir(t)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		SharedKey: "context:\u65e9:%2B+plain",
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir.Name,
+			},
+		},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir.Name, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "contents", string(dt))
+}
+
 func testChmodNonOctal(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
