@@ -65,7 +65,7 @@ func testImageBlobSource(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	desc, provider, err := contentutil.ProviderFromRef(name)
+	desc, provider, err := contentutil.ProviderFromRef(sb.Context(), name)
 	require.NoError(t, err)
 
 	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
