@@ -69,3 +69,37 @@ func TestGitCLIConfigEnv(t *testing.T) {
 		require.Contains(t, got, "SUDO_UID=1000")
 	})
 }
+
+func TestGitCLIAdviceOption(t *testing.T) {
+	run := func(t *testing.T, opts ...Option) (env, args []string) {
+		t.Helper()
+		opts = append(opts, WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+			env = append([]string(nil), cmd.Env...)
+			args = append([]string(nil), cmd.Args...)
+			return nil
+		}))
+		cli := NewGitCLI(opts...)
+		_, err := cli.Run(t.Context(), "status")
+		require.NoError(t, err)
+		return env, args
+	}
+
+	t.Run("unset by default", func(t *testing.T) {
+		env, args := run(t)
+		require.NotContains(t, env, "GIT_ADVICE=0")
+		require.NotContains(t, env, "GIT_ADVICE=1")
+		require.NotContains(t, args, "advice.detachedHead=false")
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		env, args := run(t, WithGitAdvice(false))
+		require.Contains(t, env, "GIT_ADVICE=0")
+		require.Contains(t, args, "advice.detachedHead=false")
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		env, args := run(t, WithGitAdvice(true))
+		require.Contains(t, env, "GIT_ADVICE=1")
+		require.NotContains(t, args, "advice.detachedHead=false")
+	})
+}

@@ -285,6 +285,16 @@ func TestIdentifierBundleValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "git advice",
+			url:  "https://example.com/repo.git",
+			attrs: map[string]string{
+				pb.AttrGitAdvice: "true",
+			},
+			assert: func(t *testing.T, id *GitIdentifier) {
+				require.True(t, id.Advice)
+			},
+		},
+		{
 			name: "bundle+checkoutbundle",
 			url:  "https://example.com/repo.git",
 			attrs: map[string]string{

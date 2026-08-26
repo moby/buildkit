@@ -69,6 +69,27 @@ func TestGit(t *testing.T) {
 			},
 		},
 		{
+			name:       "git advice",
+			st:         Git("github.com/foo/bar.git", "ref", GitAdvice(true)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+				"git.advice":           "true",
+			},
+		},
+		{
+			name:       "git advice disabled",
+			st:         Git("github.com/foo/bar.git", "ref", GitAdvice(false)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
 			name: "bundle",
 			st: Git(
 				"github.com/foo/bar.git", "",
