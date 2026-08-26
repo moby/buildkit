@@ -817,9 +817,6 @@ github.com/moby/policy-helpers/types
 # github.com/moby/profiles/seccomp v0.2.3
 ## explicit; go 1.23.0
 github.com/moby/profiles/seccomp
-# github.com/moby/sys/capability v0.4.0
-## explicit; go 1.21
-github.com/moby/sys/capability
 # github.com/moby/sys/mount v0.3.5
 ## explicit; go 1.18
 github.com/moby/sys/mount
@@ -862,11 +859,6 @@ github.com/opencontainers/image-spec/specs-go/v1
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
 github.com/opencontainers/runtime-spec/specs-go/features
-# github.com/opencontainers/runtime-tools v0.9.1-0.20251114084447-edf4cb3d2116
-## explicit; go 1.21
-github.com/opencontainers/runtime-tools/generate
-github.com/opencontainers/runtime-tools/generate/seccomp
-github.com/opencontainers/runtime-tools/validate/capabilities
 # github.com/opencontainers/selinux v1.15.1
 ## explicit; go 1.22
 github.com/opencontainers/selinux/go-selinux
@@ -1228,9 +1220,6 @@ go.opentelemetry.io/proto/otlp/common/v1
 go.opentelemetry.io/proto/otlp/metrics/v1
 go.opentelemetry.io/proto/otlp/resource/v1
 go.opentelemetry.io/proto/otlp/trace/v1
-# go.yaml.in/yaml/v2 v2.4.4
-## explicit; go 1.15
-go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.5
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
@@ -1442,9 +1431,6 @@ google.golang.org/protobuf/types/known/structpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
 google.golang.org/protobuf/types/pluginpb
-# gopkg.in/yaml.v3 v3.0.1
-## explicit
-gopkg.in/yaml.v3
 # k8s.io/klog/v2 v2.140.0
 ## explicit; go 1.21
 k8s.io/klog/v2
@@ -1460,15 +1446,13 @@ kernel.org/pub/linux/libs/security/libcap/cap
 # kernel.org/pub/linux/libs/security/libcap/psx v1.2.78
 ## explicit; go 1.11
 kernel.org/pub/linux/libs/security/libcap/psx
-# sigs.k8s.io/yaml v1.6.0
-## explicit; go 1.22
-sigs.k8s.io/yaml
-# tags.cncf.io/container-device-interface v1.1.0
-## explicit; go 1.21
+# tags.cncf.io/container-device-interface v1.1.1
+## explicit; go 1.23
+tags.cncf.io/container-device-interface/internal/ociedit
 tags.cncf.io/container-device-interface/internal/validation
 tags.cncf.io/container-device-interface/internal/validation/k8s
 tags.cncf.io/container-device-interface/pkg/cdi
 tags.cncf.io/container-device-interface/pkg/parser
-# tags.cncf.io/container-device-interface/specs-go v1.1.0
+# tags.cncf.io/container-device-interface/specs-go v1.1.1
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
