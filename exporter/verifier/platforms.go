@@ -96,12 +96,19 @@ func CheckInvalidPlatforms[T comparable](ctx context.Context, res *result.Result
 	mismatch := len(reqMap) != len(ps.Platforms)
 
 	if !mismatch {
+	results:
 		for _, p := range ps.Platforms {
 			pp := platforms.Normalize(p.Platform)
-			if _, ok := reqMap[platforms.FormatAll(pp)]; !ok {
-				mismatch = true
-				break
+			if _, ok := reqMap[platforms.FormatAll(pp)]; ok {
+				continue
 			}
+			for _, reqP := range reqList {
+				if platforms.OnlyStrict(reqP.Platform).Match(pp) {
+					continue results
+				}
+			}
+			mismatch = true
+			break
 		}
 	}
 
