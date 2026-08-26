@@ -133,6 +133,11 @@ func (c Moby) New(ctx context.Context, cfg *integration.BackendConfig) (b integr
 			}
 		}
 	}
+	if bkcfg.History != nil && bkcfg.History.MaxEntries != nil {
+		dcfg.Builder.History = &dockerd.BuilderHistoryConfig{
+			MaxEntries: bkcfg.History.MaxEntries,
+		}
+	}
 
 	dcfgdt, err := json.Marshal(dcfg)
 	if err != nil {
