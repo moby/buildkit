@@ -64,6 +64,11 @@ func AddBuildConfig(ctx context.Context, p *provenancetypes.ProvenancePredicateS
 		}
 	}
 
+	for original, runtime := range c.DigestMapping {
+		if idx, ok := indexes[original]; ok {
+			indexes[runtime] = idx
+		}
+	}
 	return indexes, nil
 }
 
@@ -142,6 +147,9 @@ func toBuildSteps(def *pb.Definition, c *Capture, withUsage bool) ([]provenancet
 		}
 		if withUsage {
 			s.ResourceUsage = c.Samples[dgst]
+			if s.ResourceUsage == nil {
+				s.ResourceUsage = c.Samples[c.DigestMapping[dgst]]
+			}
 		}
 		out = append(out, s)
 	}

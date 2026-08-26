@@ -187,6 +187,22 @@ func TestCaptureMergeNil(t *testing.T) {
 	require.NoError(t, c.Merge(nil))
 }
 
+func TestCaptureDigestMapping(t *testing.T) {
+	t.Parallel()
+
+	original := digest.FromString("original")
+	runtime := digest.FromString("runtime")
+	c := &Capture{}
+	c.AddDigestMapping(map[digest.Digest]digest.Digest{original: runtime})
+
+	clone := c.Clone()
+	require.Equal(t, runtime, clone.DigestMapping[original])
+
+	merged := &Capture{}
+	require.NoError(t, merged.Merge(c))
+	require.Empty(t, merged.DigestMapping)
+}
+
 func TestCaptureSort(t *testing.T) {
 	t.Parallel()
 	c := &Capture{}

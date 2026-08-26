@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -38,16 +40,17 @@ func workerRefResolver(refCfg cacheconfig.RefConfig, all bool, g session.Group) 
 }
 
 type resultProxy struct {
-	id         string
-	b          *provenanceBridge
-	req        frontend.SolveRequest
-	g          flightcontrol.Group[solver.CachedResult]
-	mu         sync.Mutex
-	released   bool
-	v          solver.CachedResult
-	err        error
-	errResults []solver.Result
-	provenance *provenance.Capture
+	id            string
+	b             *provenanceBridge
+	req           frontend.SolveRequest
+	g             flightcontrol.Group[solver.CachedResult]
+	mu            sync.Mutex
+	released      bool
+	v             solver.CachedResult
+	err           error
+	errResults    []solver.Result
+	provenance    *provenance.Capture
+	digestMapping map[digest.Digest]digest.Digest
 }
 
 func newResultProxy(b *provenanceBridge, req frontend.SolveRequest) *resultProxy {
@@ -98,8 +101,12 @@ func (rp *resultProxy) wrapError(err error) error {
 	var ve *errdefs.VertexError
 	if errors.As(err, &ve) {
 		if rp.req.Definition.Source != nil {
-			locs, ok := rp.req.Definition.Source.Locations[ve.Digest]
-			if ok {
+			digests := append([]digest.Digest{digest.Digest(ve.Digest)}, rp.definitionDigests(digest.Digest(ve.Digest))...)
+			for _, dgst := range digests {
+				locs, ok := rp.req.Definition.Source.Locations[string(dgst)]
+				if !ok {
+					continue
+				}
 				for _, loc := range locs.Locations {
 					err = errdefs.WithSource(err, &errdefs.Source{
 						Info:   rp.req.Definition.Source.Infos[loc.SourceIndex],
@@ -113,7 +120,9 @@ func (rp *resultProxy) wrapError(err error) error {
 }
 
 func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithProvenance, error) {
-	res, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies)
+	digestMapping := map[digest.Digest]digest.Digest{}
+	res, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies, digestMapping)
+	rp.setDigestMapping(digestMapping)
 	var ee *llberrdefs.ExecError
 	if errors.As(err, &ee) {
 		ee.EachRef(func(res solver.Result) error {
@@ -124,6 +133,25 @@ func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithP
 		ee.OwnerBorrowed = true
 	}
 	return res, err
+}
+
+func (rp *resultProxy) setDigestMapping(digestMapping map[digest.Digest]digest.Digest) {
+	rp.mu.Lock()
+	rp.digestMapping = digestMapping
+	rp.mu.Unlock()
+}
+
+func (rp *resultProxy) definitionDigests(runtime digest.Digest) []digest.Digest {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	var out []digest.Digest
+	for original, mapped := range rp.digestMapping {
+		if mapped == runtime {
+			out = append(out, original)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err error) {
@@ -166,6 +194,9 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 				err = errors.Errorf("failed to capture provenance: %v", err)
 				v.Release(context.TODO())
 				v = nil
+			}
+			if capture != nil {
+				capture.AddDigestMapping(rp.digestMapping)
 			}
 			rp.provenance = capture
 		}

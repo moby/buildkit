@@ -246,7 +246,7 @@ func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.V
 }
 
 func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, polEngine, nil, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+	return loadLLB(ctx, def, polEngine, nil, nil, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		vtx, err := newVertex(dgst, op, load, opts...)
 		if err != nil {
 			return nil, err
@@ -256,7 +256,11 @@ func Load(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluat
 }
 
 func loadWithProxyNetwork(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork bool, opts ...LoadOpt) (solver.Edge, error) {
-	return loadLLB(ctx, def, polEngine, &proxyNetwork, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
+	return loadWithProxyNetworkAndDigestMap(ctx, def, polEngine, proxyNetwork, nil, opts...)
+}
+
+func loadWithProxyNetworkAndDigestMap(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork bool, digestMapping map[digest.Digest]digest.Digest, opts ...LoadOpt) (solver.Edge, error) {
+	return loadLLB(ctx, def, polEngine, &proxyNetwork, digestMapping, func(dgst digest.Digest, op *op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		vtx, err := newVertex(dgst, op, load, opts...)
 		if err != nil {
 			return nil, err
@@ -352,7 +356,7 @@ type op struct {
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork *bool, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
+func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEvaluator, proxyNetwork *bool, digestMapping map[digest.Digest]digest.Digest, fn func(digest.Digest, *op, func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error)) (solver.Edge, error) {
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
@@ -413,6 +417,11 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	for dgst := range allOps {
 		if _, err := recomputeDigests(ctx, allOps, mutatedDigests, dgst); err != nil {
 			return solver.Edge{}, err
+		}
+	}
+	for original, runtime := range mutatedDigests {
+		if original != runtime && digestMapping != nil {
+			digestMapping[original] = runtime
 		}
 	}
 

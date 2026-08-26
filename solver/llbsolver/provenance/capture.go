@@ -23,6 +23,8 @@ type Capture struct {
 	IncompleteMaterials bool
 	ProxyIncomplete     []provenancetypes.ProxyCaptureIncomplete
 	Samples             map[digest.Digest]*resourcestypes.Samples
+	// DigestMapping maps frontend definition digests to runtime vertex digests.
+	DigestMapping map[digest.Digest]digest.Digest `json:"-"`
 }
 
 func (c *Capture) Clone() *Capture {
@@ -46,6 +48,9 @@ func (c *Capture) Clone() *Capture {
 	if len(c.Samples) > 0 {
 		out.Samples = make(map[digest.Digest]*resourcestypes.Samples, len(c.Samples))
 		maps.Copy(out.Samples, c.Samples)
+	}
+	if len(c.DigestMapping) > 0 {
+		out.DigestMapping = maps.Clone(c.DigestMapping)
 	}
 	return out
 }
@@ -90,6 +95,17 @@ func (c *Capture) Merge(c2 *Capture) error {
 	}
 	c.ProxyIncomplete = append(c.ProxyIncomplete, c2.ProxyIncomplete...)
 	return nil
+}
+
+// AddDigestMapping adds frontend-to-runtime digest mappings for this result.
+func (c *Capture) AddDigestMapping(mapping map[digest.Digest]digest.Digest) {
+	if len(mapping) == 0 {
+		return
+	}
+	if c.DigestMapping == nil {
+		c.DigestMapping = make(map[digest.Digest]digest.Digest, len(mapping))
+	}
+	maps.Copy(c.DigestMapping, mapping)
 }
 
 func (c *Capture) Sort() {
