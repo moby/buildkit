@@ -21,22 +21,22 @@ require (
 	github.com/containerd/accelerated-container-image v1.3.0
 	github.com/containerd/console v1.0.5
 	github.com/containerd/containerd/api v1.11.1
-	github.com/containerd/containerd/v2 v2.3.3
+	github.com/containerd/containerd/v2 v2.3.4
 	github.com/containerd/continuity v0.5.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
 	github.com/containerd/go-cni v1.1.13
-	github.com/containerd/go-runc v1.1.0
+	github.com/containerd/go-runc v1.2.1
 	github.com/containerd/log v0.1.0
 	github.com/containerd/nydus-snapshotter v0.15.15
-	github.com/containerd/platforms v1.0.0-rc.4
+	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/containerd/stargz-snapshotter v0.18.2
 	github.com/containerd/stargz-snapshotter/estargz v0.18.2
 	github.com/containerd/typeurl/v2 v2.3.0
 	github.com/containernetworking/plugins v1.9.1
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v29.6.2+incompatible
+	github.com/docker/cli v29.7.2+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.13.0
 	github.com/gohugoio/hashstructure v0.6.0
@@ -77,7 +77,7 @@ require (
 	github.com/spdx/tools-golang v0.5.7
 	github.com/stretchr/testify v1.12.1
 	github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
-	github.com/tonistiigi/fsutil v0.0.0-20260818132828-ea1b24afbd39
+	github.com/tonistiigi/fsutil v0.0.0-20260819142231-83cac42c1c52
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240814133006-030d3b2625d0

@@ -357,7 +357,7 @@ github.com/containerd/containerd/api/types/runc/options
 github.com/containerd/containerd/api/types/runtimeoptions/v1
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/api/types/transfer
-# github.com/containerd/containerd/v2 v2.3.3
+# github.com/containerd/containerd/v2 v2.3.4
 ## explicit; go 1.26.3
 github.com/containerd/containerd/v2/client
 github.com/containerd/containerd/v2/core/containers
@@ -465,8 +465,8 @@ github.com/containerd/fuse-overlayfs-snapshotter/v2
 # github.com/containerd/go-cni v1.1.13
 ## explicit; go 1.21
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v1.1.0
-## explicit; go 1.18
+# github.com/containerd/go-runc v1.2.1
+## explicit; go 1.21
 github.com/containerd/go-runc
 # github.com/containerd/log v0.1.0
 ## explicit; go 1.20
@@ -476,7 +476,7 @@ github.com/containerd/log
 github.com/containerd/nydus-snapshotter/pkg/converter
 github.com/containerd/nydus-snapshotter/pkg/converter/tool
 github.com/containerd/nydus-snapshotter/pkg/label
-# github.com/containerd/platforms v1.0.0-rc.4
+# github.com/containerd/platforms v1.0.0-rc.5
 ## explicit; go 1.24
 github.com/containerd/platforms
 # github.com/containerd/plugin v1.1.0
@@ -559,7 +559,7 @@ github.com/dimchansky/utfbom
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v29.6.2+incompatible
+# github.com/docker/cli v29.7.2+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -1039,7 +1039,7 @@ github.com/theupdateframework/go-tuf/v2/metadata/updater
 # github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20260818132828-ea1b24afbd39
+# github.com/tonistiigi/fsutil v0.0.0-20260819142231-83cac42c1c52
 ## explicit; go 1.25.0
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
