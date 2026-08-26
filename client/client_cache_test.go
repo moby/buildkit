@@ -1033,6 +1033,125 @@ func testMultipleRecordsWithSameLayersCacheImportExport(t *testing.T, sb integra
 	ensurePruneAll(t, c, sb)
 }
 
+// testRemoteCacheSharedMergeBranches verifies remote-cache reuse when distinct
+// merge branches produce byte-identical content. After export, it prunes local
+// endpoint records and checks that imported cache preserves random markers.
+// Previously, a leftover nil in-progress marker in addItemToStorage's per-leaf
+// visited map could silently drop a shared link and rerun a marker operation.
+func testRemoteCacheSharedMergeBranches(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+		workers.FeatureMergeDiff,
+	)
+	requiresLinux(t)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("busybox:latest")
+	// These operations have distinct cache keys but produce byte-identical
+	// snapshots. The test depends on this content collision making the cache
+	// graph reconverge; repeated copy and merge operations preserve the
+	// identical content while giving it distinct dependency chains.
+	sameA := base.Run(llb.Args([]string{
+		"sh", "-c",
+		`echo $(( 1 + 2 )) > /value && touch -d "1970-01-01 00:00:00" /value`,
+	})).Root()
+	sameB := base.Run(llb.Args([]string{
+		"sh", "-c",
+		`echo $(( 2 + 1 )) > /value && touch -d "1970-01-01 00:00:00" /value`,
+	})).Root()
+
+	copyValue := func(src llb.State) llb.State {
+		return llb.Scratch().File(llb.Copy(src, "/value", "/value"))
+	}
+	copiedA := copyValue(sameA)
+	copiedB := copyValue(sameB)
+	mergedA := llb.Merge([]llb.State{copiedA, copiedB})
+	mergedB := llb.Merge([]llb.State{copiedB, copiedA})
+	deepA := copyValue(mergedA)
+	deepB := copyValue(mergedB)
+
+	// A cache miss after import is observable because rerunning either command
+	// changes its marker. The final state retains both branches independently.
+	randomA := base.Run(
+		llb.Shlex("sh -c 'test -f /input/value && head -c 100 /dev/urandom | sha256sum > /random-a'"),
+		llb.AddMount("/input", deepA, llb.Readonly),
+	).Root()
+	randomB := base.Run(
+		llb.Shlex("sh -c 'test -f /input/value && head -c 100 /dev/urandom | sha256sum > /random-b'"),
+		llb.AddMount("/input", deepB, llb.Readonly),
+	).Root()
+	final := llb.Scratch().
+		File(llb.Copy(randomA, "/random-a", "/random-a")).
+		File(llb.Copy(randomB, "/random-b", "/random-b"))
+
+	def, err := final.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	cache := []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":  registry + "/buildkit/testremotecachesharedmergebranches:latest",
+			"mode": "max",
+		},
+	}}
+
+	firstOutput := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports:      []ExportEntry{{Type: ExporterLocal, OutputDir: firstOutput}},
+		CacheExports: cache,
+	}, nil)
+	require.NoError(t, err)
+
+	randomAContents, err := os.ReadFile(filepath.Join(firstOutput, "random-a"))
+	require.NoError(t, err)
+	randomBContents, err := os.ReadFile(filepath.Join(firstOutput, "random-b"))
+	require.NoError(t, err)
+
+	for i := range 20 {
+		// Drop local results so the endpoint records must be recovered from
+		// the exported cache on every solve.
+		require.Eventually(t, func() bool {
+			if err := c.Prune(sb.Context(), nil, PruneAll); err != nil {
+				return false
+			}
+			usage, err := c.DiskUsage(sb.Context())
+			if err != nil {
+				return false
+			}
+			for _, record := range usage {
+				if strings.Contains(record.Description, "random-a") || strings.Contains(record.Description, "random-b") {
+					return false
+				}
+			}
+			return true
+		}, 30*time.Second, 500*time.Millisecond, "random endpoint cache records were not pruned")
+
+		output := t.TempDir()
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports:      []ExportEntry{{Type: ExporterLocal, OutputDir: output}},
+			CacheImports: cache,
+		}, nil)
+		require.NoError(t, err)
+
+		actualA, err := os.ReadFile(filepath.Join(output, "random-a"))
+		require.NoError(t, err)
+		require.Equalf(t, randomAContents, actualA, "iteration %d: random-a was recomputed", i)
+		actualB, err := os.ReadFile(filepath.Join(output, "random-b"))
+		require.NoError(t, err)
+		require.Equalf(t, randomBContents, actualB, "iteration %d: random-b was recomputed", i)
+	}
+}
+
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
