@@ -18,33 +18,82 @@ import (
 )
 
 func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
-	rootfs := t.TempDir()
-	root, err := os.OpenRoot(rootfs)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, root.Close())
-	})
-	const bundle = "etc/ssl/certs/ca-certificates.crt"
-	require.NoError(t, root.MkdirAll(filepath.Dir(bundle), 0o755))
 	original := []byte("original bundle\n")
-	require.NoError(t, root.WriteFile(bundle, original, 0o644))
+	bundle, cleanup := injectTestProxyCA(t, original)
 
-	caPEM := testCertPEM(t)
-	cleanup, err := InjectProxyCA(rootfs, caPEM)
+	dt, err := os.ReadFile(bundle)
 	require.NoError(t, err)
 
-	dt, err := root.ReadFile(bundle)
-	require.NoError(t, err)
-	require.Contains(t, string(dt), string(caPEM))
-
-	require.NoError(t, root.WriteFile(bundle, append(dt, []byte("container change\n")...), 0o644))
+	change := []byte("container change\n")
+	require.NoError(t, os.WriteFile(bundle, append(dt, change...), 0o644))
 	require.NoError(t, cleanup())
 
-	dt, err = root.ReadFile(bundle)
+	dt, err = os.ReadFile(bundle)
 	require.NoError(t, err)
-	require.NotContains(t, string(dt), string(caPEM))
-	require.Contains(t, string(dt), string(original))
-	require.Contains(t, string(dt), "container change\n")
+	expected := append(append([]byte{}, original...), change...)
+	require.Equal(t, expected, dt)
+}
+
+func TestInjectProxyCARestoresBundleWithoutTrailingNewline(t *testing.T) {
+	original := []byte("original bundle")
+	bundle, cleanup := injectTestProxyCA(t, original)
+
+	require.NoError(t, cleanup())
+
+	dt, err := os.ReadFile(bundle)
+	require.NoError(t, err)
+	require.Equal(t, original, dt)
+}
+
+func TestInjectProxyCARestoresEmptyBundle(t *testing.T) {
+	original := []byte{}
+	bundle, cleanup := injectTestProxyCA(t, original)
+
+	require.NoError(t, cleanup())
+
+	dt, err := os.ReadFile(bundle)
+	require.NoError(t, err)
+	require.Equal(t, original, dt)
+}
+
+func TestInjectProxyCARestoresBundleEndingInNewline(t *testing.T) {
+	original := []byte("original bundle\n")
+	bundle, cleanup := injectTestProxyCA(t, original)
+
+	require.NoError(t, cleanup())
+
+	dt, err := os.ReadFile(bundle)
+	require.NoError(t, err)
+	require.Equal(t, original, dt)
+}
+
+func TestInjectProxyCACleanupAllowsDeletedBundle(t *testing.T) {
+	bundle, cleanup := injectTestProxyCA(t, []byte("original bundle\n"))
+	require.NoError(t, os.Remove(bundle))
+
+	require.NoError(t, cleanup())
+	require.NoFileExists(t, bundle)
+}
+
+func TestInjectProxyCACleanupRejectsOversizedBundle(t *testing.T) {
+	bundle, cleanup := injectTestProxyCA(t, []byte("original bundle\n"))
+	require.NoError(t, os.Truncate(bundle, maxCertBundleBytes+1))
+
+	err := cleanup()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exceeds 10485760 bytes")
+}
+
+func injectTestProxyCA(t *testing.T, original []byte) (string, func() error) {
+	t.Helper()
+	rootfs := t.TempDir()
+	bundle := filepath.Join(rootfs, "etc/ssl/certs/ca-certificates.crt")
+	require.NoError(t, os.MkdirAll(filepath.Dir(bundle), 0o755))
+	require.NoError(t, os.WriteFile(bundle, original, 0o644))
+
+	cleanup, err := InjectProxyCA(rootfs, testCertPEM(t))
+	require.NoError(t, err)
+	return bundle, cleanup
 }
 
 func testCertPEM(t *testing.T) []byte {

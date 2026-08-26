@@ -91,6 +91,16 @@ BuildKit also injects a generated CA certificate into common Linux trust bundle
 locations for the duration of the exec. This lets HTTPS requests using the
 system trust store pass through the BuildKit proxy.
 
+BuildKit removes its injected CA after the exec while preserving other changes
+to the selected bundle. If BuildKit cannot read or rewrite the bundle during
+cleanup, the exec and solve fail; the result is not stored as a successful cache
+record or passed to exporters.
+
+Cleanup is deferred and therefore does not run if `buildkitd` terminates during
+the exec. An interrupted exec does not become a successful cache result, and its
+incomplete active reference is not exported after restart and remains eligible
+for garbage collection.
+
 ## Request capture and logs
 
 The proxy records network requests made by exec steps. Build output includes a
@@ -129,3 +139,7 @@ host networking.
 Applications that ignore `HTTP_PROXY` and `HTTPS_PROXY`, use custom trust
 stores, or open raw TCP connections cannot bypass the proxy. That traffic is
 blocked instead of being captured.
+
+Cleanup removes only BuildKit's temporary mutation from the selected system
+bundle. It does not remove copies of that bundle or certificates imported by
+build code into other system or application-specific trust stores.

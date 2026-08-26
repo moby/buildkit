@@ -96,6 +96,47 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, int32(0), leakHit.Load())
 
+	cleanupDestDir := t.TempDir()
+	cleanupFailure := llb.Image("alpine:latest").
+		Run(
+			llb.Shlex(
+				`sh -c 'touch /exec-completed && dd if=/dev/zero bs=1048576 count=11 >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null'`,
+			),
+			llb.IgnoreCache,
+		).
+		Root()
+	def, err = cleanupFailure.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: cleanupDestDir,
+		}},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to clean up proxy CA")
+	require.ErrorContains(t, err, "exceeds 10485760 bytes")
+	require.NoFileExists(t, filepath.Join(cleanupDestDir, "exec-completed"))
+
+	processAndCleanupFailure := llb.Image("alpine:latest").
+		Run(
+			llb.Shlex(
+				`sh -c 'dd if=/dev/zero bs=1048576 count=11 >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null && exit 42'`,
+			),
+			llb.IgnoreCache,
+		).
+		Root()
+	def, err = processAndCleanupFailure.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exit code: 42")
+	require.ErrorContains(t, err, "failed to clean up proxy CA")
+	require.ErrorContains(t, err, "exceeds 10485760 bytes")
+
 	var checked atomic.Int32
 	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		if req.Source.Source.Identifier != httpURL+"/allowed" {
