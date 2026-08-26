@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/moby/buildkit/cache"
@@ -109,7 +108,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 
 		st := &fstypes.Stat{
 			Mode: uint32(os.ModeDir | 0755),
-			Path: strings.ReplaceAll(k, "/", "_"),
+			Path: local.PlatformIDToPath(k),
 		}
 		if opt.Epoch != nil && opt.Epoch.Value != nil {
 			st.ModTime = opt.Epoch.Value.UnixNano()
