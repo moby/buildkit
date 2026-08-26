@@ -319,19 +319,21 @@ func testProxyNetworkGatewayExecEnvNoRootless(t *testing.T, sb integration.Sandb
 
 	env := strings.Split(strings.TrimSpace(childEnv.String()), "\n")
 	require.Contains(t, env, "CHILD_ENV=preserved")
-	require.Contains(t, env, "ALL_PROXY=http://child-process-proxy.invalid")
+	require.NotContains(t, env, "ALL_PROXY=http://child-process-proxy.invalid")
 	require.NotContains(t, env, "ALL_PROXY=http://initial-process-proxy.invalid")
 	require.NotContains(t, env, "INIT_ONLY=must-not-leak")
-	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"} {
-		found := false
-		for _, entry := range env {
-			if strings.HasPrefix(entry, name+"=") && len(entry) > len(name)+1 {
-				found = true
-				break
-			}
+	values := make(map[string]string, len(env))
+	for _, entry := range env {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok {
+			values[name] = value
 		}
-		require.Truef(t, found, "%s is not set in the gateway exec environment:\n%s", name, childEnv.String())
 	}
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy", "NO_PROXY", "no_proxy"} {
+		require.NotEmptyf(t, values[name], "%s is not set in the gateway exec environment:\n%s", name, childEnv.String())
+	}
+	require.Equal(t, values["HTTP_PROXY"], values["ALL_PROXY"])
+	require.Equal(t, values["http_proxy"], values["all_proxy"])
 }
 
 func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {

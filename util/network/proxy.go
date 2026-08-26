@@ -41,8 +41,10 @@ var proxyEnvNames = [...]struct {
 }{
 	{name: "HTTP_PROXY"},
 	{name: "HTTPS_PROXY"},
+	{name: "ALL_PROXY"},
 	{name: "http_proxy"},
 	{name: "https_proxy"},
+	{name: "all_proxy"},
 	{name: "NO_PROXY", noProxy: true},
 	{name: "no_proxy", noProxy: true},
 }
