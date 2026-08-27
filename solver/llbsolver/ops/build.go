@@ -18,34 +18,38 @@ import (
 	"github.com/pkg/errors"
 )
 
-const buildCacheType = "buildkit.build.v0"
+const buildCacheType = "buildkit.build.v1"
 
 type BuildOp struct {
-	op *pb.BuildOp
-	b  frontend.FrontendLLBBridge
-	v  solver.Vertex
+	op           *pb.BuildOp
+	b            frontend.FrontendLLBBridge
+	v            solver.Vertex
+	proxyNetwork bool
 }
 
 var _ solver.Op = &BuildOp{}
 
-func NewBuildOp(v solver.Vertex, op *pb.Op_Build, b frontend.FrontendLLBBridge, _ worker.Worker) (*BuildOp, error) {
+func NewBuildOp(v solver.Vertex, op *pb.Op_Build, b frontend.FrontendLLBBridge, _ worker.Worker, proxyNetwork bool) (*BuildOp, error) {
 	if err := opsutils.Validate(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	return &BuildOp{
-		op: op.Build,
-		b:  b,
-		v:  v,
+		op:           op.Build,
+		b:            b,
+		v:            v,
+		proxyNetwork: proxyNetwork,
 	}, nil
 }
 
 func (b *BuildOp) CacheMap(ctx context.Context, job solver.JobContext, index int) (*solver.CacheMap, bool, error) {
 	dt, err := json.Marshal(struct {
-		Type string
-		Exec *pb.BuildOp
+		Type         string
+		Exec         *pb.BuildOp
+		ProxyNetwork bool `json:",omitempty"`
 	}{
-		Type: buildCacheType,
-		Exec: b.op,
+		Type:         buildCacheType,
+		Exec:         b.op,
+		ProxyNetwork: b.proxyNetwork,
 	})
 	if err != nil {
 		return nil, false, err

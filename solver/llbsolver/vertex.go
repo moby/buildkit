@@ -385,6 +385,10 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 
 	if proxyNetwork != nil {
 		for _, op := range allOps {
+			if op.GetBuild() != nil {
+				op.ProxyNetwork = *proxyNetwork
+				continue
+			}
 			var err error
 			op.ProxyNetwork, err = proxyNetworkForOp(op.Op, *proxyNetwork)
 			if err != nil {

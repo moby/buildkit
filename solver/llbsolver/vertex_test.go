@@ -131,6 +131,21 @@ func TestWithProxyNetworkAffectsVertexDigest(t *testing.T) {
 	require.NotEqual(t, defaultEdge.Vertex.Digest(), proxyEdge.Vertex.Digest())
 }
 
+func TestWithProxyNetworkAffectsBuildOpVertexDigest(t *testing.T) {
+	build := &pb.Op{Op: &pb.Op_Build{Build: &pb.BuildOp{}}}
+	buildDigest, buildBytes := marshalTestOp(t, build)
+	root := &pb.Op{Inputs: []*pb.Input{{Digest: string(buildDigest)}}}
+	_, rootBytes := marshalTestOp(t, root)
+	def := &pb.Definition{Def: [][]byte{buildBytes, rootBytes}}
+
+	defaultEdge, err := loadWithProxyNetwork(t.Context(), def, nil, false)
+	require.NoError(t, err)
+	proxyEdge, err := loadWithProxyNetwork(t.Context(), def, nil, true)
+	require.NoError(t, err)
+
+	require.NotEqual(t, defaultEdge.Vertex.Digest(), proxyEdge.Vertex.Digest())
+}
+
 func TestNormalizeRuntimePlatformsDoesNotAffectVertexDigest(t *testing.T) {
 	def := proxyNetworkTestDefinition(t)
 

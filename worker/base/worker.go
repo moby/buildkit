@@ -424,7 +424,7 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 		case *pb.Op_File:
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:
-			return ops.NewBuildOp(v, op, s, w)
+			return ops.NewBuildOp(v, op, s, w, proxyOpt.Network)
 		case *pb.Op_Merge:
 			return ops.NewMergeOp(v, op, w)
 		case *pb.Op_Diff:
