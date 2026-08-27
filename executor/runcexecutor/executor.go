@@ -554,14 +554,15 @@ func (s *forwardIO) Stderr() io.ReadCloser {
 }
 
 // newRunProcKiller returns an abstraction for sending SIGKILL to the
-// process inside the container initiated from `runc run`.
-func newRunProcKiller(runC *runc.Runc, id string) procKiller {
-	return procKiller{runC: runC, id: id}
+// process inside the container initiated from `runc run`. A non-empty
+// pidfile enables KillProcessGroup.
+func newRunProcKiller(runC *runc.Runc, id, pidfile string) procKiller {
+	return procKiller{runC: runC, id: id, pidfile: pidfile, killGroup: pidfile != ""}
 }
 
 // newExecProcKiller returns an abstraction for sending SIGKILL to the
 // process inside the container initiated from `runc exec`.
-func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
+func newExecProcKiller(runC *runc.Runc, id string, killGroup bool) (procKiller, error) {
 	// for `runc exec` we need to create a pidfile and read it later to kill
 	// the process
 	tdir, err := os.MkdirTemp("", "runc")
@@ -570,9 +571,11 @@ func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
 	}
 
 	return procKiller{
-		runC:    runC,
-		id:      id,
-		pidfile: filepath.Join(tdir, "pidfile"),
+		runC:        runC,
+		id:          id,
+		pidfile:     filepath.Join(tdir, "pidfile"),
+		execProcess: true,
+		killGroup:   killGroup,
 		cleanup: func() {
 			os.RemoveAll(tdir)
 		},
@@ -580,10 +583,12 @@ func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
 }
 
 type procKiller struct {
-	runC    *runc.Runc
-	id      string
-	pidfile string
-	cleanup func()
+	runC        *runc.Runc
+	id          string
+	pidfile     string
+	execProcess bool
+	killGroup   bool
+	cleanup     func()
 }
 
 // Cleanup will delete any tmp files created for the pidfile allocation
@@ -612,7 +617,7 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	ctx, _ = context.WithTimeoutCause(ctx, 10*time.Second, errors.WithStack(context.DeadlineExceeded)) //nolint:govet
 	defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-	if k.pidfile == "" {
+	if !k.execProcess {
 		// for `runc run` process we use `runc kill` to terminate the process
 		return k.runC.Kill(ctx, k.id, int(syscall.SIGKILL), nil)
 	}
@@ -648,6 +653,38 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	}
 	defer process.Release()
 	return process.Signal(syscall.SIGKILL)
+}
+
+// KillProcessGroup sends SIGKILL to the process group of the in-container
+// process. Under host pidns, its subprocesses can survive the kill and keep
+// runc from exiting.
+func (k procKiller) KillProcessGroup(ctx context.Context) error {
+	if !k.killGroup || k.pidfile == "" {
+		return nil
+	}
+
+	pidData, err := os.ReadFile(k.pidfile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// the container never started, there is no process group yet
+			return nil
+		}
+		return errors.Wrap(err, "failed to read pidfile from runc")
+	}
+	pid, err := strconv.Atoi(string(pidData))
+	if err != nil {
+		return errors.Wrap(err, "read invalid pid from pidfile")
+	}
+	if pid <= 1 {
+		return errors.Errorf("refusing to kill process group of pid %d", pid)
+	}
+
+	bklog.G(ctx).Debugf("sending sigkill to process group %d in container %s", pid, k.id)
+	err = syscall.Kill(-pid, syscall.SIGKILL)
+	if err != nil && !errors.Is(err, syscall.ESRCH) {
+		return errors.Wrapf(err, "failed to kill process group %d", pid)
+	}
+	return nil
 }
 
 // procHandle is to track the process so we can send signals to it
@@ -828,6 +865,18 @@ func doKillProc(ctx context.Context, p *procHandle) error {
 
 	// Wait for the process to end. Track how long it takes.
 	start := time.Now()
+	select {
+	case <-p.ended:
+		return nil
+	case <-time.After(killWaitDelay):
+	}
+
+	// runc has not exited after the kill, kill the process group for
+	// surviving subprocesses
+	if err := p.killer.KillProcessGroup(context.WithoutCancel(ctx)); err != nil {
+		bklog.G(ctx).Errorf("failed to kill process group in container %s: %+v", p.killer.id, err)
+	}
+
 	select {
 	case <-p.ended:
 		return nil
