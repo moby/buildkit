@@ -563,8 +563,19 @@ func (s *forwardIO) Stderr() io.ReadCloser {
 
 // newRunProcKiller returns an abstraction for sending SIGKILL to the
 // process inside the container initiated from `runc run`.
-func newRunProcKiller(runC *runc.Runc, id string) procKiller {
-	return procKiller{runC: runC, id: id}
+func newRunProcKiller(runC *runc.Runc, id, pidfile string) procKiller {
+	k := procKiller{
+		runC:    runC,
+		id:      id,
+		pidfile: pidfile,
+	}
+	if pidfile == "" {
+		return k
+	}
+
+	k.mountNS = &mountNamespace{}
+	k.cleanup = k.mountNS.close
+	return k
 }
 
 // newExecProcKiller returns an abstraction for sending SIGKILL to the
@@ -584,14 +595,17 @@ func newExecProcKiller(runC *runc.Runc, id string) (procKiller, error) {
 		cleanup: func() {
 			os.RemoveAll(tdir)
 		},
+		execProcess: true,
 	}, nil
 }
 
 type procKiller struct {
-	runC    *runc.Runc
-	id      string
-	pidfile string
-	cleanup func()
+	runC        *runc.Runc
+	id          string
+	pidfile     string
+	cleanup     func()
+	execProcess bool
+	mountNS     *mountNamespace
 }
 
 // Cleanup will delete any tmp files created for the pidfile allocation
@@ -605,7 +619,7 @@ func (k procKiller) Cleanup() {
 // Kill will send SIGKILL to the process running inside the container.
 // If the process was created by `runc run` then we will use `runc kill`,
 // otherwise for `runc exec` we will read the pid from a pidfile and then
-// send the signal directly that process.
+// send the signal directly to its process group.
 func (k procKiller) Kill(ctx context.Context) (err error) {
 	bklog.G(ctx).Debugf("sending sigkill to process in container %s", k.id)
 	defer func() {
@@ -625,30 +639,48 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 		return k.runC.Kill(ctx, k.id, int(syscall.SIGKILL), nil)
 	}
 
-	// `runc exec` will write the pidfile a few milliseconds after we
+	// runc will write the pidfile after we
 	// get the runc pid via the startedCh, so we might need to retry until
 	// it appears in the edge case where we want to kill a process
 	// immediately after it was created.
-	var pidData []byte
-	for {
-		pidData, err = os.ReadFile(k.pidfile)
-		if err != nil {
-			if os.IsNotExist(err) {
-				select {
-				case <-ctx.Done():
-					return errors.New("context cancelled before runc wrote pidfile")
-				case <-time.After(10 * time.Millisecond):
-					continue
-				}
-			}
-			return errors.Wrap(err, "failed to read pidfile from runc")
-		}
-		break
-	}
-	pid, err := strconv.Atoi(string(pidData))
+	pid, err := k.readPidfile(ctx, 10*time.Millisecond)
 	if err != nil {
-		return errors.Wrap(err, "read invalid pid from pidfile")
+		return err
 	}
+
+	if pid <= 1 {
+		return errors.Errorf("refusing to kill process group of pid %d", pid)
+	}
+
+	if k.mountNS != nil {
+		k.mountNS.pin(pid)
+	}
+
+	bklog.G(ctx).Debugf("sending sigkill to process group %d in container %s", pid, k.id)
+	groupErr := syscall.Kill(-pid, syscall.SIGKILL)
+	if groupErr != nil && !errors.Is(groupErr, syscall.ESRCH) {
+		return errors.Wrapf(groupErr, "failed to kill process group %d", pid)
+	}
+
+	if !k.execProcess {
+		runcErr := k.runC.Kill(ctx, k.id, int(syscall.SIGKILL), nil)
+		sweepErr := k.mountNS.kill()
+		if sweepErr != nil {
+			bklog.G(ctx).Debugf("mount namespace kill failed in container %s: %v", k.id, sweepErr)
+		}
+		if groupErr != nil {
+			return runcErr
+		}
+		if runcErr != nil {
+			bklog.G(ctx).Debugf("runc kill after process group kill failed in container %s: %v", k.id, runcErr)
+		}
+		return nil
+	}
+
+	if groupErr == nil {
+		return nil
+	}
+
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		// error only possible on non-unix hosts
@@ -658,6 +690,123 @@ func (k procKiller) Kill(ctx context.Context) (err error) {
 	return process.Signal(syscall.SIGKILL)
 }
 
+func (k procKiller) pinFromPidfile(ctx context.Context) {
+	pid, err := k.readPidfile(ctx, time.Millisecond)
+	if err != nil {
+		return
+	}
+
+	k.mountNS.pin(pid)
+}
+
+func (k procKiller) readPidfile(ctx context.Context, retry time.Duration) (pid int, err error) {
+	var pidData []byte
+	for {
+		pidData, err = os.ReadFile(k.pidfile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				select {
+				case <-ctx.Done():
+					return 0, errors.New("context cancelled before runc wrote pidfile")
+				case <-time.After(retry):
+					continue
+				}
+			}
+			return 0, errors.Wrap(err, "failed to read pidfile from runc")
+		}
+		break
+	}
+	pid, err = strconv.Atoi(string(pidData))
+	if err != nil {
+		return 0, errors.Wrap(err, "read invalid pid from pidfile")
+	}
+
+	return pid, nil
+}
+
+type mountNamespace struct {
+	once   sync.Once
+	mu     sync.Mutex
+	f      *os.File
+	closed bool
+}
+
+func (ns *mountNamespace) pin(pid int) {
+	ns.once.Do(func() {
+		f, err := os.Open(filepath.Join("/proc", strconv.Itoa(pid), "ns", "mnt"))
+		if err != nil {
+			return
+		}
+
+		ns.mu.Lock()
+		defer ns.mu.Unlock()
+		if ns.closed {
+			f.Close()
+			return
+		}
+
+		ns.f = f
+	})
+}
+
+func (ns *mountNamespace) kill() error {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	if ns.f == nil {
+		return nil
+	}
+
+	pinned, err := ns.f.Stat()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	self, err := os.Stat("/proc/self/ns/mnt")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if os.SameFile(pinned, self) {
+		return errors.New("refusing to kill processes in our own mount namespace")
+	}
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	var killErr error
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+
+		info, err := os.Stat(filepath.Join("/proc", entry.Name(), "ns", "mnt"))
+		if err != nil || !os.SameFile(pinned, info) {
+			continue
+		}
+
+		err = syscall.Kill(pid, syscall.SIGKILL)
+		if err != nil && !errors.Is(err, syscall.ESRCH) && killErr == nil {
+			killErr = errors.Wrapf(err, "failed to kill process %d", pid)
+		}
+	}
+	return killErr
+}
+
+func (ns *mountNamespace) close() {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	ns.closed = true
+	if ns.f == nil {
+		return
+	}
+
+	ns.f.Close()
+	ns.f = nil
+}
+
 // procHandle is to track the process so we can send signals to it
 // and handle graceful shutdown.
 type procHandle struct {
@@ -665,6 +814,7 @@ type procHandle struct {
 	monitorProcess *os.Process
 	ready          chan struct{}
 	ended          chan struct{}
+	killDone       chan struct{}
 	shutdown       func(error)
 	// this only used when the request context is canceled and we need
 	// to kill the in-container process.
@@ -683,6 +833,7 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 	p := &procHandle{
 		ready:    make(chan struct{}),
 		ended:    make(chan struct{}),
+		killDone: make(chan struct{}),
 		shutdown: cancel,
 		killer:   killer,
 	}
@@ -690,6 +841,7 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 	runcCtx = bklog.WithLogger(runcCtx, bklog.G(ctx))
 
 	go func() {
+		defer close(p.killDone)
 		// Wait for pid
 		select {
 		case <-p.ended:
@@ -717,6 +869,7 @@ func runcProcessHandle(ctx context.Context, killer procKiller) (*procHandle, con
 // Release will free resources with a procHandle.
 func (p *procHandle) Release() {
 	close(p.ended)
+	<-p.killDone
 	if p.monitorProcess != nil {
 		p.monitorProcess.Release()
 	}
