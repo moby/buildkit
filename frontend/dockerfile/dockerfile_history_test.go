@@ -270,7 +270,7 @@ COPY notexist /foo
 		require.NotNil(t, extErr)
 
 		require.Greater(t, extErr.Size, int64(0))
-		require.Equal(t, "application/vnd.googeapis.google.rpc.status+proto", extErr.MediaType)
+		require.Equal(t, "application/vnd.googleapis.google.rpc.status+proto", extErr.MediaType)
 
 		bkstore := proxy.NewContentStore(c.ContentClient())
 
