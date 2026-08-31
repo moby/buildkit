@@ -73,7 +73,7 @@ func TestGitCLIConfigEnv(t *testing.T) {
 func TestGitCLIAdviceOption(t *testing.T) {
 	run := func(t *testing.T, opts ...Option) (env, args []string) {
 		t.Helper()
-		opts = append(opts, WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+		opts = append(opts, WithExec(func(_ context.Context, cmd *exec.Cmd) error {
 			env = append([]string(nil), cmd.Env...)
 			args = append([]string(nil), cmd.Args...)
 			return nil

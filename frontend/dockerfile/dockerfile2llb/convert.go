@@ -1456,10 +1456,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 			}
 			opt = append(opt, llb.AddCDIDevice(deviceOpts...))
 		}
-		runDevices, err := dispatchRunDevices(c)
-		if err != nil {
-			return err
-		}
+		runDevices := dispatchRunDevices(c)
 		opt = append(opt, runDevices...)
 	}
 
