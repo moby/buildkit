@@ -1465,7 +1465,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 			checkCompression(bDesc, c)
 		}
 
-		// check if compression variables are availalbe on B still after A is released
+		// check if compression variables are available on B still after A is released
 		if testCase.checkPrune && aRef.ID() != bRef.ID() {
 			require.NoError(t, aRef.Release(ctx))
 			ensurePrune(ctx, t, cm, 1, 10)
