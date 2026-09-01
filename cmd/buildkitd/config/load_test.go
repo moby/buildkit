@@ -43,6 +43,7 @@ foo="bar"
 namespace="non-default"
 platforms=["linux/amd64"]
 address="containerd.sock"
+hypervIsolation=true
 [worker.containerd.runtime]
 name="exotic"
 path="/usr/bin/exotic"
@@ -110,6 +111,7 @@ searchDomains=["example.com"]
 	require.Nil(t, cfg.Workers.Containerd.Enabled)
 	require.Equal(t, 1, len(cfg.Workers.Containerd.Platforms))
 	require.Equal(t, "containerd.sock", cfg.Workers.Containerd.Address)
+	require.True(t, cfg.Workers.Containerd.HyperVIsolation)
 
 	require.Equal(t, 0, len(cfg.Workers.OCI.GCPolicy))
 	require.Equal(t, "non-default", cfg.Workers.Containerd.Namespace)
