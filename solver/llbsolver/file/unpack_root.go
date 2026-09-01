@@ -5,14 +5,30 @@ import (
 	"context"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/moby/sys/user"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
+
+var (
+	minRootTime = time.Unix(0, 0)
+	maxRootTime time.Time
+)
+
+func init() {
+	if unsafe.Sizeof(syscall.Timespec{}.Nsec) == 8 {
+		maxRootTime = time.Unix(0, 1<<63-1)
+	} else {
+		maxRootTime = time.Unix(1<<31-1, 0)
+	}
+}
 
 type rootDirTime struct {
 	name  string
@@ -30,6 +46,10 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 	tr := tar.NewReader(r)
 	var dirs []rootDirTime
 	var copyBuf []byte
+	impliedUID, impliedGID := 0, 0
+	if idmap != nil {
+		impliedUID, impliedGID = idmap.RootPair()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -71,8 +91,33 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 
 		parent := filepath.Dir(opName)
 		if parent != "." {
-			if err := root.MkdirAll(parent, 0o755); err != nil {
-				return err
+			var cur string
+			for c := range strings.SplitSeq(parent, string(filepath.Separator)) {
+				if c == "" {
+					continue
+				}
+				cur = filepath.Join(cur, c)
+				if err := root.Mkdir(cur, 0o755); err != nil {
+					if !errors.Is(err, os.ErrExist) {
+						return err
+					}
+					fi, err := root.Stat(cur)
+					if err != nil {
+						return err
+					}
+					if fi.IsDir() {
+						continue
+					}
+					return &os.PathError{Op: "mkdir", Path: cur, Err: syscall.ENOTDIR}
+				}
+				if !noSameOwner {
+					if err := root.Lchown(cur, impliedUID, impliedGID); err != nil {
+						return err
+					}
+				}
+				if err := applyRootMode(root, cur, 0o755); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -88,6 +133,7 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 		}
 
 		mode := hdr.FileInfo().Mode()
+		atime, mtime := rootHeaderTimes(hdr)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := root.Mkdir(opName, mode.Perm()); err != nil && !errors.Is(err, os.ErrExist) {
@@ -96,13 +142,13 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
 				return err
 			}
-			if err := root.Chmod(opName, mode); err != nil {
+			if err := applyRootMode(root, opName, mode); err != nil {
 				return err
 			}
 			dirs = append(dirs, rootDirTime{
 				name:  opName,
-				atime: headerAccessTime(hdr),
-				mtime: hdr.ModTime,
+				atime: atime,
+				mtime: mtime,
 			})
 		case tar.TypeReg, 0:
 			// A zero typeflag is the historic tar regular-file marker.
@@ -151,7 +197,7 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 				file.Close()
 				return err
 			}
-			if err := root.Chtimes(opName, headerAccessTime(hdr), hdr.ModTime); err != nil {
+			if err := root.Chtimes(opName, atime, mtime); err != nil {
 				file.Close()
 				return err
 			}
@@ -166,6 +212,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 				return err
 			}
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
+				return err
+			}
+			if err := applyRootSymlinkTimes(root, opName, atime, mtime); err != nil {
 				return err
 			}
 		case tar.TypeLink:
@@ -191,10 +240,10 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 				return err
 			}
 			if fi.Mode()&os.ModeSymlink == 0 {
-				if err := root.Chmod(opName, mode); err != nil {
+				if err := applyRootMode(root, opName, mode); err != nil {
 					return err
 				}
-				if err := root.Chtimes(opName, headerAccessTime(hdr), hdr.ModTime); err != nil {
+				if err := root.Chtimes(opName, atime, mtime); err != nil {
 					return err
 				}
 			}
@@ -203,8 +252,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 		}
 	}
 
-	for i := len(dirs) - 1; i >= 0; i-- {
-		if err := root.Chtimes(dirs[i].name, dirs[i].atime, dirs[i].mtime); err != nil {
+	for i := range len(dirs) {
+		d := dirs[len(dirs)-1-i]
+		if err := root.Chtimes(d.name, d.atime, d.mtime); err != nil {
 			return err
 		}
 	}
@@ -212,18 +262,20 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 }
 
 func cleanRootTarPath(name string) (string, error) {
-	name = filepath.Clean(name)
-	if filepath.VolumeName(name) != "" {
-		return "", errors.Errorf("archive path %q is outside extraction root", name)
-	}
-	// Match chroot-style extraction: /foo is extracted as foo under the
-	// destination root, while paths that still escape are rejected below.
-	name = strings.TrimLeft(name, string(filepath.Separator))
+	original := name
+	name = path.Clean(strings.TrimLeft(name, "/"))
 	if name == "." || name == "" {
 		return "", nil
 	}
+	if err := validateRootTarPath(name); err != nil {
+		return "", errors.Wrapf(err, "archive path %q is outside extraction root", original)
+	}
+	name = filepath.FromSlash(name)
+	if filepath.VolumeName(name) != "" {
+		return "", errors.Errorf("archive path %q is outside extraction root", original)
+	}
 	if !filepath.IsLocal(name) {
-		return "", errors.Errorf("archive path %q is outside extraction root", name)
+		return "", errors.Errorf("archive path %q is outside extraction root", original)
 	}
 	return name, nil
 }
@@ -288,11 +340,19 @@ func resolveRootPath(root *os.Root, name string, followLeaf bool) (string, error
 	return "", errors.Errorf("too many symlinks resolving archive path %q", original)
 }
 
-func headerAccessTime(hdr *tar.Header) time.Time {
-	if !hdr.AccessTime.IsZero() {
-		return hdr.AccessTime
+func rootHeaderTimes(hdr *tar.Header) (time.Time, time.Time) {
+	atime := hdr.ModTime
+	if hdr.AccessTime.After(atime) {
+		atime = hdr.AccessTime
 	}
-	return hdr.ModTime
+	return boundRootTime(atime), boundRootTime(hdr.ModTime)
+}
+
+func boundRootTime(t time.Time) time.Time {
+	if t.Before(minRootTime) || t.After(maxRootTime) {
+		return minRootTime
+	}
+	return t
 }
 
 func mapArchiveHeaderOwner(hdr *tar.Header, u *copy.User, idmap *user.IdentityMapping) error {
