@@ -896,6 +896,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return nil, errors.Errorf("invalid response status %d", resp.StatusCode)
+	}
 
 	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
