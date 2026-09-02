@@ -77,6 +77,13 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 		}
 		hdr.Name = name
 
+		// Dockerfile ADD extracts filesystem content, but should not create
+		// device nodes or FIFOs. Skip them without replacing existing paths.
+		switch hdr.Typeflag {
+		case tar.TypeBlock, tar.TypeChar, tar.TypeFifo:
+			continue
+		}
+
 		if err := mapArchiveHeaderOwner(hdr, u, idmap); err != nil {
 			return err
 		}
@@ -142,6 +149,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
 				return err
 			}
+			if err := applyRootXattrs(root, nil, opName, hdr); err != nil {
+				return err
+			}
 			if err := applyRootMode(root, opName, mode); err != nil {
 				return err
 			}
@@ -193,6 +203,10 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 					return err
 				}
 			}
+			if err := applyRootXattrs(root, file, opName, hdr); err != nil {
+				file.Close()
+				return err
+			}
 			if err := file.Chmod(mode); err != nil {
 				file.Close()
 				return err
@@ -214,6 +228,8 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
 				return err
 			}
+			// Avoid applying xattrs through symlinks. os.Root has no non-following
+			// xattr method, and opening the path would touch the symlink target.
 			if err := applyRootSymlinkTimes(root, opName, atime, mtime); err != nil {
 				return err
 			}
@@ -240,6 +256,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 				return err
 			}
 			if fi.Mode()&os.ModeSymlink == 0 {
+				if err := applyRootXattrs(root, nil, opName, hdr); err != nil {
+					return err
+				}
 				if err := applyRootMode(root, opName, mode); err != nil {
 					return err
 				}
@@ -256,6 +275,20 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 		d := dirs[len(dirs)-1-i]
 		if err := root.Chtimes(d.name, d.atime, d.mtime); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func applyRootXattrs(root *os.Root, file *os.File, name string, hdr *tar.Header) error {
+	const paxSchilyXattr = "SCHILY.xattr."
+	for key, value := range hdr.PAXRecords {
+		xattr, ok := strings.CutPrefix(key, paxSchilyXattr)
+		if !ok {
+			continue
+		}
+		if err := setRootXattr(root, file, name, xattr, []byte(value)); err != nil {
+			return errors.Wrapf(err, "failed to set xattr %q", xattr)
 		}
 	}
 	return nil
