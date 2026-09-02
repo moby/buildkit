@@ -53,6 +53,131 @@ func TestUnpackWritesThroughRootLocalAbsoluteSymlink(t *testing.T) {
 	require.True(t, os.SameFile(fileInfo, linkInfo))
 }
 
+func TestUnpackFIFO(t *testing.T) {
+	if !supportsRootFIFO {
+		t.Skip("FIFO extraction is not supported on this platform")
+	}
+	for _, existing := range []string{"missing", "file", "directory", "symlink", "fifo"} {
+		t.Run(existing, func(t *testing.T) {
+			dest := t.TempDir()
+			outside := filepath.Join(t.TempDir(), "target")
+			require.NoError(t, os.WriteFile(outside, []byte("untouched"), 0o644))
+			name := filepath.Join(dest, "pipe")
+			switch existing {
+			case "file":
+				require.NoError(t, os.WriteFile(name, []byte("old"), 0o644))
+			case "directory":
+				require.NoError(t, os.Mkdir(name, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(name, "child"), nil, 0o644))
+			case "symlink":
+				require.NoError(t, os.Symlink(outside, name))
+			case "fifo":
+				require.NoError(t, unix.Mkfifo(name, 0o600))
+			}
+			buf := bytes.NewBuffer(nil)
+			tw := tar.NewWriter(buf)
+			hdr := &tar.Header{
+				Name:     "pipe",
+				Typeflag: tar.TypeFifo,
+				Mode:     0o620,
+				Uid:      os.Getuid(),
+				Gid:      os.Getgid(),
+				ModTime:  time.Unix(123456789, 0),
+			}
+			require.NoError(t, tw.WriteHeader(hdr))
+			require.NoError(t, tw.WriteHeader(&tar.Header{
+				Name:     "alias",
+				Typeflag: tar.TypeLink,
+				Linkname: "pipe",
+				Mode:     hdr.Mode,
+				Uid:      hdr.Uid,
+				Gid:      hdr.Gid,
+				ModTime:  hdr.ModTime,
+			}))
+			require.NoError(t, tw.WriteHeader(&tar.Header{
+				Name:     "after",
+				Typeflag: tar.TypeReg,
+				Mode:     0o644,
+				Uid:      hdr.Uid,
+				Gid:      hdr.Gid,
+				Size:     int64(len("content")),
+			}))
+			_, err := tw.Write([]byte("content"))
+			require.NoError(t, err)
+			require.NoError(t, tw.Close())
+			require.NoError(t, applyRootArchive(t.Context(), dest, buf, nil, nil, false))
+
+			fi, err := os.Lstat(name)
+			require.NoError(t, err)
+			require.NotZero(t, fi.Mode()&os.ModeNamedPipe)
+			require.Equal(t, os.FileMode(0o620), fi.Mode().Perm())
+			require.Equal(t, hdr.ModTime, fi.ModTime())
+			var st unix.Stat_t
+			require.NoError(t, unix.Lstat(name, &st))
+			require.EqualValues(t, hdr.Uid, st.Uid)
+			require.EqualValues(t, hdr.Gid, st.Gid)
+			alias, err := os.Lstat(filepath.Join(dest, "alias"))
+			require.NoError(t, err)
+			require.True(t, os.SameFile(fi, alias))
+			dt, err := os.ReadFile(outside)
+			require.NoError(t, err)
+			require.Equal(t, "untouched", string(dt))
+			dt, err = os.ReadFile(filepath.Join(dest, "after"))
+			require.NoError(t, err)
+			require.Equal(t, "content", string(dt))
+		})
+	}
+}
+
+func TestUnpackFIFOPaths(t *testing.T) {
+	if !supportsRootFIFO {
+		t.Skip("FIFO extraction is not supported on this platform")
+	}
+	for _, name := range []string{"nested/pipe", "/nested/pipe", "local/pipe", "../outside/pipe", "escape/pipe"} {
+		t.Run(name, func(t *testing.T) {
+			parent := t.TempDir()
+			dest := filepath.Join(parent, "dest")
+			outside := filepath.Join(parent, "outside")
+			require.NoError(t, os.Mkdir(dest, 0o755))
+			require.NoError(t, os.Mkdir(outside, 0o755))
+			require.NoError(t, os.Symlink("../outside", filepath.Join(dest, "escape")))
+			require.NoError(t, os.Symlink("/nested", filepath.Join(dest, "local")))
+			buf := bytes.NewBuffer(nil)
+			tw := tar.NewWriter(buf)
+			require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeFifo, Mode: 0o600}))
+			require.NoError(t, tw.Close())
+			err := applyArchiveNoSameOwner(t, dest, buf.Bytes())
+			if name == "../outside/pipe" || name == "escape/pipe" {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				fi, err := os.Lstat(filepath.Join(dest, "nested", "pipe"))
+				require.NoError(t, err)
+				require.NotZero(t, fi.Mode()&os.ModeNamedPipe)
+			}
+			entries, err := os.ReadDir(outside)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+		})
+	}
+}
+
+func TestUnpackReplacesFIFOWithRegularFile(t *testing.T) {
+	if !supportsRootFIFO {
+		t.Skip("FIFO extraction is not supported on this platform")
+	}
+	dest := t.TempDir()
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "pipe", Typeflag: tar.TypeFifo, Mode: 0o600}))
+	writeTarFile(t, tw, "pipe", "content")
+	require.NoError(t, tw.Close())
+	require.NoError(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()))
+	dt, err := os.ReadFile(filepath.Join(dest, "pipe"))
+	require.NoError(t, err)
+	require.Equal(t, "content", string(dt))
+}
+
 func TestUnpackDoesNotWriteThroughAbsoluteArchiveSymlink(t *testing.T) {
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "dest")
