@@ -2,6 +2,7 @@ package forwarder
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -222,11 +223,17 @@ func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 }
 
 func (c *BridgeClient) discard(err error) {
-	for _, ctr := range c.ctrs {
+	c.mu.Lock()
+	ctrs := slices.Clone(c.ctrs)
+	c.mu.Unlock()
+	for _, ctr := range ctrs {
 		ctr.Release(context.TODO())
 	}
 
 	c.discardMounts()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	for id, workerRef := range c.workerRefByID {
 		workerRef.Release(context.TODO())
@@ -288,7 +295,9 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 				}
 			} else if m.ResultID != "" {
 				var ok bool
+				c.mu.Lock()
 				workerRef, ok = c.workerRefByID[m.ResultID]
+				c.mu.Unlock()
 				if !ok {
 					return errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
 				}
@@ -329,7 +338,9 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	if err != nil {
 		return nil, err
 	}
+	c.mu.Lock()
 	c.ctrs = append(c.ctrs, ctr)
+	c.mu.Unlock()
 	return ctr, nil
 }
 

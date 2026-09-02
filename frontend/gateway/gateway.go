@@ -364,15 +364,20 @@ func (lbf *llbBridgeForwarder) Discard() {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
-	for ctr := range lbf.ctrs {
+	lbf.ctrsMu.Lock()
+	ctrs := slices.Collect(maps.Keys(lbf.ctrs))
+	lbf.ctrsMu.Unlock()
+	for _, ctr := range ctrs {
 		lbf.ReleaseContainer(context.TODO(), &pb.ReleaseContainerRequest{
 			ContainerID: ctr,
 		})
 	}
 
+	lbf.mountsMu.Lock()
 	for _, mount := range lbf.mounts {
 		mount.Unmount()
 	}
+	lbf.mountsMu.Unlock()
 
 	for id, workerRef := range lbf.workerRefByID {
 		workerRef.Release(context.TODO())
@@ -1113,7 +1118,9 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		var workerRef *worker.WorkerRef
 		if m.ResultID != "" {
 			var ok bool
+			lbf.mu.Lock()
 			workerRef, ok = lbf.workerRefByID[m.ResultID]
+			lbf.mu.Unlock()
 			if !ok {
 				refProxy, err := lbf.convertRef(m.ResultID)
 				if err != nil {
