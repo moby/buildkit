@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/moby/sys/user"
+	"github.com/moby/sys/userns"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
@@ -76,6 +77,16 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			continue
 		}
 		hdr.Name = name
+
+		// Skip device nodes and unsupported FIFOs without replacing existing paths.
+		switch hdr.Typeflag {
+		case tar.TypeBlock, tar.TypeChar:
+			continue
+		case tar.TypeFifo:
+			if !supportsRootFIFO {
+				continue
+			}
+		}
 
 		if err := mapArchiveHeaderOwner(hdr, u, idmap); err != nil {
 			return err
@@ -142,6 +153,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
 				return err
 			}
+			if err := applyRootXattrs(root, nil, opName, hdr, false); err != nil {
+				return err
+			}
 			if err := applyRootMode(root, opName, mode); err != nil {
 				return err
 			}
@@ -193,6 +207,10 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 					return err
 				}
 			}
+			if err := applyRootXattrs(root, file, opName, hdr, false); err != nil {
+				file.Close()
+				return err
+			}
 			if err := file.Chmod(mode); err != nil {
 				file.Close()
 				return err
@@ -204,6 +222,25 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err := file.Close(); err != nil {
 				return err
 			}
+		case tar.TypeFifo:
+			if err := createRootFIFO(root, opName, mode.Perm()); err != nil {
+				if errors.Is(err, syscall.EPERM) && userns.RunningInUserNS() {
+					continue
+				}
+				return err
+			}
+			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
+				return err
+			}
+			if err := applyRootXattrs(root, nil, opName, hdr, false); err != nil {
+				return err
+			}
+			if err := applyRootMode(root, opName, mode); err != nil {
+				return err
+			}
+			if err := root.Chtimes(opName, atime, mtime); err != nil {
+				return err
+			}
 		case tar.TypeSymlink:
 			// Preserve the archive's link target. os.Root does not validate the
 			// target here. Later extraction resolves absolute targets relative to
@@ -212,6 +249,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 				return err
 			}
 			if err := applyRootOwner(root, opName, hdr, noSameOwner); err != nil {
+				return err
+			}
+			if err := applyRootXattrs(root, nil, opName, hdr, true); err != nil {
 				return err
 			}
 			if err := applyRootSymlinkTimes(root, opName, atime, mtime); err != nil {
@@ -239,6 +279,9 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 			if err != nil {
 				return err
 			}
+			if err := applyRootXattrs(root, nil, opName, hdr, fi.Mode()&os.ModeSymlink != 0); err != nil {
+				return err
+			}
 			if fi.Mode()&os.ModeSymlink == 0 {
 				if err := applyRootMode(root, opName, mode); err != nil {
 					return err
@@ -256,6 +299,26 @@ func applyRootArchive(ctx context.Context, dest string, r io.Reader, u *copy.Use
 	for _, d := range dirs {
 		if err := root.Chtimes(d.name, d.atime, d.mtime); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func applyRootXattrs(root *os.Root, file *os.File, name string, hdr *tar.Header, symlink bool) error {
+	const paxSchilyXattr = "SCHILY.xattr."
+	for key, value := range hdr.PAXRecords {
+		xattr, ok := strings.CutPrefix(key, paxSchilyXattr)
+		if !ok {
+			continue
+		}
+		var err error
+		if symlink {
+			err = setRootSymlinkXattr(root, name, xattr, []byte(value))
+		} else {
+			err = setRootXattr(root, file, name, xattr, []byte(value))
+		}
+		if err != nil {
+			return errors.Wrapf(err, "failed to set xattr %q", xattr)
 		}
 	}
 	return nil
