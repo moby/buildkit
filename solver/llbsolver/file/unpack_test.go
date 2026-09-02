@@ -261,7 +261,7 @@ func TestUnpackRejectsAbsoluteSymlinkRelativeEscape(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "archive-created symlink escaped destination")
 }
 
-func TestUnpackRejectsSpecialFileEntries(t *testing.T) {
+func TestUnpackSkipsSpecialFileEntries(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		typeflag byte
@@ -272,6 +272,7 @@ func TestUnpackRejectsSpecialFileEntries(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dest := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dest, tc.name), []byte("keep"), 0o644))
 
 			buf := bytes.NewBuffer(nil)
 			tw := tar.NewWriter(buf)
@@ -280,12 +281,18 @@ func TestUnpackRejectsSpecialFileEntries(t *testing.T) {
 				Typeflag: tc.typeflag,
 				Mode:     0o600,
 			}))
+			writeTarFile(t, tw, "after", "content")
 			require.NoError(t, tw.Close())
 
-			require.Error(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()))
+			require.NoError(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()))
 
-			_, err := os.Stat(filepath.Join(dest, tc.name))
-			require.True(t, os.IsNotExist(err), "special entry should not be extracted")
+			dt, err := os.ReadFile(filepath.Join(dest, tc.name))
+			require.NoError(t, err)
+			require.Equal(t, "keep", string(dt))
+
+			dt, err = os.ReadFile(filepath.Join(dest, "after"))
+			require.NoError(t, err)
+			require.Equal(t, "content", string(dt))
 		})
 	}
 }
