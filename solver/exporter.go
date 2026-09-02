@@ -145,8 +145,40 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	var i int
 
 	mainCtx := ctx
-	if CacheOptGetterOf(ctx) == nil && e.recordCtxOpts != nil {
-		ctx = e.recordCtxOpts(ctx)
+	if e.recordCtxOpts != nil {
+		if outer := CacheOptGetterOf(ctx); outer != nil {
+			// The context already carries a cache opt getter installed by the
+			// caller of the export (e.g. withDescHandlerCacheOpts for the
+			// exported result ref). Such a getter is rooted at a single
+			// state/ref chain, so it can only resolve cache opts (e.g. desc
+			// handlers for lazy blobs) that belong to that chain. Records that
+			// belong to other branches of the build graph (e.g. an earlier
+			// stage consumed through COPY --from) would fail to resolve their
+			// lazy blobs through it and get silently dropped from the export.
+			// Re-root the lookup at this record's own state (recordCtxOpts)
+			// and keep the inherited getter as a fallback for anything the
+			// record-specific lookup can not resolve.
+			recordOptGetter := CacheOptGetterOf(e.recordCtxOpts(ctx))
+			ctx = WithCacheOptGetter(ctx, func(includeAncestors bool, keys ...any) map[any]any {
+				vals := recordOptGetter(includeAncestors, keys...)
+				if len(vals) < len(keys) {
+					var missing []any
+					for _, k := range keys {
+						if _, ok := vals[k]; !ok {
+							missing = append(missing, k)
+						}
+					}
+					for k, v := range outer(includeAncestors, missing...) {
+						if _, ok := vals[k]; !ok {
+							vals[k] = v
+						}
+					}
+				}
+				return vals
+			})
+		} else {
+			ctx = e.recordCtxOpts(ctx)
+		}
 	}
 	v := e.record
 	for exportRecord && addRecord {
