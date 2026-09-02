@@ -73,7 +73,7 @@ ENV GOFLAGS=-mod=vendor
 FROM buildkit-base AS buildkit-version
 # TODO: PKG should be inferred from go modules
 RUN --mount=target=. <<'EOT'
-  # if git is worktree (file starting with gitdir:) then skip verions check
+  # if git is worktree (file starting with gitdir:) then skip version check
   if [ -f .git ] && head -1 .git | grep -q "^gitdir:"; then
     echo >&2 "Skipping version check for worktree"
     # set dev stubs

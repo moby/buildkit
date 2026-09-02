@@ -356,7 +356,7 @@ func TestHardlinks(t *testing.T) {
 			require.EqualValues(t, 1, stat2.Nlink)
 			require.NotEqual(t, stat2Ino, stat2.Ino)
 
-			// verify the original files and the files inthe merge are unchanged
+			// verify the original files and the files in the merge are unchanged
 			requireContents(ctx, t, sn, base1Snap.Name,
 				fstest.CreateFile("1", []byte("1"), 0600),
 			)
