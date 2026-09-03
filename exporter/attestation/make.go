@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"os"
 
 	"github.com/containerd/continuity/fs"
 	intoto "github.com/in-toto/in-toto-golang/in_toto"
@@ -13,6 +12,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -58,7 +58,7 @@ func ReadAll(ctx context.Context, s session.Group, att exporter.Attestation) ([]
 }
 
 func readRegularFile(p string) ([]byte, error) {
-	f, err := openRegularFile(p)
+	f, err := openfile.Regular(p)
 	if err != nil {
 		return nil, err
 	}
@@ -81,25 +81,6 @@ func readAllLimited(r io.Reader, name string, limit int64) ([]byte, error) {
 		return nil, errors.Errorf("%s exceeds %d bytes", name, limit)
 	}
 	return dt, nil
-}
-
-func openRegularFile(p string) (*os.File, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	st, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return nil, errors.WithStack(err)
-	}
-	if !st.Mode().IsRegular() {
-		f.Close()
-		return nil, errors.Errorf("%s is not a regular file", p)
-	}
-
-	return f, nil
 }
 
 // MakeInTotoStatements iterates over all provided result attestations and
