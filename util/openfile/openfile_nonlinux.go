@@ -5,6 +5,8 @@ package openfile
 import (
 	"os"
 
+	"github.com/containerd/continuity/fs"
+
 	"github.com/pkg/errors"
 )
 
@@ -33,4 +35,15 @@ func openRegular(p string) (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+// openRegularInRoot has no race-safe equivalent off Linux: resolution and open
+// are separate steps, so a mount mutated in between can still redirect the
+// open. The inode type is still checked before and after opening.
+func openRegularInRoot(root, name string) (*os.File, error) {
+	p, err := fs.RootPath(root, name)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return openRegular(p)
 }

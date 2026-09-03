@@ -23,6 +23,16 @@ func Regular(p string) (*os.File, error) {
 	return openRegular(p)
 }
 
+// RegularInRoot opens name inside root for reading and fails unless it is a
+// regular file. Unlike Regular it resolves name itself, confined to root, and
+// does so as a single operation: a process running against the same mount
+// cannot swap a path component between the resolution and the open. Use it
+// when the mount may be mutated while it is read, as a gateway container mount
+// can be.
+func RegularInRoot(root, name string) (*os.File, error) {
+	return openRegularInRoot(root, name)
+}
+
 func checkRegular(f *os.File, name string) error {
 	fi, err := f.Stat()
 	if err != nil {
