@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"os"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/client/llb"
@@ -13,6 +12,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/opsutils"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/cachedigest"
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -116,18 +116,9 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 		return nil, errors.Wrapf(err, "working dir %s points to invalid target", fn)
 	}
 
-	f, err := os.Open(newfn)
+	f, err := openfile.Regular(newfn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open %s", newfn)
-	}
-	st, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return nil, errors.WithStack(err)
-	}
-	if !st.Mode().IsRegular() {
-		f.Close()
-		return nil, errors.Errorf("%s is not a regular file", newfn)
 	}
 
 	def, err := llb.ReadFrom(f)

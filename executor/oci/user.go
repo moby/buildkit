@@ -3,7 +3,6 @@ package oci
 import (
 	"context"
 	"io"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/containerd/containerd/v2/core/containers"
 	containerdoci "github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/continuity/fs"
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/moby/sys/user"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -77,19 +77,9 @@ func openUserFile(root, p string) (io.ReadCloser, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	f, err := os.Open(p)
+	f, err := openfile.Regular(p)
 	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	info, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return nil, errors.WithStack(err)
-	}
-	if !info.Mode().IsRegular() {
-		f.Close()
-		return nil, errors.Errorf("%s is not a regular file", p)
+		return nil, err
 	}
 
 	return &limitedReadCloser{

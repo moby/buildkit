@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/continuity/fs"
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -28,26 +29,17 @@ func ReadFile(ctx context.Context, root string, req ReadRequest) ([]byte, error)
 		return nil, errors.WithStack(err)
 	}
 
-	f, err := os.Open(fp)
+	f, err := openfile.Regular(fp)
 	if err != nil {
 		// The filename here is internal to the mount, so we can restore
 		// the request base path for error reporting.
-		// See os.DirFS.Open for details.
 		pe := &os.PathError{}
 		if errors.As(err, &pe) {
 			pe.Path = req.Filename
 		}
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	if !info.Mode().IsRegular() {
-		return nil, errors.Errorf("%s is not a regular file", req.Filename)
-	}
 
 	var rdr io.Reader = f
 	if req.Range != nil {
