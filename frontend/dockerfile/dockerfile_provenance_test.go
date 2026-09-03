@@ -1400,7 +1400,7 @@ func testGatewayProvenanceDifferentCallbackInputProducer(t *testing.T, sb integr
 	case <-inputReady:
 	case err := <-firstBuildDone:
 		require.NoError(t, err)
-		require.FailNow(t, "producer build exited before returning an input")
+		t.Fatal("producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseProducer)
@@ -1560,7 +1560,7 @@ COPY --from=linked /innerseed /innerseed
 	case <-rootInputReady:
 	case err := <-rootProducerDone:
 		require.NoError(t, err)
-		require.FailNow(t, "root input producer build exited before returning an input")
+		t.Fatal("root input producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseRootProducer)
@@ -1680,7 +1680,7 @@ func testDockerfileProvenanceInputProducer(t *testing.T, sb integration.Sandbox)
 	case <-inputReady:
 	case err := <-producerDone:
 		require.NoError(t, err)
-		require.FailNow(t, "producer build exited before returning an input")
+		t.Fatal("producer build exited before returning an input")
 	}
 	defer func() {
 		close(releaseProducer)
@@ -2386,9 +2386,8 @@ ADD bar bar`)
 				require.Equal(t, r.Start.Line, r.End.Line, "step %s has range with multiple lines", id)
 
 				idx := r.Start.Line - 1
-				if idx < 0 || int(idx) >= len(lines) {
-					t.Fatalf("step %s has invalid range on line %d", id, idx)
-				}
+				require.GreaterOrEqualf(t, int(idx), 0, "step %s has invalid range on line %d", id, idx)
+				require.Lessf(t, int(idx), len(lines), "step %s has invalid range on line %d", id, idx)
 				lines[idx] = true
 			}
 		}
@@ -2518,7 +2517,7 @@ COPY bar bar2
 	for {
 		ev, err := history.Recv()
 		if err != nil {
-			require.Equal(t, io.EOF, err)
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
 		require.Equal(t, ref, ev.Record.Ref)

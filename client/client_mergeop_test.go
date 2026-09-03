@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,7 +247,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			},
 		}}
 	default:
-		require.Fail(t, fmt.Sprintf("unknown cache mode: %s", mode))
+		t.Errorf("unknown cache mode: %s", mode)
 	}
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
@@ -377,7 +376,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			_, err = contentStore.Info(ctx, layer.Digest)
 			require.NoError(t, err)
 		default:
-			require.Fail(t, fmt.Sprintf("unexpected layer index %d", i))
+			t.Errorf("unexpected layer index %d", i)
 		}
 	}
 

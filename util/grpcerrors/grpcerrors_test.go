@@ -49,8 +49,7 @@ func TestFromGRPCPreserveUnknownTypes(t *testing.T) {
 	}
 
 	assertErrorProperties := func(t *testing.T, err error) {
-		require.Error(t, err)
-		assert.Equal(t, fmt.Sprintf("%s: %s", errCode, errMessage), err.Error())
+		require.EqualError(t, err, fmt.Sprintf("%s: %s", errCode, errMessage))
 
 		st, ok := status.FromError(err)
 		require.True(t, ok)
@@ -202,7 +201,7 @@ func TestToGRPCMessage(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
 		decoded := grpcerrors.FromGRPC(grpcerrors.ToGRPC(t.Context(), err))
-		assert.Equal(t, err.Error(), decoded.Error())
+		assert.EqualError(t, err, decoded.Error())
 	})
 	t.Run("keep extra context", func(t *testing.T) {
 		t.Parallel()
@@ -216,7 +215,7 @@ func TestToGRPCMessage(t *testing.T) {
 		encoded := grpcerrors.ToGRPC(t.Context(), joined)
 		decoded := grpcerrors.FromGRPC(encoded)
 
-		assert.ErrorContains(t, decoded, wrapped.Error()) //nolint:testifylint // error is not critical
+		require.ErrorContains(t, decoded, wrapped.Error())
 		assert.ErrorContains(t, decoded, anotherErr.Error())
 	})
 }

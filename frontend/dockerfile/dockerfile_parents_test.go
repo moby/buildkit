@@ -337,15 +337,15 @@ RUN if exist \out\c exit /b 1
 
 	type test struct {
 		target     string
-		errorRegex any
+		errorRegex string
 	}
 
 	tests := []test{
-		{"normal", nil},
-		{"withpivot", nil},
-		{"nonexistentfile", `failed to calculate checksum of ref.*: "/test/nonexistent-file": not found`},
-		{"wildcard-nonexistent", nil},
-		{"wildcard-afterpivot", nil},
+		{target: "normal"},
+		{target: "withpivot"},
+		{target: "nonexistentfile", errorRegex: `failed to calculate checksum of ref.*: "/test/nonexistent-file": not found`},
+		{target: "wildcard-nonexistent"},
+		{target: "wildcard-afterpivot"},
 	}
 
 	for _, tt := range tests {
@@ -360,7 +360,7 @@ RUN if exist \out\c exit /b 1
 			},
 		}, nil)
 
-		if tt.errorRegex != nil {
+		if tt.errorRegex != "" {
 			require.Error(t, err)
 			require.Regexp(t, tt.errorRegex, err.Error())
 		} else {

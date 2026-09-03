@@ -134,6 +134,7 @@ func TestMutate(t *testing.T) {
 			if tc.expectedErr != "" {
 				require.Error(t, err, tc.expectedErr)
 			} else {
+				require.NoError(t, err)
 				require.True(t, proto.Equal(tc.expectedOp, op))
 			}
 		})

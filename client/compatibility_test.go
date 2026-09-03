@@ -638,7 +638,7 @@ func readCompatibilityActualFromProvider(ctx context.Context, t *testing.T, prov
 			return readCompatibilityActualFromProvider(ctx, t, provider, manifestDesc)
 		}
 
-		require.FailNow(t, "missing platform manifest in image index")
+		t.Fatal("missing platform manifest in image index")
 	}
 
 	manifestDT, err := content.ReadBlob(ctx, provider, desc)

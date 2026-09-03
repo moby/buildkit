@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +23,7 @@ func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
 	root, err := os.OpenRoot(rootfs)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, root.Close())
+		assert.NoError(t, root.Close())
 	})
 	const bundle = "etc/ssl/certs/ca-certificates.crt"
 	require.NoError(t, root.MkdirAll(filepath.Dir(bundle), 0o755))

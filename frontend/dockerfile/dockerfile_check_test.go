@@ -1649,8 +1649,8 @@ func checkUnmarshal(t *testing.T, sb integration.Sandbox, lintTest *lintTestPara
 			require.NotNil(t, lintResults.Error)
 			if lintTest.BuildErr != "" {
 				require.Equal(t, lintTest.BuildErr, lintResults.Error.Message)
-			} else if !lintTest.UnmarshalBuildErrRegexp.MatchString(lintResults.Error.Message) {
-				t.Fatalf("error %q does not match %q", lintResults.Error.Message, lintTest.UnmarshalBuildErrRegexp.String())
+			} else {
+				require.Truef(t, lintTest.UnmarshalBuildErrRegexp.MatchString(lintResults.Error.Message), "error %q does not match %q", lintResults.Error.Message, lintTest.UnmarshalBuildErrRegexp.String())
 			}
 			require.Greater(t, lintResults.Error.Location.SourceIndex, int32(-1))
 			require.Less(t, lintResults.Error.Location.SourceIndex, int32(len(lintResults.Sources)))
