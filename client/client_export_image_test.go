@@ -215,7 +215,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 
 		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
-		resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+		resolver := docker.NewResolver(docker.ResolverOptions{
+			Hosts: docker.ConfigureDefaultRegistries(docker.WithPlainHTTP(docker.MatchAllHosts)),
+		})
 		name, desc, err := resolver.Resolve(ctx, target)
 		require.NoError(t, err)
 
@@ -262,7 +264,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 
 		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
-		resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+		resolver := docker.NewResolver(docker.ResolverOptions{
+			Hosts: docker.ConfigureDefaultRegistries(docker.WithPlainHTTP(docker.MatchAllHosts)),
+		})
 		name, desc, err := resolver.Resolve(ctx, target)
 		require.NoError(t, err)
 

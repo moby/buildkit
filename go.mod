@@ -31,7 +31,7 @@ require (
 	github.com/containerd/nydus-snapshotter v0.15.15
 	github.com/containerd/platforms v1.0.0-rc.5
 	github.com/containerd/stargz-snapshotter v0.18.2
-	github.com/containerd/stargz-snapshotter/estargz v0.18.2
+	github.com/containerd/stargz-snapshotter/estargz v0.18.3-0.20260607065519-4daea594a1da
 	github.com/containerd/typeurl/v2 v2.3.0
 	github.com/containernetworking/plugins v1.9.1
 	github.com/coreos/go-systemd/v22 v22.7.0
