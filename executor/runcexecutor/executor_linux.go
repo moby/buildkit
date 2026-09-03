@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/console"
 	runc "github.com/containerd/go-runc"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/executor/oci"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/sys/signal"
@@ -27,7 +28,13 @@ func updateRuncFieldsForHostOS(runtime *runc.Runc) {
 }
 
 func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo, started func(), keep bool) error {
-	killer := newRunProcKiller(w.runc, id)
+	killGroup := w.processMode == oci.NoProcessSandbox
+	var pidfile string
+	if killGroup {
+		// subprocesses survive the kill only under host pidns, we need a pidfile to kill them
+		pidfile = filepath.Join(bundle, "pid")
+	}
+	killer := newRunProcKiller(w.runc, id, pidfile)
 	return w.callWithIO(ctx, process, started, killer, func(ctx context.Context, started chan<- int, io runc.IO, pidfile string) error {
 		extraArgs := []string{}
 		if keep {
@@ -37,6 +44,7 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 			NoPivot:   w.noPivot,
 			Started:   started,
 			IO:        io,
+			PidFile:   pidfile,
 			ExtraArgs: extraArgs,
 		})
 		return err
@@ -44,7 +52,8 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 }
 
 func (w *runcExecutor) exec(ctx context.Context, id string, specsProcess *specs.Process, process executor.ProcessInfo, started func()) error {
-	killer, err := newExecProcKiller(w.runc, id)
+	killGroup := w.processMode == oci.NoProcessSandbox
+	killer, err := newExecProcKiller(w.runc, id, killGroup)
 	if err != nil {
 		return errors.Wrap(err, "failed to initialize process killer")
 	}
