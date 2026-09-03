@@ -2146,6 +2146,10 @@ executable doesn't receive a `SIGTERM` from `docker stop <container>`.
 
 Only the last `ENTRYPOINT` instruction in the Dockerfile will have an effect.
 
+Setting `ENTRYPOINT` also discards any `CMD` inherited from the base image,
+unless the same build stage defines its own `CMD`. For more information, see
+[Understand how CMD and ENTRYPOINT interact](#understand-how-cmd-and-entrypoint-interact).
+
 ### Exec form ENTRYPOINT example
 
 You can use the exec form of `ENTRYPOINT` to set fairly stable default commands
@@ -2387,9 +2391,39 @@ The table below shows what command is executed for different `ENTRYPOINT` / `CMD
 | **CMD exec_cmd p1_cmd**        | /bin/sh -c exec_cmd p1_cmd | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry /bin/sh -c exec_cmd p1_cmd |
 
 > [!NOTE]
-> If `CMD` is defined from the base image, setting `ENTRYPOINT` will
-> reset `CMD` to an empty value. In this scenario, `CMD` must be defined in the
-> current image to have a value.
+> Setting `ENTRYPOINT` discards any `CMD` inherited from the base image. The
+> build stage that sets `ENTRYPOINT` must define its own `CMD` for the image to
+> have one. The order of the two instructions doesn't matter: a `CMD` in the
+> same stage is kept whether it appears before or after `ENTRYPOINT`.
+
+This is easy to miss when you add an entrypoint wrapper to a base image that
+only defines a `CMD`. The following Dockerfile produces an image with no `CMD`
+at all, because the `nginx` image supplies its command as a `CMD`, and setting
+`ENTRYPOINT` discards it:
+
+```dockerfile
+FROM nginx
+COPY entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+```
+
+A wrapper script ending in `exec "$@"` receives no arguments here, so it runs
+`exec` with nothing to execute, falls through to the end of the script, and the
+container exits immediately. Restate the command to keep the base image's
+behavior:
+
+```dockerfile
+FROM nginx
+COPY entrypoint.sh /
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+To check what a base image sets, inspect its configuration:
+
+```console
+$ docker image inspect --format '{{json .Config.Cmd}}' nginx
+```
 
 ## VOLUME
 
