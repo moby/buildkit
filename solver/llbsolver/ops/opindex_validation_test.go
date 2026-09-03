@@ -97,3 +97,52 @@ func TestFileOwnerInputWithoutInputs(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestFileSymlinkOwnerUnboundedInput(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		owner *pb.ChownOpt
+	}{
+		{
+			name: "user",
+			owner: &pb.ChownOpt{
+				User: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Input: 1}}},
+			},
+		},
+		{
+			name: "group",
+			owner: &pb.ChownOpt{
+				Group: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Input: 1}}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fo := &pb.FileOp{
+				Actions: []*pb.FileAction{
+					{
+						Input:          -1,
+						SecondaryInput: -1,
+						Output:         0,
+						Action: &pb.FileAction_Symlink{
+							Symlink: &pb.FileActionSymlink{
+								Oldpath: "target",
+								Newpath: "/link",
+								Owner:   tc.owner,
+							},
+						},
+					},
+				},
+			}
+			f := &fileOp{op: fo, numInputs: 0}
+			require.NotPanics(t, func() {
+				_, _, err := f.CacheMap(t.Context(), testJobContext(t), 1)
+				require.ErrorContains(t, err, "invalid input index 1")
+			})
+
+			s, rb := newTestFileSolver()
+			outs, err := s.Solve(t.Context(), nil, fo.Actions, nil)
+			require.ErrorContains(t, err, "invalid user index: 1")
+			rb.checkReleased(t, outs)
+		})
+	}
+}
