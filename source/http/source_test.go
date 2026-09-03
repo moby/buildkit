@@ -2,6 +2,8 @@ package http
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -313,6 +315,31 @@ func TestHTTPChecksum(t *testing.T) {
 
 	ref.Release(t.Context())
 	ref = nil
+}
+
+func TestHTTPChecksumReturnsResponseStatus(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("forbidden response body"))
+	}))
+	defer server.Close()
+
+	hs, err := newHTTPSource(t)
+	require.NoError(t, err)
+	id := &HTTPIdentifier{
+		URL:      server.URL + "/artifact",
+		Checksum: digest.FromString("expected"),
+	}
+	h, err := hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	_, err = h.Snapshot(ctx, nil)
+	require.ErrorContains(t, err, "invalid response status 403")
 }
 
 func TestHTTPSignatureVerification(t *testing.T) {
