@@ -28,7 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
+func LLBBridgeToGatewayClient(_ context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
 	bc := &BridgeClient{
 		opts:              opts,
 		inputs:            inputs,
@@ -77,10 +77,7 @@ func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 
 	c.mu.Lock()
 	cRes, err := result.ConvertResult(res, func(r solver.ResultProxy) (client.Reference, error) {
-		rr, err := c.newRef(r, session.NewGroup(c.sid))
-		if err != nil {
-			return nil, err
-		}
+		rr := c.newRef(r, session.NewGroup(c.sid))
 		c.refs = append(c.refs, rr)
 		return rr, nil
 	})
@@ -122,7 +119,7 @@ func (c *BridgeClient) BuildOpts() client.BuildOpts {
 	return c.buildOpts
 }
 
-func (c *BridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+func (c *BridgeClient) Inputs(context.Context) (map[string]llb.State, error) {
 	inputs := make(map[string]llb.State)
 	for key, def := range c.inputs {
 		defop, err := llb.NewDefinitionOp(def)
@@ -333,8 +330,8 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	return ctr, nil
 }
 
-func (c *BridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
-	return &ref{resultProxy: r, session: s, c: c}, nil
+func (c *BridgeClient) newRef(r solver.ResultProxy, s session.Group) *ref {
+	return &ref{resultProxy: r, session: s, c: c}
 }
 
 type ref struct {

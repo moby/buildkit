@@ -9,6 +9,6 @@ import (
 	"github.com/moby/buildkit/client/connhelper"
 )
 
-func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
+func Helper(*url.URL) (*connhelper.ConnectionHelper, error) {
 	return nil, errors.New("npipe connections are only supported on windows")
 }

@@ -91,7 +91,7 @@ func (c *Containerd) NetNSDetached() bool {
 	return false
 }
 
-func (c *Containerd) New(ctx context.Context, cfg *integration.BackendConfig) (b integration.Backend, cl func() error, err error) {
+func (c *Containerd) New(_ context.Context, cfg *integration.BackendConfig) (b integration.Backend, cl func() error, err error) {
 	if err := integration.LookupBinary(c.Containerd); err != nil {
 		return nil, nil, err
 	}

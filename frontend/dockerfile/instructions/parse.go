@@ -482,7 +482,7 @@ func parseWorkdir(req parseRequest) (*WorkdirCommand, error) {
 	}, nil
 }
 
-func parseShellDependentCommand(req parseRequest, emptyAsNil bool) (ShellDependantCmdLine, error) {
+func parseShellDependentCommand(req parseRequest, emptyAsNil bool) ShellDependantCmdLine {
 	var files []ShellInlineFile
 	for _, heredoc := range req.heredocs {
 		file := ShellInlineFile{
@@ -501,7 +501,7 @@ func parseShellDependentCommand(req parseRequest, emptyAsNil bool) (ShellDependa
 		CmdLine:      args,
 		Files:        files,
 		PrependShell: !req.attributes["json"],
-	}, nil
+	}
 }
 
 func parseRun(req parseRequest) (*RunCommand, error) {
@@ -518,10 +518,7 @@ func parseRun(req parseRequest) (*RunCommand, error) {
 	}
 	cmd.FlagsUsed = req.flags.Used()
 
-	cmdline, err := parseShellDependentCommand(req, false)
-	if err != nil {
-		return nil, err
-	}
+	cmdline := parseShellDependentCommand(req, false)
 	cmd.ShellDependantCmdLine = cmdline
 
 	cmd.withNameAndCode = newWithNameAndCode(req)
@@ -540,10 +537,7 @@ func parseCmd(req parseRequest) (*CmdCommand, error) {
 		return nil, err
 	}
 
-	cmdline, err := parseShellDependentCommand(req, false)
-	if err != nil {
-		return nil, err
-	}
+	cmdline := parseShellDependentCommand(req, false)
 
 	return &CmdCommand{
 		ShellDependantCmdLine: cmdline,
@@ -556,10 +550,7 @@ func parseEntrypoint(req parseRequest) (*EntrypointCommand, error) {
 		return nil, err
 	}
 
-	cmdline, err := parseShellDependentCommand(req, true)
-	if err != nil {
-		return nil, err
-	}
+	cmdline := parseShellDependentCommand(req, true)
 
 	return &EntrypointCommand{
 		ShellDependantCmdLine: cmdline,

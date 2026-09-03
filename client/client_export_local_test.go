@@ -742,7 +742,7 @@ func testSessionExporter(t *testing.T, sb integration.Sandbox) {
 	exporterCalled := false
 	// The provider has no finalization callback; FinalizeExport returning
 	// Unimplemented must not fail the solve.
-	exporter := exporterprovider.New(func(ctx context.Context, md map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error) {
+	exporter := exporterprovider.New(func(_ context.Context, _ map[string][]byte, refs []string) ([]*exporter.ExporterRequest, error) {
 		require.Len(t, refs, 1)
 		g := c.GatewayClientForBuild(buildID)
 		resp, err := g.ReadDir(sb.Context(), &gatewaypb.ReadDirRequest{
@@ -933,7 +933,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:  ExporterTar,
 				Attrs: map[string]string{},
-				Output: func(m map[string]string) (io.WriteCloser, error) {
+				Output: func(map[string]string) (io.WriteCloser, error) {
 					return &iohelper.NopWriteCloser{Writer: io.Discard}, nil
 				},
 			},

@@ -10,11 +10,11 @@ import (
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-func getReadUserFn(_ worker.Worker) func(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error) {
+func getReadUserFn(worker.Worker) func(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error) {
 	return readUser
 }
 
-func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error) {
+func readUser(chopt *pb.ChownOpt, _, _ snapshot.Mountable) (*copy.User, error) {
 	if chopt == nil {
 		return nil, nil
 	}

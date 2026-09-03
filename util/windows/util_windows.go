@@ -157,7 +157,7 @@ type executorMountable struct {
 	m snapshot.Mountable
 }
 
-func (m *executorMountable) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (m *executorMountable) Mount(context.Context, bool) (snapshot.Mountable, error) {
 	return m.m, nil
 }
 

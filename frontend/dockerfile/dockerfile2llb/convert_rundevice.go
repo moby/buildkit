@@ -5,7 +5,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 )
 
-func dispatchRunDevices(c *instructions.RunCommand) ([]llb.RunOption, error) {
+func dispatchRunDevices(c *instructions.RunCommand) []llb.RunOption {
 	var out []llb.RunOption
 	for _, device := range instructions.GetDevices(c) {
 		deviceOpts := []llb.CDIDeviceOption{
@@ -16,5 +16,5 @@ func dispatchRunDevices(c *instructions.RunCommand) ([]llb.RunOption, error) {
 		}
 		out = append(out, llb.AddCDIDevice(deviceOpts...))
 	}
-	return out, nil
+	return out
 }

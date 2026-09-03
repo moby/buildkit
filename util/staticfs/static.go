@@ -43,7 +43,7 @@ func (fs *FS) Add(p string, stat *types.Stat, data []byte) {
 	}
 }
 
-func (fs *FS) Walk(ctx context.Context, target string, fn fs.WalkDirFunc) error {
+func (fs *FS) Walk(_ context.Context, target string, fn fs.WalkDirFunc) error {
 	target = strings.TrimPrefix(target, "/")
 	keys := make([]string, 0, len(fs.files))
 	for k := range fs.files {
