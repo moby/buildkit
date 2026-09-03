@@ -55,6 +55,9 @@ func Validate(op *pb.Op) error {
 		if op.Merge == nil {
 			return errors.New("invalid nil merge op")
 		}
+		if len(op.Merge.Inputs) != inputCount {
+			return errors.Errorf("invalid merge op with %d inner inputs and %d outer inputs", len(op.Merge.Inputs), inputCount)
+		}
 	case *pb.Op_Diff:
 		if op.Diff == nil {
 			return errors.New("invalid nil diff op")
