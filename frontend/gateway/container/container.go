@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/moby/buildkit/util/system"
 
 	"github.com/moby/buildkit/cache"
@@ -449,8 +451,8 @@ func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
 	return stack.Enable(err2)
 }
 
-func (gwCtr *gatewayContainer) ReadFile(ctx context.Context, req client.ReadContainerRequest) ([]byte, error) {
-	fsys, err := gwCtr.mount(ctx, req.MountIndex)
+func (gwCtr *gatewayContainer) ReadFile(ctx context.Context, req client.ReadContainerRequest) (_ []byte, retErr error) {
+	m, err := gwCtr.localMount(ctx, req.MountIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +461,37 @@ func (gwCtr *gatewayContainer) ReadFile(ctx context.Context, req client.ReadCont
 	if err != nil {
 		return nil, err
 	}
-	return fs.ReadFile(fsys, fpath)
+
+	// os.Root names paths relative to the mount, while reads on the open file
+	// name the daemon-side path. Report what the caller asked for in both cases.
+	defer func() {
+		var pathErr *os.PathError
+		if errors.As(retErr, &pathErr) {
+			pathErr.Path = req.Filename
+		}
+	}()
+
+	// The mount is mutable while the container runs, so resolution and open
+	// have to be one operation. Anything but a regular file is refused without
+	// its driver's open method running.
+	f, err := openfile.RegularInRoot(m.Root.Name(), fpath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var rdr io.Reader = f
+	if req.Range != nil {
+		if req.Range.Offset < 0 || req.Range.Length < 0 {
+			return nil, errors.Errorf("invalid range for %s", req.Filename)
+		}
+		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length))
+	}
+	dt, err := io.ReadAll(rdr)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return dt, nil
 }
 
 func (gwCtr *gatewayContainer) ReadDir(ctx context.Context, req client.ReadDirContainerRequest) ([]*fstypes.Stat, error) {
@@ -525,6 +557,14 @@ func (gwCtr *gatewayContainer) StatFile(ctx context.Context, req client.StatCont
 }
 
 func (gwCtr *gatewayContainer) mount(ctx context.Context, index int) (fs.FS, error) {
+	m, err := gwCtr.localMount(ctx, index)
+	if err != nil {
+		return nil, err
+	}
+	return m.FS, nil
+}
+
+func (gwCtr *gatewayContainer) localMount(ctx context.Context, index int) (*gatewayContainerMount, error) {
 	// No lock needed for this because the number of mounts does
 	// not change.
 	if index < 0 || index >= len(gwCtr.localMounts) {
@@ -538,7 +578,7 @@ func (gwCtr *gatewayContainer) mount(ctx context.Context, index int) (fs.FS, err
 
 	// Already mounted?
 	if mount.FS != nil {
-		return mount.FS, nil
+		return &gwCtr.localMounts[index], nil
 	}
 
 	// Defensively check that this mount really exists.
@@ -572,9 +612,9 @@ func (gwCtr *gatewayContainer) mount(ctx context.Context, index int) (fs.FS, err
 		return root.Close()
 	})
 
-	f := root.FS()
-	gwCtr.localMounts[index].FS = f
-	return f, nil
+	gwCtr.localMounts[index].Root = root
+	gwCtr.localMounts[index].FS = root.FS()
+	return &gwCtr.localMounts[index], nil
 }
 
 type gatewayContainerProcess struct {
@@ -735,6 +775,7 @@ func relpath(p string) (string, error) {
 }
 
 type gatewayContainerMount struct {
-	Src executor.Mountable
-	FS  fs.FS
+	Src  executor.Mountable
+	Root *os.Root
+	FS   fs.FS
 }
