@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 	"io"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -71,8 +72,17 @@ func ParseUIDGID(str string) (uid uint32, gid uint32, err error) {
 	return
 }
 
-func openUserFile(root, p string) (io.ReadCloser, error) {
-	p, err := fs.RootPath(root, p)
+func openUserFile(root, orig string) (_ io.ReadCloser, retErr error) {
+	// paths below are daemon-side locations, report the path as the build
+	// asked for it
+	defer func() {
+		var pathErr *os.PathError
+		if errors.As(retErr, &pathErr) {
+			pathErr.Path = orig
+		}
+	}()
+
+	p, err := fs.RootPath(root, orig)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -85,7 +95,7 @@ func openUserFile(root, p string) (io.ReadCloser, error) {
 	return &limitedReadCloser{
 		ReadCloser: f,
 		r:          &io.LimitedReader{R: f, N: maxUserFileBytes + 1},
-		name:       p,
+		name:       orig,
 	}, nil
 }
 

@@ -23,7 +23,15 @@ type FileRange struct {
 	Length int
 }
 
-func ReadFile(ctx context.Context, root string, req ReadRequest) ([]byte, error) {
+func ReadFile(ctx context.Context, root string, req ReadRequest) (_ []byte, retErr error) {
+	// paths below are internal to the mount, report the one that was requested
+	defer func() {
+		var pathErr *os.PathError
+		if errors.As(retErr, &pathErr) {
+			pathErr.Path = req.Filename
+		}
+	}()
+
 	fp, err := fs.RootPath(root, req.Filename)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -31,18 +39,15 @@ func ReadFile(ctx context.Context, root string, req ReadRequest) ([]byte, error)
 
 	f, err := openfile.Regular(fp)
 	if err != nil {
-		// The filename here is internal to the mount, so we can restore
-		// the request base path for error reporting.
-		pe := &os.PathError{}
-		if errors.As(err, &pe) {
-			pe.Path = req.Filename
-		}
 		return nil, err
 	}
 	defer f.Close()
 
 	var rdr io.Reader = f
 	if req.Range != nil {
+		if req.Range.Offset < 0 || req.Range.Length < 0 {
+			return nil, errors.Errorf("invalid range for %s", req.Filename)
+		}
 		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length))
 	}
 	dt, err := io.ReadAll(rdr)
