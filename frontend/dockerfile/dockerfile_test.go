@@ -134,6 +134,9 @@ var allTests = integration.TestFuncs(
 	testDockerignoreInvalid,
 	testDockerignoreOverride,
 
+	// dockerfile_filesize_test.go
+	testDockerfileTooLarge,
+
 	// dockerfile_export_test.go
 	testTarExporterBasic,
 	testTarExporterMulti,
