@@ -48,6 +48,35 @@ func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
 	require.Contains(t, string(dt), "container change\n")
 }
 
+func TestInjectProxyCACleanupRestoresBundleExactly(t *testing.T) {
+	for name, original := range map[string][]byte{
+		"empty":                    {},
+		"without trailing newline": []byte("original bundle"),
+		"with trailing newline":    []byte("original bundle\n"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rootfs := t.TempDir()
+			root, err := os.OpenRoot(rootfs)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, root.Close())
+			})
+
+			const bundle = "etc/ssl/certs/ca-certificates.crt"
+			require.NoError(t, root.MkdirAll(filepath.Dir(bundle), 0o755))
+			require.NoError(t, root.WriteFile(bundle, original, 0o644))
+
+			cleanup, err := InjectProxyCA(rootfs, testCertPEM(t))
+			require.NoError(t, err)
+			require.NoError(t, cleanup())
+
+			dt, err := root.ReadFile(bundle)
+			require.NoError(t, err)
+			require.Equal(t, original, dt)
+		})
+	}
+}
+
 func TestInjectProxyCACleanupHandlesRetargetedSymlinks(t *testing.T) {
 	t.Run("external directory symlink", func(t *testing.T) {
 		rootfs := t.TempDir()
@@ -62,17 +91,22 @@ func TestInjectProxyCACleanupHandlesRetargetedSymlinks(t *testing.T) {
 		require.NoError(t, err)
 
 		external := t.TempDir()
-		externalBundle := filepath.Join(external, "ca-certificates.crt")
+		externalRoot, err := os.OpenRoot(external)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, externalRoot.Close())
+		})
+		const externalBundle = "ca-certificates.crt"
 		injected, err := os.ReadFile(bundle)
 		require.NoError(t, err)
 		require.Contains(t, string(injected), string(caPEM))
-		require.NoError(t, os.WriteFile(externalBundle, injected, 0o644))
+		require.NoError(t, externalRoot.WriteFile(externalBundle, injected, 0o644))
 
 		require.NoError(t, os.RemoveAll(certsDir))
 		require.NoError(t, os.Symlink(external, certsDir))
 		require.NoError(t, cleanup())
 
-		after, err := os.ReadFile(externalBundle)
+		after, err := externalRoot.ReadFile(externalBundle)
 		require.NoError(t, err)
 		require.Equal(t, string(injected), string(after))
 		require.Contains(t, string(after), string(caPEM))
