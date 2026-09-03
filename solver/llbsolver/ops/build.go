@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/client/llb"
@@ -111,6 +112,14 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 		fn = override
 	}
 
+	// paths below are daemon-side locations, report the requested filename
+	defer func() {
+		var pathErr *os.PathError
+		if errors.As(retErr, &pathErr) {
+			pathErr.Path = fn
+		}
+	}()
+
 	newfn, err := fs.RootPath(root, fn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "working dir %s points to invalid target", fn)
@@ -118,7 +127,7 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 
 	f, err := openfile.Regular(newfn)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open %s", newfn)
+		return nil, err
 	}
 
 	def, err := llb.ReadFrom(f)
