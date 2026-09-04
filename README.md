@@ -325,6 +325,23 @@ COPY --from=builder /usr/src/app/testresult.xml .
 buildctl build ... --opt target=testresult --output type=local,dest=path/to/output-dir
 ```
 
+Alternatively, `src=<path>` exports only part of the build result, without
+needing a dedicated stage:
+
+```bash
+buildctl build ... --output type=local,dest=path/to/output-dir,src=/usr/src/app/reports
+```
+
+The contents of `src` are written to the root of the destination, so
+`src=/usr/src/app/reports` exports `reports/index.html` as `index.html`. Omit
+`src` to export the entire filesystem.
+
+`src` must point to a directory, and is always resolved from the root of the
+build result, so `src=app/build` and `src=/app/build` are equivalent. Symlinks
+are resolved within the build result: a link pointing at `/etc` refers to `/etc`
+inside the result, never on the host running BuildKit. With a multi-platform
+build, `src` is applied to each platform.
+
 With a [multi-platform build](docs/multi-platform.md), a subfolder matching
 each target platform will be created in the destination directory:
 
@@ -379,10 +396,12 @@ buildctl build ... --output type=local,dest=./bin/release,mode=delete
 ```
 
 Tar exporter is similar to local exporter but transfers the files through a tarball.
+It supports `src=<path>` with the same meaning as above.
 
 ```bash
 buildctl build ... --output type=tar,dest=out.tar
 buildctl build ... --output type=tar > out.tar
+buildctl build ... --output type=tar,dest=reports.tar,src=/usr/src/app/reports
 ```
 
 #### Docker tarball
