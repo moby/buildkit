@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/platforms"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -960,4 +961,177 @@ func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+// sourceTestState returns a state with a nested layout, so a src pointing at
+// "sub" can be told apart from the whole result.
+//
+//	top.txt
+//	sub/nested.txt
+//	sub/deeper/deep.txt
+func sourceTestState() llb.State {
+	return llb.Scratch().
+		File(llb.Mkfile("top.txt", 0600, []byte("top"))).
+		File(llb.Mkdir("sub", 0755)).
+		File(llb.Mkfile("sub/nested.txt", 0600, []byte("nested"))).
+		File(llb.Mkdir("sub/deeper", 0755)).
+		File(llb.Mkfile("sub/deeper/deep.txt", 0600, []byte("deep")))
+}
+
+func testExportLocalSource(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := sourceTestState().Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs:     map[string]string{"src": "/sub"},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(
+		fstest.CreateFile("nested.txt", []byte("nested"), 0600),
+		fstest.CreateDir("deeper", 0755),
+		fstest.CreateFile("deeper/deep.txt", []byte("deep"), 0600),
+	)))
+}
+
+func testExportLocalSourceNotFound(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := sourceTestState().Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs:     map[string]string{"src": "/nope"},
+			},
+		},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "src=/nope no such file or directory")
+	// the mountpoint of the ref inside the daemon must never reach the client
+	require.NotContains(t, err.Error(), "buildkit-mount")
+}
+
+func testExportLocalSourceMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	platformsToTest := []string{"linux/amd64", "linux/arm64"}
+
+	// every platform builds the same layout and differs only in file contents,
+	// so the exported platform directories can be compared against each other
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		expPlatforms := &exptypes.Platforms{
+			Platforms: make([]exptypes.Platform, len(platformsToTest)),
+		}
+		for i, platform := range platformsToTest {
+			st := llb.Scratch().
+				File(llb.Mkfile("top.txt", 0600, []byte("top"))).
+				File(llb.Mkdir("sub", 0755)).
+				File(llb.Mkfile("sub/nested.txt", 0600, []byte(platform))).
+				File(llb.Mkdir("sub/deeper", 0755)).
+				File(llb.Mkfile("sub/deeper/deep.txt", 0600, []byte(platform)))
+
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			r, err := c.Solve(ctx, gateway.SolveRequest{Definition: def.ToPB()})
+			if err != nil {
+				return nil, err
+			}
+			ref, err := r.SingleRef()
+			if err != nil {
+				return nil, err
+			}
+			res.AddRef(platform, ref)
+			expPlatforms.Platforms[i] = exptypes.Platform{
+				ID:       platform,
+				Platform: platforms.MustParse(platform),
+			}
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+		return res, nil
+	}
+
+	destDir := t.TempDir()
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+				Attrs:     map[string]string{"src": "/sub"},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	// src is applied per platform: every platform directory holds the same
+	// re-rooted layout, with only the file contents telling them apart
+	for _, platform := range platformsToTest {
+		platDir := filepath.Join(destDir, strings.ReplaceAll(platform, "/", "_"))
+		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(platDir, fstest.Apply(
+			fstest.CreateFile("nested.txt", []byte(platform), 0600),
+			fstest.CreateDir("deeper", 0755),
+			fstest.CreateFile("deeper/deep.txt", []byte(platform), 0600),
+		)), "unexpected content for %s", platform)
+	}
+}
+
+func testExportTarSource(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := sourceTestState().Marshal(sb.Context())
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&iohelper.NopWriteCloser{Writer: &buf}),
+				Attrs:  map[string]string{"src": "/sub"},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	item, ok := m["nested.txt"]
+	require.True(t, ok, "src contents must be at the root of the tarball")
+	require.Equal(t, []byte("nested"), item.Data)
+
+	_, ok = m["deeper/deep.txt"]
+	require.True(t, ok)
+
+	_, ok = m["top.txt"]
+	require.False(t, ok, "paths outside src must not be in the tarball")
 }
