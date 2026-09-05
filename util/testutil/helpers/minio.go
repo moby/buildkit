@@ -21,6 +21,7 @@ import (
 const (
 	minioBin = "minio"
 	mcBin    = "mc"
+	mcAlias  = "buildkit"
 )
 
 type MinioOpts struct {
@@ -79,25 +80,31 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	}
 	deferF.Append(minioStop)
 
+	// mc keeps its aliases in a single configuration folder that defaults to
+	// $HOME/.mc. Servers started in parallel would then race each other while
+	// rewriting that file and observe missing aliases, so give every server its
+	// own folder. It is passed through the environment rather than as a flag so
+	// that no mc invocation can miss it: mc treats "<alias>/<bucket>" of an
+	// unknown alias as a local path and silently succeeds on the filesystem.
+	mcEnv := append(os.Environ(), "MC_CONFIG_DIR="+t.TempDir())
+	mcCmd := func(args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(t.Context(), mcBin, args...)
+		cmd.Env = mcEnv
+		return cmd
+	}
+
 	// create alias config
-	alias := randomString(10)
-	cmd = exec.CommandContext(t.Context(), mcBin, "alias", "set", alias, address, opts.AccessKeyID, opts.SecretAccessKey)
-	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
+	if err := integration.RunCmd(mcCmd("alias", "set", mcAlias, address, opts.AccessKeyID, opts.SecretAccessKey), sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
-	deferF.Append(func() error {
-		return exec.CommandContext(t.Context(), mcBin, "alias", "rm", alias).Run()
-	})
 
 	// create bucket
-	cmd = exec.CommandContext(t.Context(), mcBin, "mb", "--region", opts.Region, fmt.Sprintf("%s/%s", alias, bucket)) // #nosec G204
-	if err := integration.RunCmd(cmd, sb.Logs()); err != nil {
+	if err := integration.RunCmd(mcCmd("mb", "--region", opts.Region, fmt.Sprintf("%s/%s", mcAlias, bucket)), sb.Logs()); err != nil {
 		return "", "", nil, err
 	}
 
 	// trace
-	cmd = exec.CommandContext(t.Context(), mcBin, "admin", "trace", "--json", alias)
-	traceStop, err := integration.StartCmd(cmd, sb.Logs())
+	traceStop, err := integration.StartCmd(mcCmd("admin", "trace", "--json", mcAlias), sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
