@@ -37,9 +37,11 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testSnapshotWithMultipleBlobs,
 	testUncompressedLocalCacheImportExport,
 	testUncompressedRegistryCacheImportExport,
+	testUncompressedS3CacheImportExport,
 	testZstdLocalCacheExport,
 	testZstdLocalCacheImportExport,
 	testZstdRegistryCacheImportExport,
+	testZstdS3CacheImportExport,
 	testStargzLazyInlineCacheImportExport,
 	testStargzLazyRegistryCacheImportExport,
 
