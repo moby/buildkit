@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/containerd/platforms"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -138,6 +139,56 @@ func TestDefinitionNil(t *testing.T) {
 	// should be an error, not a panic
 	_, err := NewDefinitionOp(nil)
 	require.Error(t, err)
+}
+
+func TestDefinitionInvalidSourceLocations(t *testing.T) {
+	def, err := Image("ref").Marshal(t.Context())
+	require.NoError(t, err)
+	pbDef := def.ToPB()
+	dgst := digest.FromBytes(pbDef.Def[0])
+
+	for _, tc := range []struct {
+		name    string
+		locs    *pb.Locations
+		wantErr string
+	}{
+		{
+			name:    "nil locations",
+			wantErr: fmt.Sprintf("invalid nil source locations for vertex %s", dgst),
+		},
+		{
+			name:    "nil location",
+			locs:    &pb.Locations{Locations: []*pb.Location{nil}},
+			wantErr: fmt.Sprintf("invalid nil source location for vertex %s", dgst),
+		},
+		{
+			name:    "invalid source index",
+			locs:    &pb.Locations{Locations: []*pb.Location{{SourceIndex: 1}}},
+			wantErr: "failed to find source map with index 1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pbDef.Source = &pb.Source{
+				Infos:     []*pb.SourceInfo{{Filename: "Dockerfile"}},
+				Locations: map[string]*pb.Locations{string(dgst): tc.locs},
+			}
+
+			// should be an error, not a panic
+			_, err := NewDefinitionOp(pbDef)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestDefinitionNoInputsOnLastVertex(t *testing.T) {
+	def, err := Image("ref").Marshal(t.Context())
+	require.NoError(t, err)
+	pbDef := def.ToPB()
+	pbDef.Def = pbDef.Def[:1] // drop the terminal vertex
+
+	// should be an error, not a panic
+	_, err = NewDefinitionOp(pbDef)
+	require.ErrorContains(t, err, "invalid definition with no inputs on last vertex")
 }
 
 func testParallelWalk(ctx context.Context, out Output) error {

@@ -310,6 +310,24 @@ func TestLoadRejectsDependencyCountMismatch(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsInvalidSourceIndex(t *testing.T) {
+	for _, sourceIndex := range []int32{-1, 1} {
+		t.Run(fmt.Sprintf("index=%d", sourceIndex), func(t *testing.T) {
+			def := proxyNetworkTestDefinition(t)
+			dgst := digest.FromBytes(def.Def[0])
+			def.Source = &pb.Source{
+				Infos: []*pb.SourceInfo{{Filename: "Dockerfile"}},
+				Locations: map[string]*pb.Locations{
+					string(dgst): {Locations: []*pb.Location{{SourceIndex: sourceIndex}}},
+				},
+			}
+
+			_, err := Load(t.Context(), def, nil)
+			require.ErrorContains(t, err, fmt.Sprintf("invalid source index %d for vertex %s", sourceIndex, dgst))
+		})
+	}
+}
+
 func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Definition {
 	t.Helper()
 	source := &pb.Op{

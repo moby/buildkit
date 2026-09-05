@@ -373,6 +373,9 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 	if len(def.Def) == 0 {
 		return solver.Edge{}, errors.New("invalid empty definition")
 	}
+	if err := validateSourceLocations(def.Source); err != nil {
+		return solver.Edge{}, err
+	}
 
 	allOps := make(map[digest.Digest]*op)
 	sources := make(map[digest.Digest]struct{})
@@ -481,6 +484,26 @@ func loadLLB(ctx context.Context, def *pb.Definition, polEngine SourcePolicyEval
 		return solver.Edge{}, err
 	}
 	return solver.Edge{Vertex: v, Index: solver.Index(lastOp.Inputs[0].Index)}, nil
+}
+
+func validateSourceLocations(src *pb.Source) error {
+	if src == nil {
+		return nil
+	}
+	for dgst, locs := range src.Locations {
+		if locs == nil {
+			return errors.Errorf("invalid nil source locations for vertex %s", dgst)
+		}
+		for i, loc := range locs.Locations {
+			if loc == nil {
+				return errors.Errorf("invalid nil source location %d for vertex %s", i, dgst)
+			}
+			if loc.SourceIndex < 0 || int(loc.SourceIndex) >= len(src.Infos) {
+				return errors.Errorf("invalid source index %d for vertex %s", loc.SourceIndex, dgst)
+			}
+		}
+	}
+	return nil
 }
 
 func llbOpName(pbOp *pb.Op, load func(string) (solver.Vertex, error)) (string, error) {
