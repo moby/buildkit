@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/openfile"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 func TestInjectProxyCACleanupPreservesContainerChanges(t *testing.T) {
@@ -176,10 +178,29 @@ func TestInjectProxyCACleanupDoesNotBlockOnFIFO(t *testing.T) {
 
 	select {
 	case err := <-done:
-		require.ErrorContains(t, err, "is not a regular file")
+		require.ErrorIs(t, err, openfile.ErrNotRegular)
 	case <-time.After(3 * time.Second):
 		t.Fatal("cleanup blocked on FIFO bundle")
 	}
+}
+
+func TestInjectProxyCACleanupRejectsDeviceNode(t *testing.T) {
+	rootfs := t.TempDir()
+	const bundle = "etc/ssl/certs/ca-certificates.crt"
+	bundlePath := filepath.Join(rootfs, bundle)
+	require.NoError(t, os.MkdirAll(filepath.Dir(bundlePath), 0o755))
+	require.NoError(t, os.WriteFile(bundlePath, []byte("original bundle\n"), 0o644))
+
+	cleanup, err := InjectProxyCA(rootfs, testCertPEM(t))
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(bundlePath))
+	// Use /dev/null so the test remains harmless if the safety check regresses.
+	if err := unix.Mknod(bundlePath, unix.S_IFCHR|0o600, int(unix.Mkdev(1, 3))); err != nil {
+		t.Skipf("cannot create device node: %v", err)
+	}
+
+	err = cleanup()
+	require.ErrorIs(t, err, openfile.ErrNotRegular)
 }
 
 func testCertPEM(t *testing.T) []byte {
