@@ -263,6 +263,53 @@ func TestLoadRejectsNegativeInputIndex(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsDependencyCountMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		op      func(digest.Digest) *pb.Op
+		wantErr string
+	}{
+		{
+			name: "source",
+			op: func(input digest.Digest) *pb.Op {
+				return &pb.Op{
+					Inputs: []*pb.Input{{Digest: string(input)}},
+					Op:     &pb.Op_Source{Source: &pb.SourceOp{Identifier: "local://malformed"}},
+				}
+			},
+			wantErr: "invalid source op with 1 inputs",
+		},
+		{
+			name: "diff",
+			op: func(input digest.Digest) *pb.Op {
+				return &pb.Op{
+					Inputs: []*pb.Input{{Digest: string(input)}},
+					Op: &pb.Op_Diff{Diff: &pb.DiffOp{
+						Lower: &pb.LowerDiffInput{Input: int64(pb.Empty)},
+						Upper: &pb.UpperDiffInput{Input: int64(pb.Empty)},
+					}},
+				}
+			},
+			wantErr: "invalid diff op with 0 inner inputs and 1 outer inputs",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baseDigest, baseBytes := marshalTestOp(t, &pb.Op{
+				Op: &pb.Op_Source{Source: &pb.SourceOp{Identifier: "local://base"}},
+			})
+			malformedDigest, malformedBytes := marshalTestOp(t, tc.op(baseDigest))
+			_, rootBytes := marshalTestOp(t, &pb.Op{
+				Inputs: []*pb.Input{{Digest: string(malformedDigest)}},
+			})
+
+			_, err := Load(t.Context(), &pb.Definition{
+				Def: [][]byte{baseBytes, malformedBytes, rootBytes},
+			}, nil)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
 func proxyNetworkTestDefinition(t *testing.T, opts ...func(*pb.ExecOp)) *pb.Definition {
 	t.Helper()
 	source := &pb.Op{
