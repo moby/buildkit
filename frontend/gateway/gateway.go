@@ -278,8 +278,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	lbf, ctx := serveLLBBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
-	defer lbf.conn.Close()
 	defer lbf.Discard()
+	defer lbf.conn.Close()
 
 	mdmnt, release, err := metadataMount(frontendDef)
 	if err != nil {
@@ -361,21 +361,35 @@ func (b *bindMount) IdentityMapping() *user.IdentityMapping {
 }
 
 func (lbf *llbBridgeForwarder) Discard() {
+	lbf.discardOnce.Do(lbf.discard)
+}
+
+func (lbf *llbBridgeForwarder) discard() {
+	lbf.mu.Lock()
+	lbf.closing = true
+	cancelContainerCtx := lbf.cancelContainerCtx
+	lbf.mu.Unlock()
+	if cancelContainerCtx != nil {
+		cancelContainerCtx(errors.WithStack(context.Canceled))
+	}
+
+	// Release existing containers before waiting so their resources cannot
+	// block an admitted container creation. A second pass below collects any
+	// container registered while this pass is running.
+	lbf.releaseContainers()
+
+	// New admissions are disabled before Wait, so no Add can race this Wait.
+	lbf.containerCreation.Wait()
+	lbf.releaseContainers()
+
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
-	lbf.ctrsMu.Lock()
-	ctrs := slices.Collect(maps.Keys(lbf.ctrs))
-	lbf.ctrsMu.Unlock()
-	for _, ctr := range ctrs {
-		lbf.ReleaseContainer(context.TODO(), &pb.ReleaseContainerRequest{
-			ContainerID: ctr,
-		})
-	}
-
 	lbf.mountsMu.Lock()
-	for _, mount := range lbf.mounts {
+	lbf.mountsClosed = true
+	for id, mount := range lbf.mounts {
 		mount.Unmount()
+		delete(lbf.mounts, id)
 	}
 	lbf.mountsMu.Unlock()
 
@@ -394,6 +408,17 @@ func (lbf *llbBridgeForwarder) Discard() {
 		r.Release(context.TODO())
 	}
 	lbf.refs = map[string]solver.ResultProxy{}
+}
+
+func (lbf *llbBridgeForwarder) releaseContainers() {
+	lbf.ctrsMu.Lock()
+	ctrs := slices.Collect(maps.Keys(lbf.ctrs))
+	lbf.ctrsMu.Unlock()
+	for _, ctr := range ctrs {
+		lbf.ReleaseContainer(context.TODO(), &pb.ReleaseContainerRequest{
+			ContainerID: ctr,
+		})
+	}
 }
 
 func (lbf *llbBridgeForwarder) Done() <-chan struct{} {
@@ -438,20 +463,25 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 }
 
 func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
+	// Container lifetime is independent of an individual gateway RPC and ends
+	// when the forwarder is discarded.
+	containerCtx, cancelContainerCtx := context.WithCancelCause(context.WithoutCancel(ctx))
 	lbf := &llbBridgeForwarder{
-		callCtx:    ctx,
-		llbBridge:  llbBridge,
-		refs:       map[string]solver.ResultProxy{},
-		resultByID: map[string]solver.Result{},
-		doneCh:     make(chan struct{}),
-		pipe:       newPipe(),
-		workers:    workers,
-		inputs:     inputs,
-		sid:        sid,
-		sm:         sm,
-		ctrs:       map[string]gwclient.Container{},
-		mounts:     map[string]snapshot.Mounter{},
-		executor:   exec,
+		callCtx:            ctx,
+		containerCtx:       containerCtx,
+		cancelContainerCtx: cancelContainerCtx,
+		llbBridge:          llbBridge,
+		refs:               map[string]solver.ResultProxy{},
+		resultByID:        map[string]solver.Result{},
+		doneCh:             make(chan struct{}),
+		pipe:               newPipe(),
+		workers:            workers,
+		inputs:             inputs,
+		sid:                sid,
+		sm:                 sm,
+		ctrs:               map[string]gwclient.Container{},
+		mounts:             map[string]snapshot.Mounter{},
+		executor:           exec,
 	}
 	return lbf
 }
@@ -546,12 +576,19 @@ type LLBBridgeForwarder interface {
 }
 
 type llbBridgeForwarder struct {
-	mu         sync.Mutex
-	callCtx    context.Context
-	llbBridge  frontend.FrontendLLBBridge
-	refs       map[string]solver.ResultProxy
-	resultByID map[string]solver.Result
-	discarded  bool
+	mu                 sync.Mutex
+	discardOnce        sync.Once
+	closing            bool
+	containerCreation  sync.WaitGroup
+	containerCtx       context.Context
+	cancelContainerCtx context.CancelCauseFunc
+	// newContainer is overridden by tests.
+	newContainer  func(context.Context, container.NewContainerRequest) (gwclient.Container, error)
+	callCtx       context.Context
+	llbBridge     frontend.FrontendLLBBridge
+	refs          map[string]solver.ResultProxy
+	resultByID    map[string]solver.Result
+	discarded     bool
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
@@ -565,10 +602,11 @@ type llbBridgeForwarder struct {
 	sm                *session.Manager
 	executor          executor.Executor
 	*pipe
-	ctrs     map[string]gwclient.Container
-	ctrsMu   sync.Mutex
-	mounts   map[string]snapshot.Mounter
-	mountsMu sync.Mutex
+	ctrs         map[string]gwclient.Container
+	ctrsMu       sync.Mutex
+	mounts       map[string]snapshot.Mounter
+	mountsMu     sync.Mutex
+	mountsClosed bool
 }
 
 func (lbf *llbBridgeForwarder) ResolveSourceMeta(ctx context.Context, req *pb.ResolveSourceMetaRequest) (*pb.ResolveSourceMetaResponse, error) {
@@ -927,6 +965,9 @@ func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (
 func (lbf *llbBridgeForwarder) getMounter(ctx context.Context, id string, ref cache.ImmutableRef) (snapshot.Mounter, error) {
 	lbf.mountsMu.Lock()
 	defer lbf.mountsMu.Unlock()
+	if lbf.mountsClosed {
+		return nil, stack.Enable(status.Error(codes.Unavailable, "gateway forwarder is closing"))
+	}
 
 	mounter, ok := lbf.mounts[id]
 	if ok {
@@ -1137,6 +1178,14 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	if err := validateNewContainerRequest(in); err != nil {
 		return nil, err
 	}
+	if err := lbf.beginContainerCreation(); err != nil {
+		return nil, err
+	}
+	// Registered first so Done runs after container cleanup and ctrsMu unlock.
+	defer lbf.containerCreation.Done()
+	ctx, cancelCtx := lbf.containerRequestContext(ctx)
+	defer cancelCtx()
+
 	ctrReq := container.NewContainerRequest{
 		ContainerID: in.ContainerID,
 		NetMode:     in.Network,
@@ -1186,21 +1235,14 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		})
 	}
 
-	// Not using `ctx` here because it will get cancelled as soon as NewContainer returns
-	// and we want the context to live for the duration of the container.
 	group := session.NewGroup(lbf.sid)
-
-	cm, err := lbf.workers.DefaultCacheManager()
-	if err != nil {
-		return nil, stack.Enable(err)
-	}
 
 	ctrReq.ExtraHosts, err = container.ParseExtraHosts(in.ExtraHosts)
 	if err != nil {
 		return nil, stack.Enable(err)
 	}
 
-	ctr, err := container.NewContainer(context.Background(), cm, lbf.executor, lbf.sm, group, ctrReq)
+	ctr, err := lbf.createContainer(group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)
 	}
@@ -1218,6 +1260,41 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 	lbf.ctrs[in.ContainerID] = ctr
 	return &pb.NewContainerResponse{}, nil
+}
+
+func (lbf *llbBridgeForwarder) beginContainerCreation() error {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+	if lbf.closing {
+		return stack.Enable(status.Error(codes.Unavailable, "gateway forwarder is closing"))
+	}
+	// Add is serialized with the closing transition in Discard.
+	lbf.containerCreation.Add(1)
+	return nil
+}
+
+func (lbf *llbBridgeForwarder) createContainer(group session.Group, req container.NewContainerRequest) (gwclient.Container, error) {
+	// The RPC context is cancelled when NewContainer returns, while this context
+	// remains valid for the container lifetime and is cancelled by Discard.
+	if lbf.newContainer != nil {
+		return lbf.newContainer(lbf.containerCtx, req)
+	}
+	cm, err := lbf.workers.DefaultCacheManager()
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+	return container.NewContainer(lbf.containerCtx, cm, lbf.executor, lbf.sm, group, req)
+}
+
+func (lbf *llbBridgeForwarder) containerRequestContext(ctx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	stop := context.AfterFunc(lbf.containerCtx, func() {
+		cancel(context.Cause(lbf.containerCtx))
+	})
+	return ctx, func() {
+		stop()
+		cancel(errors.WithStack(context.Canceled))
+	}
 }
 
 func validateNewContainerRequest(in *pb.NewContainerRequest) error {

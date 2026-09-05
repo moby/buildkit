@@ -30,16 +30,21 @@ import (
 )
 
 func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*BridgeClient, error) {
+	// The enclosing solve bounds every in-process container lifetime; an
+	// individual NewContainer caller may narrow it further.
+	containerCtx, cancelContainerCtx := context.WithCancelCause(ctx)
 	bc := &BridgeClient{
-		opts:              opts,
-		inputs:            inputs,
-		FrontendLLBBridge: llbBridge,
-		sid:               sid,
-		sm:                sm,
-		workers:           w,
-		resultByID:        make(map[string]solver.Result),
-		executor:          exec,
-		mounts:            make(map[string]snapshot.Mounter),
+		opts:               opts,
+		inputs:             inputs,
+		FrontendLLBBridge:  llbBridge,
+		sid:                sid,
+		sm:                 sm,
+		workers:            w,
+		resultByID:         make(map[string]solver.Result),
+		executor:           exec,
+		mounts:             make(map[string]snapshot.Mounter),
+		containerCtx:       containerCtx,
+		cancelContainerCtx: cancelContainerCtx,
 	}
 	bc.buildOpts = bc.loadBuildOpts()
 	return bc, nil
@@ -47,21 +52,28 @@ func LLBBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 
 type BridgeClient struct {
 	frontend.FrontendLLBBridge
-	mu         sync.Mutex
-	opts       map[string]string
-	inputs     map[string]*opspb.Definition
-	sid        string
-	sm         *session.Manager
-	refs       []*ref
-	workers    worker.Infos
-	resultByID map[string]solver.Result
-	discarded  bool
-	buildOpts  client.BuildOpts
-	ctrs       []client.Container
-	executor   executor.Executor
+	mu                 sync.Mutex
+	closing            bool
+	containerCreation  sync.WaitGroup
+	containerCtx       context.Context
+	cancelContainerCtx context.CancelCauseFunc
+	// newContainer is overridden by tests.
+	newContainer  func(context.Context, container.NewContainerRequest) (client.Container, error)
+	opts          map[string]string
+	inputs        map[string]*opspb.Definition
+	sid           string
+	sm            *session.Manager
+	refs          []*ref
+	workers       worker.Infos
+	resultByID    map[string]solver.Result
+	discarded     bool
+	buildOpts     client.BuildOpts
+	ctrs          []client.Container
+	executor      executor.Executor
 
-	mounts   map[string]snapshot.Mounter
-	mountsMu sync.Mutex
+	mounts       map[string]snapshot.Mounter
+	mountsMu     sync.Mutex
+	mountsClosed bool
 }
 
 func (c *BridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
@@ -248,11 +260,21 @@ func (c *BridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 
 func (c *BridgeClient) discard(err error) {
 	c.mu.Lock()
-	ctrs := slices.Clone(c.ctrs)
+	c.closing = true
+	cancelContainerCtx := c.cancelContainerCtx
 	c.mu.Unlock()
-	for _, ctr := range ctrs {
-		ctr.Release(context.TODO())
+	if cancelContainerCtx != nil {
+		cancelContainerCtx(errors.WithStack(context.Canceled))
 	}
+
+	// Release existing containers before waiting so their resources cannot
+	// block an admitted container creation. A second pass below collects any
+	// container registered while this pass is running.
+	c.releaseContainers()
+
+	// New admissions are disabled before Wait, so no Add can race this Wait.
+	c.containerCreation.Wait()
+	c.releaseContainers()
 
 	c.discardMounts()
 
@@ -275,14 +297,25 @@ func (c *BridgeClient) discard(err error) {
 	}
 }
 
+func (c *BridgeClient) releaseContainers() {
+	c.mu.Lock()
+	ctrs := slices.Clone(c.ctrs)
+	c.ctrs = nil
+	c.mu.Unlock()
+	for _, ctr := range ctrs {
+		ctr.Release(context.TODO())
+	}
+}
+
 func (c *BridgeClient) discardMounts() {
 	c.mountsMu.Lock()
 	defer c.mountsMu.Unlock()
 
-	for _, mount := range c.mounts {
+	c.mountsClosed = true
+	for id, mount := range c.mounts {
 		mount.Unmount()
+		delete(c.mounts, id)
 	}
-	c.mounts = nil
 }
 
 func (c *BridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string, opts client.WarnOpts) error {
@@ -290,6 +323,19 @@ func (c *BridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string,
 }
 
 func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
+	if err := c.beginContainerCreation(); err != nil {
+		return nil, err
+	}
+	// Registered first so Done runs after every cleanup defer added below.
+	defer c.containerCreation.Done()
+	ctx, cancelCtx := c.containerContext(ctx)
+	created := false
+	defer func() {
+		if !created {
+			cancelCtx()
+		}
+	}()
+
 	ctrReq := container.NewContainerRequest{
 		ContainerID: identity.NewID(),
 		NetMode:     req.NetMode,
@@ -298,7 +344,7 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		Platform:    req.Platform,
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
 	for i, m := range req.Mounts {
 		eg.Go(func() error {
@@ -309,7 +355,7 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 					return errors.Errorf("unexpected Ref type: %T", m.Ref)
 				}
 
-				res, err := refProxy.resultProxy.Result(ctx)
+				res, err := refProxy.resultProxy.Result(egCtx)
 				if err != nil {
 					return err
 				}
@@ -356,20 +402,48 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		return nil, err
 	}
 
-	cm, err := c.workers.DefaultCacheManager()
-	if err != nil {
-		return nil, err
-	}
-
-	group := session.NewGroup(c.sid)
-	ctr, err := container.NewContainer(ctx, cm, c.executor, c.sm, group, ctrReq)
+	ctr, err := c.createContainer(ctx, ctrReq)
 	if err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
 	c.ctrs = append(c.ctrs, ctr)
 	c.mu.Unlock()
+	created = true
 	return ctr, nil
+}
+
+func (c *BridgeClient) containerContext(ctx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	stop := context.AfterFunc(c.containerCtx, func() {
+		cancel(context.Cause(c.containerCtx))
+	})
+	return ctx, func() {
+		stop()
+		cancel(errors.WithStack(context.Canceled))
+	}
+}
+
+func (c *BridgeClient) createContainer(ctx context.Context, req container.NewContainerRequest) (client.Container, error) {
+	if c.newContainer != nil {
+		return c.newContainer(ctx, req)
+	}
+	cm, err := c.workers.DefaultCacheManager()
+	if err != nil {
+		return nil, err
+	}
+	return container.NewContainer(ctx, cm, c.executor, c.sm, session.NewGroup(c.sid), req)
+}
+
+func (c *BridgeClient) beginContainerCreation() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing {
+		return errors.New("gateway client is closing")
+	}
+	// Add is serialized with the closing transition in discard.
+	c.containerCreation.Add(1)
+	return nil
 }
 
 func (c *BridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
@@ -449,6 +523,9 @@ func (r *ref) getMounter(ctx context.Context) (snapshot.Mounter, error) {
 
 	r.c.mountsMu.Lock()
 	defer r.c.mountsMu.Unlock()
+	if r.c.mountsClosed {
+		return nil, errors.New("gateway client is closing")
+	}
 
 	mounter, ok := r.c.mounts[id]
 	if !ok {
