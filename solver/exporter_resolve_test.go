@@ -269,6 +269,21 @@ func TestExportPartialCompressionMatchStillResolves(t *testing.T) {
 	requireLoads(t, store, depth-1)
 }
 
+// TestExportEStargzStillResolves is the case that makes the resolve genuinely
+// necessary rather than merely defensive. An eStargz layer reports the plain
+// gzip media type, because it is a gzip layer with a table of contents appended.
+// So a chain of gzip descriptors is not evidence that the layers are eStargz,
+// and asking for eStargz has to resolve even though every media type "matches".
+func TestExportEStargzStillResolves(t *testing.T) {
+	const depth = 20
+	estargz := compression.New(compression.EStargz)
+	store := newCountingResultStore(ocispecs.MediaTypeImageLayerGzip)
+
+	exportChain(t, store, depth, &estargz, CacheExportModeMax)
+
+	requireLoads(t, store, depth-1)
+}
+
 // TestExportWithoutCompressionOptResolvesOnlyWithoutRemote guards the path that
 // does not ask for a compression at all. There the remote decides on its own,
 // exactly as before.
@@ -335,6 +350,9 @@ func TestRemoteMatchesCompression(t *testing.T) {
 		{name: "no layer matches", remote: remoteOf(ocispecs.MediaTypeImageLayerZstd), comp: gzip, want: false},
 		{name: "uncompressed", remote: remoteOf(ocispecs.MediaTypeImageLayer), comp: compression.New(compression.Uncompressed), want: true},
 		{name: "unknown media type", remote: remoteOf("application/octet-stream"), comp: gzip, want: false},
+		// eStargz shares the gzip media type, so a gzip descriptor proves nothing.
+		{name: "estargz never matches", remote: remoteOf(ocispecs.MediaTypeImageLayerGzip), comp: compression.New(compression.EStargz), want: false},
+		{name: "unset type", remote: remoteOf(ocispecs.MediaTypeImageLayerGzip), comp: compression.Config{}, want: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, remoteMatchesCompression(tc.remote, tc.comp))

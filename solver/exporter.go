@@ -22,14 +22,19 @@ type exporter struct {
 
 // remoteMatchesCompression reports whether every layer of remote is already in
 // the requested compression, in which case resolving the result again cannot
-// produce a better remote. A partial match is not enough; that case keeps the
-// existing behaviour.
+// produce a better remote.
+//
+// It uses IsExactMediaType rather than IsMediaType because it needs to know
+// what a blob is, not whether it is acceptable: an eStargz layer carries the
+// plain gzip media type, so a chain of gzip descriptors is no evidence that the
+// layers are eStargz, and asking for eStargz must still resolve. A partial
+// match is not enough either; that case keeps the existing behaviour.
 func remoteMatchesCompression(remote *Remote, comp compression.Config) bool {
 	if remote == nil || len(remote.Descriptors) == 0 {
 		return false
 	}
 	for _, desc := range remote.Descriptors {
-		if !compression.IsMediaType(comp.Type, desc.MediaType) {
+		if !compression.IsExactMediaType(comp.Type, desc.MediaType) {
 			return false
 		}
 	}
