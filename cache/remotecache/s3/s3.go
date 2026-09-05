@@ -25,6 +25,7 @@ import (
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -52,6 +53,10 @@ const (
 	attrRetryMode             = "retry_mode"
 	attrRetryMaxAttempts      = "retry_max_attempts"
 	maxCopyObjectSize         = 5 * 1024 * 1024 * 1024
+	// abortMultipartTimeout bounds the best-effort cleanup of a failed
+	// multipart upload, which runs on a context detached from the failed
+	// operation.
+	abortMultipartTimeout = 30 * time.Second
 )
 
 type Config struct {
@@ -283,7 +288,13 @@ func (e *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 				}
 				if exists != nil {
 					if time.Since(*exists) > e.config.TouchRefresh {
-						err = e.s3Client.touch(groupCtx, key, size)
+						// Some S3-compatible endpoints omit Content-Length from
+						// HeadObject responses, and dereferencing it
+						// unconditionally took the daemon down.
+						if size == nil {
+							return errors.Errorf("failed to touch %s: object has no content length", key)
+						}
+						err = e.s3Client.touch(groupCtx, key, *size)
 						if err != nil {
 							return errors.Wrapf(err, "failed to touch file")
 						}
@@ -562,7 +573,8 @@ func (s3Client *s3Client) exists(ctx context.Context, key string) (*time.Time, *
 
 func buildCopySourceRange(start int64, objectSize int64) string {
 	end := start + maxCopyObjectSize - 1
-	if end > objectSize {
+	// The range is inclusive, so the last addressable byte is objectSize-1.
+	if end >= objectSize {
 		end = objectSize - 1
 	}
 	startRange := strconv.FormatInt(start, 10)
@@ -570,11 +582,11 @@ func buildCopySourceRange(start int64, objectSize int64) string {
 	return "bytes=" + startRange + "-" + stopRange
 }
 
-func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (err error) {
+func (s3Client *s3Client) touch(ctx context.Context, key string, size int64) (err error) {
 	copySource := fmt.Sprintf("%s/%s", s3Client.bucket, key)
 
 	// CopyObject does not support files > 5GB
-	if *size < maxCopyObjectSize {
+	if size < maxCopyObjectSize {
 		cp := &s3.CopyObjectInput{
 			Bucket:            &s3Client.bucket,
 			CopySource:        &copySource,
@@ -598,13 +610,22 @@ func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (e
 	}
 
 	defer func() {
+		if err == nil {
+			return
+		}
 		abortIn := s3.AbortMultipartUploadInput{
 			Bucket:   &s3Client.bucket,
 			Key:      &key,
 			UploadId: output.UploadId,
 		}
-		if err != nil {
-			s3Client.AbortMultipartUpload(ctx, &abortIn)
+		// By the time we get here the operation context is usually already
+		// cancelled, which would fail the abort and leave the upload to accrue
+		// storage charges. Abort on a detached context, and report a failure
+		// rather than discarding it.
+		abortCtx, cancel := context.WithTimeoutCause(context.WithoutCancel(ctx), abortMultipartTimeout, errors.WithStack(context.DeadlineExceeded))
+		defer cancel()
+		if _, abortErr := s3Client.AbortMultipartUpload(abortCtx, &abortIn); abortErr != nil {
+			bklog.G(ctx).Errorf("failed to abort multipart upload for %s, it may keep incurring storage costs until a bucket lifecycle rule removes it: %v", key, abortErr)
 		}
 	}()
 
@@ -612,8 +633,8 @@ func (s3Client *s3Client) touch(ctx context.Context, key string, size *int64) (e
 	var currentPosition int64
 	var completedParts []s3types.CompletedPart
 
-	for currentPosition < *size {
-		copyRange := buildCopySourceRange(currentPosition, *size)
+	for currentPosition < size {
+		copyRange := buildCopySourceRange(currentPosition, size)
 		partInput := s3.UploadPartCopyInput{
 			Bucket:          &s3Client.bucket,
 			CopySource:      &copySource,
