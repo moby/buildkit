@@ -14,7 +14,6 @@ type readerAtCloser struct {
 	mu     sync.Mutex
 	offset int64
 	rc     io.ReadCloser
-	ra     io.ReaderAt
 	open   func(offset int64) (io.ReadCloser, error)
 	closed bool
 }
@@ -33,10 +32,12 @@ func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	if hrs.ra != nil {
-		return hrs.ra.ReadAt(p, off)
+	if len(p) == 0 {
+		return 0, nil
 	}
 
+	// The underlying object is served as a stream, so a read at an offset other
+	// than where the current stream sits requires reopening it with a new range.
 	if hrs.rc == nil || off != hrs.offset {
 		if hrs.rc != nil {
 			hrs.rc.Close()
@@ -47,24 +48,14 @@ func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
 			return 0, err
 		}
 		hrs.rc = rc
-	}
-	if ra, ok := hrs.rc.(io.ReaderAt); ok {
-		hrs.ra = ra
-		n, err = ra.ReadAt(p, off)
-	} else {
-		for {
-			var nn int
-			nn, err = hrs.rc.Read(p)
-			n += nn
-			p = p[nn:]
-			if nn == len(p) || err != nil {
-				break
-			}
-		}
+		hrs.offset = off
 	}
 
-	hrs.offset += int64(n)
-	return
+	// io.ReadFull matches the io.ReaderAt contract: a read that returns fewer
+	// bytes than requested must report a non-nil error.
+	n, err = io.ReadFull(hrs.rc, p)
+	hrs.offset = off + int64(n)
+	return n, err
 }
 
 func (hrs *readerAtCloser) Close() error {
