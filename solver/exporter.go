@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -17,6 +18,22 @@ type exporter struct {
 
 	edge     *edge // for secondaryExporters
 	override *bool
+}
+
+// remoteMatchesCompression reports whether every layer of remote is already in
+// the requested compression, in which case resolving the result again cannot
+// produce a better remote. A partial match is not enough; that case keeps the
+// existing behaviour.
+func remoteMatchesCompression(remote *Remote, comp compression.Config) bool {
+	if remote == nil || len(remote.Descriptors) == 0 {
+		return false
+	}
+	for _, desc := range remote.Descriptors {
+		if !compression.IsMediaType(comp.Type, desc.MediaType) {
+			return false
+		}
+	}
+	return true
 }
 
 func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
@@ -187,7 +204,19 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 		}
 
-		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
+		// Loading the result is expensive: for a record that came from an
+		// imported cache it rebuilds the whole ref chain, one blob at a time,
+		// under the cache manager's global lock, only for the ref to be
+		// released a few lines later. It is needed to produce a remote when the
+		// storage did not return one, or to get one in the requested
+		// compression. Neither applies when the remote we already have is
+		// entirely in that compression, so skip it then.
+		needsResolve := remote == nil
+		if !needsResolve && opt.CompressionOpt != nil {
+			needsResolve = !remoteMatchesCompression(remote, *opt.CompressionOpt)
+		}
+
+		if needsResolve && opt.Mode != CacheExportModeRemoteOnly {
 			res, err := cm.results.Load(ctx, res)
 			if err != nil {
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
