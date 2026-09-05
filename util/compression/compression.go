@@ -105,6 +105,21 @@ func fromMediaType(mediaType string) (Type, error) {
 	}
 }
 
+// IsExactMediaType reports whether mediaType identifies ct and nothing else.
+//
+// It is stricter than IsMediaType, which compares against Type.MediaType() and
+// therefore cannot tell eStargz from plain gzip: both report the gzip media
+// type, because an eStargz layer is a valid gzip layer with a table of contents
+// appended. A caller that needs to know what a blob actually is, rather than
+// whether it is acceptable, must use this.
+func IsExactMediaType(ct Type, mediaType string) bool {
+	t, err := fromMediaType(mediaType)
+	if err != nil {
+		return false
+	}
+	return t == ct
+}
+
 func IsMediaType(ct Type, mt string) bool {
 	mt, ok := toOCILayerType[mt]
 	if !ok {
