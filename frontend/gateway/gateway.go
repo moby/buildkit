@@ -1066,6 +1066,9 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			Details: in.Error.Details,
 		})))
 	}
+	if in.Result == nil {
+		return nil, stack.Enable(status.Error(codes.InvalidArgument, "result is required"))
+	}
 	r := &frontend.Result{
 		Metadata: in.Result.Metadata,
 	}
@@ -1131,6 +1134,9 @@ func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest)
 
 func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewContainerRequest) (_ *pb.NewContainerResponse, err error) {
 	bklog.G(ctx).Debugf("|<--- NewContainer %s", in.ContainerID)
+	if err := validateNewContainerRequest(in); err != nil {
+		return nil, err
+	}
 	ctrReq := container.NewContainerRequest{
 		ContainerID: in.ContainerID,
 		NetMode:     in.Network,
@@ -1212,6 +1218,25 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 	lbf.ctrs[in.ContainerID] = ctr
 	return &pb.NewContainerResponse{}, nil
+}
+
+func validateNewContainerRequest(in *pb.NewContainerRequest) error {
+	hasRoot := false
+	for i, m := range in.Mounts {
+		if m == nil {
+			return stack.Enable(status.Errorf(codes.InvalidArgument, "mount %d is nil", i))
+		}
+		if m.Dest == opspb.RootMount {
+			hasRoot = true
+		}
+		if m.MountType == opspb.MountType_SSH && m.SSHOpt == nil {
+			return stack.Enable(status.Errorf(codes.InvalidArgument, "SSH mount %q requires options", m.Dest))
+		}
+	}
+	if !hasRoot {
+		return stack.Enable(status.Error(codes.InvalidArgument, "root mount is required"))
+	}
+	return nil
 }
 
 func (lbf *llbBridgeForwarder) ReadFileContainer(ctx context.Context, in *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
@@ -1567,6 +1592,9 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				}
 				pio.signal(ctx, syscallSignal)
 			} else if init := execMsg.GetInit(); init != nil {
+				if init.Meta == nil {
+					return stack.Enable(status.Error(codes.InvalidArgument, "process meta is required"))
+				}
 				if pioFound {
 					return stack.Enable(status.Errorf(codes.AlreadyExists, "Process %s already exists", pid))
 				}

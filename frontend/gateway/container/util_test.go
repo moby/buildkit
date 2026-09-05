@@ -27,3 +27,8 @@ func TestIsPathEscapesRootError(t *testing.T) {
 
 	require.True(t, isPathEscapesRootError(err), "expected returned error to be a path escapes root error")
 }
+
+func TestNewContainerRequiresRootMount(t *testing.T) {
+	_, err := NewContainer(t.Context(), nil, nil, nil, nil, NewContainerRequest{})
+	require.ErrorContains(t, err, "root mount is required")
+}
