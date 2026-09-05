@@ -53,6 +53,19 @@ type Mount struct {
 }
 
 func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor, sm *session.Manager, g session.Group, req NewContainerRequest) (client.Container, error) {
+	hasRoot := false
+	for i, m := range req.Mounts {
+		if m.Mount == nil {
+			return nil, errors.Errorf("mount %d is nil", i)
+		}
+		if m.Dest == opspb.RootMount {
+			hasRoot = true
+		}
+	}
+	if !hasRoot {
+		return nil, errors.New("root mount is required")
+	}
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	platform := &opspb.Platform{
