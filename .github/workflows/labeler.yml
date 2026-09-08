@@ -12,10 +12,11 @@ on:
 
 jobs:
   labeler:
+    if: ${{ github.repository == 'moby/buildkit' }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-latest
     steps:
       -
         name: Run
