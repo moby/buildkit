@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/containerd/containerd/v2/defaults"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -467,7 +468,7 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 			Length: r.Length,
 		}
 	}
-	return cacheutil.ReadFile(ctx, root, newReq)
+	return cacheutil.ReadFile(ctx, root, newReq, defaults.DefaultMaxSendMsgSize)
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {

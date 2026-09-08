@@ -23,7 +23,7 @@ type FileRange struct {
 	Length int
 }
 
-func ReadFile(ctx context.Context, root string, req ReadRequest) (_ []byte, retErr error) {
+func ReadFile(_ context.Context, root string, req ReadRequest, maxSize int) (_ []byte, retErr error) {
 	// paths below are internal to the mount, report the one that was requested
 	defer func() {
 		var pathErr *os.PathError
@@ -43,16 +43,29 @@ func ReadFile(ctx context.Context, root string, req ReadRequest) (_ []byte, retE
 	}
 	defer f.Close()
 
-	var rdr io.Reader = f
+	var rdr io.Reader
+	var rangeLimited bool
 	if req.Range != nil {
 		if req.Range.Offset < 0 || req.Range.Length < 0 {
 			return nil, errors.Errorf("invalid range for %s", req.Filename)
 		}
-		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length))
+		// One extra byte is allowed for callers that detect oversized files by
+		// reading maxSize+1 bytes.
+		length := req.Range.Length
+		if length > maxSize+1 {
+			length = maxSize + 1
+			rangeLimited = true
+		}
+		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(length))
+	} else {
+		rdr = io.LimitReader(f, int64(maxSize)+1)
 	}
 	dt, err := io.ReadAll(rdr)
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+	if (req.Range == nil || rangeLimited) && len(dt) > maxSize {
+		return nil, errors.Errorf("%s exceeds maximum allowed size of %d bytes", req.Filename, maxSize)
 	}
 	return dt, nil
 }
