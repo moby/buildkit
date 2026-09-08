@@ -254,7 +254,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		if !opt.NoDockerignore {
 			// a missing ignore file is not an error, but an oversized one
 			// must not be silently skipped
-			dt, err := readFile(ctx, ref, DefaultDockerignoreName)
+			dt, err := ReadFile(ctx, ref, DefaultDockerignoreName)
 			if isFileTooLarge(err) {
 				return nil, nil, err
 			}
