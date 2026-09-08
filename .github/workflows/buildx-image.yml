@@ -36,6 +36,7 @@ env:
 
 jobs:
   create:
+    if: ${{ github.repository == 'moby/buildkit' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read # same as global permission
