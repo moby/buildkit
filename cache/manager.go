@@ -108,6 +108,34 @@ type cacheManager struct {
 	unlazyG flightcontrol.Group[struct{}]
 }
 
+// isLegacyLayerSnapshotID reports whether ref uses a pre-versioning layer snapshot ID.
+func isLegacyLayerSnapshotID(ref *immutableRef) bool {
+	return isLegacyLayerRecord(ref.cacheRecord)
+}
+
+func isLegacyLayerRecord(ref *cacheRecord) bool {
+	switch ref.kind() {
+	case BaseLayer, Layer:
+	default:
+		return false
+	}
+	chainID := ref.getChainID()
+	return chainID != "" && ref.getBlob() != "" && ref.getSnapshotID() == chainID.String()
+}
+
+// hasLegacyLayerSnapshotID reports whether ref depends on a pre-versioning layer snapshot.
+func hasLegacyLayerSnapshotID(ref *immutableRef) bool {
+	var legacy bool
+	_ = ref.walkUniqueAncestors(func(record *cacheRecord) error {
+		if isLegacyLayerRecord(record) {
+			legacy = true
+			return errSkipWalk
+		}
+		return nil
+	})
+	return legacy
+}
+
 func NewManager(opt ManagerOpt) (Manager, error) {
 	cm := &cacheManager{
 		Snapshotter:     snapshot.NewMergeSnapshotter(context.TODO(), opt.Snapshotter, opt.LeaseManager),
@@ -180,7 +208,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			return nil, err
 		}
 
-		if p.getChainID() == "" || p.getBlobChainID() == "" {
+		if p.getChainID() == "" || p.getBlobChainID() == "" || hasLegacyLayerSnapshotID(p) {
 			_ = p.Release(context.WithoutCancel(ctx))
 			return nil, errors.Errorf("failed to get ref by blob on non-addressable parent")
 		}
@@ -218,6 +246,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		if ref == nil {
 			continue
 		}
+		if hasLegacyLayerSnapshotID(ref) {
+			go ref.Release(context.WithoutCancel(ctx))
+			continue
+		}
 		// Blob-chain inputs are not necessarily verified by lazy snapshotters.
 		// Only reuse a record with the same snapshot-sharing identity.
 		if ref.getChainID() != chainID {
@@ -246,13 +278,17 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
 		}
 		if ref != nil {
+			if hasLegacyLayerSnapshotID(ref) {
+				go ref.Release(context.WithoutCancel(ctx))
+				continue
+			}
 			link = ref
 			break
 		}
 	}
 
 	id := identity.NewID()
-	snapshotID := chainID.String()
+	snapshotID := snapshot.LayerSnapshotID(chainID)
 	if link != nil {
 		snapshotID = link.getSnapshotID()
 		go link.Release(context.WithoutCancel(ctx))
