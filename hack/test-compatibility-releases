@@ -31,9 +31,26 @@ v0.29.0:20
 "
 fi
 
-failures=0
+if [ "${1:-}" = "--matrix" ]; then
+  sep=""
+  printf '{"compatibility_release":['
+  for entry in $COMPATIBILITY_RELEASES; do
+    printf '%s"%s"' "$sep" "$entry"
+    sep=","
+  done
+  printf ']}\n'
+  exit 0
+fi
 
-for entry in $COMPATIBILITY_RELEASES; do
+failures=0
+set -- $COMPATIBILITY_RELEASES
+group_logs=
+
+if [ "$#" -gt 1 ]; then
+  group_logs=1
+fi
+
+for entry; do
   release=${entry%:*}
   expected=${entry#*:}
   suffix=$(printf '%s' "$release" | tr -cd '[:alnum:]-')
@@ -41,7 +58,9 @@ for entry in $COMPATIBILITY_RELEASES; do
 
   mkdir -p "$bindir"
 
-  echo "::group::compatibility $release"
+  if [ -n "$group_logs" ]; then
+    echo "::group::compatibility $release"
+  fi
   docker pull "moby/buildkit:$release"
   cid=$(docker create "moby/buildkit:$release")
   trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
@@ -56,7 +75,9 @@ for entry in $COMPATIBILITY_RELEASES; do
     ./hack/test integration; then
     failures=1
   fi
-  echo "::endgroup::"
+  if [ -n "$group_logs" ]; then
+    echo "::endgroup::"
+  fi
 done
 
 exit "$failures"
