@@ -1018,7 +1018,7 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		}
 	}
 
-	dt, err := cacheutil.ReadFile(ctx, root, newReq)
+	dt, err := cacheutil.ReadFile(ctx, root, newReq, defaults.DefaultMaxSendMsgSize)
 	if err != nil {
 		return nil, lbf.wrapSolveError(err)
 	}

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/containerd/containerd/v2/defaults"
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/openfile"
@@ -33,6 +34,8 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
 )
+
+const maxReadFileSize = defaults.DefaultMaxRecvMsgSize
 
 type NewContainerRequest struct {
 	ContainerID string
@@ -502,16 +505,29 @@ func (gwCtr *gatewayContainer) ReadFile(ctx context.Context, req client.ReadCont
 	}
 	defer f.Close()
 
-	var rdr io.Reader = f
+	var rdr io.Reader
+	var rangeLimited bool
 	if req.Range != nil {
 		if req.Range.Offset < 0 || req.Range.Length < 0 {
 			return nil, errors.Errorf("invalid range for %s", req.Filename)
 		}
-		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length))
+		// One extra byte is allowed for callers that detect oversized files by
+		// reading maxReadFileSize+1 bytes.
+		length := req.Range.Length
+		if length > maxReadFileSize+1 {
+			length = maxReadFileSize + 1
+			rangeLimited = true
+		}
+		rdr = io.NewSectionReader(f, int64(req.Range.Offset), int64(length))
+	} else {
+		rdr = io.LimitReader(f, maxReadFileSize+1)
 	}
 	dt, err := io.ReadAll(rdr)
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+	if (req.Range == nil || rangeLimited) && len(dt) > maxReadFileSize {
+		return nil, errors.Errorf("%s exceeds maximum allowed size of %d bytes", req.Filename, maxReadFileSize)
 	}
 	return dt, nil
 }

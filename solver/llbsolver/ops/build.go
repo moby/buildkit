@@ -3,8 +3,10 @@ package ops
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 
+	"github.com/containerd/containerd/v2/defaults"
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
@@ -20,6 +22,8 @@ import (
 )
 
 const buildCacheType = "buildkit.build.v0"
+
+const maxBuildDefinitionSize = defaults.DefaultMaxRecvMsgSize
 
 type BuildOp struct {
 	op *pb.BuildOp
@@ -130,7 +134,12 @@ func (b *BuildOp) Exec(ctx context.Context, job solver.JobContext, inputs []solv
 		return nil, err
 	}
 
-	def, err := llb.ReadFrom(f)
+	lr := &io.LimitedReader{R: f, N: int64(maxBuildDefinitionSize) + 1}
+	def, err := llb.ReadFrom(lr)
+	if lr.N == 0 {
+		f.Close()
+		return nil, errors.Errorf("%s exceeds maximum allowed size of %d bytes", fn, maxBuildDefinitionSize)
+	}
 	if err != nil {
 		f.Close()
 		return nil, err
