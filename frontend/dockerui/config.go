@@ -394,11 +394,11 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 		return nil, err
 	}
 
-	dt, err := readFile(ctx, ref, bctx.filename)
+	dt, err := ReadFile(ctx, ref, bctx.filename)
 	if err != nil {
 		if path.Base(bctx.filename) == DefaultDockerfileName && !isFileTooLarge(err) {
 			var err1 error
-			dt, err1 = readFile(ctx, ref, path.Join(path.Dir(bctx.filename), strings.ToLower(DefaultDockerfileName)))
+			dt, err1 = ReadFile(ctx, ref, path.Join(path.Dir(bctx.filename), strings.ToLower(DefaultDockerfileName)))
 			if err1 == nil {
 				err = nil
 			}
@@ -412,7 +412,7 @@ func (bc *Client) ReadEntrypoint(ctx context.Context, lang string, opts ...llb.L
 
 	// a missing ignore file is not an error, but an oversized one must not
 	// be silently skipped
-	dt, err = readFile(ctx, ref, bctx.filename+".dockerignore")
+	dt, err = ReadFile(ctx, ref, bctx.filename+".dockerignore")
 	if err == nil {
 		bc.dockerignore = dt
 		bc.dockerignoreName = bctx.filename + ".dockerignore"
@@ -563,7 +563,7 @@ func (bc *Client) dockerIgnorePatterns(ctx context.Context, bctx *buildContext) 
 		}
 		// a missing ignore file is not an error, but an oversized one must
 		// not be silently skipped
-		dt, err := readFile(ctx, ref, DefaultDockerignoreName)
+		dt, err := ReadFile(ctx, ref, DefaultDockerignoreName)
 		if isFileTooLarge(err) {
 			return nil, err
 		}
