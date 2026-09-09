@@ -1,9 +1,12 @@
 package git
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/sourcepolicy"
+	spb "github.com/moby/buildkit/sourcepolicy/pb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -189,6 +192,163 @@ func TestNewGitIdentifier(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIdentifierFullRemoteURLValidation(t *testing.T) {
+	tests := []struct {
+		name       string
+		identifier string
+		fullURL    string
+		wantRemote string
+		wantErr    string
+		notErr     string
+	}{
+		{
+			name:       "same URL",
+			identifier: "example.com/user/repo.git#main",
+			fullURL:    "https://example.com/user/repo.git",
+			wantRemote: "https://example.com/user/repo.git",
+		},
+		{
+			name:       "different protocol",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "git://example.com/user/repo.git",
+			wantRemote: "git://example.com/user/repo.git",
+		},
+		{
+			name:       "transport credentials",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://user:password@example.com/user/repo.git",
+			wantRemote: "https://user:password@example.com/user/repo.git",
+		},
+		{
+			name:       "SCP style",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "git@example.com:user/repo.git",
+			wantRemote: "git@example.com:user/repo.git",
+		},
+		{
+			name:       "identifier ref and subdir suffix",
+			identifier: "example.com/user/repo.git#main:subdir",
+			fullURL:    "ssh://git@example.com/user/repo.git",
+			wantRemote: "ssh://git@example.com/user/repo.git",
+		},
+		{
+			name:       "case insensitive host",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://EXAMPLE.COM/user/repo.git",
+			wantRemote: "https://EXAMPLE.COM/user/repo.git",
+		},
+		{
+			name:       "canonical repository path",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://example.com/user/repo.git/",
+			wantRemote: "https://example.com/user/repo.git",
+		},
+		{
+			name:       "different host",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://mirror.example.com/user/repo.git",
+			wantErr:    "git.fullurl does not match source identifier",
+		},
+		{
+			name:       "different port",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "ssh://git@example.com:2222/user/repo.git",
+			wantErr:    "git.fullurl does not match source identifier",
+		},
+		{
+			name:       "different repository path",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://example.com/user/other.git",
+			wantErr:    "git.fullurl does not match source identifier",
+		},
+		{
+			name:       "optional git suffix in full URL",
+			identifier: "example.com/user/repo",
+			fullURL:    "https://example.com/user/repo.git",
+			wantRemote: "https://example.com/user/repo",
+		},
+		{
+			name:       "optional git suffix in identifier",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://example.com/user/repo",
+			wantRemote: "https://example.com/user/repo.git",
+		},
+		{
+			name:       "optional git suffix in SCP URL",
+			identifier: "example.com/user/repo",
+			fullURL:    "git@example.com:user/repo.git",
+			wantRemote: "git@example.com:user/repo",
+		},
+		{
+			name:       "query and fragment removed",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://example.com/user/repo.git?variant=other#main",
+			wantRemote: "https://example.com/user/repo.git",
+		},
+		{
+			name:       "additional path suffix",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://example.com/user/repo.git.backup",
+			wantErr:    "git.fullurl does not match source identifier",
+		},
+		{
+			name:       "invalid full URL",
+			identifier: "example.com/user/repo.git",
+			fullURL:    "https://user:password@[/repo.git",
+			wantErr:    "failed to parse git.fullurl",
+			notErr:     "password",
+		},
+	}
+
+	src := &Source{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := src.Identifier("git", tt.identifier, map[string]string{
+				pb.AttrFullRemoteURL: tt.fullURL,
+			}, nil)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				if tt.notErr != "" {
+					require.NotContains(t, err.Error(), tt.notErr)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			gid, ok := id.(*GitIdentifier)
+			require.True(t, ok)
+			require.Equal(t, tt.wantRemote, gid.Remote)
+		})
+	}
+}
+
+func TestIdentifierRejectsConvertedFullRemoteURL(t *testing.T) {
+	const (
+		source = "git://example.com/source.git#main"
+		mirror = "git://mirror.example.com/source.git#main"
+	)
+	op := &pb.SourceOp{
+		Identifier: source,
+		Attrs: map[string]string{
+			pb.AttrFullRemoteURL: "https://example.com/source.git",
+		},
+	}
+	policy := &spb.Policy{Rules: []*spb.Rule{
+		{
+			Action:   spb.PolicyAction_CONVERT,
+			Selector: &spb.Selector{Identifier: source},
+			Updates:  &spb.Update{Identifier: mirror},
+		},
+	}}
+
+	mutated, err := sourcepolicy.NewEngine([]*spb.Policy{policy}).Evaluate(t.Context(), op)
+	require.NoError(t, err)
+	require.True(t, mutated)
+
+	_, err = (&Source{}).Identifier("git", strings.TrimPrefix(op.Identifier, "git://"), op.Attrs, nil)
+	require.ErrorContains(t, err, "git.fullurl does not match source identifier")
 }
 
 // TestIdentifierBundleValidation exercises the attribute-level validation
