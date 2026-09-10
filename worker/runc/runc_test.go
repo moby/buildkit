@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/iohelper"
@@ -242,6 +243,97 @@ func TestRuncWorkerCancel(t *testing.T) {
 	require.NoError(t, err)
 
 	tests.TestWorkerCancel(t, w)
+}
+
+func TestRuncWorkerCancelNoProcessSandbox(t *testing.T) {
+	t.Parallel()
+	checkRequirement(t)
+
+	workerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
+	w, err := base.NewWorker(t.Context(), workerOpt)
+	require.NoError(t, err)
+
+	ctx := tests.NewCtx("buildkit-test")
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+
+	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
+	root, err := w.CacheMgr.New(ctx, snap, nil)
+	require.NoError(t, err)
+
+	id := identity.NewID()
+
+	// a subprocess survives the kill of the in-container process under host
+	// pidns and would keep runc from returning without the process group kill
+	meta := executor.Meta{
+		Args: []string{"/bin/sh", "-c", "(sleep 600 &); sleep 600"},
+		Cwd:  "/",
+	}
+
+	pid1Ctx, pid1Cancel := context.WithCancelCause(ctx)
+	defer pid1Cancel(context.Canceled)
+
+	var (
+		pid1Err, pid2Err error
+		pid1Done         = make(chan struct{})
+		pid2Done         = make(chan struct{})
+	)
+
+	started := make(chan struct{})
+
+	go func() {
+		defer close(pid1Done)
+		_, pid1Err = w.WorkerOpt.Executor.Run(pid1Ctx, id, execMount(root, false), nil, executor.ProcessInfo{Meta: meta}, started)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid1 to start")
+	}
+
+	select {
+	case <-pid1Done:
+		t.Fatalf("pid1 exited early: %v", pid1Err)
+	case <-time.After(time.Second):
+	}
+
+	pid2Ctx, pid2Cancel := context.WithCancelCause(ctx)
+	defer pid2Cancel(context.Canceled)
+
+	started = make(chan struct{})
+
+	go func() {
+		defer close(pid2Done)
+		// Exec has no started channel, fake it
+		go func() {
+			<-time.After(2 * time.Second)
+			close(started)
+		}()
+		pid2Err = w.WorkerOpt.Executor.Exec(pid2Ctx, id, executor.ProcessInfo{Meta: meta})
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid2 to start")
+	}
+
+	pid2Cancel(context.Canceled)
+	select {
+	case <-pid2Done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Unexpected timeout waiting for pid2 to return after cancel")
+	}
+	require.Contains(t, pid2Err.Error(), "exit code: 137", "pid2 exits with sigkill")
+
+	pid1Cancel(context.Canceled)
+	select {
+	case <-pid1Done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Unexpected timeout waiting for pid1 to return after cancel")
+	}
+	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
 }
 
 func execMount(m cache.Mountable, readonly bool) executor.Mount {
