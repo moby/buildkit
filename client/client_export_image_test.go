@@ -902,21 +902,18 @@ func testExportedImageLabels(t *testing.T, sb integration.Sandbox) {
 
 	// layers should be deleted
 	_, err = store.Info(ctx, mfst.Layers[1].Digest)
-	require.Error(t, err)
-	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 
 	// config should be deleted
 	_, err = store.Info(ctx, mfst.Config.Digest)
-	require.Error(t, err)
-	require.True(t, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 
 	// buildkit contentstore still has the layer because it is multi-ns
 	bkstore := proxy.NewContentStore(c.ContentClient())
 
 	// layer should be deleted as not kept by history
 	_, err = bkstore.Info(ctx, mfst.Layers[1].Digest)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "not found")
+	require.ErrorContains(t, err, "not found")
 
 	// config should still be there
 	_, err = bkstore.Info(ctx, img.Metadata().Target.Digest)
@@ -1606,8 +1603,7 @@ func testPullWithDigestCheck(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
+	require.ErrorContains(t, err, fmt.Sprintf("image digest %s for %s does not match expected checksum %s", dgst2, name2, dgst1))
 }
 
 // testPullZstdImage verifies pulling and re-exporting a Zstd-compressed image.

@@ -77,12 +77,10 @@ func TestRefToPURL(t *testing.T) {
 			purl, err := RefToPURL(packageurl.TypeDocker, tc.ref, tc.platform)
 			if tc.err {
 				require.Error(t, err)
-				return
-			}
-			if err != nil {
+			} else {
 				require.NoError(t, err)
+				require.Equal(t, tc.expected, purl)
 			}
-			require.Equal(t, tc.expected, purl)
 		})
 	}
 }
@@ -141,16 +139,14 @@ func TestPURLToRef(t *testing.T) {
 			ref, platform, err := PURLToRef(tc.purl)
 			if tc.err {
 				require.Error(t, err)
-				return
-			}
-			if err != nil {
-				require.NoError(t, err)
-			}
-			require.Equal(t, tc.expected, ref)
-			if platform == nil {
-				require.Nil(t, tc.platform)
 			} else {
-				require.Equal(t, *tc.platform, *platform)
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, ref)
+				if platform == nil {
+					require.Nil(t, tc.platform)
+				} else {
+					require.Equal(t, *tc.platform, *platform)
+				}
 			}
 		})
 	}

@@ -58,7 +58,6 @@ func TestParseDevice(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			result, err := ParseDevice(tt.input)
 			if tt.expectedErr != nil {
-				require.Error(t, err)
 				require.EqualError(t, err, tt.expectedErr.Error())
 			} else {
 				require.NoError(t, err)

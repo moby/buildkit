@@ -140,7 +140,6 @@ func TestDecodeFramesInvalid(t *testing.T) {
 	bad[7] = 10
 	copy(bad[8:], []byte{1, 2, 3, 4})
 	_, err = decodeFrames(bad)
-	require.Error(t, err, "should error for length mismatch")
 	require.ErrorIs(t, err, ErrInvalidEncoding, "should return ErrInvalidFrameLength")
 }
 

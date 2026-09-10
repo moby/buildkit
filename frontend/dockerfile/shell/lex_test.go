@@ -116,9 +116,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 		expected := strings.TrimSpace(words[2])
 
 		// Key W=Windows; A=All; U=Unix
-		if platform != "W" && platform != "A" && platform != "U" {
-			t.Fatalf("Invalid tag %s at line %d of %s. Must be W, A or U", platform, lineCount, fn)
-		}
+		require.Falsef(t, platform != "W" && platform != "A" && platform != "U", "Invalid tag %s at line %d of %s. Must be W, A or U", platform, lineCount, fn)
 
 		if ((platform == "W" || platform == "A") && runtime.GOOS == "windows") ||
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
@@ -137,9 +135,7 @@ func TestShellParser4Words(t *testing.T) {
 	fn := "wordsTest"
 
 	file, err := os.Open(fn)
-	if err != nil {
-		t.Fatalf("Can't open '%s': %s", err, fn)
-	}
+	require.NoErrorf(t, err, "Can't open '%s'", fn)
 	defer file.Close()
 
 	const (
@@ -170,9 +166,7 @@ func TestShellParser4Words(t *testing.T) {
 			}
 
 			words := strings.Split(line, "|")
-			if len(words) != 2 {
-				t.Fatalf("Error in '%s'(line %d) - should be exactly one | in: %q", fn, lineNum, line)
-			}
+			require.Equalf(t, 2, len(words), "Error in '%s'(line %d) - should be exactly one | in: %q", fn, lineNum, line)
 			test := strings.TrimSpace(words[0])
 			expected := strings.Split(strings.TrimLeft(words[1], " "), ",")
 
@@ -183,13 +177,9 @@ func TestShellParser4Words(t *testing.T) {
 				result = []string{"error"}
 			}
 
-			if len(result) != len(expected) {
-				t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
-			}
+			require.Equalf(t, len(expected), len(result), "Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
 			for i, w := range expected {
-				if w != result[i] {
-					t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
-				}
+				require.Equalf(t, w, result[i], "Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
 			}
 		}
 	}
@@ -203,38 +193,24 @@ func TestGetEnv(t *testing.T) {
 		return value
 	}
 	sw.envs = EnvsFromSlice([]string{})
-	if getEnv("foo") != "" {
-		t.Fatal("2 - 'foo' should map to ''")
-	}
+	require.Empty(t, getEnv("foo"), "2 - 'foo' should map to ''")
 
 	sw.envs = EnvsFromSlice([]string{"foo"})
-	if getEnv("foo") != "" {
-		t.Fatal("3 - 'foo' should map to ''")
-	}
+	require.Empty(t, getEnv("foo"), "3 - 'foo' should map to ''")
 
 	sw.envs = EnvsFromSlice([]string{"foo="})
-	if getEnv("foo") != "" {
-		t.Fatal("4 - 'foo' should map to ''")
-	}
+	require.Empty(t, getEnv("foo"), "4 - 'foo' should map to ''")
 
 	sw.envs = EnvsFromSlice([]string{"foo=bar"})
-	if getEnv("foo") != "bar" {
-		t.Fatal("5 - 'foo' should map to 'bar'")
-	}
+	require.Equal(t, "bar", getEnv("foo"), "5 - 'foo' should map to 'bar'")
 
 	sw.envs = EnvsFromSlice([]string{"foo=bar", "car=hat"})
-	if getEnv("foo") != "bar" {
-		t.Fatal("6 - 'foo' should map to 'bar'")
-	}
-	if getEnv("car") != "hat" {
-		t.Fatal("7 - 'car' should map to 'hat'")
-	}
+	require.Equal(t, "bar", getEnv("foo"), "6 - 'foo' should map to 'bar'")
+	require.Equal(t, "hat", getEnv("car"), "7 - 'car' should map to 'hat'")
 
 	// Make sure we grab the last 'car' in the list
 	sw.envs = EnvsFromSlice([]string{"foo=bar", "car=hat", "car=bike"})
-	if getEnv("car") != "bike" {
-		t.Fatal("8 - 'car' should map to 'bike'")
-	}
+	require.Equal(t, "bike", getEnv("car"), "8 - 'car' should map to 'bike'")
 }
 
 func TestProcessWithMatches(t *testing.T) {

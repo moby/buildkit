@@ -138,13 +138,12 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 		require.NoError(t, err)
 	case networkHostDenied:
 		if !workers.IsTestDockerd() {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+			require.ErrorContains(t, err, "entitlement network.host is not allowed")
 		} else {
 			require.NoError(t, err)
 		}
 	default:
-		require.Fail(t, fmt.Sprintf("unexpected network.host mode %q", hostAllowed))
+		t.Errorf("unexpected network.host mode %q", hostAllowed)
 	}
 }
 
@@ -189,12 +188,11 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 		require.NoError(t, err)
 	case networkHostDenied:
 		if !workers.IsTestDockerd() {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+			require.ErrorContains(t, err, "entitlement network.host is not allowed")
 		} else {
 			require.NoError(t, err)
 		}
 	default:
-		require.Fail(t, fmt.Sprintf("unexpected network.host mode %q", hostAllowed))
+		t.Errorf("unexpected network.host mode %q", hostAllowed)
 	}
 }

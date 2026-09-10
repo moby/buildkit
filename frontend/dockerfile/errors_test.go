@@ -1,7 +1,6 @@
 package dockerfile
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -109,7 +108,7 @@ env bar=baz`,
 						continue next
 					}
 				}
-				require.Fail(t, fmt.Sprintf("line %d not found", l))
+				t.Errorf("line %d not found", l)
 			}
 		})
 	}

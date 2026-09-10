@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -459,7 +460,7 @@ func TestChecksumWildcardWithBadMountable(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -512,12 +513,10 @@ func TestSymlinksNoFollow(t *testing.T) {
 	require.Equal(t, expectedSym, dgst)
 
 	_, err = cc.Checksum(t.Context(), ref, "foo/ghi", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil) // same because broken symlink
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	_, err = cc.Checksum(t.Context(), ref, "y1", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	dgst, err = cc.Checksum(t.Context(), ref, "sym", ChecksumOpts{}, nil)
 	require.NoError(t, err)
@@ -611,8 +610,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	require.Equal(t, dgstFileData0, dgst)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0/ghi", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	dgst, err = cc.Checksum(t.Context(), ref, "/", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
@@ -1000,7 +998,7 @@ func TestHandleChange(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1062,12 +1060,10 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	_, err = cc.Checksum(t.Context(), ref, "d0/abc", ChecksumOpts{FollowLinks: true}, nil)
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.ErrorIs(t, err, errNotFound)
 
 	err = ref.Release(t.Context())
 	require.NoError(t, err)
@@ -1080,7 +1076,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1131,7 +1127,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1324,7 +1320,7 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
@@ -1443,7 +1439,7 @@ func TestChecksumUpdateDirectory(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)

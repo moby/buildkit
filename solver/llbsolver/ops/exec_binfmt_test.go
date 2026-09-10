@@ -82,7 +82,7 @@ func TestBinfmtXAttrErrorHandler(t *testing.T) {
 
 			if tt.expectErr {
 				require.Error(t, result, tt.description)
-				require.Equal(t, tt.inputErr, result, "Error should be propagated unchanged")
+				require.ErrorIs(t, result, tt.inputErr, "Error should be propagated unchanged")
 			} else {
 				require.NoError(t, result, tt.description)
 			}

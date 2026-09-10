@@ -212,9 +212,9 @@ func TestCombinedResolverCache_ErrorHandlingAndRollback(t *testing.T) {
 	combined := combinedResolverCache([]ResolverCache{rc1, rc2})
 	values, release, err := combined.Lock("key")
 
+	require.EqualError(t, err, "rc2 failed")
 	assert.Nil(t, values)
 	assert.Nil(t, release)
-	require.EqualError(t, err, "rc2 failed")
 
 	mu.Lock()
 	assert.Contains(t, released, "rc1", "should rollback acquired locks")

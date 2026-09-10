@@ -195,9 +195,9 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		cancel(errors.WithStack(context.Canceled))
 		select {
 		case err = <-waitCh:
-			require.Failf(t, "timed out waiting for pid1 to exit", "pid1 returned after cancellation: %+v", err)
+			t.Errorf("pid1 returned after cancellation: %+v", err)
 		case <-time.After(5 * time.Second):
-			require.FailNow(t, "timed out waiting for pid1 to exit after cancellation")
+			t.Fatal("timed out waiting for pid1 to exit after cancellation")
 		}
 	}
 
@@ -345,11 +345,11 @@ func TestWorkerCancel(t *testing.T, w *base.Worker) {
 
 	pid2Cancel(errors.WithStack(context.Canceled))
 	<-pid2Done
-	require.Contains(t, pid2Err.Error(), "exit code: 137", "pid2 exits with sigkill")
+	require.ErrorContains(t, pid2Err, "exit code: 137", "pid2 exits with sigkill")
 
 	pid1Cancel(errors.WithStack(context.Canceled))
 	<-pid1Done
-	require.Contains(t, pid1Err.Error(), "exit code: 137", "pid1 exits with sigkill")
+	require.ErrorContains(t, pid1Err, "exit code: 137", "pid1 exits with sigkill")
 }
 
 func execMount(m cache.Mountable) executor.Mount {

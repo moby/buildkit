@@ -125,10 +125,7 @@ RUN --mount=type=ssh apk update \
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !found {
-		sshAgentOutput := sshAgentOutputBuf.String()
-		t.Fatalf("ssh-agent failed to start: %s", sshAgentOutput)
-	}
+	require.Truef(t, found, "ssh-agent failed to start: %s", sshAgentOutputBuf.String())
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
 		Paths: []string{sockPath},

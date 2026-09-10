@@ -547,7 +547,6 @@ func testFetchByCommit(t *testing.T, format string, keepGitDir bool) {
 	gStale, err := gs.Resolve(ctx, idStale, nil, nil)
 	require.NoError(t, err)
 	_, _, _, _, err = gStale.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "expected checksum to match")
 
 	// Fetch the old commit by checksum with FetchByCommit and the same
@@ -657,7 +656,6 @@ func testFetchByCommitRequiresChecksum(t *testing.T, format string) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 	_, _, _, _, err = g.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "fetch-by-commit")
 }
 
@@ -1403,7 +1401,6 @@ func testFetchBranchRemoveRace(t *testing.T, format string, keepGitDir bool) {
 	require.Error(t, err, string(out))
 
 	_, err = g.Snapshot(ctx, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "fetched ref feature does not match expected commit "+shaFeature)
 }
 

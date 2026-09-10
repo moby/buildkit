@@ -1,6 +1,10 @@
 package version
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestUserAgent(t *testing.T) {
 	cases := []struct {
@@ -41,9 +45,7 @@ func TestUserAgent(t *testing.T) {
 					return pver
 				})
 			}
-			if g, w := UserAgent(), tt.want; g != w {
-				t.Fatalf("got: %q\nwant: %q", g, w)
-			}
+			require.Equal(t, tt.want, UserAgent())
 		})
 	}
 }

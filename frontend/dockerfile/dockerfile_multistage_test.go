@@ -191,9 +191,8 @@ FROM target
 				dockerui.DefaultLocalNameContext:    dir,
 			},
 		}, nil)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot copy from stage")
-		require.Contains(t, err.Error(), "needs to be defined before current stage")
+		require.ErrorContains(t, err, "cannot copy from stage")
+		require.ErrorContains(t, err, "needs to be defined before current stage")
 	}
 }
 
@@ -224,6 +223,5 @@ func testEmptyStages(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "dockerfile contains no stages to build")
+	require.ErrorContains(t, err, "dockerfile contains no stages to build")
 }

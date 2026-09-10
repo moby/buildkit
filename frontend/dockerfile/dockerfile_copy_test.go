@@ -41,7 +41,6 @@ COPY --from=$FOO . .
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "variable expansion is not supported for --from, define a new stage with FROM using ARG from global scope as a workaround")
 }
 

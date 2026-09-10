@@ -1,6 +1,10 @@
 package executor
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestValidContainerID(t *testing.T) {
 	t.Parallel()
@@ -22,11 +26,10 @@ func TestValidContainerID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := ValidContainerID(tc.id)
-			if tc.wantErr && err == nil {
-				t.Fatalf("expected an error for id %q", tc.id)
-			}
-			if !tc.wantErr && err != nil {
-				t.Fatalf("expected no error for id %q, got %v", tc.id, err)
+			if tc.wantErr {
+				require.Errorf(t, err, "expected an error for id %q", tc.id)
+			} else {
+				require.NoErrorf(t, err, "expected no error for id %q", tc.id)
 			}
 		})
 	}

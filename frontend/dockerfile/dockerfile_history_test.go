@@ -310,12 +310,9 @@ COPY notexist /foo
 
 		// contains vertex metadata
 		var ve *errdefs.VertexError
-		if errors.As(err, &ve) {
-			_, err := digest.Parse(ve.Digest)
-			require.NoError(t, err)
-		} else {
-			t.Fatal("did not find vertex error")
-		}
+		require.ErrorAs(t, err, &ve, "did not find vertex error")
+		_, perr := digest.Parse(ve.Digest)
+		require.NoError(t, perr)
 
 		// source points to Dockerfile
 		sources := errdefs.Sources(err)

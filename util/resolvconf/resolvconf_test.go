@@ -702,9 +702,7 @@ func BenchmarkGenerate(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		_, err := rc.Generate(true)
-		if err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, err)
 	}
 }
 

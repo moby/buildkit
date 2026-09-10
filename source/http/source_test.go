@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -214,8 +215,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid response")
+	require.ErrorContains(t, err, "invalid response")
 }
 
 func TestHTTPCredentialsRedactedInError(t *testing.T) {
@@ -365,7 +365,6 @@ func TestHTTPSignatureVerification(t *testing.T) {
 		h, err := hs.Resolve(ctx, id, nil, nil)
 		require.NoError(t, err)
 		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to verify pgp signature")
 	})
 
@@ -395,7 +394,6 @@ func TestHTTPSignatureVerification(t *testing.T) {
 		h, err := hs.Resolve(ctx, id, nil, nil)
 		require.NoError(t, err)
 		_, _, _, _, err = h.CacheKey(ctx, nil, 0)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "requires both pubkey and signature")
 	})
 }
@@ -535,7 +533,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	store, err := local.NewStore(tmpdir)
@@ -548,7 +546,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, db.Close())
+		assert.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
@@ -560,7 +558,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, md.Close())
+		assert.NoError(t, md.Close())
 	})
 
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
@@ -583,7 +581,7 @@ func newCacheManager(t *testing.T) (cache.Manager, error) {
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, cm.Close())
+		assert.NoError(t, cm.Close())
 	})
 
 	return cm, nil

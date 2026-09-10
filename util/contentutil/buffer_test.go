@@ -10,7 +10,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,8 +39,7 @@ func TestReadWrite(t *testing.T) {
 	require.Equal(t, "foo1", string(dt))
 
 	_, err = content.ReadBlob(ctx, b, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo3"))})
-	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, cerrdefs.ErrNotFound))
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 }
 
 func TestReaderAt(t *testing.T) {
@@ -67,8 +65,7 @@ func TestReaderAt(t *testing.T) {
 	buf = make([]byte, 7)
 
 	n, err = rdr.ReadAt(buf, 3)
-	require.Error(t, err)
-	require.Equal(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, "bar", string(buf[:n]))
 }
 

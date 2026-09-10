@@ -24,13 +24,10 @@ func TestErrorCasesHeredoc(t *testing.T) {
 		r := strings.NewReader(c.dockerfile)
 		ast, err := parser.Parse(r)
 
-		if err != nil {
-			t.Fatalf("Error when parsing Dockerfile: %s", err)
-		}
+		require.NoErrorf(t, err, "Error when parsing Dockerfile")
 		n := ast.AST.Children[0]
 		_, err = ParseInstruction(n)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), c.expectedError)
+		require.ErrorContains(t, err, c.expectedError)
 	}
 }
 

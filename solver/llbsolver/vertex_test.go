@@ -181,7 +181,6 @@ func TestWithProxyNetworkHostEgressRequiresEntitlement(t *testing.T) {
 	})
 
 	_, err := loadWithProxyNetwork(t.Context(), def, nil, true, ValidateEntitlements(entitlements.Set{}, nil))
-	require.Error(t, err)
 	require.ErrorContains(t, err, "network.host is not allowed")
 
 	_, err = loadWithProxyNetwork(t.Context(), def, nil, true, ValidateEntitlements(entitlements.Set{

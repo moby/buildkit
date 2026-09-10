@@ -6,6 +6,7 @@ import (
 
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,7 @@ func TestBoltCacheStorage(t *testing.T) {
 		st, err := NewStore(filepath.Join(tmpDir, "cache.db"))
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			require.NoError(t, st.Close())
+			assert.NoError(t, st.Close())
 		})
 
 		return st

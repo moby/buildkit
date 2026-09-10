@@ -52,7 +52,7 @@ func TestMerge(t *testing.T) {
 			require.Equal(t, int64(6), info.Size())
 			require.Equal(t, os.FileMode(0400), info.Mode())
 		default:
-			require.Fail(t, "unexpected path", path)
+			t.Errorf("unexpected path %s", path)
 		}
 		files = append(files, path)
 		return nil

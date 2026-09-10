@@ -74,9 +74,7 @@ FROM %s
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
-
-	require.Contains(t, err.Error(), "FOO: custom error")
+	require.ErrorContains(t, err, "FOO: custom error")
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -114,9 +112,7 @@ ARG BAR=${FOO:?"foo missing"}
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
-	require.Error(t, err)
-
-	require.Contains(t, err.Error(), "FOO: foo missing")
+	require.ErrorContains(t, err, "FOO: foo missing")
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{

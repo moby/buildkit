@@ -309,7 +309,7 @@ ARG BUILDKIT_SBOM_SCAN_STAGE=true
 		case "extra":
 			extraCount++
 		default:
-			require.Fail(t, "unexpected attestation", "%v", att)
+			t.Errorf("unexpected attestation: %v", att)
 		}
 	}
 	require.Equal(t, extraCount, len(att.LayersRaw)-1)
