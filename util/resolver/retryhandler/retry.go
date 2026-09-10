@@ -20,34 +20,42 @@ var MaxRetryBackoff = 8 * time.Second
 
 func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
-		backoff := time.Second
-		for {
-			descs, err := f(ctx, desc)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return nil, err
-				default:
-					if !retryError(err) {
-						return nil, err
-					}
+		return WithRetry(ctx, logger, func(ctx context.Context) ([]ocispecs.Descriptor, error) {
+			return f(ctx, desc)
+		})
+	}
+}
+
+// WithRetry runs f, retrying on transient network errors with an
+// exponential backoff, up to MaxRetryBackoff.
+func WithRetry[T any](ctx context.Context, logger func([]byte), f func(ctx context.Context) (T, error)) (T, error) {
+	backoff := time.Second
+	for {
+		v, err := f(ctx)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return v, err
+			default:
+				if !retryError(err) {
+					return v, err
 				}
-				if logger != nil {
-					logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
-				}
-			} else {
-				return descs, nil
-			}
-			// backoff logic
-			if backoff >= MaxRetryBackoff {
-				return nil, err
 			}
 			if logger != nil {
-				logger(fmt.Appendf(nil, "retrying in %v\n", backoff))
+				logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
 			}
-			time.Sleep(backoff)
-			backoff *= 2
+		} else {
+			return v, nil
 		}
+		// backoff logic
+		if backoff >= MaxRetryBackoff {
+			return v, err
+		}
+		if logger != nil {
+			logger(fmt.Appendf(nil, "retrying in %v\n", backoff))
+		}
+		time.Sleep(backoff)
+		backoff *= 2
 	}
 }
 
