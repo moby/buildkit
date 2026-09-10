@@ -33,7 +33,7 @@ type Frame struct {
 }
 
 // encodeFrames encodes a series of frames: [frameID:uint32][len:uint32][data:len]
-func encodeFrames(frames []Frame) ([]byte, error) {
+func encodeFrames(frames []Frame) []byte {
 	var out []byte
 	for _, f := range frames {
 		buf := make([]byte, 8+len(f.Data))
@@ -42,7 +42,7 @@ func encodeFrames(frames []Frame) ([]byte, error) {
 		copy(buf[8:], f.Data)
 		out = append(out, buf...)
 	}
-	return out, nil
+	return out
 }
 
 // decodeFrames decodes a series of frames from data.

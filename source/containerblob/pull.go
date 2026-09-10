@@ -81,7 +81,7 @@ func (p *puller) ensureResolver(ctx context.Context, g session.Group) error {
 	return nil
 }
 
-func (p *puller) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (cacheKey string, imgDigest string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
+func (p *puller) CacheKey(ctx context.Context, _ solver.JobContext, _ int) (cacheKey string, imgDigest string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
 	dgst := p.id.Reference.Digest()
 	if err := dgst.Validate(); err != nil {
 		return "", "", nil, false, errors.Wrap(err, "invalid reference digest")

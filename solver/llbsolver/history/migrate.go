@@ -31,7 +31,7 @@ func (h *Queue) migrateV2() error {
 			return err
 		}
 		defer release(context.WithoutCancel(ctx))
-		return b.ForEach(func(key, dt []byte) error {
+		return b.ForEach(func(key, _ []byte) error {
 			recs, err := h.opt.LeaseManager.ListResources(ctx, leases.Lease{ID: h.leaseID(string(key))})
 			if err != nil {
 				if cerrdefs.IsNotFound(err) {

@@ -199,7 +199,7 @@ func generateCDIOpts(manager *cdidevices.Manager, devs []*pb.CDIDevice) ([]oci.S
 	}
 
 	withCDIDevices := func(devs []*pb.CDIDevice) oci.SpecOpts {
-		return func(ctx context.Context, _ oci.Client, c *containers.Container, s *specs.Spec) error {
+		return func(ctx context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 			if err := manager.Refresh(); err != nil {
 				bklog.G(ctx).Warnf("CDI registry refresh failed: %v", err)
 			}

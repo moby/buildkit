@@ -61,16 +61,14 @@ func NewConnection(cc *grpc.ClientConn, handler func(cc *grpc.ClientConn)) *Conn
 	return c
 }
 
-func (c *Connection) StartConnection(ctx context.Context) error {
+func (c *Connection) StartConnection(context.Context) error {
 	c.stopCh = make(chan struct{})
 	c.disconnectedCh = make(chan bool, 1)
 	c.backgroundConnectionDoneCh = make(chan struct{})
 
-	if err := c.connect(); err == nil {
-		c.setStateConnected()
-	} else {
-		c.SetStateDisconnected(err)
-	}
+	c.connect()
+	c.setStateConnected()
+
 	go c.indefiniteBackgroundConnection()
 
 	// TODO: proper error handling when initializing connections.
@@ -148,13 +146,8 @@ func (c *Connection) indefiniteBackgroundConnection() {
 			// Normal scenario that we'll wait for
 		}
 
-		if err := c.connect(); err == nil {
-			c.setStateConnected()
-		} else {
-			// this code is unreachable in most cases
-			// c.connect does not establish Connection
-			c.SetStateDisconnected(err)
-		}
+		c.connect()
+		c.setStateConnected()
 
 		// Apply some jitter to avoid lockstep retrials of other
 		// collector-exporters. Lockstep retrials could result in an
@@ -168,9 +161,8 @@ func (c *Connection) indefiniteBackgroundConnection() {
 	}
 }
 
-func (c *Connection) connect() error {
+func (c *Connection) connect() {
 	c.newConnectionHandler(c.cc)
-	return nil
 }
 
 func (c *Connection) ContextWithMetadata(ctx context.Context) context.Context {

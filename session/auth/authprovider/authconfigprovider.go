@@ -23,7 +23,7 @@ type authConfigProvider struct {
 	mu              sync.Mutex
 }
 
-func (ap *authConfigProvider) load(ctx context.Context, host string, scopes []string, cacheExpireCheck ExpireCachedAuthCheck) (types.AuthConfig, error) {
+func (ap *authConfigProvider) load(_ context.Context, host string, _ []string, cacheExpireCheck ExpireCachedAuthCheck) (types.AuthConfig, error) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
 

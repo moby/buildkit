@@ -60,7 +60,7 @@ func CredentialsFunc(ctx context.Context, sm *session.Manager, g session.Group) 
 func FetchToken(ctx context.Context, req *FetchTokenRequest, sm *session.Manager, g session.Group) (resp *FetchTokenResponse, err error) {
 	ctx, cancel := context.WithTimeoutCause(ctx, sessionAuthTimeout, errors.Wrap(context.DeadlineExceeded, "fetching auth token from session"))
 	defer cancel()
-	err = sm.Any(ctx, g, func(ctx context.Context, id string, c session.Caller) error {
+	err = sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
 		client := NewAuthClient(c.Conn())
 
 		resp, err = client.FetchToken(ctx, req)

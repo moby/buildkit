@@ -69,7 +69,7 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	}))
 	defer httpSrv.Close()
 	var leakHit atomic.Int32
-	leakSrv, leakURL := newProxyHTTPServer(t, "0.0.0.0", testHostIP(t), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	leakSrv, leakURL := newProxyHTTPServer(t, "0.0.0.0", testHostIP(t), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		leakHit.Add(1)
 		_, _ = w.Write([]byte("host namespace leak\n"))
 	}))
@@ -99,7 +99,7 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int32(0), leakHit.Load())
 
 	var checked atomic.Int32
-	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+	denyProvider := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		if req.Source.Source.Identifier != httpURL+"/allowed" {
 			return &policysession.DecisionResponse{
 				Action: sourcepolicypb.PolicyAction_ALLOW,
@@ -521,7 +521,7 @@ func testProxyNetworkDefaultEgressNoRootless(t *testing.T, sb integration.Sandbo
 	}
 
 	var checked atomic.Int32
-	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+	denyProvider := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		if req.Source.Source.Identifier == hostURL+"/denied" {
 			checked.Add(1)
 			return &policysession.DecisionResponse{
@@ -625,7 +625,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 			name:  "basic alpine",
 			state: func() llb.State { return llb.Image("alpine") },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, runtime.GOOS, req.Platform.OS)
 					require.Equal(t, runtime.GOARCH, req.Platform.Architecture)
 
@@ -640,7 +640,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 			name:  "alpine with attrs",
 			state: func() llb.State { return llb.Image("alpine", llb.WithLayerLimit(1)) },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Equal(t, map[string]string{
 						"image.layerlimit": "1",
@@ -655,7 +655,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 			name:  "deny alpine",
 			state: func() llb.State { return llb.Image("alpine") },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					return nil, nil, errors.New("policy denied")
 				},
@@ -666,7 +666,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 			name:  "alpine with digest policy",
 			state: func() llb.State { return llb.Image("alpine") },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					return nil, &pb.ResolveSourceMetaRequest{
@@ -674,7 +674,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 						Platform: req.Platform,
 					}, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.NotEmpty(t, req.Source.Image.Digest)
 					_, err := digest.Parse(req.Source.Image.Digest)
@@ -736,7 +736,7 @@ func testSourcePolicySessionDenyMessages(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("alpine").Marshal(ctx)
 	require.NoError(t, err)
 
-	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+	p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 		return &policysession.DecisionResponse{
 			Action: sourcepolicypb.PolicyAction_DENY,
@@ -787,7 +787,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 					}
 			},
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, runtime.GOOS, req.Platform.OS)
 					require.Equal(t, runtime.GOARCH, req.Platform.Architecture)
 
@@ -806,7 +806,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 				}, sourceresolver.Opt{}
 			},
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					return nil, nil, errors.New("policy denied")
 				},
@@ -862,7 +862,7 @@ func testSourceMetaPolicySessionResolveAttestations(t *testing.T, sb integration
 	requestedPredicateType := policyimage.SLSAProvenancePredicateType1
 
 	callbackCalls := 0
-	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+	p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		switch callbackCalls {
 		case 0:
 			callbackCalls++
@@ -959,7 +959,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 	waitBusyboxStart := make(chan struct{})
 	waitAlpineDone := make(chan struct{})
 
-	p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+	p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		switch req.Source.Source.Identifier {
 		case "docker-image://docker.io/library/alpine:latest":
 			switch countAlpine {
@@ -1254,7 +1254,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 			name:  "gitchecksum",
 			state: func() llb.State { return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0")) },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Git)
 					return nil, &pb.ResolveSourceMetaRequest{
@@ -1262,7 +1262,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 						Platform: req.Platform,
 					}, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
 					require.NotNil(t, req.Source.Git)
 					require.Len(t, req.Source.Git.Checksum, 40)
@@ -1279,7 +1279,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 			name:  "gitobjects",
 			state: func() llb.State { return llb.Git(server.URL+"/.git", "", llb.GitRef("v2.0")) },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Git)
 					return nil, &pb.ResolveSourceMetaRequest{
@@ -1290,7 +1290,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 						},
 					}, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, gitURL+"#v2.0", req.Source.Source.Identifier)
 					require.NotNil(t, req.Source.Git)
 					require.Len(t, req.Source.Git.Checksum, 40)
@@ -1358,7 +1358,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 			name:  "convert and allow",
 			state: func() llb.State { return llb.Image("alpine") },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					src := req.Source.Source
@@ -1372,7 +1372,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 						Update: src,
 					}, nil, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/busybox:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					require.Equal(t, "bar", req.Source.Source.Attrs["foo"])
@@ -1386,7 +1386,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 			name:  "convert and deny",
 			state: func() llb.State { return llb.Image("alpine") },
 			callbacks: []policysession.PolicyCallback{
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					src := req.Source.Source
@@ -1399,7 +1399,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 						Update: src,
 					}, nil, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					require.Equal(t, "bar", req.Source.Source.Attrs["foo"])
@@ -1410,7 +1410,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 						Update: src,
 					}, nil, nil
 				},
-				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+				func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 					require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 					require.Nil(t, req.Source.Image)
 					require.Equal(t, "baz", req.Source.Source.Attrs["foo"])
@@ -1461,7 +1461,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 
 		calls := 0
 
-		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 			require.Equal(t, "docker-image://docker.io/library/alpine:latest", req.Source.Source.Identifier)
 			require.Nil(t, req.Source.Image)
 			calls++
@@ -1521,7 +1521,7 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 		require.NoError(t, err)
 
 		callCounter := 0
-		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 			switch callCounter {
 			case 0:
 				callCounter++
@@ -1566,7 +1566,7 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 
 	t.Run("oversized suffix denied", func(t *testing.T) {
 		callCounter := 0
-		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 			callCounter++
 			return nil, &pb.ResolveSourceMetaRequest{
 				Source:   req.Source.Source,
@@ -1590,7 +1590,7 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 
 	t.Run("unsupported algo denied", func(t *testing.T) {
 		callCounter := 0
-		p := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+		p := policysession.NewPolicyProvider(func(_ context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 			callCounter++
 			return nil, &pb.ResolveSourceMetaRequest{
 				Source:   req.Source.Source,

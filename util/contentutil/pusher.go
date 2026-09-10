@@ -78,7 +78,7 @@ func (i *pushingIngester) Writer(ctx context.Context, opts ...content.WriterOpt)
 		release()
 		return nil, err
 	}
-	runtime.SetFinalizer(contentWriter, func(_ content.Writer) {
+	runtime.SetFinalizer(contentWriter, func(content.Writer) {
 		release()
 	})
 	return &writer{

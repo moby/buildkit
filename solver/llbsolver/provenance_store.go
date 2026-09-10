@@ -32,16 +32,16 @@ func newProvenanceStore() *provenanceStore {
 	}
 }
 
-func (s *provenanceStore) register(def *pb.Definition, req *provenancetypes.RequestProvenance) (string, digest.Digest, error) {
+func (s *provenanceStore) register(def *pb.Definition, req *provenancetypes.RequestProvenance) (string, error) {
 	if s == nil || def == nil || req == nil {
-		return "", "", nil
+		return "", nil
 	}
 	dgst, err := definitionHeadDigest(def)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if dgst == "" {
-		return "", "", nil
+		return "", nil
 	}
 	recordID := identity.NewID()
 	s.mu.Lock()
@@ -54,7 +54,7 @@ func (s *provenanceStore) register(def *pb.Definition, req *provenancetypes.Requ
 	}
 	s.byDigest[dgst][recordID] = struct{}{}
 	s.mu.Unlock()
-	return recordID, dgst, nil
+	return recordID, nil
 }
 
 func (s *provenanceStore) unregister(recordIDs []string) {
@@ -141,7 +141,7 @@ func (b *provenanceBridge) registerProvenanceRef(def *pb.Definition, ref solver.
 		}
 	}
 	reqProv := req.bridge.requestProvenance(srcs)
-	recordID, _, err := b.provenanceStore.register(def, reqProv)
+	recordID, err := b.provenanceStore.register(def, reqProv)
 	if err != nil {
 		return err
 	}

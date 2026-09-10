@@ -38,7 +38,7 @@ func addDefaultPort(hostport string, defaultPort int) string {
 // SSHKeyScan scans a ssh server for the hostkey; server should be in the form hostname, or hostname:port
 func SSHKeyScan(server string) (string, error) {
 	var key string
-	KeyScanCallback := func(hostport string, remote net.Addr, pubKey ssh.PublicKey) error {
+	KeyScanCallback := func(hostport string, _ net.Addr, pubKey ssh.PublicKey) error {
 		hostname, port, err := net.SplitHostPort(hostport)
 		if err != nil {
 			return err

@@ -55,7 +55,7 @@ type LoadOpt func(*pb.Op, *pb.OpMetadata, *solver.VertexOptions) error
 
 func WithValidateCaps() LoadOpt {
 	cs := pb.Caps.CapSet(pb.Caps.All())
-	return func(_ *pb.Op, md *pb.OpMetadata, opt *solver.VertexOptions) error {
+	return func(_ *pb.Op, md *pb.OpMetadata, _ *solver.VertexOptions) error {
 		if md != nil {
 			for c := range md.Caps {
 				if err := cs.Supports(apicaps.CapID(c)); err != nil {
@@ -89,7 +89,7 @@ func WithLinuxResourcesMetadata() LoadOpt {
 
 func NormalizeRuntimePlatforms() LoadOpt {
 	var defaultPlatform *pb.Platform
-	return func(op *pb.Op, _ *pb.OpMetadata, opt *solver.VertexOptions) error {
+	return func(op *pb.Op, _ *pb.OpMetadata, _ *solver.VertexOptions) error {
 		if op.Platform == nil {
 			if defaultPlatform == nil {
 				p := platforms.DefaultSpec()
@@ -127,7 +127,7 @@ func NormalizeRuntimePlatforms() LoadOpt {
 }
 
 func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) LoadOpt {
-	return func(op *pb.Op, _ *pb.OpMetadata, opt *solver.VertexOptions) error {
+	return func(op *pb.Op, _ *pb.OpMetadata, _ *solver.VertexOptions) error {
 		switch op := op.Op.(type) {
 		case *pb.Op_Exec:
 			v := entitlements.Values{
@@ -220,7 +220,7 @@ type detectPrunedCacheID struct {
 	ids map[string]bool
 }
 
-func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, opt *solver.VertexOptions) error {
+func (dpc *detectPrunedCacheID) Load(op *pb.Op, md *pb.OpMetadata, _ *solver.VertexOptions) error {
 	if md == nil || !md.IgnoreCache {
 		return nil
 	}

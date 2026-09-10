@@ -25,7 +25,7 @@ func TestProvenanceStoreLooksUpByDefinitionDigest(t *testing.T) {
 		},
 	}
 
-	recordID, _, err := store.register(pbDef, req)
+	recordID, err := store.register(pbDef, req)
 	require.NoError(t, err)
 	require.NotEmpty(t, recordID)
 	require.Equal(t, pbDefBefore, pbDef)
@@ -64,7 +64,7 @@ func TestProvenanceStoreOmitsInputRoot(t *testing.T) {
 		},
 	}
 
-	recordID, _, err := store.register(pbDef, req)
+	recordID, err := store.register(pbDef, req)
 	require.NoError(t, err)
 	require.NotEmpty(t, recordID)
 
@@ -89,7 +89,7 @@ func TestProvenanceStoreLookupAfterDefinitionOpRoundTrip(t *testing.T) {
 		},
 	}
 
-	recordID, _, err := store.register(pbDef, req)
+	recordID, err := store.register(pbDef, req)
 	require.NoError(t, err)
 	require.NotEmpty(t, recordID)
 
@@ -117,7 +117,7 @@ func TestProvenanceStoreUnregister(t *testing.T) {
 		},
 	}
 
-	recordID, _, err := store.register(pbDef, req)
+	recordID, err := store.register(pbDef, req)
 	require.NoError(t, err)
 	require.NotEmpty(t, recordID)
 
@@ -136,14 +136,14 @@ func TestProvenanceStoreAmbiguousDigest(t *testing.T) {
 
 	pbDef := def.ToPB()
 	store := newProvenanceStore()
-	_, _, err = store.register(pbDef, &provenancetypes.RequestProvenance{
+	_, err = store.register(pbDef, &provenancetypes.RequestProvenance{
 		Request: &provenancetypes.Parameters{
 			Frontend: "dockerfile.v0",
 			Args:     map[string]string{"target": "base"},
 		},
 	})
 	require.NoError(t, err)
-	_, _, err = store.register(pbDef, &provenancetypes.RequestProvenance{
+	_, err = store.register(pbDef, &provenancetypes.RequestProvenance{
 		Request: &provenancetypes.Parameters{
 			Frontend: "dockerfile.v0",
 			Args:     map[string]string{"target": "other"},

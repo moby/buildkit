@@ -30,7 +30,7 @@ func (h *sessionHandler) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	var resp *http.Response
-	err := h.sm.Any(context.TODO(), h.g, func(ctx context.Context, _ string, caller session.Caller) error {
+	err := h.sm.Any(context.TODO(), h.g, func(_ context.Context, _ string, caller session.Caller) error {
 		up, err := upload.New(context.TODO(), caller, req.URL)
 		if err != nil {
 			return err

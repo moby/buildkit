@@ -487,7 +487,7 @@ func resetCacheStore(ctx context.Context, cs content.Store, storePath string) er
 }
 
 func prepareSyncedFiles(def *llb.Definition, localMounts map[string]fsutil.FS) (filesync.StaticDirSource, error) {
-	resetUIDAndGID := func(p string, st *fstypes.Stat) fsutil.MapResult {
+	resetUIDAndGID := func(_ string, st *fstypes.Stat) fsutil.MapResult {
 		st.Uid = 0
 		st.Gid = 0
 		return fsutil.MapResultKeep

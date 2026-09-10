@@ -16,7 +16,7 @@ import (
 )
 
 func Dialer(api controlapi.ControlClient) session.Dialer {
-	return func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error) {
+	return func(ctx context.Context, _ string, meta map[string][]string) (net.Conn, error) {
 		meta = lowerHeaders(meta)
 		md := metadata.MD(meta)
 		ctx = metadata.NewOutgoingContext(ctx, md)
@@ -134,13 +134,13 @@ func (c *conn) LocalAddr() net.Addr {
 func (c *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
-func (c *conn) SetDeadline(t time.Time) error {
+func (c *conn) SetDeadline(time.Time) error {
 	return nil
 }
-func (c *conn) SetReadDeadline(t time.Time) error {
+func (c *conn) SetReadDeadline(time.Time) error {
 	return nil
 }
-func (c *conn) SetWriteDeadline(t time.Time) error {
+func (c *conn) SetWriteDeadline(time.Time) error {
 	return nil
 }
 

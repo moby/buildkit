@@ -89,7 +89,7 @@ func (tsh *tarsumHash) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (tsh *tarsumHash) Sum(_ []byte) []byte {
+func (tsh *tarsumHash) Sum([]byte) []byte {
 	b, _ := hex.DecodeString(tsh.Hash.Sum().Hex())
 	return b
 }

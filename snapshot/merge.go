@@ -100,7 +100,7 @@ func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager)
 	}
 }
 
-func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff, opts ...snapshots.Opt) error {
+func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff, _ ...snapshots.Opt) error {
 	var baseKey string
 	if sn.skipBaseLayers {
 		// Overlay-based snapshotters can skip the base snapshot of the merge (if one exists) and just use it as the

@@ -489,7 +489,7 @@ func testBuildHTTPSourceUnauthorizedChecksumRace(t *testing.T, sb integration.Sa
 	defer c.Close()
 
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
 			time.Sleep(200 * time.Millisecond)
 		}

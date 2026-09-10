@@ -14,7 +14,7 @@ func NewNoneProvider() Provider {
 type none struct {
 }
 
-func (h *none) New(_ context.Context, hostname string, _ NamespaceOptions) (Namespace, error) {
+func (h *none) New(context.Context, string, NamespaceOptions) (Namespace, error) {
 	return &noneNS{}, nil
 }
 
@@ -25,7 +25,7 @@ func (h *none) Close() error {
 type noneNS struct {
 }
 
-func (h *noneNS) Set(s *specs.Spec) error {
+func (h *noneNS) Set(*specs.Spec) error {
 	return nil
 }
 

@@ -80,7 +80,7 @@ func (is *Source) Schemes() []string {
 	return []string{srctypes.DockerImageScheme}
 }
 
-func (is *Source) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (is *Source) Identifier(_, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
 	if is.ResolverType == ResolverTypeOCILayout {
 		return is.ociIdentifier(ref, attrs, platform)
 	}
@@ -88,7 +88,7 @@ func (is *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 	return is.registryIdentifier(ref, attrs, platform)
 }
 
-func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
+func (is *Source) Resolve(_ context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
 	var (
 		p          *puller
 		platform   = platforms.DefaultSpec()

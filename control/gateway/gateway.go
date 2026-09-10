@@ -26,11 +26,11 @@ func (gwf *GatewayForwarder) Register(server *grpc.Server) {
 	gwapi.RegisterLLBBridgeServer(server, gwf)
 }
 
-func (gwf *GatewayForwarder) RegisterBuild(ctx context.Context, id string, bridge gateway.LLBBridgeForwarder) {
+func (gwf *GatewayForwarder) RegisterBuild(_ context.Context, id string, bridge gateway.LLBBridgeForwarder) {
 	gwf.registrar.Register(id, bridge)
 }
 
-func (gwf *GatewayForwarder) UnregisterBuild(ctx context.Context, id string) {
+func (gwf *GatewayForwarder) UnregisterBuild(_ context.Context, id string) {
 	gwf.registrar.Discard(id)
 }
 

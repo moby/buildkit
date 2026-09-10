@@ -9,13 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func mkfifo(_ string, _ os.FileMode) fstest.Applier {
+func mkfifo(string, os.FileMode) fstest.Applier {
 	return applyFn(func(string) error {
 		return errors.New("mkfifo applier not implemented yet on this platform")
 	})
 }
 
-func mkchardev(_ string, _ os.FileMode, _, _ uint32) fstest.Applier {
+func mkchardev(string, os.FileMode, uint32, uint32) fstest.Applier {
 	return applyFn(func(string) error {
 		return errors.New("mkchardev applier not implemented yet on this platform")
 	})

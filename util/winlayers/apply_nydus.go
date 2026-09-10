@@ -16,7 +16,7 @@ import (
 	nydusify "github.com/containerd/nydus-snapshotter/pkg/converter"
 )
 
-func isNydusBlob(ctx context.Context, desc ocispecs.Descriptor) bool {
+func isNydusBlob(_ context.Context, desc ocispecs.Descriptor) bool {
 	if desc.Annotations == nil {
 		return false
 	}

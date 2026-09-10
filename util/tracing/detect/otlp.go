@@ -81,6 +81,6 @@ func (otlpExporterDetector) DetectMetricExporter() (sdkmetric.Exporter, error) {
 	}
 }
 
-func deltaTemporality(_ sdkmetric.InstrumentKind) metricdata.Temporality {
+func deltaTemporality(sdkmetric.InstrumentKind) metricdata.Temporality {
 	return metricdata.DeltaTemporality
 }

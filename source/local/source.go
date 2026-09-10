@@ -48,7 +48,7 @@ func (ls *localSource) Schemes() []string {
 	return []string{srctypes.LocalScheme}
 }
 
-func (ls *localSource) Identifier(scheme, ref string, attrs map[string]string, platform *pb.Platform) (source.Identifier, error) {
+func (ls *localSource) Identifier(_, ref string, attrs map[string]string, _ *pb.Platform) (source.Identifier, error) {
 	id, err := NewLocalIdentifier(ref)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (ls *localSource) Identifier(scheme, ref string, attrs map[string]string, p
 	return id, nil
 }
 
-func (ls *localSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
+func (ls *localSource) Resolve(_ context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	localIdentifier, ok := id.(*LocalIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid local identifier %v", id)
@@ -126,7 +126,7 @@ type localSourceHandler struct {
 	*localSource
 }
 
-func (ls *localSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobContext, index int) (string, string, solver.CacheOpts, bool, error) {
+func (ls *localSourceHandler) CacheKey(_ context.Context, jobCtx solver.JobContext, _ int) (string, string, solver.CacheOpts, bool, error) {
 	sessionID := ls.src.SessionID
 
 	if sessionID == "" {
@@ -290,7 +290,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		opt.Filter = func(p string, stat *fstypes.Stat) bool {
+		opt.Filter = func(_ string, stat *fstypes.Stat) bool {
 			uid, gid, err := idmap.ToHost(int(stat.Uid), int(stat.Gid))
 			if err != nil {
 				return false

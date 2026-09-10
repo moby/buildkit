@@ -24,7 +24,7 @@ var EStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.Store
 
 const estargzLabel = "buildkit.io/compression/estargz"
 
-func (c estargzType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c estargzType) Compress(_ context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	var cInfo *compressionInfo
 	var writeErr error
 	var mu sync.Mutex
@@ -134,7 +134,7 @@ func (c estargzType) NeedsConversion(ctx context.Context, cs content.Store, desc
 	return true, nil
 }
 
-func (c estargzType) NeedsComputeDiffBySelf(comp Config) bool {
+func (c estargzType) NeedsComputeDiffBySelf(Config) bool {
 	return true
 }
 

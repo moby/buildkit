@@ -183,7 +183,7 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	}
 
 	if scanner != nil {
-		if err := rb.EachPlatform(ctx, func(ctx context.Context, id string, p ocispecs.Platform) error {
+		if err := rb.EachPlatform(ctx, func(ctx context.Context, id string, _ ocispecs.Platform) error {
 			target, ok := scanTargets.Load(id)
 			if !ok {
 				return errors.Errorf("no scan targets for %s", id)

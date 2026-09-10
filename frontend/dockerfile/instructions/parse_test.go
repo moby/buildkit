@@ -163,7 +163,7 @@ func TestNilLinter(t *testing.T) {
 				cmd + " a b c",
 				cmd + " 0 0",
 			} {
-				t.Run(tc, func(t *testing.T) {
+				t.Run(tc, func(*testing.T) {
 					ast, err := parser.Parse(strings.NewReader("FROM busybox\n" + tc))
 					if err == nil {
 						_, _, _ = Parse(ast.AST, nil)

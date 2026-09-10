@@ -50,7 +50,7 @@ func TestConfigMultiplatform(t *testing.T) {
 		t.Helper()
 
 		idxDesc := cc.Add(t, idx, idx.MediaType, nil)
-		r := &testResolver{cc: cc, resolve: func(ctx context.Context, ref string) (string, ocispecs.Descriptor, error) {
+		r := &testResolver{cc: cc, resolve: func(_ context.Context, ref string) (string, ocispecs.Descriptor, error) {
 			return ref, idxDesc, nil
 		}}
 
@@ -85,7 +85,7 @@ type testCache struct {
 	content map[digest.Digest]content.ReaderAt
 }
 
-func (testCache) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
+func (testCache) Info(context.Context, digest.Digest) (content.Info, error) {
 	return content.Info{}, nil
 }
 
@@ -93,7 +93,7 @@ func (testCache) Update(context.Context, content.Info, ...string) (content.Info,
 	return content.Info{}, nil
 }
 
-func (*testCache) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+func (*testCache) Writer(context.Context, ...content.WriterOpt) (content.Writer, error) {
 	// This needs to be implemented because the content helpers will open a writer to use as a lock
 	return nopWriter{}, nil
 }
@@ -108,7 +108,7 @@ func (nopWriter) Close() error {
 	return nil
 }
 
-func (nopWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+func (nopWriter) Commit(context.Context, int64, digest.Digest, ...content.Opt) error {
 	return nil
 }
 
@@ -116,7 +116,7 @@ func (nopWriter) Status() (content.Status, error) {
 	return content.Status{}, nil
 }
 
-func (nopWriter) Truncate(size int64) error {
+func (nopWriter) Truncate(int64) error {
 	return nil
 }
 
@@ -156,7 +156,7 @@ func (*sectionNopCloser) Close() error {
 	return nil
 }
 
-func (c *testCache) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
+func (c *testCache) ReaderAt(_ context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	ra, ok := c.content[desc.Digest]
 	if !ok {
 		return nil, cerrdefs.ErrNotFound
@@ -175,7 +175,7 @@ func (f fetcherFunc) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.Re
 	return f(ctx, desc)
 }
 
-func (r *testResolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, error) {
+func (r *testResolver) Fetcher(context.Context, string) (remotes.Fetcher, error) {
 	return fetcherFunc(func(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
 		ra, err := r.cc.ReaderAt(ctx, desc)
 		if err != nil {

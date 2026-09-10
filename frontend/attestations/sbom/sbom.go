@@ -57,7 +57,7 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 		return nil, errors.Errorf("scanner %s does not have cmd", scanner)
 	}
 
-	return func(ctx context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[*llb.State], error) {
+	return func(_ context.Context, name string, ref llb.State, extras map[string]llb.State, opts ...llb.ConstraintsOpt) (result.Attestation[*llb.State], error) {
 		var env []string
 		env = append(env, cfg.Config.Env...)
 		env = append(env, "BUILDKIT_SCAN_DESTINATION="+outDir)

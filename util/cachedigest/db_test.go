@@ -109,8 +109,7 @@ func TestEncodeDecodeFrames(t *testing.T) {
 		{FrameIDType, []byte(TypeJSON)},
 		{FrameIDData, []byte("hello world")},
 	}
-	encoded, err := encodeFrames(framesIn)
-	require.NoError(t, err, "encodeFrames should not error")
+	encoded := encodeFrames(framesIn)
 
 	decoded, err := decodeFrames(encoded)
 	require.NoError(t, err, "decodeFrames should not error")

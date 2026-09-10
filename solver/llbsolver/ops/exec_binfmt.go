@@ -37,7 +37,7 @@ type emulator struct {
 	idmap *user.IdentityMapping
 }
 
-func (e *emulator) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (e *emulator) Mount(context.Context, bool) (snapshot.Mountable, error) {
 	return &staticEmulatorMount{path: e.path, idmap: e.idmap}, nil
 }
 
@@ -132,7 +132,7 @@ func getEmulator(ctx context.Context, p *pb.Platform) (*emulator, error) {
 // qemu emulator setup on SELinux-enabled systems. Since the security.selinux xattr
 // is not critical for the emulator functionality, we safely ignore these errors
 // while preserving other xattr error handling.
-func ignoreSELinuxXAttrErrorHandler(dst, src, xattrKey string, err error) error {
+func ignoreSELinuxXAttrErrorHandler(_, _, xattrKey string, err error) error {
 	// Ignore ENOTSUP errors specifically for security.selinux xattr
 	// This allows qemu emulator setup to succeed on SELinux systems
 	// when copying to filesystems that don't support SELinux xattrs

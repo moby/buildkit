@@ -19,6 +19,6 @@ func Supported() bool {
 	return false
 }
 
-func New(opt Opt) (network.ProxyProvider, error) {
+func New(Opt) (network.ProxyProvider, error) {
 	return nil, errors.New("proxy network provider is only supported on linux")
 }

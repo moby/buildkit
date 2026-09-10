@@ -43,11 +43,11 @@ func getContainerdDebugSock(tmpdir string) string {
 }
 
 // no-op for parity with unix
-func mountInfo(_ string) error {
+func mountInfo(string) error {
 	return nil
 }
 
-func chown(_ string, _, _ int) error {
+func chown(string, int, int) error {
 	// Chown not supported on Windows
 	return nil
 }
@@ -67,7 +67,7 @@ func applyDockerdPlatformFlags(flags []string, workerID string) []string {
 	return flags
 }
 
-func getBuildkitdNetworkAddr(_ string) string {
+func getBuildkitdNetworkAddr(string) string {
 	// Using TCP on Windows, instead of Unix sockets.
 	return "localhost:0"
 }

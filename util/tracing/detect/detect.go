@@ -84,14 +84,14 @@ func detectExporter[T any](envVar string, fn func(d ExporterDetector) (T, bool, 
 	return exp, nil
 }
 
-func NewSpanExporter(_ context.Context) (sdktrace.SpanExporter, error) {
+func NewSpanExporter(context.Context) (sdktrace.SpanExporter, error) {
 	return detectExporter("OTEL_TRACES_EXPORTER", func(d ExporterDetector) (sdktrace.SpanExporter, bool, error) {
 		exp, err := d.DetectTraceExporter()
 		return exp, exp != nil, err
 	})
 }
 
-func NewMetricExporter(_ context.Context) (sdkmetric.Exporter, error) {
+func NewMetricExporter(context.Context) (sdkmetric.Exporter, error) {
 	return detectExporter("OTEL_METRICS_EXPORTER", func(d ExporterDetector) (sdkmetric.Exporter, bool, error) {
 		exp, err := d.DetectMetricExporter()
 		return exp, exp != nil, err
@@ -110,11 +110,11 @@ func (n noneDetector) DetectMetricExporter() (sdkmetric.Exporter, error) {
 
 type noneSpanExporter struct{}
 
-func (n noneSpanExporter) ExportSpans(_ context.Context, _ []sdktrace.ReadOnlySpan) error {
+func (n noneSpanExporter) ExportSpans(context.Context, []sdktrace.ReadOnlySpan) error {
 	return nil
 }
 
-func (n noneSpanExporter) Shutdown(_ context.Context) error {
+func (n noneSpanExporter) Shutdown(context.Context) error {
 	return nil
 }
 
@@ -133,15 +133,15 @@ func (n noneMetricExporter) Aggregation(kind sdkmetric.InstrumentKind) sdkmetric
 	return sdkmetric.DefaultAggregationSelector(kind)
 }
 
-func (n noneMetricExporter) Export(_ context.Context, _ *metricdata.ResourceMetrics) error {
+func (n noneMetricExporter) Export(context.Context, *metricdata.ResourceMetrics) error {
 	return nil
 }
 
-func (n noneMetricExporter) ForceFlush(_ context.Context) error {
+func (n noneMetricExporter) ForceFlush(context.Context) error {
 	return nil
 }
 
-func (n noneMetricExporter) Shutdown(_ context.Context) error {
+func (n noneMetricExporter) Shutdown(context.Context) error {
 	return nil
 }
 

@@ -15,7 +15,7 @@ import (
 
 const socketScheme = "npipe://"
 
-func listenFD(_ string, _ *tls.Config) (net.Listener, error) {
+func listenFD(string, *tls.Config) (net.Listener, error) {
 	return nil, errors.New("listening server on fd not supported on windows")
 }
 

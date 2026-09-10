@@ -282,7 +282,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 				return nil
 			}
 			hasBacklinks := false
-			cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+			cm.backend.WalkBacklinks(id, func(string, CacheInfoLink) error {
 				hasBacklinks = true
 				return nil
 			})

@@ -2850,7 +2850,7 @@ func TestGetDefaultBranchRejectsDashPrefixedRef(t *testing.T) {
 func TestGitCLIAdvice(t *testing.T) {
 	run := func(t *testing.T, gitAdvice bool) (env, args []string) {
 		t.Helper()
-		cli := gitCLI(gitutil.WithGitAdvice(gitAdvice), gitutil.WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+		cli := gitCLI(gitutil.WithGitAdvice(gitAdvice), gitutil.WithExec(func(_ context.Context, cmd *exec.Cmd) error {
 			env = append([]string(nil), cmd.Env...)
 			args = append([]string(nil), cmd.Args...)
 			return nil

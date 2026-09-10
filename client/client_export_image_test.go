@@ -1427,7 +1427,7 @@ func testOCIExporterContentStore(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		checkStore := func(dir string) {
-			err = filepath.Walk(dir, func(filename string, fi os.FileInfo, err error) error {
+			err = filepath.Walk(dir, func(filename string, fi os.FileInfo, _ error) error {
 				filename = strings.TrimPrefix(filename, dir)
 				filename = strings.Trim(filename, "/")
 				if filename == "" || filename == "ingest" {

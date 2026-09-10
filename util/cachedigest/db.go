@@ -71,11 +71,7 @@ func (d *DB) saveFrames(key string, frames []Frame) {
 	}
 
 	d.wg.Go(func() {
-		val, err := encodeFrames(frames)
-		if err != nil {
-			// Optionally log error
-			return
-		}
+		val := encodeFrames(frames)
 		_ = d.db.Update(func(tx *bolt.Tx) error {
 			b, err := tx.CreateBucketIfNotExists([]byte(bucketName))
 			if err != nil {
@@ -86,7 +82,7 @@ func (d *DB) saveFrames(key string, frames []Frame) {
 	})
 }
 
-func (d *DB) Get(ctx context.Context, dgst string) (Type, []Frame, error) {
+func (d *DB) Get(_ context.Context, dgst string) (Type, []Frame, error) {
 	if d.db == nil {
 		return "", nil, errors.WithStack(ErrNotFound)
 	}

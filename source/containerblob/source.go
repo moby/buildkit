@@ -48,7 +48,7 @@ func (is *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 	}
 }
 
-func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
+func (is *Source) Resolve(_ context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*ImageBlobIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid image blob identifier %v", id)

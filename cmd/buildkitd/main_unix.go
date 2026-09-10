@@ -62,6 +62,6 @@ func getLocalListener(listenerPath, _ string) (net.Listener, error) {
 	return l, nil
 }
 
-func groupToSecurityDescriptor(_ string) (string, error) {
+func groupToSecurityDescriptor(string) (string, error) {
 	return "", nil
 }

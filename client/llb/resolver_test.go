@@ -75,7 +75,7 @@ type testResolver struct {
 	platform string
 }
 
-func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt sourceresolver.Opt) (string, digest.Digest, []byte, error) {
+func (r *testResolver) ResolveImageConfig(_ context.Context, ref string, opt sourceresolver.Opt) (string, digest.Digest, []byte, error) {
 	var img struct {
 		Config struct {
 			Env        []string `json:"Env,omitempty"`

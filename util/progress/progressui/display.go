@@ -179,10 +179,10 @@ func newDiscardDisplay() Display {
 	return Display{disp: &discardDisplay{}}
 }
 
-func (d *discardDisplay) init(displayLimiter *rate.Limiter) {}
-func (d *discardDisplay) update(ss *client.SolveStatus)     {}
-func (d *discardDisplay) refresh()                          {}
-func (d *discardDisplay) done()                             {}
+func (d *discardDisplay) init(*rate.Limiter)         {}
+func (d *discardDisplay) update(*client.SolveStatus) {}
+func (d *discardDisplay) refresh()                   {}
+func (d *discardDisplay) done()                      {}
 
 type consoleDisplay struct {
 	t              *trace
@@ -294,7 +294,7 @@ func newRawJSONDisplay(w io.Writer) Display {
 	}
 }
 
-func (d *rawJSONDisplay) init(displayLimiter *rate.Limiter) {
+func (d *rawJSONDisplay) init(*rate.Limiter) {
 	// Initialization parameters are ignored for this display.
 }
 
@@ -380,6 +380,7 @@ type vertex struct {
 	hidden bool
 }
 
+//nolint:unparam
 func (v *vertex) update(c int) {
 	if v.count == 0 {
 		now := time.Now()

@@ -76,7 +76,7 @@ type testMetaResolver struct {
 	config []byte
 }
 
-func (r testMetaResolver) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
+func (r testMetaResolver) ResolveSourceMetadata(_ context.Context, op *pb.SourceOp, _ sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
 	return &sourceresolver.MetaResponse{
 		Op: op,
 		Image: &sourceresolver.ResolveImageResponse{
