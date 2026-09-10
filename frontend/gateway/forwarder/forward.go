@@ -264,6 +264,7 @@ func (c *BridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		NetMode:     req.NetMode,
 		Hostname:    req.Hostname,
 		Mounts:      make([]container.Mount, len(req.Mounts)),
+		Platform:    req.Platform,
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
