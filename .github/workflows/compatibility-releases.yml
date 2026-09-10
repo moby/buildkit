@@ -22,8 +22,27 @@ env:
   CACHE_SCOPE: "build-integration-tests"
 
 jobs:
-  compatibility:
+  prepare:
     runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      -
+        name: Generate matrix
+        id: matrix
+        run: |
+          echo "matrix=$(./hack/test-compatibility-releases --matrix)" >> "$GITHUB_OUTPUT"
+
+  compatibility:
+    needs:
+      - prepare
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       -
         name: Checkout
@@ -56,6 +75,7 @@ jobs:
       -
         name: Test compatibility releases
         env:
+          COMPATIBILITY_RELEASES: ${{ matrix.compatibility_release }}
           TEST_IMAGE_BUILD: "0"
           TEST_IMAGE_NAME: ${{ env.TEST_IMAGE_NAME }}
         run: |
