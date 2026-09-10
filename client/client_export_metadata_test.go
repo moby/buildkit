@@ -1906,6 +1906,246 @@ func testSBOMSupplements(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testSBOMCycloneDX(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureSBOM)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	p := platforms.DefaultSpec()
+	pk := platforms.Format(p)
+
+	// Build a CycloneDX scanner image
+	scannerFrontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+
+		st := llb.Image("busybox", llb.Platform(p))
+		def, err := st.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		_, err = ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+		res.AddRef(pk, ref)
+
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		var img ocispecs.Image
+		cmd := `
+cat <<EOF > $BUILDKIT_SCAN_DESTINATION/cdx.json
+{
+  "_type": "https://in-toto.io/Statement/v0.1",
+  "predicateType": "https://cyclonedx.org/bom",
+  "predicate": {
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.4"
+  }
+}
+EOF
+`
+		img.Config.Cmd = []string{"/bin/sh", "-c", cmd}
+		img.Platform = p
+		config, err := json.Marshal(img)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal image config")
+		}
+		res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, pk), config)
+
+		return res, nil
+	}
+
+	scannerTarget := registry + "/buildkit/testcdxscanner:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": scannerTarget,
+					"push": "true",
+				},
+			},
+		},
+	}, "", scannerFrontend, nil)
+	require.NoError(t, err)
+
+	// makeBaseResult builds a scratch image with a greeting file and platform metadata,
+	// shared by the plain target and the CDX-annotated frontend.
+	makeBaseResult := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+
+		st := llb.Scratch().File(
+			llb.Mkfile("/greeting", 0600, []byte("hello cyclonedx!")),
+		)
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		if _, err = ref.ToState(); err != nil {
+			return nil, err
+		}
+		res.AddRef(pk, ref)
+
+		expPlatforms := &exptypes.Platforms{
+			Platforms: []exptypes.Platform{{ID: pk, Platform: p}},
+		}
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+
+		return res, nil
+	}
+
+	// Test CycloneDX fallback scanner
+	target := registry + "/buildkit/testcdx:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "generator=" + scannerTarget,
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", makeBaseResult, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err := testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Len(t, imgs.Images, 2, "expected main image + attestation manifest")
+
+	att := imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+	attest := intoto.Statement{}
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
+	require.Equal(t, intoto.PredicateCycloneDX, attest.PredicateType)
+	require.NotEmpty(t, attest.Subject)
+	pred, ok := attest.Predicate.(map[string]interface{})
+	require.True(t, ok, "predicate should be a JSON object")
+	require.Equal(t, "CycloneDX", pred["bomFormat"])
+	require.Equal(t, "1.4", pred["specVersion"])
+
+	// Test that HasSBOM recognizes CycloneDX attestations from frontend
+	cdxFrontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := makeBaseResult(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+
+		// Attach a CycloneDX attestation from the frontend
+		st := llb.Scratch().
+			File(llb.Mkfile("/result.cdx", 0600, []byte(`{"bomFormat": "CycloneDX"}`)))
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		refAttest, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		if _, err = refAttest.ToState(); err != nil {
+			return nil, err
+		}
+
+		res.AddAttestation(pk, gateway.Attestation{
+			Kind: gatewaypb.AttestationKind_InToto,
+			Ref:  refAttest,
+			Path: "/result.cdx",
+			InToto: result.InTotoAttestation{
+				PredicateType: intoto.PredicateCycloneDX,
+			},
+		})
+
+		return res, nil
+	}
+
+	// When frontend provides CycloneDX SBOM, the fallback scanner should be skipped
+	target = registry + "/buildkit/testcdx2:latest"
+	_, err = c.Build(sb.Context(), SolveOpt{
+		FrontendAttrs: map[string]string{
+			"attest:sbom": "",
+		},
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, "", cdxFrontend, nil)
+	require.NoError(t, err)
+
+	desc, provider, err = contentutil.ProviderFromRef(target)
+	require.NoError(t, err)
+
+	imgs, err = testutil.ReadImages(sb.Context(), provider, desc)
+	require.NoError(t, err)
+	require.Len(t, imgs.Images, 2, "expected main image + attestation manifest")
+
+	att = imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+	attest = intoto.Statement{}
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &attest))
+	require.Equal(t, intoto.StatementInTotoV1, attest.Type)
+	require.Equal(t, intoto.PredicateCycloneDX, attest.PredicateType)
+	require.NotEmpty(t, attest.Subject)
+	pred, ok = attest.Predicate.(map[string]interface{})
+	require.True(t, ok, "predicate should be a JSON object")
+	require.Equal(t, "CycloneDX", pred["bomFormat"])
+}
+
 func testSourceDateEpochClamp(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	requiresLinux(t)
