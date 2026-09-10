@@ -901,7 +901,8 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 	cacheStoreForDebug = cacheStorage
 
 	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, &bolt.Options{
-		FreelistType: bolt.FreelistMapType,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	})
 	if err != nil {
 		return nil, err
