@@ -4,13 +4,15 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
+	"context"
 	"flag"
 	"html/template"
 	"io"
 	"os"
 	"path/filepath"
 
+	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/compression/go126flate"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +34,12 @@ func main() {
 		defer f.Close()
 		buf := &bytes.Buffer{}
 
-		gz, err := gzip.NewWriterLevel(newHexStringWriter(buf), gzip.BestCompression)
+		// Go 1.27 changed compress/flate output in CL 707355 for
+		// golang/go#75532. Use BuildKit's Go 1.26-compatible gzip writer so
+		// the checked-in archutil binaries do not depend on the Go toolchain.
+		compressor, _ := compression.Gzip.Compress(context.Background(),
+			compression.New(compression.Gzip).SetLevel(go126flate.BestCompression))
+		gz, err := compressor(newHexStringWriter(buf), "")
 		if err != nil {
 			panic(err)
 		}
