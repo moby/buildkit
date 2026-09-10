@@ -1943,3 +1943,137 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 
 	ensurePruneAll(t, c, sb)
 }
+
+// testStargzCacheExportMaxCrossStageLazyBase covers
+// https://github.com/moby/buildkit/issues/6893: with a lazy (stargz)
+// snapshotter and a multi-stage build where a later stage consumes an
+// earlier, different-base stage via COPY --from, mode=max cache export used
+// to silently drop the earlier stage's cache records (their lazy base blobs
+// were not resolvable during export), so a later build re-ran steps that
+// should have been restored from cache.
+func testStargzCacheExportMaxCrossStageLazyBase(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+		workers.FeatureDirectPush,
+	)
+	requiresLinux(t)
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" || sb.Snapshotter() != "stargz" {
+		t.Skip("test requires containerd worker with stargz snapshotter")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	// Prepare two different eStargz base images. The bug only triggers when
+	// the stages use different base images, so that the lazy base blobs of
+	// the earlier stage are not part of the final stage's ref chain.
+	pushEsgz := func(orgImage, name string) string {
+		ref := registry + "/stargz/" + name + ":" + identity.NewID()
+		def, err := llb.Image(orgImage).Run(llb.Args([]string{"/bin/touch", "/marker-" + name})).Marshal(sb.Context())
+		require.NoError(t, err)
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name":              ref,
+						"push":              "true",
+						"compression":       "estargz",
+						"oci-mediatypes":    "true",
+						"force-compression": "true",
+					},
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+		return ref
+	}
+	baseA := pushEsgz("docker.io/library/alpine:latest", "alpine")
+	baseB := pushEsgz("docker.io/library/busybox:latest", "busybox")
+
+	// Remove the local copies of the pushed eStargz images (and any state the
+	// preparation builds left behind) so that the pulls in the actual build
+	// are lazy and need desc-handler resolution during cache export, which is
+	// the precondition for this bug.
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+	imageService := client.ImageService()
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	for _, ref := range []string{baseA, baseB} {
+		err = imageService.Delete(ctx, ref, images.SynchronousDelete())
+		require.NoError(t, err)
+	}
+	checkAllReleasable(t, c, sb, true)
+
+	// Multi-stage graph mirroring the issue reproducer: an earlier stage on
+	// baseA writes a random marker plus a stable file, a later step in the
+	// same stage depends on the first RUN and is forced to re-run by the
+	// bust value; the final stage on the different baseB copies the results.
+	//
+	// The first RUN writes content that changes whenever it re-executes, so
+	// a cache miss (the dropped record) is observable on the second build.
+	buildDef := func(bust string) (*llb.Definition, error) {
+		build := llb.Image(baseA).
+			Run(llb.Shlex("sh -c 'echo stable > /stable && head -c 100 /dev/urandom | sha256sum > /stable-id'")).
+			Run(llb.Shlex("sh -c 'echo " + bust + " > /bust'"))
+		final := llb.Image(baseB).
+			File(llb.Copy(build.Root(), "/stable-id", "/stable-id")).
+			File(llb.Copy(build.Root(), "/bust", "/bust"))
+		return final.Marshal(sb.Context())
+	}
+
+	cacheRef := registry + "/buildkit/stargz-crossstagecache:" + identity.NewID()
+	cacheEntry := []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":            cacheRef,
+			"mode":           "max",
+			"compression":    "estargz",
+			"oci-mediatypes": "true",
+		},
+	}}
+
+	def1, err := buildDef("1")
+	require.NoError(t, err)
+	firstOutput := t.TempDir()
+	_, err = c.Solve(sb.Context(), def1, SolveOpt{
+		Exports:      []ExportEntry{{Type: ExporterLocal, OutputDir: firstOutput}},
+		CacheExports: cacheEntry,
+	}, nil)
+	require.NoError(t, err)
+
+	stableID, err := os.ReadFile(filepath.Join(firstOutput, "stable-id"))
+	require.NoError(t, err)
+
+	// Drop all local state so the second build must be restored from the
+	// exported registry cache.
+	ensurePruneAll(t, c, sb)
+
+	// Rebuild with a different bust value so the second RUN of the build
+	// stage re-runs, which requires the first RUN's record (and its lazy
+	// base layers) to have been exported.
+	def2, err := buildDef("2")
+	require.NoError(t, err)
+	secondOutput := t.TempDir()
+	_, err = c.Solve(sb.Context(), def2, SolveOpt{
+		Exports:      []ExportEntry{{Type: ExporterLocal, OutputDir: secondOutput}},
+		CacheImports: cacheEntry,
+	}, nil)
+	require.NoError(t, err)
+
+	actualID, err := os.ReadFile(filepath.Join(secondOutput, "stable-id"))
+	require.NoError(t, err)
+	require.Equal(t, stableID, actualID,
+		"first RUN of the build stage was re-executed on cache import: its record was dropped from the mode=max cache export")
+}

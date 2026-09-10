@@ -42,6 +42,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testZstdRegistryCacheImportExport,
 	testStargzLazyInlineCacheImportExport,
 	testStargzLazyRegistryCacheImportExport,
+	testStargzCacheExportMaxCrossStageLazyBase,
 
 	// client_control_test.go
 	testCallInfo,
