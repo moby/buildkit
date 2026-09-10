@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/progress/progresswriter"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
@@ -138,7 +139,12 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		}
 		ap.mu.Unlock()
 		// credential information is provided, use oauth POST endpoint
-		resp, err := authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
+		var resp *authutil.OAuthTokenResponse
+		err := retryhandler.Retry(ctx, func() error {
+			var err error
+			resp, err = authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
+			return err
+		})
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -146,11 +152,16 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
-					resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
+					var fetchResp *authutil.FetchTokenResponse
+					err = retryhandler.Retry(ctx, func() error {
+						var err error
+						fetchResp, err = authutil.FetchToken(ctx, httpClient, nil, to)
+						return err
+					})
 					if err != nil {
 						return nil, err
 					}
-					return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresInSeconds), nil
+					return toTokenResponse(fetchResp.Token, fetchResp.IssuedAt, fetchResp.ExpiresInSeconds), nil
 				}
 			}
 			return nil, err
@@ -158,7 +169,12 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresInSeconds), nil
 	}
 	// do request anonymously
-	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
+	var resp *authutil.FetchTokenResponse
+	err = retryhandler.Retry(ctx, func() error {
+		var err error
+		resp, err = authutil.FetchToken(ctx, httpClient, nil, to)
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}

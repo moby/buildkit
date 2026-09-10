@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	"github.com/moby/buildkit/version"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -385,7 +386,12 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		}()
 		// try GET first because Docker Hub does not support POST
 		// switch once support has landed
-		resp, err := auth.FetchToken(ctx, ah.client, nil, to)
+		var resp *auth.FetchTokenResponse
+		err := retryhandler.Retry(ctx, func() error {
+			var err error
+			resp, err = auth.FetchToken(ctx, ah.client, nil, to)
+			return err
+		})
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -393,15 +399,20 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
-					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
+					var oauthResp *auth.OAuthTokenResponse
+					err = retryhandler.Retry(ctx, func() error {
+						var err error
+						oauthResp, err = auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
+						return err
+					})
 					if err != nil {
 						return nil, err
 					}
-					if resp.ExpiresInSeconds == 0 {
-						resp.ExpiresInSeconds = defaultExpiration
+					if oauthResp.ExpiresInSeconds == 0 {
+						oauthResp.ExpiresInSeconds = defaultExpiration
 					}
-					issuedAt, expires = resp.IssuedAt, resp.ExpiresInSeconds
-					token = resp.AccessToken
+					issuedAt, expires = oauthResp.IssuedAt, oauthResp.ExpiresInSeconds
+					token = oauthResp.AccessToken
 					return nil, nil
 				}
 				bklog.G(ctx).WithFields(logrus.Fields{
@@ -419,7 +430,12 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		return nil, nil
 	}
 	// do request anonymously
-	resp, err := auth.FetchToken(ctx, ah.client, hdr, to)
+	var resp *auth.FetchTokenResponse
+	err = retryhandler.Retry(ctx, func() error {
+		var err error
+		resp, err = auth.FetchToken(ctx, ah.client, hdr, to)
+		return err
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
