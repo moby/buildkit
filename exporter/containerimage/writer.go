@@ -386,6 +386,9 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefC
 	if refCfg.Compression.Level != nil {
 		attr = append(attr, attribute.Int("exportLayers.compressionLevel", *refCfg.Compression.Level))
 	}
+	if refCfg.Compression.Threads != nil {
+		attr = append(attr, attribute.Int("exportLayers.compressionThreads", *refCfg.Compression.Threads))
+	}
 	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(attr...))
 
 	eg, ctx := errgroup.WithContext(ctx)

@@ -54,9 +54,10 @@ var (
 )
 
 type Config struct {
-	Type  Type
-	Force bool
-	Level *int
+	Type    Type
+	Force   bool
+	Level   *int
+	Threads *int // number of threads used for parallel compression, 0 for all CPUs
 }
 
 func New(t Type) Config {
@@ -72,6 +73,11 @@ func (c Config) SetForce(v bool) Config {
 
 func (c Config) SetLevel(l int) Config {
 	c.Level = &l
+	return c
+}
+
+func (c Config) SetThreads(n int) Config {
+	c.Threads = &n
 	return c
 }
 
