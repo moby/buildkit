@@ -22,6 +22,13 @@ const (
 	minioBin = "minio"
 	mcBin    = "mc"
 	mcAlias  = "buildkit"
+
+	// mcTimeout bounds a single one-shot mc invocation. These run on
+	// t.Context(), which is only canceled once the test returns, so the
+	// sandbox timeout does not cover them: without a deadline of their own a
+	// wedged server keeps the test running until the whole test binary hits
+	// its go test deadline, and the test that hung is never reported.
+	mcTimeout = 30 * time.Second
 )
 
 type MinioOpts struct {
@@ -87,24 +94,33 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	// that no mc invocation can miss it: mc treats "<alias>/<bucket>" of an
 	// unknown alias as a local path and silently succeeds on the filesystem.
 	mcEnv := append(os.Environ(), "MC_CONFIG_DIR="+t.TempDir())
-	mcCmd := func(args ...string) *exec.Cmd {
-		cmd := exec.CommandContext(t.Context(), mcBin, args...)
+	mcCmd := func(ctx context.Context, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, mcBin, args...)
 		cmd.Env = mcEnv
 		return cmd
 	}
+	runMc := func(args ...string) error {
+		ctx, cancel := context.WithTimeout(t.Context(), mcTimeout)
+		defer cancel()
+		err := integration.RunCmd(mcCmd(ctx, args...), sb.Logs())
+		if err != nil && ctx.Err() != nil && t.Context().Err() == nil {
+			return errors.Wrapf(err, "mc %s did not finish within %s", args[0], mcTimeout)
+		}
+		return err
+	}
 
 	// create alias config
-	if err := integration.RunCmd(mcCmd("alias", "set", mcAlias, address, opts.AccessKeyID, opts.SecretAccessKey), sb.Logs()); err != nil {
+	if err := runMc("alias", "set", mcAlias, address, opts.AccessKeyID, opts.SecretAccessKey); err != nil {
 		return "", "", nil, err
 	}
 
 	// create bucket
-	if err := integration.RunCmd(mcCmd("mb", "--region", opts.Region, fmt.Sprintf("%s/%s", mcAlias, bucket)), sb.Logs()); err != nil {
+	if err := runMc("mb", "--region", opts.Region, fmt.Sprintf("%s/%s", mcAlias, bucket)); err != nil {
 		return "", "", nil, err
 	}
 
 	// trace
-	traceStop, err := integration.StartCmd(mcCmd("admin", "trace", "--json", mcAlias), sb.Logs())
+	traceStop, err := integration.StartCmd(mcCmd(t.Context(), "admin", "trace", "--json", mcAlias), sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
