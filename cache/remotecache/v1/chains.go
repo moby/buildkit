@@ -343,25 +343,30 @@ func (c *item) addChild(src *item, index int, selector string) {
 }
 
 func (c *item) addResult(r solver.CacheExportResult) {
-	var exists bool
 	for _, rr := range c.results {
-		if !rr.CreatedAt.Equal(r.CreatedAt) {
-			continue
+		if sameResult(rr, r) {
+			return
 		}
-		if len(rr.Result.Descriptors) != len(r.Result.Descriptors) {
-			continue
-		}
-		for i, d := range rr.Result.Descriptors {
-			if d.Digest != r.Result.Descriptors[i].Digest {
-				continue
-			}
-		}
-		exists = true
-		break
 	}
-	if !exists {
-		c.results = append(c.results, r)
+	c.results = append(c.results, r)
+}
+
+// sameResult reports whether two results describe the same remote, i.e. they
+// were created at the same time and reference the same blob chain. Results that
+// differ only in their provider are considered the same.
+func sameResult(a, b solver.CacheExportResult) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return false
 	}
+	if len(a.Result.Descriptors) != len(b.Result.Descriptors) {
+		return false
+	}
+	for i, d := range a.Result.Descriptors {
+		if d.Digest != b.Result.Descriptors[i].Digest {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *item) computeID() {
@@ -395,14 +400,15 @@ func (c *item) computeID() {
 	c.id = string(h.Sum(nil))
 }
 
-func (c *item) bestResult() *solver.CacheExportResult {
-	if len(c.results) == 0 {
-		return nil
-	}
-	slices.SortFunc(c.results, func(a, b solver.CacheExportResult) int {
+// sortedResults returns the results of the item, most recent first. Not all of
+// them are necessarily usable: a result whose provider cannot resolve its
+// descriptors cannot be marshalled into the cache config, so the caller needs
+// to be able to fall back to the next candidate.
+func (c *item) sortedResults() []solver.CacheExportResult {
+	slices.SortStableFunc(c.results, func(a, b solver.CacheExportResult) int {
 		return b.CreatedAt.Compare(a.CreatedAt)
 	})
-	return &c.results[0]
+	return c.results
 }
 
 func (c *item) walkChildren(fn func(i *item) error, visited map[*item]struct{}) error {
