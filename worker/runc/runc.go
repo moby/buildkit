@@ -144,6 +144,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Root:             root,
 		Labels:           xlabels,
 		MetadataStore:    md,
+		ContentMetadata:  db,
 		NetworkProviders: np,
 		ProxyProvider:    proxyProvider,
 		Executor:         exe,

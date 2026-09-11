@@ -2,6 +2,7 @@ package bboltcachestorage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -62,6 +63,14 @@ func (s *Store) Exists(id string) bool {
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func (s *Store) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResult, error) {
+	c, ok := s.db.(db.Compactor)
+	if !ok {
+		return db.CompactResult{Reason: "database does not support compaction"}, nil
+	}
+	return c.Compact(ctx, opt)
 }
 
 func (s *Store) Walk(fn func(id string) error) error {

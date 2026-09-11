@@ -683,7 +683,8 @@ func (c *Controller) gc() {
 		return
 	}
 
-	eg, ctx := errgroup.WithContext(context.TODO())
+	ctx := context.Background()
+	eg, pruneCtx := errgroup.WithContext(ctx)
 
 	var size int64
 	ch := make(chan client.UsageInfo)
@@ -698,7 +699,7 @@ func (c *Controller) gc() {
 	for _, w := range workers {
 		eg.Go(func() error {
 			if policy := w.GCPolicy(); len(policy) > 0 {
-				return w.Prune(ctx, ch, policy...)
+				return w.Prune(pruneCtx, ch, policy...)
 			}
 			return nil
 		})
@@ -713,6 +714,63 @@ func (c *Controller) gc() {
 	if size > 0 {
 		bklog.G(ctx).Debugf("gc cleaned up %d bytes", size)
 		go c.throttledReleaseUnreferenced()
+	}
+
+	c.compactDatabases(ctx, workers)
+}
+
+type metadataCompactor interface {
+	MetadataDatabases() map[string]db.Compactor
+}
+
+// compactDatabases compacts the cache, history and worker metadata databases
+// one at a time so that only one compacted copy occupies disk space at once.
+func (c *Controller) compactDatabases(ctx context.Context, workers []worker.Worker) {
+	opts := db.CompactOptions{
+		MinReclaimBytes:   256 << 20,
+		MinReclaimPercent: 25,
+		MinInterval:       time.Hour,
+		CopyTimeout:       30 * time.Second,
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(errors.WithStack(context.Canceled))
+	go func() {
+		select {
+		case <-c.opt.GracefulStop:
+			cancel(errors.WithStack(context.Canceled))
+		case <-ctx.Done():
+		}
+	}()
+	compact := func(name string, database db.Compactor) {
+		if context.Cause(ctx) != nil {
+			return
+		}
+		res, err := database.Compact(ctx, opts)
+		if err != nil {
+			bklog.G(ctx).WithError(err).Errorf("compaction of %s returned an error (compacted=%t, size=%d -> %d)", name, res.Compacted, res.SizeBefore, res.SizeAfter)
+			return
+		}
+		if !res.Compacted {
+			bklog.G(ctx).Debugf("skipped compaction of %s (%d of %d bytes reclaimable): %s", name, res.Reclaimable, res.SizeBefore, res.Reason)
+			return
+		}
+		bklog.G(ctx).Infof("compacted %s from %d to %d bytes in %s", name, res.SizeBefore, res.SizeAfter, res.Duration)
+	}
+
+	if c.opt.CacheStore != nil {
+		compact("cache database", c.opt.CacheStore)
+	}
+	if hdb, ok := c.opt.HistoryDB.(db.Compactor); ok {
+		compact("history database", hdb)
+	}
+	for _, w := range workers {
+		mc, ok := w.(metadataCompactor)
+		if !ok {
+			continue
+		}
+		for name, database := range mc.MetadataDatabases() {
+			compact(name+" of worker "+w.ID(), database)
+		}
 	}
 }
 

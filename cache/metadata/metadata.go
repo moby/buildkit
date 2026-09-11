@@ -235,6 +235,15 @@ func (s *Store) Close() error {
 	return errors.WithStack(s.db.Close())
 }
 
+func (s *Store) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResult, error) {
+	c, ok := s.db.(db.Compactor)
+	if !ok {
+		return db.CompactResult{Reason: "database does not support compaction"}, nil
+	}
+	res, err := c.Compact(ctx, opt)
+	return res, errors.WithStack(err)
+}
+
 type StorageItem struct {
 	id      string
 	vmu     sync.RWMutex
