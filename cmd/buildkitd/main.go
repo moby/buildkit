@@ -553,8 +553,12 @@ func defaultConfigPath() string {
 
 func loadConfigFile(c *cli.Command) (config.Config, error) {
 	cfg, err := config.LoadFile(c.String("config"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return config.Config{}, err
+	if err != nil {
+		// If a user explicitly passes a config file, we want to fail loudly.
+		// On the other hand, an absent default config path should not fail.
+		if c.IsSet("config") || !errors.Is(err, os.ErrNotExist) {
+			return config.Config{}, err
+		}
 	}
 	return cfg, nil
 }
