@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path"
@@ -14,14 +16,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/images"
+	ctdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	cerrdefs "github.com/containerd/errdefs"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/helpers"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -391,30 +398,205 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer cleanup()
 
+	o := CacheOptionsEntry{
+		Type:  "s3",
+		Attrs: s3CacheAttrs(opts, s3Addr, s3Bucket),
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o}, []CacheOptionsEntry{o})
+	require.NotZero(t, putRequests.Load())
+}
+
+func testZstdS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendS3,
+	)
+
+	opts := helpers.MinioOpts{
+		Region:          "us-east-1",
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin",
+	}
+
+	s3Addr, s3Bucket, cleanup, err := helpers.NewMinioServer(t, sb, opts)
+	require.NoError(t, err)
+	defer cleanup()
+
+	// the key layout is set explicitly so that the objects can be read back
+	// below from the same attributes the daemon was given
+	attrs := s3CacheAttrs(opts, s3Addr, s3Bucket)
+	attrs["prefix"] = "cache/"
+	attrs["manifests_prefix"] = "manifests/"
+	attrs["blobs_prefix"] = "blobs/"
+	attrs["name"] = "zstd"
+
+	exAttrs := maps.Clone(attrs)
+	exAttrs["compression"] = "zstd"
+	exAttrs["force-compression"] = "true"
+
 	im := CacheOptionsEntry{
-		Type: "s3",
-		Attrs: map[string]string{
-			"region":            opts.Region,
-			"access_key_id":     opts.AccessKeyID,
-			"secret_access_key": opts.SecretAccessKey,
-			"bucket":            s3Bucket,
-			"endpoint_url":      s3Addr,
-			"use_path_style":    "true",
-		},
+		Type:  "s3",
+		Attrs: attrs,
 	}
 	ex := CacheOptionsEntry{
-		Type: "s3",
-		Attrs: map[string]string{
-			"region":            opts.Region,
-			"access_key_id":     opts.AccessKeyID,
-			"secret_access_key": opts.SecretAccessKey,
-			"bucket":            s3Bucket,
-			"endpoint_url":      s3Addr,
-			"use_path_style":    "true",
-		},
+		Type:  "s3",
+		Attrs: exAttrs,
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
-	require.NotZero(t, putRequests.Load())
+
+	s3c := newS3TestClient(opts, s3Addr)
+
+	// the exported layers must be zstd, otherwise the compression attributes
+	// were ignored and the default was used instead
+	requireS3CacheCompression(t, sb, s3c, exAttrs, compression.Zstd)
+
+	// the build above only creates new layers, which are born in the requested
+	// compression; force-compression must also convert layers that already
+	// exist in another one, so export a result that includes the gzip layers
+	// of the base image under a separate manifest
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "echo -n zstd > /data"`)).Root()
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	forcedAttrs := maps.Clone(exAttrs)
+	forcedAttrs["name"] = "forced"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type:  "s3",
+				Attrs: forcedAttrs,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	layers := requireS3CacheCompression(t, sb, s3c, forcedAttrs, compression.Zstd)
+	require.Greater(t, len(layers), 1, "expected the base image layers to be exported next to the new one")
+}
+
+func testUncompressedS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendS3,
+	)
+
+	opts := helpers.MinioOpts{
+		Region:          "us-east-1",
+		AccessKeyID:     "minioadmin",
+		SecretAccessKey: "minioadmin",
+	}
+
+	s3Addr, s3Bucket, cleanup, err := helpers.NewMinioServer(t, sb, opts)
+	require.NoError(t, err)
+	defer cleanup()
+
+	// the key layout is set explicitly so that the objects can be read back
+	// below from the same attributes the daemon was given
+	attrs := s3CacheAttrs(opts, s3Addr, s3Bucket)
+	attrs["prefix"] = "cache/"
+	attrs["manifests_prefix"] = "manifests/"
+	attrs["blobs_prefix"] = "blobs/"
+	attrs["name"] = "uncompressed"
+
+	exAttrs := maps.Clone(attrs)
+	exAttrs["compression"] = "uncompressed"
+	exAttrs["force-compression"] = "true"
+
+	im := CacheOptionsEntry{
+		Type:  "s3",
+		Attrs: attrs,
+	}
+	ex := CacheOptionsEntry{
+		Type:  "s3",
+		Attrs: exAttrs,
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+
+	// uncompressed is the other end of the range: the blob digest equals the
+	// diffID and the media type carries no compression suffix. A silent gzip
+	// fallback would still round-trip above, so what the manifest records is
+	// the only thing that proves the attributes were honored.
+	requireS3CacheCompression(t, sb, newS3TestClient(opts, s3Addr), exAttrs, compression.Uncompressed)
+}
+
+// s3CacheAttrs returns the attributes of an s3 cache import or export entry
+// pointing at the minio server started with opts.
+func s3CacheAttrs(opts helpers.MinioOpts, addr, bucket string) map[string]string {
+	return map[string]string{
+		"region":            opts.Region,
+		"access_key_id":     opts.AccessKeyID,
+		"secret_access_key": opts.SecretAccessKey,
+		"bucket":            bucket,
+		"endpoint_url":      addr,
+		"use_path_style":    "true",
+	}
+}
+
+func newS3TestClient(opts helpers.MinioOpts, addr string) *s3.Client {
+	return s3.NewFromConfig(aws.Config{
+		Region:      opts.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(opts.AccessKeyID, opts.SecretAccessKey, ""),
+	}, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(addr)
+		o.UsePathStyle = true
+	})
+}
+
+// requireS3CacheCompression reads the cache manifest written by an export with
+// attrs and checks that every layer it references is recorded as comp and that
+// the stored blob really is in that format.
+func requireS3CacheCompression(t *testing.T, sb integration.Sandbox, s3c *s3.Client, attrs map[string]string, comp compression.Type) []cacheimporttypes.CacheLayer {
+	t.Helper()
+
+	var frame ctdcompression.Compression
+	switch comp {
+	case compression.Uncompressed:
+		frame = ctdcompression.Uncompressed
+	case compression.Gzip:
+		frame = ctdcompression.Gzip
+	case compression.Zstd:
+		frame = ctdcompression.Zstd
+	default:
+		t.Fatalf("cannot detect %s blobs", comp)
+	}
+
+	dt := getS3Object(t, sb, s3c, attrs["bucket"], attrs["prefix"]+attrs["manifests_prefix"]+attrs["name"])
+	var config cacheimporttypes.CacheConfig
+	require.NoError(t, json.Unmarshal(dt, &config))
+
+	require.NotEmpty(t, config.Layers)
+	for _, l := range config.Layers {
+		require.NotNil(t, l.Annotations)
+		require.True(t, compression.IsMediaType(comp, l.Annotations.MediaType),
+			"layer %s has media type %q, expected %s", l.Blob, l.Annotations.MediaType, comp)
+
+		blob := getS3Object(t, sb, s3c, attrs["bucket"], attrs["prefix"]+attrs["blobs_prefix"]+l.Blob.String())
+		require.Equal(t, frame, ctdcompression.DetectCompression(blob), "layer %s is not %s", l.Blob, comp)
+	}
+	return config.Layers
+}
+
+func getS3Object(t *testing.T, sb integration.Sandbox, s3c *s3.Client, bucket, key string) []byte {
+	t.Helper()
+
+	out, err := s3c.GetObject(sb.Context(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	require.NoError(t, err)
+	defer out.Body.Close()
+
+	dt, err := io.ReadAll(out.Body)
+	require.NoError(t, err)
+	return dt
 }
 
 func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {

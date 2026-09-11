@@ -208,20 +208,26 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 			return nil, err
 		}
 
+		compressionConfig, err := compression.ParseAttributes(attrs)
+		if err != nil {
+			return nil, err
+		}
+
 		s3Client, err := newS3Client(ctx, config)
 		if err != nil {
 			return nil, err
 		}
 		cc := v1.NewCacheChains()
-		return &exporter{CacheExporterTarget: cc, chains: cc, s3Client: s3Client, config: config}, nil
+		return &exporter{CacheExporterTarget: cc, chains: cc, s3Client: s3Client, config: config, compression: compressionConfig}, nil
 	}
 }
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains   *v1.CacheChains
-	s3Client *s3Client
-	config   Config
+	chains      *v1.CacheChains
+	s3Client    *s3Client
+	config      Config
+	compression compression.Config
 }
 
 func (*exporter) Name() string {
@@ -230,7 +236,7 @@ func (*exporter) Name() string {
 
 func (e *exporter) Config() remotecache.Config {
 	return remotecache.Config{
-		Compression: compression.New(compression.Default),
+		Compression: e.compression,
 	}
 }
 
