@@ -18,8 +18,8 @@ import (
 
 	authutil "github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
-	"github.com/docker/cli/cli/config"
-	"github.com/docker/cli/cli/config/types"
+	"github.com/docker/cli/v29/cli/config"
+	"github.com/docker/cli/v29/cli/config/types"
 	cleanhttp "github.com/hashicorp/go-cleanhttp"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
