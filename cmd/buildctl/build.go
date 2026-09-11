@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/containerd/continuity"
-	"github.com/docker/cli/cli/config"
+	"github.com/docker/cli/v29/cli/config"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
