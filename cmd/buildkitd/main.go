@@ -267,7 +267,7 @@ func main() {
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-		cfg, err := config.LoadFile(c.String("config"))
+		cfg, err := loadConfigFile(c)
 		if err != nil {
 			return err
 		}
@@ -551,9 +551,17 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
+func loadConfigFile(c *cli.Command) (config.Config, error) {
+	cfg, err := config.LoadFile(c.String("config"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return config.Config{}, err
+	}
+	return cfg, nil
+}
+
 func defaultConf() (config.Config, error) {
 	cfg, err := config.LoadFile(defaultConfigPath())
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
 			return config.Config{}, err

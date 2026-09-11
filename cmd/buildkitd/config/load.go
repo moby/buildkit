@@ -21,9 +21,6 @@ func Load(r io.Reader) (Config, error) {
 func LoadFile(fp string) (Config, error) {
 	f, err := os.Open(fp)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Config{}, nil
-		}
 		return Config{}, errors.Wrapf(err, "failed to load config from %s", fp)
 	}
 	defer f.Close()
