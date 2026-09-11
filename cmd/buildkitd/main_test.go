@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -44,17 +45,25 @@ func runApplyMainFlags(t *testing.T, args []string, cfg *config.Config) error {
 func TestLoadConfigFile(t *testing.T) {
 	fp := filepath.Join(t.TempDir(), "buildkitd.toml")
 
-	_, err := runLoadConfigFile(t, fp, []string{"--config", fp})
+	_, _, err := runLoadConfigFile(t, fp, []string{"--config", fp})
 	require.ErrorContains(t, err, fp)
 
-	_, err = runLoadConfigFile(t, fp, nil)
+	_, found, err := runLoadConfigFile(t, fp, nil)
 	require.NoError(t, err)
+	require.False(t, found)
+
+	require.NoError(t, os.WriteFile(fp, nil, 0644))
+
+	_, found, err = runLoadConfigFile(t, fp, nil)
+	require.NoError(t, err)
+	require.True(t, found)
 }
 
-func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (config.Config, error) {
+func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (config.Config, bool, error) {
 	t.Helper()
 
 	var cfg config.Config
+	var found bool
 	cmd := &cli.Command{
 		Name: "buildkitd",
 		Flags: []cli.Flag{
@@ -65,9 +74,9 @@ func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (config.
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			var err error
-			cfg, err = loadConfigFile(cmd)
+			cfg, found, err = loadConfigFile(cmd)
 			return err
 		},
 	}
-	return cfg, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
+	return cfg, found, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
 }
