@@ -101,6 +101,8 @@ var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceCon
 
 const telemetryShutdownTimeout = 5 * time.Second
 
+const configMissingErrorEnv = "BUILDKITD_CONFIG_MISSING_ERROR"
+
 type workerInitializerOpt struct {
 	compaction     []compaction.Config
 	config         *config.Config
@@ -271,14 +273,15 @@ func main() {
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-		cfg, err := loadConfigFile(c)
+		// Keep track of any warnings we need to print to the log and wait until after
+		// the logger is configured before we write them to the log file.
+		var warnings []string
+
+		cfg, err := loadConfigFile(c, &warnings)
 		if err != nil {
 			return err
 		}
 
-		// Keep track of any warnings we need to print to the log and wait until after
-		// the logger is configured before we write them to the log file.
-		var warnings []string
 		if cfg.Debug { //nolint:staticcheck
 			warnings = append(warnings, "'debug' configuration option is deprecated, use 'log.level = \"debug\"' instead")
 		}
@@ -558,12 +561,31 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
-func loadConfigFile(c *cli.Command) (config.Config, error) {
+func loadConfigFile(c *cli.Command, warnings *[]string) (config.Config, error) {
 	cfg, err := config.LoadFile(c.String("config"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	switch {
+	case err == nil:
+		return cfg, nil
+	case !errors.Is(err, os.ErrNotExist):
+		return config.Config{}, err
+	case !c.IsSet("config"):
+		return config.Config{}, nil
+	}
+
+	v, ok := os.LookupEnv(configMissingErrorEnv)
+	if !ok {
+		*warnings = append(*warnings, fmt.Sprintf("%v; this will become an error in a future release, set %s=0 to keep ignoring it", err, configMissingErrorEnv))
+		return config.Config{}, nil
+	}
+	fail, perr := strconv.ParseBool(v)
+	if perr != nil {
+		return config.Config{}, errors.Wrapf(perr, "invalid %s", configMissingErrorEnv)
+	}
+	if fail {
 		return config.Config{}, err
 	}
-	return cfg, nil
+	*warnings = append(*warnings, err.Error())
+	return config.Config{}, nil
 }
 
 func defaultConf() (config.Config, error) {
