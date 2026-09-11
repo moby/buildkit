@@ -267,7 +267,7 @@ func main() {
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-		cfg, err := config.LoadFile(c.String("config"))
+		cfg, configFound, err := loadConfigFile(c)
 		if err != nil {
 			return err
 		}
@@ -310,6 +310,12 @@ func main() {
 				return errors.Wrap(err, "unsupported log level")
 			}
 			logrus.SetLevel(level)
+		}
+
+		if configFound {
+			bklog.G(ctx).Infof("using config file %q", c.String("config"))
+		} else {
+			bklog.G(ctx).Infof("no config file found at %q, using defaults", c.String("config"))
 		}
 
 		if logrus.IsLevelEnabled(logrus.WarnLevel) {
@@ -551,9 +557,22 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
+func loadConfigFile(c *cli.Command) (config.Config, bool, error) {
+	cfg, err := config.LoadFile(c.String("config"))
+	if err != nil {
+		// If a user explicitly passes a config file, we want to fail loudly.
+		// On the other hand, an absent default config path should not fail.
+		if c.IsSet("config") || !errors.Is(err, os.ErrNotExist) {
+			return config.Config{}, false, err
+		}
+		return cfg, false, nil
+	}
+	return cfg, true, nil
+}
+
 func defaultConf() (config.Config, error) {
 	cfg, err := config.LoadFile(defaultConfigPath())
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
 			return config.Config{}, err
