@@ -49,6 +49,7 @@ import (
 	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/progress"
@@ -89,6 +90,7 @@ type WorkerOpt struct {
 	GarbageCollect   func(context.Context) (gc.Stats, error)
 	ParallelismSem   *semaphore.Weighted
 	MetadataStore    *metadata.Store
+	ContentMetadata  db.Compactor
 	MountPoolRoot    string
 	ResourceMonitor  *resources.Monitor
 	CDIManager       *cdidevices.Manager
@@ -245,6 +247,14 @@ func (w *Worker) GarbageCollect(ctx context.Context) error {
 	}
 	_, err := w.WorkerOpt.GarbageCollect(ctx)
 	return err
+}
+
+func (w *Worker) MetadataDatabases() map[string]db.Compactor {
+	dbs := map[string]db.Compactor{"metadata_v2.db": w.MetadataStore}
+	if w.ContentMetadata != nil {
+		dbs["containerdmeta.db"] = w.ContentMetadata
+	}
+	return dbs
 }
 
 func (w *Worker) Close() error {

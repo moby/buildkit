@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/util/db/boltutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
@@ -95,7 +96,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	db, err := bolt.Open(filepath.Join(root, "containerdmeta.db"), 0644, &bolt.Options{
+	db, err := boltutil.Open(filepath.Join(root, "containerdmeta.db"), 0644, &bolt.Options{
 		FreelistType: bolt.FreelistMapType,
 	})
 	if err != nil {
@@ -143,6 +144,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Root:             root,
 		Labels:           xlabels,
 		MetadataStore:    md,
+		ContentMetadata:  db,
 		NetworkProviders: np,
 		ProxyProvider:    proxyProvider,
 		Executor:         exe,

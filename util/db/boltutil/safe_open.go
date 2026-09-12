@@ -28,7 +28,11 @@ func SafeOpen(dbPath string, mode os.FileMode, opts *bolt.Options) (db db.DB, er
 			db, err = fallbackOpen(dbPath, mode, opts, err)
 		}
 	}()
-	return Open(dbPath, mode, opts)
+	opened, err := Open(dbPath, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return opened, nil
 }
 
 // fallbackOpen performs database recovery and opens a new database
@@ -42,10 +46,13 @@ func fallbackOpen(dbPath string, mode os.FileMode, opts *bolt.Options, openErr e
 	if err := os.Rename(dbPath, backupPath); err != nil {
 		return nil, errors.Wrapf(err, "failed to rename database file %s to %s", dbPath, backupPath)
 	}
-
 	// Attempt to open the database again. This should be a new database.
 	// If this fails, it is a permanent error.
-	return Open(dbPath, mode, opts)
+	opened, err := Open(dbPath, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return opened, nil
 }
 
 // fileHasContent checks if we have access to the file with appropriate
