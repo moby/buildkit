@@ -160,6 +160,9 @@ cert="cert.pem"
 nameservers=["1.1.1.1","8.8.8.8"]
 options=["edns0"]
 searchDomains=["example.com"]
+
+[system]
+sessionAuthTimeout="48h"
 `
 
 	cfg, err := Load(bytes.NewBuffer([]byte(testConfig)))
@@ -234,6 +237,9 @@ searchDomains=["example.com"]
 	require.Equal(t, []string{"1.1.1.1", "8.8.8.8"}, cfg.DNS.Nameservers)
 	require.Equal(t, []string{"example.com"}, cfg.DNS.SearchDomains)
 	require.Equal(t, []string{"edns0"}, cfg.DNS.Options)
+
+	require.NotNil(t, cfg.System)
+	require.Equal(t, 48*time.Hour, cfg.System.SessionAuthTimeout.Duration)
 }
 
 func TestLoadHistoryMaxEntries(t *testing.T) {
@@ -258,6 +264,34 @@ func TestLoadHistoryMaxEntries(t *testing.T) {
 				require.Equal(t, tc.want, *cfg.History.MaxEntries)
 			} else {
 				require.Nil(t, cfg.History.MaxEntries)
+			}
+		})
+	}
+}
+
+func TestLoadSessionAuthTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		toml    string
+		wantSet bool
+		want    time.Duration
+	}{
+		{name: "unset", toml: "[system]\n"},
+		{name: "disabled", toml: "[system]\nsessionAuthTimeout = 0\n", wantSet: true, want: 0},
+		{name: "configured", toml: "[system]\nsessionAuthTimeout = 300\n", wantSet: true, want: 300 * time.Second},
+		{name: "duration-string", toml: "[system]\nsessionAuthTimeout = \"48h\"\n", wantSet: true, want: 48 * time.Hour},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := Load(bytes.NewBufferString(tc.toml))
+			require.NoError(t, err)
+			require.NotNil(t, cfg.System)
+			if tc.wantSet {
+				require.NotNil(t, cfg.System.SessionAuthTimeout)
+				require.Equal(t, tc.want, cfg.System.SessionAuthTimeout.Duration)
+			} else {
+				require.Nil(t, cfg.System.SessionAuthTimeout)
 			}
 		})
 	}
