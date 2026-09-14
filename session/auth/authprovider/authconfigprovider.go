@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/cli/cli/config/configfile"
-	"github.com/docker/cli/cli/config/types"
+	"github.com/docker/cli/v29/cli/config/configfile"
+	"github.com/docker/cli/v29/cli/config/types"
 )
 
 func LoadAuthConfig(config *configfile.ConfigFile) AuthConfigProvider {

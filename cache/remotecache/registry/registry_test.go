@@ -12,8 +12,8 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
-	"github.com/docker/cli/cli/config/configfile"
-	"github.com/docker/cli/cli/config/types"
+	"github.com/docker/cli/v29/cli/config/configfile"
+	"github.com/docker/cli/v29/cli/config/types"
 	cacheimport "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"

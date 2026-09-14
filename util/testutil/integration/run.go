@@ -23,7 +23,7 @@ import (
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/platforms"
-	"github.com/docker/cli/cli/config"
+	"github.com/docker/cli/v29/cli/config"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"

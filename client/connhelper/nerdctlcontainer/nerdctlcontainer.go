@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/docker/cli/cli/connhelper/commandconn"
+	"github.com/docker/cli/v29/cli/connhelper/commandconn"
 	"github.com/moby/buildkit/client/connhelper"
 	"github.com/pkg/errors"
 )
