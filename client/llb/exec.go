@@ -14,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// windowsSSHAgentPipe is the fixed named pipe that Windows OpenSSH uses to
+// reach the SSH agent. It is the default SSH mount target on Windows.
+const windowsSSHAgentPipe = `\\.\pipe\openssh-ssh-agent`
+
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
 	e := &ExecOp{base: base, constraints: c, proxyEnv: proxyEnv}
 	root := base.Output()
@@ -131,6 +135,18 @@ func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 	return nil
 }
 
+// marshalOS returns the target OS for this exec, preferring the marshal-time
+// constraints platform, then the op's own platform, and defaulting to linux.
+func (e *ExecOp) marshalOS(c *Constraints) string {
+	if c.Platform != nil {
+		return c.Platform.OS
+	}
+	if e.constraints.Platform != nil {
+		return e.constraints.Platform.OS
+	}
+	return "linux"
+}
+
 func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	cache := e.cache.Acquire()
 	defer cache.Release()
@@ -153,25 +169,37 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	if len(e.ssh) > 0 {
-		for i, s := range e.ssh {
-			if s.Target == "" {
-				e.ssh[i].Target = fmt.Sprintf("/run/buildkit/ssh_agent.%d", i)
+		if e.marshalOS(c) == "windows" {
+			// Windows OpenSSH always connects to the fixed named pipe
+			// \\.\pipe\openssh-ssh-agent and ignores SSH_AUTH_SOCK. Every mount
+			// shares that single destination (there is no per-mount default like
+			// the Unix ssh_agent.N sockets), so default empty targets to the pipe
+			// and reject duplicates that would otherwise silently collide.
+			seen := make(map[string]struct{}, len(e.ssh))
+			for i := range e.ssh {
+				if e.ssh[i].Target == "" {
+					e.ssh[i].Target = windowsSSHAgentPipe
+				}
+				if _, ok := seen[e.ssh[i].Target]; ok {
+					return "", nil, nil, nil, errors.Errorf("multiple SSH mounts target the same Windows pipe %q; specify a distinct target for each", e.ssh[i].Target)
+				}
+				seen[e.ssh[i].Target] = struct{}{}
 			}
-		}
-		if _, ok := env.Get("SSH_AUTH_SOCK"); !ok {
-			env = env.AddOrReplace("SSH_AUTH_SOCK", e.ssh[0].Target)
+		} else {
+			for i, s := range e.ssh {
+				if s.Target == "" {
+					e.ssh[i].Target = fmt.Sprintf("/run/buildkit/ssh_agent.%d", i)
+				}
+			}
+			if _, ok := env.Get("SSH_AUTH_SOCK"); !ok {
+				env = env.AddOrReplace("SSH_AUTH_SOCK", e.ssh[0].Target)
+			}
 		}
 	}
 	if c.Caps != nil {
 		if err := c.Caps.Supports(pb.CapExecMetaSetsDefaultPath); err != nil {
-			os := "linux"
-			if c.Platform != nil {
-				os = c.Platform.OS
-			} else if e.constraints.Platform != nil {
-				os = e.constraints.Platform.OS
-			}
 			// don't set PATH on Windows. #5445
-			if os != "windows" {
+			if os := e.marshalOS(c); os != "windows" {
 				env = env.SetDefault("PATH", system.DefaultPathEnv(os))
 			}
 		} else {

@@ -291,7 +291,11 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		} else {
 			mws := MountWithSession(mountable, g)
 			dest := m.Dest
-			if !system.IsAbs(filepath.Clean(dest), platform) {
+			if system.IsNamedPipePath(dest, platform) {
+				// Windows named pipe destinations (e.g. a forwarded SSH agent
+				// at \\.\pipe\openssh-ssh-agent) are device paths used verbatim;
+				// they must not be cleaned or joined to the working directory.
+			} else if !system.IsAbs(filepath.Clean(dest), platform) {
 				dest = filepath.Join("/", cwd, dest)
 			}
 			mws.Dest = dest

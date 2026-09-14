@@ -220,6 +220,20 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		}
 		releasers = append(releasers, release)
 		for _, mount := range mounts {
+			// Windows named pipes (e.g. a forwarded SSH agent) are handed
+			// straight to HCS: they cannot be locally mounted by the
+			// snapshotter and their destination (e.g. \\.\pipe\openssh-ssh-agent)
+			// must be preserved verbatim rather than rooted to C:\.
+			if isNamedPipeMount(mount) {
+				s.Mounts = append(s.Mounts, specs.Mount{
+					Destination: filepath.FromSlash(m.Dest),
+					Type:        normalizeMountType(mount.Type),
+					Source:      mount.Source,
+					Options:     mount.Options,
+				})
+				continue
+			}
+
 			mount, release, err := compactLongOverlayMount(mount, m.Readonly)
 			if err != nil {
 				releaseAll()
