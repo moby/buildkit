@@ -168,9 +168,10 @@ func main() {
 
 	app.Flags = append(app.Flags,
 		&cli.StringFlag{
-			Name:  "config",
-			Usage: "path to config file",
-			Value: defaultConfigPath(),
+			Name:    "config",
+			Usage:   "path to config file",
+			Value:   defaultConfigPath(),
+			Sources: cli.EnvVars("BUILDKITD_CONFIG"),
 		},
 		&cli.BoolFlag{
 			Name:  "debug",
