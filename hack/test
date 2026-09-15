@@ -155,6 +155,8 @@ baseCreateFlags="--rm --privileged $dockerConfigMount \
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
   cid=$(dockerCmd create $baseCreateFlags \
+    --tmpfs /boltutil-disk:rw,size=128m,mode=1777 \
+    -e BUILDKIT_TEST_BOLTUTIL_DISK_DIR=/boltutil-disk \
     ${BUILDKIT_INTEGRATION_SNAPSHOTTER:+"-eBUILDKIT_INTEGRATION_SNAPSHOTTER"} \
     -e SKIP_INTEGRATION_TESTS \
     $TEST_IMAGE_NAME \
