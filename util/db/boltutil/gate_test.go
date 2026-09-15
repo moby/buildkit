@@ -9,6 +9,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGateClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var g gate
+		require.True(t, g.enter())
+		closed := make(chan struct{})
+		go func() {
+			g.close()
+			close(closed)
+		}()
+		synctest.Wait()
+		require.False(t, g.enter(), "nested transactions must fail instead of blocking shutdown")
+		select {
+		case <-closed:
+			t.Fatal("closed before the transaction finished")
+		default:
+		}
+		g.exit()
+		<-closed
+		require.False(t, g.enter())
+	})
+}
+
 func TestGateDrain(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var g gate
