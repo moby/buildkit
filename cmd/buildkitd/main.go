@@ -50,6 +50,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/util/db/boltutil"
+	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/moby/buildkit/util/disk"
 	"github.com/moby/buildkit/util/grpcerrors"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
@@ -100,6 +101,7 @@ var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceCon
 const telemetryShutdownTimeout = 5 * time.Second
 
 type workerInitializerOpt struct {
+	compaction     []compaction.Config
 	config         *config.Config
 	sessionManager *session.Manager
 	traceSocket    string
@@ -849,6 +851,14 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 }
 
 func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp metric.MeterProvider) (*control.Controller, error) {
+	compactionPolicy, err := cfg.Compaction.Policy()
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid compaction configuration")
+	}
+	var policies []compaction.Config
+	if cfg.Compaction.Enabled {
+		policies = append(policies, compactionPolicy)
+	}
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -874,6 +884,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 	}
 
 	wc, err := newWorkerController(c, workerInitializerOpt{
+		compaction:     policies,
 		config:         cfg,
 		sessionManager: sessionManager,
 		traceSocket:    traceSocket,
@@ -894,7 +905,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 		frontends["gateway.v0"] = gwfe
 	}
 
-	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"))
+	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"), policies...)
 	if err != nil {
 		return nil, err
 	}
@@ -902,7 +913,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 
 	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, &bolt.Options{
 		FreelistType: bolt.FreelistMapType,
-	})
+	}, policies...)
 	if err != nil {
 		return nil, err
 	}

@@ -2,11 +2,62 @@ package config
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/db/compaction"
+
 	"github.com/stretchr/testify/require"
 )
+
+func TestCompactionConfig(t *testing.T) {
+	for _, enabled := range []string{"", "[compaction]\nenabled = false", "[compaction]\nenabled = true"} {
+		cfg, err := Load(strings.NewReader(enabled))
+		require.NoError(t, err)
+		require.Equal(t, strings.Contains(enabled, "true"), cfg.Compaction.Enabled)
+		policy, err := cfg.Compaction.Policy()
+		require.NoError(t, err)
+		require.Equal(t, compaction.DefaultConfig(), policy)
+	}
+	cfg, err := Load(strings.NewReader(`[compaction]
+enabled = true
+idleTimeout = "5m"
+maxRetry = 0
+writeWatermark = 1234
+minReclaimBytes = 536870912
+minReclaimPercent = 40
+`))
+	require.NoError(t, err)
+	policy, err := cfg.Compaction.Policy()
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Minute, policy.IdleTimeout)
+	require.Zero(t, policy.MaxRetry)
+	require.Equal(t, uint64(1234), policy.WriteWatermark)
+	require.Equal(t, int64(536870912), policy.MinReclaimBytes)
+	require.Equal(t, int64(40), policy.MinReclaimPercent)
+}
+
+func TestInvalidCompactionConfig(t *testing.T) {
+	for _, setting := range []string{
+		`idleTimeout = "0s"`,
+		`idleTimeout = "-1s"`,
+		`maxRetry = -1`,
+		`writeWatermark = 0`,
+		`minReclaimBytes = 0`,
+		`minReclaimBytes = -1`,
+		`minReclaimPercent = 0`,
+		`minReclaimPercent = -1`,
+		`minReclaimPercent = 101`,
+	} {
+		t.Run(setting, func(t *testing.T) {
+			cfg, err := Load(strings.NewReader("[compaction]\nenabled = true\n" + setting))
+			require.NoError(t, err)
+			_, err = cfg.Compaction.Policy()
+			require.Error(t, err)
+		})
+	}
+}
 
 func TestLoad(t *testing.T) {
 	const testConfig = `

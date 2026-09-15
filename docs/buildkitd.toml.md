@@ -71,6 +71,21 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # active-build events. Existing records remain available until normal GC.
   maxEntries = 50
 
+[compaction]
+  # Opt-in metadata database maintenance, independent of cache GC.
+  enabled = false
+  # Writes count committed transactions. Low-yield copies raise this watermark.
+  writeWatermark = 100000
+  # Both reclaimability thresholds must also be reached.
+  minReclaimBytes = 268435456
+  # Percentage of the database file estimated to be reclaimable.
+  minReclaimPercent = 25
+  # Wait for no active transactions and this interval without database activity.
+  idleTimeout = "1m"
+  # Cancel this many attempts for arriving writers, then let the next copy finish.
+  # Writers may wait for the full copy duration. Zero forces the first attempt.
+  maxRetry = 3
+
 [worker.oci]
   enabled = true
   # platforms is manually configure platforms, detected automatically if unset.

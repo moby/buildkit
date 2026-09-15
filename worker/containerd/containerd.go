@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
@@ -30,6 +31,7 @@ import (
 type RuntimeInfo = containerdexecutor.RuntimeInfo
 
 type WorkerOptions struct {
+	Compaction      []compaction.Config
 	Root            string
 	Address         string
 	SnapshotterName string
@@ -135,7 +137,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		}
 	}
 
-	md, err := metadata.NewStore(filepath.Join(root, "metadata_v2.db"))
+	md, err := metadata.NewStore(filepath.Join(root, "metadata_v2.db"), workerOpts.Compaction...)
 	if err != nil {
 		return base.WorkerOpt{}, err
 	}
