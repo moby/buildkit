@@ -70,6 +70,7 @@ type CompactionConfig struct {
 
 func (c CompactionConfig) Policy() (compaction.Config, error) {
 	policy := compaction.DefaultConfig()
+	policy.ManualOnly = !c.Enabled
 	if c.IdleTimeout != nil {
 		policy.IdleTimeout = c.IdleTimeout.Duration
 	}

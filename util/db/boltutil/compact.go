@@ -17,7 +17,6 @@ import (
 const (
 	compactSuffix       = ".compact"
 	compactTxMaxSize    = 16 << 20
-	compactHeadroom     = 64 << 20
 	defaultPauseTimeout = 30 * time.Second
 )
 
@@ -31,7 +30,9 @@ type dbSize struct {
 }
 
 func (d *DB) CompactionStats() (db.CompactionStats, error) {
-	d.hmu.Lock()
+	if !d.hmu.TryLock() {
+		return db.CompactionStats{}, db.ErrCompactionBusy
+	}
 	defer d.hmu.Unlock()
 	if d.closed {
 		return db.CompactionStats{}, errors.New("database is closed")
@@ -44,7 +45,7 @@ func (d *DB) CompactionStats() (db.CompactionStats, error) {
 // It requires enough free disk space to hold both files until replacement.
 func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResult, error) {
 	if !d.hmu.TryLock() {
-		return db.CompactResult{Reason: "database maintenance in progress"}, nil
+		return db.CompactResult{Reason: db.ErrCompactionBusy.Error()}, nil
 	}
 	defer d.hmu.Unlock()
 
@@ -88,6 +89,10 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 	pauseCtx, cancel := context.WithTimeoutCause(ctx, pauseTimeout, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 	d.lastCompact = time.Now()
+	select {
+	case opt.Progress <- "draining transactions":
+	default:
+	}
 	if !d.gate.pause(pauseCtx) {
 		if err := context.Cause(ctx); err != nil {
 			return res, err
@@ -112,6 +117,10 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 		return res, err
 	}
 	start := time.Now()
+	select {
+	case opt.Progress <- "copying and replacing database":
+	default:
+	}
 	if opt.CopyTimeout > 0 {
 		var cancelCopy context.CancelFunc
 		ctx, cancelCopy = context.WithTimeoutCause(ctx, opt.CopyTimeout, errors.WithStack(context.DeadlineExceeded))
@@ -161,8 +170,7 @@ func checkDiskSpace(p string, sz dbSize) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to stat filesystem for compaction")
 	}
-	live := max(sz.file-sz.free, 0)
-	if dstat.Available < live+live/10+compactHeadroom {
+	if dstat.Available < (db.CompactionStats{Size: sz.file, Reclaimable: sz.free}).RequiredSpace() {
 		return "insufficient free disk space for compacted copy", nil
 	}
 	return "", nil
