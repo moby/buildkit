@@ -5,10 +5,19 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
+
+func TestCompactionPolicy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metadata.db")
+	s, err := NewStore(path, compaction.DefaultConfig())
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+	require.FileExists(t, path+".compact-state")
+}
 
 func TestGetSetSearch(t *testing.T) {
 	t.Parallel()

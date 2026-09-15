@@ -5,7 +5,7 @@ import (
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/db"
+	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -14,7 +14,15 @@ import (
 // If the database file is corrupted, it backs up the corrupted file and creates
 // a new empty database. This is useful for disposable databases like cache or
 // history where data loss is acceptable but startup failure is not.
-func SafeOpen(dbPath string, mode os.FileMode, opts *bolt.Options) (db db.DB, err error) {
+func SafeOpen(dbPath string, mode os.FileMode, opts *bolt.Options, policies ...compaction.Config) (*DB, error) {
+	d, err := safeOpen(dbPath, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return d.initialize(policies)
+}
+
+func safeOpen(dbPath string, mode os.FileMode, opts *bolt.Options) (db *DB, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = errors.Errorf("%v", r)
@@ -28,7 +36,7 @@ func SafeOpen(dbPath string, mode os.FileMode, opts *bolt.Options) (db db.DB, er
 			db, err = fallbackOpen(dbPath, mode, opts, err)
 		}
 	}()
-	opened, err := Open(dbPath, mode, opts)
+	opened, err := open(dbPath, mode, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +46,7 @@ func SafeOpen(dbPath string, mode os.FileMode, opts *bolt.Options) (db db.DB, er
 // fallbackOpen performs database recovery and opens a new database
 // file when the database fails to open. Called after the first database
 // open fails.
-func fallbackOpen(dbPath string, mode os.FileMode, opts *bolt.Options, openErr error) (db.DB, error) {
+func fallbackOpen(dbPath string, mode os.FileMode, opts *bolt.Options, openErr error) (*DB, error) {
 	backupPath := dbPath + "." + identity.NewID() + ".bak"
 	bklog.L.Errorf("failed to open database file %s, resetting to empty. Old database is backed up to %s. "+
 		"This error signifies that buildkitd likely crashed or was sigkilled abruptly, leaving the database corrupted. "+
@@ -48,7 +56,7 @@ func fallbackOpen(dbPath string, mode os.FileMode, opts *bolt.Options, openErr e
 	}
 	// Attempt to open the database again. This should be a new database.
 	// If this fails, it is a permanent error.
-	opened, err := Open(dbPath, mode, opts)
+	opened, err := open(dbPath, mode, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +66,6 @@ func fallbackOpen(dbPath string, mode os.FileMode, opts *bolt.Options, openErr e
 // fileHasContent checks if we have access to the file with appropriate
 // permissions and the file has a non-zero size.
 func fileHasContent(dbPath string) bool {
-	st, err := os.Stat(dbPath)
+	st, err := os.Stat(dbPath) // #nosec G703 -- Database paths are daemon configuration, not build input.
 	return err == nil && st.Size() > 0
 }

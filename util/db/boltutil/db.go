@@ -1,7 +1,6 @@
 package boltutil
 
 import (
-	"context"
 	stderrors "errors"
 	"io/fs"
 	"os"
@@ -22,6 +21,7 @@ type DB struct {
 	mode     fs.FileMode
 	opts     *bolt.Options
 	pageSize int
+	fresh    bool
 
 	gate gate
 
@@ -38,16 +38,15 @@ var (
 	_ db.Compactor = (*DB)(nil)
 )
 
-func Open(p string, mode fs.FileMode, options *bolt.Options) (*DB, error) {
-	return OpenWithCompaction(p, mode, options, compaction.DefaultConfig())
-}
-
-// OpenWithCompaction opens a database with an idle maintenance policy.
-// Read-only databases never start maintenance or write policy state.
-func OpenWithCompaction(p string, mode fs.FileMode, options *bolt.Options, config compaction.Config) (*DB, error) {
-	if err := config.Validate(); err != nil {
+func Open(p string, mode fs.FileMode, options *bolt.Options, policies ...compaction.Config) (*DB, error) {
+	d, err := open(p, mode, options)
+	if err != nil {
 		return nil, err
 	}
+	return d.initialize(policies)
+}
+
+func open(p string, mode fs.FileMode, options *bolt.Options) (*DB, error) {
 	if options == nil {
 		options = bolt.DefaultOptions
 	}
@@ -63,16 +62,19 @@ func OpenWithCompaction(p string, mode fs.FileMode, options *bolt.Options, confi
 			bklog.L.WithError(err).Warnf("failed to remove stale compaction file for %s", p)
 		}
 	}
-	d := &DB{path: p, mode: mode, opts: &opts, pageSize: bdb.Info().PageSize, bdb: bdb}
-	if !opts.ReadOnly {
-		backend := policyBackend{d}
-		// Policy state is advisory. Failure must not trigger SafeOpen's database recovery.
-		var state compaction.State
-		if !newDB {
-			state = backend.load()
+	return &DB{path: p, mode: mode, opts: &opts, pageSize: bdb.Info().PageSize, bdb: bdb, fresh: newDB}, nil
+}
+
+func (d *DB) initialize(policies []compaction.Config) (*DB, error) {
+	if len(policies) > 1 {
+		return nil, stderrors.Join(errors.New("only one compaction policy may be attached"), d.Close())
+	}
+	if len(policies) == 1 && !d.opts.ReadOnly {
+		policy, err := compaction.NewFile(policies[0], d.path, d.fresh, d)
+		if err != nil {
+			return nil, stderrors.Join(err, d.Close())
 		}
-		ctx := bklog.WithLogger(context.Background(), bklog.L.WithField("database", p))
-		d.policy, _ = compaction.New(ctx, config, state, backend)
+		d.policy = policy
 	}
 	return d, nil
 }
