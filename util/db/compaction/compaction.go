@@ -24,6 +24,8 @@ var (
 )
 
 type Config struct {
+	// ManualOnly observes activity but starts copies only for explicit requests.
+	ManualOnly      bool
 	WriteWatermark  uint64
 	MinReclaimBytes int64
 	IdleTimeout     time.Duration
@@ -78,6 +80,9 @@ type Scheduler struct {
 	retries   int
 	attempt   context.CancelCauseFunc
 	stopping  bool
+	manual    bool
+	requests  chan *Request
+	path      string
 }
 
 // New starts maintenance. Call Close before closing the backend.
@@ -88,14 +93,15 @@ func New(ctx context.Context, config Config, state State, backend Backend) (*Sch
 	state.WriteWatermark = max(state.WriteWatermark, config.WriteWatermark)
 	ctx, stop := context.WithCancelCause(ctx)
 	s := &Scheduler{
-		config:  config,
-		backend: backend,
-		ctx:     ctx,
-		stop:    stop,
-		wake:    make(chan struct{}, 1),
-		done:    make(chan struct{}),
-		state:   state,
-		lastUse: time.Now(),
+		config:   config,
+		backend:  backend,
+		ctx:      ctx,
+		stop:     stop,
+		wake:     make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		state:    state,
+		lastUse:  time.Now(),
+		requests: make(chan *Request, 1),
 	}
 	go s.run()
 	return s, nil
@@ -105,7 +111,7 @@ func New(ctx context.Context, config Config, state State, backend Backend) (*Sch
 func (s *Scheduler) Begin(write bool) {
 	s.mu.Lock()
 	s.active++
-	if write && s.attempt != nil && s.retries < s.config.MaxRetry {
+	if write && s.attempt != nil && (s.manual || s.retries < s.config.MaxRetry) {
 		s.attempt(errWriter)
 	}
 	s.mu.Unlock()
@@ -124,7 +130,7 @@ func (s *Scheduler) End(committed bool) {
 		s.state.Writes++
 		crossed = s.state.Writes == s.state.WriteWatermark
 	}
-	wake := idle && (s.pending || s.stopping) || crossed
+	wake := idle && (s.pending || s.stopping || s.manual) || crossed
 	s.mu.Unlock()
 	if wake {
 		select {
@@ -136,6 +142,9 @@ func (s *Scheduler) End(committed bool) {
 
 // Stop cancels and joins maintenance before the backend is closed.
 func (s *Scheduler) Stop() {
+	if s.path != "" {
+		files.CompareAndDelete(s.path, s)
+	}
 	s.mu.Lock()
 	s.stopping = true
 	s.mu.Unlock()
@@ -166,6 +175,16 @@ func (s *Scheduler) save() error {
 
 func (s *Scheduler) run() {
 	defer close(s.done)
+	defer func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.manual = false
+		select {
+		case r := <-s.requests:
+			r.done <- Outcome{Error: "compaction scheduler stopped"}
+		default:
+		}
+	}()
 	ticker := time.NewTicker(checkpointInterval)
 	defer ticker.Stop()
 	timer := time.NewTimer(s.config.IdleTimeout)
@@ -183,7 +202,7 @@ func (s *Scheduler) run() {
 				at = s.notBefore
 			}
 			delay = max(time.Until(at), 0)
-		} else if !s.pending && s.state.Writes >= s.state.WriteWatermark {
+		} else if !s.config.ManualOnly && !s.pending && s.state.Writes >= s.state.WriteWatermark {
 			delay = max(time.Until(s.nextCheck), 0)
 		}
 		s.mu.Unlock()
@@ -191,6 +210,8 @@ func (s *Scheduler) run() {
 		select {
 		case <-s.ctx.Done():
 		case <-s.wake:
+		case req := <-s.requests:
+			s.runRequest(req, ticker.C)
 		case <-timer.C:
 			s.compact()
 		case <-ticker.C:
@@ -202,6 +223,9 @@ func (s *Scheduler) run() {
 }
 
 func (s *Scheduler) check() {
+	if s.config.ManualOnly {
+		return
+	}
 	s.mu.Lock()
 	eligible := !s.pending && s.state.Writes >= s.state.WriteWatermark && !time.Now().Before(s.nextCheck)
 	if eligible {
@@ -213,7 +237,9 @@ func (s *Scheduler) check() {
 	}
 	stats, err := s.backend.CompactionStats()
 	if err != nil {
-		bklog.G(s.ctx).WithError(err).Warn("failed to check database compaction watermark")
+		if !errors.Is(err, db.ErrCompactionBusy) {
+			bklog.G(s.ctx).WithError(err).Warn("failed to check database compaction watermark")
+		}
 		return
 	}
 	percent := s.config.MinReclaimPercent
@@ -226,7 +252,7 @@ func (s *Scheduler) check() {
 
 func (s *Scheduler) compact() {
 	s.mu.Lock()
-	if !s.pending || s.active != 0 || time.Since(s.lastUse) < s.config.IdleTimeout || time.Now().Before(s.notBefore) || context.Cause(s.ctx) != nil {
+	if s.manual || !s.pending || s.active != 0 || time.Since(s.lastUse) < s.config.IdleTimeout || time.Now().Before(s.notBefore) || context.Cause(s.ctx) != nil {
 		s.mu.Unlock()
 		return
 	}

@@ -856,7 +856,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 		return nil, errors.Wrap(err, "invalid compaction configuration")
 	}
 	var policies []compaction.Config
-	if cfg.Compaction.Enabled {
+	if cfg.Compaction.Enabled || cfg.GRPC.DebugAddress != "" {
 		policies = append(policies, compactionPolicy)
 	}
 	sessionManager, err := session.NewManager()

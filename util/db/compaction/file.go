@@ -5,11 +5,24 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db"
 	"github.com/pkg/errors"
 )
+
+var files sync.Map
+
+// Files returns the databases with an attached compaction policy.
+func Files() map[string]*Scheduler {
+	result := map[string]*Scheduler{}
+	files.Range(func(key, value any) bool {
+		result[key.(string)] = value.(*Scheduler)
+		return true
+	})
+	return result
+}
 
 // NewFile starts a policy with checkpoints beside the database. Its lifetime is
 // controlled by Stop and Close, rather than by a build request's context.
@@ -20,7 +33,13 @@ func NewFile(config Config, path string, fresh bool, database db.Compactor) (*Sc
 		state = backend.load()
 	}
 	ctx := bklog.WithLogger(context.Background(), bklog.L.WithField("database", path))
-	return New(ctx, config, state, backend)
+	s, err := New(ctx, config, state, backend)
+	if err != nil {
+		return nil, err
+	}
+	s.path = path
+	files.Store(path, s)
+	return s, nil
 }
 
 type fileBackend struct {

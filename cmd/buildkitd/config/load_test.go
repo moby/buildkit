@@ -18,7 +18,9 @@ func TestCompactionConfig(t *testing.T) {
 		require.Equal(t, strings.Contains(enabled, "true"), cfg.Compaction.Enabled)
 		policy, err := cfg.Compaction.Policy()
 		require.NoError(t, err)
-		require.Equal(t, compaction.DefaultConfig(), policy)
+		expected := compaction.DefaultConfig()
+		expected.ManualOnly = !cfg.Compaction.Enabled
+		require.Equal(t, expected, policy)
 	}
 	cfg, err := Load(strings.NewReader(`[compaction]
 enabled = true
