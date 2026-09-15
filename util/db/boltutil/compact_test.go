@@ -355,7 +355,7 @@ func TestCompactConcurrentTransactions(t *testing.T) {
 		go func() {
 			errCh <- func() error {
 				for i := range writesPerActor {
-					if _, err := d.CompactionStats(); err != nil {
+					if _, err := d.CompactionStats(); err != nil && !errors.Is(err, db.ErrCompactionBusy) {
 						return err
 					}
 					n := w*writesPerActor + i
@@ -600,6 +600,17 @@ func TestCompactConcurrentMaintenance(t *testing.T) {
 				done <- err
 			}()
 			<-ctx.ready
+			statsDone := make(chan error, 1)
+			go func() {
+				_, err := d.CompactionStats()
+				statsDone <- err
+			}()
+			select {
+			case err := <-statsDone:
+				require.ErrorIs(t, err, db.ErrCompactionBusy)
+			case <-time.After(time.Second):
+				t.Fatal("inspection blocked behind compaction")
+			}
 			fi, err := os.Stat(ctx.path)
 			require.NoError(t, err)
 			var closed chan error

@@ -44,6 +44,8 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/cache/lookup", http.HandlerFunc(handleCacheLookup))
 	m.Handle("/debug/cache/store", http.HandlerFunc(handleDebugCacheStore))
 	m.Handle("POST /debug/cache/load", http.HandlerFunc(handleCacheLoad))
+	m.HandleFunc("GET /debug/compaction", handleCompactionStatus)
+	m.HandleFunc("POST /debug/compaction", handleCompactionRequest)
 
 	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		runtime.GC()
