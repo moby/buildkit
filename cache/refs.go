@@ -1666,8 +1666,13 @@ func (sr *mutableRef) release(ctx context.Context) (rerr error) {
 				}
 				return nil
 			}
-			if err := sr.equalImmutable.remove(ctx, false); err != nil {
-				return err
+			// the immutable may have become another record's parent since it
+			// was committed, in which case removing it here would strand that
+			// record on a parent the manager no longer knows about
+			if len(sr.equalImmutable.refs) == 0 {
+				if err := sr.equalImmutable.remove(ctx, false); err != nil {
+					return err
+				}
 			}
 		}
 		return sr.remove(ctx, true)
