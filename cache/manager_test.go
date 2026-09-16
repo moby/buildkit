@@ -2514,6 +2514,184 @@ func TestLoadBrokenParents(t *testing.T) {
 	require.Len(t, refA.(*immutableRef).refs, 1)
 }
 
+func TestDiskUsageMissingParent(t *testing.T) {
+	// Defence in depth for the parent walk: a record whose parent is not in
+	// the usage map must not take the daemon down. Release no longer removes a
+	// referenced parent, so the gap is made here directly rather than through
+	// the cache API.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mutRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	parent, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	parentID := parent.ID()
+
+	otherMut, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	other, err := otherMut.Commit(ctx)
+	require.NoError(t, err)
+	otherID := other.ID()
+
+	child, err := cm.Merge(ctx, []ImmutableRef{parent, other}, nil)
+	require.NoError(t, err)
+	childID := child.ID()
+
+	// the rescan loop only walks the parents of unreferenced records
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, other.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
+
+	cm.mu.Lock()
+	childRec, ok := cm.records[childID]
+	require.True(t, ok)
+	// parent is listed first, so the parent after it is only reached if the
+	// walk continues past the missing entry instead of aborting
+	require.Equal(t, parentID, childRec.mergeParents[0].ID())
+	require.Equal(t, otherID, childRec.mergeParents[1].ID())
+	delete(cm.records, parentID)
+	cm.mu.Unlock()
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+
+	byID := map[string]*client.UsageInfo{}
+	for _, r := range du {
+		byID[r.ID] = r
+	}
+
+	// the missing parent is absent from the accounting, but the child that
+	// names it is still reported and still names it
+	require.NotContains(t, byID, parentID)
+	require.Contains(t, byID, childID)
+	require.Equal(t, []string{parentID, otherID}, byID[childID].Parents)
+
+	// the whole chain is unreferenced, so nothing may be reported as in use
+	for _, r := range du {
+		require.False(t, r.InUse, r.ID)
+	}
+}
+
+func TestDiskUsageSkippedParent(t *testing.T) {
+	// The other way a parent goes missing from the usage map: it is still held
+	// by the manager, but paired with a mutable and unreferenced, so the
+	// duplicate check drops it. Keeping a referenced equalImmutable on release
+	// does not close this one, so the guard has to cover it too.
+	//
+	// There is no known API path to an unreferenced record that is still a
+	// parent, so the refs are cleared directly here.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mutRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	parent, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	parentID := parent.ID()
+
+	mutRef, err = cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	other, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	otherID := other.ID()
+
+	child, err := cm.Merge(ctx, []ImmutableRef{parent, other}, nil)
+	require.NoError(t, err)
+	childID := child.ID()
+
+	// leave an equalMutable on disk for the parent, as a crash between
+	// committing a snapshot and clearing the field would
+	spare, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	require.NoError(t, parent.(*immutableRef).setEqualMutable(spare.ID()))
+	require.NoError(t, parent.(*immutableRef).commitMetadata())
+
+	require.NoError(t, cm.Close())
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager.(*cacheManager)
+
+	cm.mu.Lock()
+	parentRec, ok := cm.records[parentID]
+	require.True(t, ok)
+	require.NotNil(t, parentRec.equalMutable)
+	childRec, ok := cm.records[childID]
+	require.True(t, ok)
+	// parent is listed first, so the parent after it is only reached if the
+	// walk continues past the skipped entry instead of aborting
+	require.Equal(t, parentID, childRec.mergeParents[0].ID())
+	require.Equal(t, otherID, childRec.mergeParents[1].ID())
+	// paired and unreferenced is what the duplicate check drops
+	parentRec.refs = map[ref]struct{}{}
+	cm.mu.Unlock()
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+
+	byID := map[string]*client.UsageInfo{}
+	for _, r := range du {
+		byID[r.ID] = r
+	}
+
+	// the parent never left the manager, it was only skipped
+	cm.mu.Lock()
+	require.Contains(t, cm.records, parentID)
+	cm.mu.Unlock()
+	require.NotContains(t, byID, parentID)
+
+	require.Contains(t, byID, childID)
+	require.Equal(t, []string{parentID, otherID}, byID[childID].Parents)
+
+	// the whole chain is unreferenced, so nothing may be reported as in use
+	for _, r := range du {
+		require.False(t, r.InUse, r.ID)
+	}
+}
+
 func TestCalculateKeepBytes(t *testing.T) {
 	ts := []struct {
 		name      string
