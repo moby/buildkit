@@ -1,17 +1,140 @@
 package resolver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	dockerauth "github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
+
+type tokenRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f tokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestAuthFetcherRetry(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		anonymous bool
+		nested    bool
+		statuses  []int // Zero simulates a dropped connection.
+		methods   []string
+	}{
+		{"get eof", false, false, []int{0, http.StatusOK}, []string{http.MethodGet, http.MethodGet}},
+		{"anonymous eof", true, false, []int{0, http.StatusOK}, []string{http.MethodGet, http.MethodGet}},
+		{"fallback eof", false, false, []int{http.StatusUnauthorized, 0, http.StatusOK}, []string{http.MethodGet, http.MethodPost, http.MethodPost}},
+		{"server error", false, false, []int{http.StatusServiceUnavailable, http.StatusOK}, []string{http.MethodGet, http.MethodGet}},
+		{"forbidden", false, false, []int{http.StatusForbidden}, []string{http.MethodGet}},
+		{"nested exhausted", false, true, []int{0, 0, 0, 0}, []string{http.MethodGet, http.MethodGet, http.MethodGet, http.MethodGet}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				var methods []string
+				client := &http.Client{Transport: tokenRoundTripper(func(req *http.Request) (*http.Response, error) {
+					methods = append(methods, req.Method)
+					if len(methods) > len(tc.statuses) {
+						t.Error("unexpected token request")
+						return nil, errors.New("unexpected token request")
+					}
+					status := tc.statuses[len(methods)-1]
+					if status == 0 {
+						return nil, io.EOF
+					}
+					return &http.Response{
+						StatusCode: status,
+						Header:     http.Header{"Content-Type": {"application/json"}},
+						Body:       io.NopCloser(strings.NewReader(`{"token":"retried","access_token":"retried","expires_in":120}`)),
+						Request:    req,
+					}, nil
+				})}
+				opts := dockerauth.TokenOptions{Realm: "https://registry.example/token", Service: "registry.example"}
+				if !tc.anonymous {
+					opts.Username, opts.Secret = "user", "password"
+				}
+				fetcher := newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, opts)
+				var token string
+				fetch := func(ctx context.Context, _ ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+					var err error
+					token, err = fetcher.doBearerAuth(ctx, nil, nil)
+					return nil, err
+				}
+				if tc.nested {
+					fetch = retryhandler.New(fetch, nil)
+				}
+				start := time.Now()
+				_, err := fetch(t.Context(), ocispecs.Descriptor{})
+				if tc.statuses[len(tc.statuses)-1] == http.StatusOK {
+					require.NoError(t, err)
+					require.Equal(t, "Bearer retried", token)
+				} else {
+					require.Error(t, err)
+				}
+				if tc.nested {
+					require.ErrorIs(t, err, io.EOF)
+					require.Equal(t, 7*time.Second, time.Since(start))
+				}
+				require.Equal(t, tc.methods, methods)
+			})
+		})
+	}
+}
+
+func TestAuthorizeCancellationDuringTokenBackoff(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		attempts := 0
+		client := &http.Client{Transport: tokenRoundTripper(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return nil, io.EOF
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader(`{"token":"recovered","expires_in":120}`)),
+				Request:    req,
+			}, nil
+		})}
+		ns := newAuthHandlerNS(nil)
+		ns.set("registry.example", "", newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, dockerauth.TokenOptions{
+			Realm: "https://registry.example/token",
+		}))
+		authorizer := newDockerAuthorizer(client, ns, nil, nil)
+		ctx, cancel := context.WithCancelCause(t.Context())
+		defer cancel(context.Canceled)
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, "https://registry.example/v2/test/manifests/latest", nil)
+		done := make(chan error, 1)
+		go func() { done <- authorizer.Authorize(ctx, req) }()
+		synctest.Wait()
+		start := time.Now()
+		cancel(context.Canceled)
+		require.Error(t, <-done)
+		require.Equal(t, 1, attempts)
+		require.Zero(t, time.Since(start))
+
+		// Cancellation must release the namespace lock and the flightcontrol call
+		// so that another request can fetch and cache a token.
+		req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, req.URL.String(), nil)
+		require.NoError(t, authorizer.Authorize(t.Context(), req))
+		require.Equal(t, "Bearer recovered", req.Header.Get("Authorization"))
+		require.NoError(t, authorizer.Authorize(t.Context(), req))
+		require.Equal(t, 2, attempts)
+	})
+}
 
 func TestParseScopes(t *testing.T) {
 	for _, tc := range []struct {
