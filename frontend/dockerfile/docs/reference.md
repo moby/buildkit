@@ -1917,7 +1917,9 @@ COPY --chown=myuser:mygroup --chmod=644 files* /somedir/
 When using names instead of numeric IDs, BuildKit resolves them using
 `/etc/passwd` and `/etc/group` in the container's root filesystem. If these
 files are missing or don't contain the specified names, the build fails.
-Numeric IDs don't require this lookup.
+Numeric IDs don't require this lookup. When combined with
+[`--link`](#copy---link), files are copied into an empty filesystem, so names
+can't be resolved and `--chown` must use numeric IDs.
 
 The `--chown` flag is not supported when building Windows containers.
 

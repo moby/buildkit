@@ -468,3 +468,41 @@ func TestSourceStateFromSourceOpWrappedCopy(t *testing.T) {
 	assert.Equal(t, sourceOp.Identifier, rewrittenSourceOp.Identifier)
 	assert.Equal(t, sourceOp.Attrs, rewrittenSourceOp.Attrs)
 }
+
+func TestCopyLinkChownByName(t *testing.T) {
+	t.Parallel()
+
+	caps := pb.Caps.CapSet(pb.Caps.All())
+
+	for _, tc := range []struct {
+		name    string
+		flags   string
+		mergeOp bool
+		err     string
+	}{
+		{name: "numeric", flags: "--link --chown=1000:1000", mergeOp: true},
+		{name: "root", flags: "--link --chown=root:root", mergeOp: true},
+		{name: "user name", flags: "--link --chown=foo", mergeOp: true, err: "--chown=foo"},
+		{name: "user and group names", flags: "--link --chown=foo:bar", mergeOp: true, err: "--chown=foo:bar"},
+		{name: "group name", flags: "--link --chown=1000:bar", mergeOp: true, err: "--chown=1000:bar"},
+		{name: "user name without merge op", flags: "--link --chown=foo:bar", err: "--chown=foo:bar"},
+		{name: "user name with chmod", flags: "--link --chmod=644 --chown=foo:bar", mergeOp: true, err: "--chown=foo:bar"},
+		{name: "user name without link", flags: "--chown=foo:bar", mergeOp: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			df := "FROM scratch\nCOPY " + tc.flags + " a /b\n"
+			opt := ConvertOpt{}
+			if tc.mergeOp {
+				opt.LLBCaps = &caps
+			}
+			_, err := Dockerfile2LLB(appcontext.Context(), []byte(df), opt)
+			if tc.err == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.err)
+			require.ErrorContains(t, err, "--link")
+		})
+	}
+}
