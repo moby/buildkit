@@ -44,3 +44,6 @@ duration. Use the database path reported by GET:
 ```sh
 curl -N -X POST 'http://127.0.0.1:6060/debug/compaction?database=/var/lib/buildkit/cache.db'
 ```
+
+See the [compaction guide](../compaction.md) for scheduling, configuration, operational
+limits, and metrics.
