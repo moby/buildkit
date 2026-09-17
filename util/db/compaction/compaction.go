@@ -24,14 +24,13 @@ var (
 )
 
 type Config struct {
-	// ManualOnly observes activity but starts copies only for explicit requests.
-	ManualOnly      bool
-	WriteWatermark  uint64
-	MinReclaimBytes int64
-	IdleTimeout     time.Duration
-	MaxRetry        int
-	// MinReclaimPercent gates copies and determines whether a completed copy was useful.
+	ManualOnly        bool
+	WriteWatermark    uint64
+	MinReclaimBytes   int64
+	IdleTimeout       time.Duration
+	MaxRetry          int
 	MinReclaimPercent int64
+	Metrics           *Metrics `json:"-"`
 }
 
 func DefaultConfig() Config {
@@ -83,11 +82,17 @@ type Scheduler struct {
 	manual    bool
 	requests  chan *Request
 	path      string
+	metrics   *databaseMetrics
 }
 
 // New starts maintenance. Call Close before closing the backend.
 func New(ctx context.Context, config Config, state State, backend Backend) (*Scheduler, error) {
+	return newScheduler(ctx, config, state, backend, config.Metrics.attach(""))
+}
+
+func newScheduler(ctx context.Context, config Config, state State, backend Backend, metrics *databaseMetrics) (*Scheduler, error) {
 	if err := config.Validate(); err != nil {
+		metrics.close()
 		return nil, err
 	}
 	state.WriteWatermark = max(state.WriteWatermark, config.WriteWatermark)
@@ -102,6 +107,7 @@ func New(ctx context.Context, config Config, state State, backend Backend) (*Sch
 		state:    state,
 		lastUse:  time.Now(),
 		requests: make(chan *Request, 1),
+		metrics:  metrics,
 	}
 	go s.run()
 	return s, nil
@@ -175,6 +181,7 @@ func (s *Scheduler) save() error {
 
 func (s *Scheduler) run() {
 	defer close(s.done)
+	defer s.metrics.close()
 	defer func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -235,7 +242,7 @@ func (s *Scheduler) check() {
 	if !eligible {
 		return
 	}
-	stats, err := s.backend.CompactionStats()
+	stats, err := s.stats()
 	if err != nil {
 		if !errors.Is(err, db.ErrCompactionBusy) {
 			bklog.G(s.ctx).WithError(err).Warn("failed to check database compaction watermark")
@@ -246,6 +253,7 @@ func (s *Scheduler) check() {
 	if stats.Size > 0 && stats.Reclaimable >= s.config.MinReclaimBytes && stats.Reclaimable >= stats.Size/100*percent+(stats.Size%100*percent+99)/100 {
 		s.mu.Lock()
 		s.pending = true
+		s.metrics.wait(false, true)
 		s.mu.Unlock()
 	}
 }
@@ -266,6 +274,7 @@ func (s *Scheduler) compact() {
 	}
 	ctx, cancel := context.WithCancelCause(s.ctx)
 	s.attempt = cancel
+	s.metrics.wait(false, false)
 	writes := s.state.Writes
 	s.mu.Unlock()
 	res, err := s.backend.Compact(ctx, db.CompactOptions{MinReclaimBytes: s.config.MinReclaimBytes, MinReclaimPercent: s.config.MinReclaimPercent})
@@ -284,12 +293,14 @@ func (s *Scheduler) compact() {
 		}
 	} else if errors.Is(cause, errWriter) {
 		s.retries++
+		s.metrics.wait(false, true)
 	} else {
 		// Disk pressure or a failed drain must not cause a tight retry loop.
 		s.pending = false
 		s.nextCheck = time.Now().Add(checkpointInterval)
 	}
 	s.mu.Unlock()
+	s.recordAttempt(s.ctx, false, res, err, cause)
 	if err != nil && (cause == nil || res.Compacted) {
 		bklog.G(s.ctx).WithError(err).Warn("database compaction failed")
 	}

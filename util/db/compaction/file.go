@@ -33,7 +33,7 @@ func NewFile(config Config, path string, fresh bool, database db.Compactor) (*Sc
 		state = backend.load()
 	}
 	ctx := bklog.WithLogger(context.Background(), bklog.L.WithField("database", path))
-	s, err := New(ctx, config, state, backend)
+	s, err := newScheduler(ctx, config, state, backend, config.Metrics.attach(path))
 	if err != nil {
 		return nil, err
 	}

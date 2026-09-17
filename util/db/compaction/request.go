@@ -25,7 +25,7 @@ func (s *Scheduler) Inspect() (Status, error) {
 	status := Status{Config: s.config, State: s.state, Active: s.active, Pending: s.pending, Manual: s.manual}
 	s.mu.Unlock()
 	var err error
-	status.Stats, err = s.backend.CompactionStats()
+	status.Stats, err = s.stats()
 	return status, err
 }
 
@@ -64,6 +64,7 @@ func (s *Scheduler) Request(ctx context.Context) (*Request, error) {
 	}
 	r := &Request{ctx: ctx, events: make(chan string, 8), done: make(chan Outcome, 1)}
 	s.manual = true
+	s.metrics.wait(true, true)
 	s.requests <- r
 	return r, nil
 }
@@ -78,6 +79,7 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 		s.mu.Lock()
 		s.manual = false
 		s.attempt = nil
+		s.metrics.wait(true, false)
 		s.mu.Unlock()
 		r.done <- outcome
 	}()
@@ -95,9 +97,11 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 			select {
 			case capacity <- struct{}{}:
 				s.attempt = cancel
+				s.metrics.wait(true, false)
 				writes := s.state.Writes
 				s.mu.Unlock()
 				result, err := s.backend.Compact(ctx, db.CompactOptions{MinReclaimBytes: s.config.MinReclaimBytes, MinReclaimPercent: s.config.MinReclaimPercent, Progress: r.events})
+				cause := context.Cause(ctx)
 				<-capacity
 				outcome.Result = result
 				if err != nil {
@@ -109,8 +113,10 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 					s.state.Writes -= writes
 					s.pending = false
 					s.retries = 0
+					s.metrics.wait(false, false)
 				}
 				s.mu.Unlock()
+				s.recordAttempt(s.ctx, true, result, err, cause)
 				return
 			default:
 				delay = s.config.IdleTimeout
