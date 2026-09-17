@@ -24,6 +24,37 @@ func tempDB(t *testing.T) (*DB, func()) {
 	}
 }
 
+func TestNewDBCorrupt(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "cache-debug.db")
+	corrupt := []byte("corrupt database")
+	require.NoError(t, os.WriteFile(dbPath, corrupt, 0600))
+
+	db, err := NewDB(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	backups, err := filepath.Glob(dbPath + ".*.bak")
+	require.NoError(t, err)
+	require.Len(t, backups, 1)
+	backup, err := os.ReadFile(backups[0])
+	require.NoError(t, err)
+	require.Equal(t, corrupt, backup)
+
+	require.NoError(t, db.All(t.Context(), func(string, Type, []Frame) error {
+		t.Error("recovered database should be empty")
+		return nil
+	}))
+
+	data := []byte("hello world")
+	dgst, err := db.FromBytes(data, TypeString)
+	require.NoError(t, err)
+	db.Wait()
+	gotType, frames, err := db.Get(t.Context(), dgst.String())
+	require.NoError(t, err)
+	require.Equal(t, TypeString, gotType)
+	require.Equal(t, []Frame{{ID: FrameIDData, Data: data}}, frames)
+}
+
 func TestFromBytesAndGet(t *testing.T) {
 	db, cleanup := tempDB(t)
 	defer cleanup()
