@@ -34,7 +34,7 @@ jobs:
       -
         name: Generate matrix
         id: generate
-        uses: docker/bake-action/subaction/matrix@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
         with:
           target: validate
           fields: platforms
