@@ -46,7 +46,7 @@ type contentCacheImporter struct {
 }
 
 func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
-	dt, err := readBlob(ctx, ci.provider, desc)
+	dt, err := readBlob(ctx, ci.provider, desc, maxManifestBlobSize)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 		return ci.importInlineCache(ctx, dt, id, w)
 	}
 
-	dt, err = readBlob(ctx, ci.provider, configDesc)
+	dt, err = readBlob(ctx, ci.provider, configDesc, maxCacheConfigBlobSize)
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +129,18 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
 }
 
-func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {
-	maxBlobSize := int64(1 << 20)
+const (
+	// maxManifestBlobSize bounds the cache manifest (image manifest or index)
+	// read from the registry's manifest endpoint, which registries cap at a few MiB.
+	maxManifestBlobSize = int64(4 << 20)
+	// maxCacheConfigBlobSize bounds the cache config blob (records + layers,
+	// application/vnd.buildkit.cacheconfig.v0). It is served from the blob
+	// endpoint, so the manifest ceiling does not apply; a mode=max export of a
+	// large multi-stage build on a busy shared daemon reaches 1-2 MiB.
+	maxCacheConfigBlobSize = int64(16 << 20)
+)
+
+func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor, maxBlobSize int64) ([]byte, error) {
 	if desc.Size > maxBlobSize {
 		return nil, errors.Errorf("blob %s is too large (%d > %d)", desc.Digest, desc.Size, maxBlobSize)
 	}
