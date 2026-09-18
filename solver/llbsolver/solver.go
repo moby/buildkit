@@ -274,9 +274,8 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		fwd = gateway.NewBridgeForwarder(ctx, br, br, s.workerController.Infos(), req.FrontendInputs, sessionID, s.sm)
 		defer fwd.Discard()
 		// Register build before calling s.recordBuildHistory, because
-		// s.recordBuildHistory can block for several seconds on
-		// LeaseManager calls, and there is a fixed 3s timeout in
-		// GatewayForwarder on build registration.
+		// s.recordBuildHistory can block for several seconds on LeaseManager
+		// calls while the gateway client is waiting for its initial Ping.
 		s.gatewayForwarder.RegisterBuild(ctx, id, fwd)
 		defer s.gatewayForwarder.UnregisterBuild(context.Background(), id)
 	}

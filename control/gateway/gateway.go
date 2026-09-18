@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"time"
 
 	"github.com/moby/buildkit/client/buildid"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -40,6 +41,10 @@ func (gwf *GatewayForwarder) lookupForwarder(ctx context.Context) (gateway.LLBBr
 		return nil, errors.New("no buildid found in context")
 	}
 
+	// Match the gateway client's initial Ping budget. A late Solve must not lose
+	// its registration after 3s, but unknown build IDs must still be bounded.
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	fwd, err := gwf.registrar.Get(ctx, bid)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
