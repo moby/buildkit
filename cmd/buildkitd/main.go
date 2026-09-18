@@ -509,6 +509,11 @@ func newGRPCListeners(cfg config.GRPCConfig) ([]net.Listener, error) {
 		}
 	}
 
+	// Apply the operator's explicitly-configured security descriptor to
+	// forwarded SSH agent pipes as well. When unset, the agent pipe keeps its
+	// container-reachable default rather than the host-facing control-pipe ACL.
+	applyAgentPipeSecurityDescriptor(cfg.SecurityDescriptor)
+
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
 		l, err := getListener(addr, *cfg.UID, *cfg.GID, sd, tlsConfig, true)
