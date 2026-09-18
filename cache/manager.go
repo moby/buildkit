@@ -513,10 +513,10 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
 	}
 
-	cm.records[id] = rec
 	if err := checkLazyProviders(rec); err != nil {
 		return nil, err
 	}
+	cm.records[id] = rec
 	return rec, nil
 }
 

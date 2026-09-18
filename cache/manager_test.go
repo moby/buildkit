@@ -2514,6 +2514,56 @@ func TestLoadBrokenParents(t *testing.T) {
 	require.Len(t, refA.(*immutableRef).refs, 1)
 }
 
+func TestLoadLazyChildDiskUsage(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	tmpdir := t.TempDir()
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+	opt := cmOpt{tmpdir: tmpdir, snapshotter: snapshotter, snapshotterName: "native"}
+	co, cleanup, err := newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	blob, desc, err := mapToBlob(map[string]string{"parent": "data"}, true)
+	require.NoError(t, err)
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "parent", bytes.NewReader(blob), desc))
+	parent, err := cm.GetByBlob(ctx, desc, nil)
+	require.NoError(t, err)
+	parentID := parent.ID()
+
+	_, childDesc, err := mapToBlob(map[string]string{"child": "data"}, true)
+	require.NoError(t, err)
+	child, err := cm.GetByBlob(ctx, childDesc, parent, DescHandlers{childDesc.Digest: {}})
+	require.NoError(t, err)
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
+	cleanup()
+
+	// The parent is available locally, but the child cannot be loaded without
+	// its remote provider after a restart.
+	co, cleanup, err = newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+	require.Equal(t, parentID, du[0].ID)
+	require.False(t, du[0].InUse)
+	require.Equal(t, int64(len(blob)), du[0].Size)
+
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true, Filter: []string{"id==" + parentID}}))
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Empty(t, du)
+}
+
 func TestCalculateKeepBytes(t *testing.T) {
 	ts := []struct {
 		name      string
