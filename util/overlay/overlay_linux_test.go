@@ -404,15 +404,10 @@ func collectAndCheckChanges(t *testing.T, base, upperdir string, expected []Test
 	ctx := t.Context()
 	changes := []TestChange{}
 
-	emptyLower := t.TempDir() // empty directory used for the lower of diff view
-	upperView := []mount.Mount{
-		{
-			Type:    "overlay",
-			Source:  "overlay",
-			Options: []string{fmt.Sprintf("lowerdir=%s", strings.Join([]string{upperdir, emptyLower}, ":"))},
-		},
-	}
-	return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
+	// Mount the read-only view exactly like WriteUpperdir does, so that the
+	// options it needs (e.g. "index=off" when the upperdir is already in use
+	// by another overlay mount) are covered by these tests.
+	return withUpperdirView(ctx, upperdir, func(upperViewRoot string) error {
 		if err := Changes(ctx, func(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
