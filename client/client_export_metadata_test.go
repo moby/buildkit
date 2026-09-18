@@ -184,7 +184,7 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]any{"foo": "1"}, attest.Predicate)
-		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
+		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsbundle@latest?platform=%s", registry, url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
 			Digest: map[string]string{
@@ -324,7 +324,7 @@ func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 		require.Equal(t, "https://example.com/attestations/v1.0", attest.PredicateType)
 		require.Equal(t, map[string]any{"success": true}, attest.Predicate)
 
-		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", url.QueryEscape(registry), url.QueryEscape(platforms.Format(ps[i])))
+		name := fmt.Sprintf("pkg:docker/%s/buildkit/testattestationsemptysubject@latest?platform=%s", registry, url.QueryEscape(platforms.Format(ps[i])))
 		subjects := []intoto.Subject{{
 			Name: name,
 			Digest: map[string]string{
@@ -860,7 +860,7 @@ func testExportAttestations(t *testing.T, sb integration.Sandbox, ociArtifact bo
 				if tagged, ok := named.(reference.Tagged); ok {
 					version = tagged.Tag()
 				}
-				p := fmt.Sprintf("pkg:docker/%s%s@%s?platform=%s", url.QueryEscape(registry), strings.TrimPrefix(name, registry), version, url.PathEscape(platforms.Format(ps[i])))
+				p := fmt.Sprintf("pkg:docker/%s%s@%s?platform=%s", registry, strings.TrimPrefix(name, registry), version, url.PathEscape(platforms.Format(ps[i])))
 				purls[k] = p
 			}
 

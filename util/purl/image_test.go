@@ -57,6 +57,10 @@ func TestRefToPURL(t *testing.T) {
 			expected: "pkg:docker/ghcr.io/foo/bar@latest",
 		},
 		{
+			ref:      "localhost:5000/foo/bar:latest",
+			expected: "pkg:docker/localhost:5000/foo/bar@latest",
+		},
+		{
 			ref:      "busybox",
 			platform: testPlatform,
 			expected: "pkg:docker/busybox@latest?platform=" + expPlatform,
