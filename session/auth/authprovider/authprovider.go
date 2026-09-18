@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/errutil"
 	"github.com/moby/buildkit/util/progress/progresswriter"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/nacl/sign"
@@ -138,7 +139,9 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		}
 		ap.mu.Unlock()
 		// credential information is provided, use oauth POST endpoint
-		resp, err := authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
+		resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*authutil.OAuthTokenResponse, error) {
+			return authutil.FetchTokenWithOAuth(ctx, httpClient, nil, "buildkit-client", to)
+		})
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
@@ -146,7 +149,9 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
-					resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
+					resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*authutil.FetchTokenResponse, error) {
+						return authutil.FetchToken(ctx, httpClient, nil, to)
+					})
 					if err != nil {
 						return nil, err
 					}
@@ -158,7 +163,9 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresInSeconds), nil
 	}
 	// do request anonymously
-	resp, err := authutil.FetchToken(ctx, httpClient, nil, to)
+	resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*authutil.FetchTokenResponse, error) {
+		return authutil.FetchToken(ctx, httpClient, nil, to)
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}

@@ -20,34 +20,47 @@ var MaxRetryBackoff = 8 * time.Second
 
 func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
-		backoff := time.Second
-		for {
-			descs, err := f(ctx, desc)
-			if err != nil {
-				select {
-				case <-ctx.Done():
-					return nil, err
-				default:
-					if !retryError(err) {
-						return nil, err
-					}
-				}
-				if logger != nil {
-					logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
-				}
-			} else {
-				return descs, nil
-			}
-			// backoff logic
-			if backoff >= MaxRetryBackoff {
-				return nil, err
-			}
-			if logger != nil {
-				logger(fmt.Appendf(nil, "retrying in %v\n", backoff))
-			}
-			time.Sleep(backoff)
-			backoff *= 2
+		descs, err := WithRetry(ctx, logger, func(ctx context.Context) ([]ocispecs.Descriptor, error) {
+			return f(ctx, desc)
+		})
+		if err != nil {
+			return nil, err
 		}
+		return descs, nil
+	}
+}
+
+type retryContextKey struct{}
+
+// WithRetry retries transient failures with exponential backoff. Nested calls
+// using the supplied context leave retries to the outer call, including New.
+// f must be safe to retry and preserve retryable errors when wrapping them.
+func WithRetry[T any](ctx context.Context, logger func([]byte), f func(context.Context) (T, error)) (T, error) {
+	if ctx.Value(retryContextKey{}) != nil {
+		return f(ctx)
+	}
+	ctx = context.WithValue(ctx, retryContextKey{}, true)
+	backoff := time.Second
+	for {
+		v, err := f(ctx)
+		if err == nil || context.Cause(ctx) != nil || !retryError(err) {
+			return v, err
+		}
+		if logger != nil {
+			logger(fmt.Appendf(nil, "error: %v\n", err.Error()))
+		}
+		if backoff >= MaxRetryBackoff {
+			return v, err
+		}
+		if logger != nil {
+			logger(fmt.Appendf(nil, "retrying in %v\n", backoff))
+		}
+		select {
+		case <-ctx.Done():
+			return v, err
+		case <-time.After(backoff):
+		}
+		backoff *= 2
 	}
 }
 
@@ -60,7 +73,7 @@ func retryError(err error) bool {
 		return true
 	}
 
-	if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) {
+	if errors.Is(err, io.EOF) || errors.Is(err, errConnectionReset) || errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 	// catches TLS timeout or other network-related temporary errors
