@@ -48,14 +48,35 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			ctx := context.WithoutCancel(ctx)
 			// after commit success cw will be set to nil, if cw isn't nil, error
 			// happened before commit, we should abort this ingest, and because the
-			// error may incured by ctx cancel, use a new context here. And since
-			// cm.Close will unlock this ref in the content store, we invoke abort
-			// to remove the ingest root in advance.
-			if aerr := sr.cm.ContentStore.Abort(ctx, ref); aerr != nil {
-				bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
-			}
+			// error may incured by ctx cancel, use a new context here.
+			//
+			// Close the writer before aborting the ingest. Aborting removes the
+			// ingest directory, while closing the writer still touches it: the
+			// data file is synced and the updatedat timestamp is rewritten. If
+			// the two run concurrently, that timestamp can reappear after the
+			// directory has been emptied, making the final rmdir fail with
+			// "directory not empty". A failed abort rolls back the metadata
+			// transaction that drops the ingest bucket, so the ingest is left
+			// behind in the db and its directory leaks on disk. Note that the
+			// data file being open is not what makes the removal fail: Linux
+			// unlinks open files just fine.
+			//
+			// The ordering is best-effort only. When the content store is the
+			// gRPC proxy, Close is a fire-and-forget CloseSend, so the server
+			// may still be finishing its own close, and rewriting updatedat,
+			// while the abort is being processed. Such an abort failure is
+			// only logged.
+			//
+			// Closing before aborting is safe because the ref handed to this
+			// function is unique per attempt (see newIngestRef in
+			// computeBlobChain): no other writer can claim the same ref between
+			// Close and Abort, so there is no ingest for Abort to destroy by
+			// mistake.
 			if cerr := cw.Close(); cerr != nil {
 				bklog.G(ctx).WithError(cerr).Warnf("failed to close writer %q", ref)
+			}
+			if aerr := sr.cm.ContentStore.Abort(ctx, ref); aerr != nil {
+				bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
 			}
 		}
 	}()
