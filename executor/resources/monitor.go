@@ -174,10 +174,11 @@ func (r *nopRecord) Start() {
 }
 
 type Monitor struct {
-	mu      sync.Mutex
-	closed  chan struct{}
-	records map[string]*cgroupRecord
-	proc    procfs.FS
+	mu         sync.Mutex
+	closed     chan struct{}
+	records    map[string]*cgroupRecord
+	proc       procfs.FS
+	rootCgroup string
 }
 
 type NetworkSampler interface {
@@ -221,30 +222,59 @@ func (m *Monitor) Close() error {
 	return nil
 }
 
-func NewMonitor() (*Monitor, error) {
-	initOnce.Do(func() {
-		isCgroupV2 = isCgroup2()
-		if !isCgroupV2 {
-			return
-		}
-		if err := prepareCgroupControllers(); err != nil {
-			bklog.L.Warnf("failed to prepare cgroup controllers: %+v", err)
-		}
-	})
+func (m *Monitor) RootCgroup() string {
+	return m.rootCgroup
+}
 
+func NewMonitor(isolateCgroups bool) (*Monitor, error) {
 	fs, err := procfs.NewDefaultFS()
 	if err != nil {
 		return nil, err
 	}
 
+	rootCgroup := ""
+
+	initOnce.Do(func() {
+		isCgroupV2 = isCgroup2()
+		if !isCgroupV2 {
+			return
+		}
+
+		cgroupPath := defaultMountpoint
+
+		if isolateCgroups {
+			proc, err := fs.Self()
+			if err != nil {
+				bklog.L.Warnf("failed to get current process info: %+v", err)
+				return
+			}
+
+			cgroups, err := proc.Cgroups()
+			if err != nil {
+				bklog.L.Warnf("failed to get current cgroups: %+v", err)
+				return
+			}
+
+			if len(cgroups) > 0 {
+				rootCgroup = cgroups[0].Path
+				cgroupPath = filepath.Join(cgroupPath, cgroups[0].Path)
+			}
+		}
+
+		if err := prepareCgroupControllers(cgroupPath); err != nil {
+			bklog.L.Warnf("failed to prepare cgroup controllers: %+v", err)
+		}
+	})
+
 	return &Monitor{
-		closed:  make(chan struct{}),
-		records: make(map[string]*cgroupRecord),
-		proc:    fs,
+		rootCgroup: rootCgroup,
+		closed:     make(chan struct{}),
+		records:    make(map[string]*cgroupRecord),
+		proc:       fs,
 	}, nil
 }
 
-func prepareCgroupControllers() error {
+func prepareCgroupControllers(cgroupPath string) error {
 	v, ok := os.LookupEnv("BUILDKIT_SETUP_CGROUPV2_ROOT")
 	if !ok {
 		return nil
@@ -252,24 +282,24 @@ func prepareCgroupControllers() error {
 	if b, _ := strconv.ParseBool(v); !b {
 		return nil
 	}
-	// move current process to init cgroup
-	if err := os.MkdirAll(filepath.Join(defaultMountpoint, initGroup), 0755); err != nil {
+	// move current process to an init cgroup subgroup
+	if err := os.MkdirAll(filepath.Join(cgroupPath, initGroup), 0755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(defaultMountpoint, cgroupProcsFile), os.O_RDONLY, 0)
+	f, err := os.OpenFile(filepath.Join(cgroupPath, cgroupProcsFile), os.O_RDONLY, 0)
 	if err != nil {
 		return err
 	}
 	s := bufio.NewScanner(f)
 	for s.Scan() {
-		if err := os.WriteFile(filepath.Join(defaultMountpoint, initGroup, cgroupProcsFile), s.Bytes(), 0); err != nil {
+		if err := os.WriteFile(filepath.Join(cgroupPath, initGroup, cgroupProcsFile), s.Bytes(), 0); err != nil {
 			return err
 		}
 	}
 	if err := f.Close(); err != nil {
 		return err
 	}
-	dt, err := os.ReadFile(filepath.Join(defaultMountpoint, cgroupControllersFile))
+	dt, err := os.ReadFile(filepath.Join(cgroupPath, cgroupControllersFile))
 	if err != nil {
 		return err
 	}
@@ -277,7 +307,7 @@ func prepareCgroupControllers() error {
 		if c == "" {
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(defaultMountpoint, cgroupSubtreeFile), []byte("+"+c), 0); err != nil {
+		if err := os.WriteFile(filepath.Join(cgroupPath, cgroupSubtreeFile), []byte("+"+c), 0); err != nil {
 			// ignore error
 			bklog.L.Warnf("failed to enable cgroup controller %q: %+v", c, err)
 		}
