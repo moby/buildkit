@@ -4,16 +4,207 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
+	"testing/synctest"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	contentlocal "github.com/containerd/containerd/v2/plugins/content/local"
+	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/client/ociindex"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
+
+func TestResetCacheStoreConcurrentExport(t *testing.T) {
+	ctx := t.Context()
+	dir, cs, manifestA := setupCacheStore(ctx, t, []byte(`{"tag":"a"}`), [][]byte{[]byte("layer-a")}, "a")
+	orphan := writeBlob(ctx, t, cs, []byte("orphan"))
+
+	export := &cacheExportStore{Store: cs, lock: flock.New(filepath.Join(dir, "reset.lock"))}
+	t.Cleanup(func() { require.NoError(t, export.Close()) })
+	// Merely setting up an export must not prevent cleanup during the build.
+	require.NoError(t, resetCacheStore(ctx, cs, dir))
+	require.NotContains(t, listDigests(ctx, t, cs), orphan)
+
+	// Reusing an existing, unindexed blob must protect it too, even though
+	// the underlying Writer returns AlreadyExists without writing anything.
+	layerData := []byte("layer-b")
+	layerB := writeBlob(ctx, t, cs, layerData)
+	writeBlob(ctx, t, export, layerData)
+	require.ErrorContains(t, resetCacheStore(ctx, cs, dir), "skipping cleanup")
+	require.Contains(t, listDigests(ctx, t, cs), layerB)
+
+	configData := []byte(`{"tag":"b"}`)
+	configB := writeBlob(ctx, t, export, configData)
+	manifest := ocispecs.Manifest{
+		MediaType: ocispecs.MediaTypeImageManifest,
+		Config: ocispecs.Descriptor{
+			Digest: configB, Size: int64(len(configData)), MediaType: "application/vnd.buildkit.cacheconfig.v0",
+		},
+		Layers: []ocispecs.Descriptor{{Digest: layerB, Size: int64(len(layerData))}},
+	}
+	manifestData, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	manifestB := writeBlob(ctx, t, export, manifestData)
+	orphan = writeBlob(ctx, t, cs, []byte("another-orphan"))
+
+	// All writers have closed, but the export has not published its tag yet.
+	require.ErrorContains(t, resetCacheStore(ctx, cs, dir), "skipping cleanup")
+	require.Len(t, listDigests(ctx, t, cs), 7)
+	idx := ociindex.NewStoreIndex(dir)
+	require.NoError(t, idx.Put(ocispecs.Descriptor{
+		Digest: manifestB, Size: int64(len(manifestData)), MediaType: ocispecs.MediaTypeImageManifest,
+	}, ociindex.Tag("b")))
+	require.NoError(t, export.Close())
+
+	require.NoError(t, resetCacheStore(ctx, cs, dir))
+	remaining := listDigests(ctx, t, cs)
+	require.Len(t, remaining, 6)
+	for _, dgst := range []digest.Digest{manifestA, manifestB, configB, layerB} {
+		require.Contains(t, remaining, dgst)
+	}
+	require.NotContains(t, remaining, orphan)
+}
+
+func TestCacheExportStoreConcurrentWriters(t *testing.T) {
+	dir := t.TempDir()
+	cs, err := contentlocal.NewStore(dir)
+	require.NoError(t, err)
+	var exports []*cacheExportStore
+	var eg errgroup.Group
+	for range 2 {
+		export := &cacheExportStore{Store: cs, lock: flock.New(filepath.Join(dir, "reset.lock"))}
+		t.Cleanup(func() { require.NoError(t, export.Close()) })
+		exports = append(exports, export)
+		for i := range 8 {
+			eg.Go(func() error {
+				data := []byte{byte(i)}
+				dgst := digest.FromBytes(data)
+				return content.WriteBlob(t.Context(), export, dgst.String(), bytes.NewReader(data), ocispecs.Descriptor{Digest: dgst, Size: int64(len(data))})
+			})
+		}
+	}
+	require.NoError(t, eg.Wait())
+	lock := flock.New(filepath.Join(dir, "reset.lock"))
+	defer lock.Close()
+	require.NoError(t, exports[0].Close())
+	locked, err := lock.TryLock()
+	require.NoError(t, err)
+	require.False(t, locked, "the second export still needs its blobs")
+	require.NoError(t, exports[1].Close())
+	locked, err = lock.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked)
+}
+
+func TestCacheExportStoreClose(t *testing.T) {
+	dir := t.TempDir()
+	cs, err := contentlocal.NewStore(dir)
+	require.NoError(t, err)
+	export := &cacheExportStore{Store: cs, lock: flock.New(filepath.Join(dir, "reset.lock"))}
+	t.Cleanup(func() { require.NoError(t, export.Close()) })
+	writeBlob(t.Context(), t, export, []byte("layer"))
+	require.NoError(t, export.Close())
+
+	// A session handler can outlive session shutdown. It must not reacquire
+	// a lock that will never be released after the solve has returned.
+	w, err := export.Writer(t.Context(), content.WithRef("late-writer"))
+	if w != nil {
+		require.NoError(t, w.Close())
+	}
+	require.ErrorIs(t, err, os.ErrClosed)
+	lock := flock.New(filepath.Join(dir, "reset.lock"))
+	defer lock.Close()
+	locked, err := lock.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked)
+}
+
+func TestCacheExportStoreWaitForReset(t *testing.T) {
+	for _, cancelWriter := range []bool{false, true} {
+		name := "release"
+		if cancelWriter {
+			name = "cancel"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			cs, err := contentlocal.NewStore(dir)
+			require.NoError(t, err)
+			lock := flock.New(filepath.Join(dir, "reset.lock"))
+			require.NoError(t, lock.Lock())
+			t.Cleanup(func() { require.NoError(t, lock.Close()) })
+			export := &cacheExportStore{Store: cs, lock: flock.New(filepath.Join(dir, "reset.lock"))}
+			t.Cleanup(func() { require.NoError(t, export.Close()) })
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancelCause(t.Context())
+				defer cancel(context.Canceled)
+				done := make(chan error, 1)
+				go func() {
+					w, err := export.Writer(ctx, content.WithRef("waiting-writer"))
+					if err == nil {
+						err = w.Close()
+					}
+					done <- err
+				}()
+				synctest.Wait()
+				select {
+				case err := <-done:
+					t.Fatalf("writer did not wait for reset: %v", err)
+				default:
+				}
+				if cancelWriter {
+					cancel(context.Canceled)
+					require.NoError(t, export.Close())
+					require.ErrorIs(t, <-done, context.Canceled)
+				} else {
+					require.NoError(t, lock.Unlock())
+					require.NoError(t, <-done)
+				}
+			})
+		})
+	}
+}
+
+type resetLockCheckStore struct {
+	content.Store
+	check func()
+}
+
+func (s resetLockCheckStore) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
+	s.check()
+	return s.Store.Walk(ctx, fn, filters...)
+}
+
+func (s resetLockCheckStore) Delete(ctx context.Context, dgst digest.Digest) error {
+	s.check()
+	return s.Store.Delete(ctx, dgst)
+}
+
+func TestResetCacheStoreHoldsLock(t *testing.T) {
+	ctx := t.Context()
+	dir, cs, _ := setupCacheStore(ctx, t, []byte(`{}`), nil, "latest")
+	orphan := writeBlob(ctx, t, cs, []byte("orphan"))
+	lock := flock.New(filepath.Join(dir, "reset.lock"))
+	defer lock.Close()
+	checks := 0
+	store := resetLockCheckStore{Store: cs, check: func() {
+		checks++
+		locked, err := lock.TryRLock()
+		require.NoError(t, err)
+		require.False(t, locked, "exports must not start during cleanup")
+	}}
+	require.NoError(t, resetCacheStore(ctx, store, dir))
+	require.Equal(t, 2, checks)
+	require.NotContains(t, listDigests(ctx, t, cs), orphan)
+	locked, err := lock.TryRLock()
+	require.NoError(t, err)
+	require.True(t, locked, "cleanup must release the lock")
+}
 
 func writeBlob(ctx context.Context, t *testing.T, cs content.Store, data []byte) digest.Digest {
 	t.Helper()
