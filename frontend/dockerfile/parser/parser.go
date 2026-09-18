@@ -485,8 +485,24 @@ func heredocsFromLine(line string) ([]Heredoc, error) {
 	shlex.SkipUnsetEnv = true
 	words, _ := shlex.ProcessWords(line, emptyEnvs{})
 
+	// Merge heredoc operators with their following words.
+	// When there's a space between << or <<- and the heredoc name,
+	// the lexer splits them into separate words. We need to recombine them.
+	var merged []string
+	for i := 0; i < len(words); i++ {
+		word := words[i]
+		// Check if this word is a heredoc operator (<<, <<-, or 3<<, 3<<-, etc.)
+		if isHeredocOperator(word) && i+1 < len(words) {
+			// Merge with the next word (the heredoc name)
+			merged = append(merged, word+words[i+1])
+			i++ // Skip the next word since we've merged it
+		} else {
+			merged = append(merged, word)
+		}
+	}
+
 	var docs []Heredoc
-	for _, word := range words {
+	for _, word := range merged {
 		heredoc, err := ParseHeredoc(word)
 		if err != nil {
 			return nil, err
@@ -496,6 +512,25 @@ func heredocsFromLine(line string) ([]Heredoc, error) {
 		}
 	}
 	return docs, nil
+}
+
+// isHeredocOperator checks if a word is a heredoc operator (<<, <<-, or with fd prefix like 3<<)
+func isHeredocOperator(word string) bool {
+	// Match patterns like: <<, <<-, 3<<, 3<<-, etc.
+	for i, ch := range word {
+		if i == len(word)-1 {
+			// We're at the last character and haven't found <<, so not a heredoc operator
+			break
+		}
+		if ch == '<' && word[i+1] == '<' {
+			// Found <<, check if it's at the end or followed by -
+			if i+2 == len(word) || (i+2 < len(word) && word[i+2] == '-' && i+3 == len(word)) {
+				return true
+			}
+			break
+		}
+	}
+	return false
 }
 
 // ChompHeredocContent chomps leading tabs from the heredoc.
