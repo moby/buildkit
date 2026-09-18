@@ -242,6 +242,11 @@ func WithUser(name string) ChownOption {
 				opt.User = &UserOpt{UID: uid}
 			}
 		case 1:
+			// A trailing colon means the user's default group, as in chown(1).
+			// An empty group would otherwise marshal to gid 0.
+			if v == "" {
+				break
+			}
 			gid, err := parseUID(v)
 			if err != nil {
 				opt.Group = &UserOpt{Name: v}
