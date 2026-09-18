@@ -2514,6 +2514,85 @@ func TestLoadBrokenParents(t *testing.T) {
 	require.Len(t, refA.(*immutableRef).refs, 1)
 }
 
+func TestReleaseKeepsReferencedParent(t *testing.T) {
+	// Releasing a mutable also removes its equalImmutable. That immutable may
+	// have become another record's parent in the meantime -- finalize clears
+	// the immutable's equalMutable but leaves mutable.equalImmutable pointing
+	// back at it -- so removing it unconditionally strands the child on a
+	// parent the manager no longer holds.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mut, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+
+	// committing the same mutable twice repoints mut.equalImmutable at parent2,
+	// while parent1 goes on pointing at mut as its equalMutable
+	parent1, err := mut.Commit(ctx)
+	require.NoError(t, err)
+	parent2, err := mut.Commit(ctx)
+	require.NoError(t, err)
+	parent2ID := parent2.ID()
+
+	otherMut, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	other, err := otherMut.Commit(ctx)
+	require.NoError(t, err)
+	otherID := other.ID()
+
+	// merging finalizes parent2, clearing parent2.equalMutable but leaving
+	// mut.equalImmutable still pointing back at it
+	child, err := cm.Merge(ctx, []ImmutableRef{parent2, other}, nil)
+	require.NoError(t, err)
+	childID := child.ID()
+
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, other.Release(ctx))
+	require.NoError(t, parent2.Release(ctx))
+
+	// parent1's last release cascades into mut.release, which reaches for
+	// mut.equalImmutable -- parent2 -- while the merge still holds it
+	require.NoError(t, parent1.Release(ctx))
+
+	cm.mu.Lock()
+	require.Contains(t, cm.records, parent2ID)
+	childRec, ok := cm.records[childID]
+	require.True(t, ok)
+	require.Equal(t, parent2ID, childRec.mergeParents[0].ID())
+	require.Equal(t, otherID, childRec.mergeParents[1].ID())
+	cm.mu.Unlock()
+
+	// the whole chain is still accounted for
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+
+	byID := map[string]*client.UsageInfo{}
+	for _, r := range du {
+		byID[r.ID] = r
+	}
+	require.Contains(t, byID, parent2ID)
+	require.Contains(t, byID, childID)
+	require.Equal(t, []string{parent2ID, otherID}, byID[childID].Parents)
+}
+
 func TestCalculateKeepBytes(t *testing.T) {
 	ts := []struct {
 		name      string
