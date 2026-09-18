@@ -245,7 +245,6 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 			OutputDir: t.TempDir(),
 		}},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "provenance materials are incomplete")
 	require.ErrorContains(t, err, "/missing")
 	var materialsErr *solvererrdefs.ProvenanceMaterialsIncompleteError
@@ -377,7 +376,6 @@ func testProxyNetworkModesNoRootless(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(ctx, def, SolveOpt{
 		ProxyNetwork: true,
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "network.host is not allowed")
 	require.Equal(t, int32(0), hostHit.Load())
 
@@ -540,7 +538,6 @@ func testProxyNetworkDefaultEgressNoRootless(t *testing.T, sb integration.Sandbo
 		ProxyNetwork:         true,
 		SourcePolicyProvider: denyProvider,
 	})
-	require.Error(t, err)
 	require.ErrorContains(t, err, "exit code: 1")
 	require.Contains(t, logOutput, "HTTP/1.1 403 Forbidden")
 	require.Equal(t, int32(1), checked.Load())
@@ -713,8 +710,7 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 				SourcePolicyProvider: p,
 			}, nil)
 			if tc.expectedError != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -836,8 +832,7 @@ func testSourceMetaPolicySession(t *testing.T, sb integration.Sandbox) {
 			}, nil)
 
 			if tc.expectedError != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -980,7 +975,7 @@ func testSourcePolicyParallelSession(t *testing.T, sb integration.Sandbox) {
 					Action: sourcepolicypb.PolicyAction_ALLOW,
 				}, nil, nil
 			default:
-				require.Fail(t, "too many calls for alpine")
+				t.Error("too many calls for alpine")
 			}
 		case "docker-image://docker.io/library/busybox:latest":
 			time.Sleep(200 * time.Millisecond)
@@ -1327,8 +1322,7 @@ func testSourcePolicySignedCommit(t *testing.T, sb integration.Sandbox) {
 				SourcePolicyProvider: p,
 			}, nil)
 			if tc.expectedError != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -1444,8 +1438,7 @@ func testSourcePolicySessionConvert(t *testing.T, sb integration.Sandbox) {
 				SourcePolicyProvider: p,
 			}, nil)
 			if tc.expectedError != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedError)
+				require.ErrorContains(t, err, tc.expectedError)
 				return
 			}
 			require.NoError(t, err)
@@ -1547,7 +1540,6 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 				// Negative check: tampered digest must fail signature verification.
 				badDigest := tamperDigestHex(responseDigest)
 				err = pgpsign.VerifySignatureWithDigest(sig, keyring, badDigest)
-				require.Error(t, err)
 				require.ErrorContains(t, err, "failed to verify signature with checksum digest")
 				return &policysession.DecisionResponse{
 					Action: sourcepolicypb.PolicyAction_ALLOW,
@@ -1583,7 +1575,6 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 		_, err = c.Solve(ctx, def, SolveOpt{
 			SourcePolicyProvider: p,
 		}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "suffix exceeds max size")
 		require.Equal(t, 1, callCounter)
 	})
@@ -1607,7 +1598,6 @@ func testSourcePolicySessionHTTPChecksumAssist(t *testing.T, sb integration.Sand
 		_, err = c.Solve(ctx, def, SolveOpt{
 			SourcePolicyProvider: p,
 		}, nil)
-		require.Error(t, err)
 		require.ErrorContains(t, err, "unsupported checksum algorithm")
 		require.Equal(t, 1, callCounter)
 	})
@@ -1758,8 +1748,7 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			if tc.expectedErr == "" {
 				require.NoError(t, err)
 			} else {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedErr)
+				require.ErrorContains(t, err, tc.expectedErr)
 			}
 		})
 	}

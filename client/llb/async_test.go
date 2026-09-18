@@ -25,7 +25,7 @@ func TestAsyncNonBlocking(t *testing.T) {
 	select {
 	case <-time.After(100 * time.Millisecond):
 	case <-ran:
-		require.Fail(t, "callback should not have been called")
+		t.Error("callback should not have been called")
 	}
 
 	def, err := st.Marshal(ctx)

@@ -104,8 +104,7 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, "", b, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "expected to fail")
+	require.ErrorContains(t, err, "expected to fail")
 }
 
 func testClientGatewayNilResult(t *testing.T, sb integration.Sandbox) {
@@ -296,8 +295,7 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 
 	g := gatewayapi.NewLLBBridgeClient(c.conn)
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no buildid found in context")
+	require.ErrorContains(t, err, "no buildid found in context")
 }
 
 func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
@@ -311,7 +309,6 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 
 	g := c.gatewayClientForBuild(t.Name() + identity.NewID())
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "no such job")
+	require.ErrorContains(t, err, "no such job")
 	require.Equal(t, codes.NotFound, grpcerrors.Code(err))
 }

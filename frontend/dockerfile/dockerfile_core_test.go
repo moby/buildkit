@@ -860,6 +860,5 @@ COPY --from=build C:\out C:\
 		},
 	}, nil)
 
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "target stage \"bulid\" could not be found (did you mean build?)")
+	require.ErrorContains(t, err, "target stage \"bulid\" could not be found (did you mean build?)")
 }

@@ -43,8 +43,7 @@ func TestFetcher(t *testing.T) {
 	require.Equal(t, "oob", string(buf[:n]))
 
 	n, err = rdr.ReadAt(buf, 5)
-	require.Error(t, err)
-	require.Equal(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, "r", string(buf[:n]))
 }
 
@@ -65,8 +64,7 @@ func TestSlowFetch(t *testing.T) {
 	require.Equal(t, "oob", string(buf[:n]))
 
 	n, err = rdr.ReadAt(buf, 5)
-	require.Error(t, err)
-	require.Equal(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, "r", string(buf[:n]))
 }
 

@@ -146,7 +146,6 @@ devices:
 			},
 		},
 	}, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "requested by the build but not allowed")
 }
 
@@ -455,8 +454,6 @@ func writeCDISpecFile(t *testing.T, sb integration.Sandbox, c *Client, csf ...cd
 			return
 		}
 
-		if now.After(deadline) {
-			t.Fatal("timeout waiting for CDI devices to appear")
-		}
+		require.LessOrEqualf(t, now, deadline, "timeout waiting for CDI devices to appear")
 	}
 }

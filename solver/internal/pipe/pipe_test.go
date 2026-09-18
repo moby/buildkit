@@ -87,6 +87,5 @@ func TestPipeCancel(t *testing.T) {
 	st = p.Receiver.Status()
 	require.Equal(t, true, st.Completed)
 	require.Equal(t, true, st.Canceled)
-	require.Error(t, st.Err)
 	require.ErrorIs(t, st.Err, context.Canceled)
 }

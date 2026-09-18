@@ -516,8 +516,7 @@ COPY --from=base /o* /
 	require.Greater(t, len(dt), 0)
 
 	_, err = os.ReadFile(filepath.Join(destDir, "out2"))
-	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {

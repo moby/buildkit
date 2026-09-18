@@ -99,7 +99,7 @@ func scannerExecOp(t *testing.T, st *llb.State) *pb.Op {
 			return &op
 		}
 	}
-	require.FailNow(t, "scanner exec op not found")
+	t.Fatal("scanner exec op not found")
 	return nil
 }
 
@@ -116,7 +116,7 @@ func scannerImageSourceOp(t *testing.T, st *llb.State) *pb.Op {
 			return &op
 		}
 	}
-	require.FailNow(t, "scanner image source op not found")
+	t.Fatal("scanner image source op not found")
 	return nil
 }
 
@@ -128,6 +128,6 @@ func findMount(t *testing.T, exec *pb.ExecOp, dest string) *pb.Mount {
 			return mount
 		}
 	}
-	require.FailNow(t, "mount not found", "dest=%s", dest)
+	t.Fatal("mount not found", "dest=%s", dest)
 	return nil
 }

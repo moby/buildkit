@@ -480,9 +480,7 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 	var runLayer *int
 	for i, l := range cc.Layers {
 		if l.ParentIndex != -1 {
-			if runLayer != nil {
-				t.Fatal("multiple RUN layers")
-			}
+			require.Nil(t, runLayer, "multiple RUN layers")
 			runLayer = &i
 		}
 	}
@@ -720,7 +718,7 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 				} else {
 					require.Error(t, err)
 					for _, errStr := range test.expectedErrors {
-						require.Contains(t, err.Error(), errStr)
+						require.ErrorContains(t, err, errStr)
 					}
 				}
 			})

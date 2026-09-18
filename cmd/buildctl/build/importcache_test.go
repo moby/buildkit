@@ -98,10 +98,10 @@ func TestParseImportCache(t *testing.T) {
 	for _, tc := range testCases {
 		im, err := ParseImportCache(tc.importCaches)
 		if tc.expectedErr == "" {
+			require.NoError(t, err)
 			require.Equal(t, tc.expected, im)
 		} else {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.expectedErr)
+			require.ErrorContains(t, err, tc.expectedErr)
 		}
 	}
 }

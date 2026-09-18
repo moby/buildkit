@@ -135,8 +135,8 @@ func testConvertMultiple(t *testing.T) {
 	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.NoError(t, err)
+	require.True(t, mutated)
 }
 
 func testConvertWildcard(t *testing.T) {
@@ -165,8 +165,8 @@ func testConvertWildcard(t *testing.T) {
 	e := NewEngine(pol)
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.NoError(t, err)
+	require.True(t, mutated)
 	require.Equal(t, "docker-image://fakereg.io/library/golang:1.19", op.Identifier)
 }
 
@@ -194,8 +194,8 @@ func testConvertRegex(t *testing.T) {
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.NoError(t, err)
+	require.True(t, mutated)
 	require.Equal(t, "docker-image://fakereg.io/library/golang:1.19", op.Identifier)
 }
 
@@ -222,8 +222,8 @@ func testConvertHTTP(t *testing.T) {
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.NoError(t, err)
+	require.True(t, mutated)
 	require.Equal(t, "https://example.com/foo", op.Identifier)
 }
 
@@ -259,8 +259,8 @@ func testConvertLoop(t *testing.T) {
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.ErrorIs(t, err, ErrTooManyOps)
+	require.True(t, mutated)
 }
 
 func testAllowConvertDeny(t *testing.T) {
@@ -304,8 +304,8 @@ func testAllowConvertDeny(t *testing.T) {
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.ErrorIs(t, err, ErrSourceDenied)
+	require.True(t, mutated)
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest", op.Identifier)
 }
 
@@ -338,8 +338,8 @@ func testConvertDeny(t *testing.T) {
 	e := NewEngine([]*spb.Policy{pol})
 
 	mutated, err := e.Evaluate(ctx, op)
-	require.True(t, mutated)
 	require.ErrorIs(t, err, ErrSourceDenied)
+	require.True(t, mutated)
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest", op.Identifier)
 }
 
@@ -374,8 +374,8 @@ func testConvert(t *testing.T) {
 			e := NewEngine([]*spb.Policy{pol})
 
 			mutated, err := e.Evaluate(ctx, op)
-			require.True(t, mutated)
 			require.NoError(t, err)
+			require.True(t, mutated)
 			require.Equal(t, dst, op.Identifier)
 		})
 	}
@@ -404,8 +404,8 @@ func testConvertExact(t *testing.T) {
 	}
 
 	mutated, err := NewEngine([]*spb.Policy{pol}).Evaluate(t.Context(), op)
-	require.True(t, mutated)
 	require.NoError(t, err)
+	require.True(t, mutated)
 	require.Equal(t, dst, op.Identifier)
 }
 
@@ -442,8 +442,8 @@ func testAllowDeny(t *testing.T) {
 	}
 
 	mutated, err = e.Evaluate(ctx, op)
-	require.False(t, mutated)
 	require.ErrorIs(t, err, ErrSourceDenied)
+	require.False(t, mutated)
 }
 
 func testDenyAll(t *testing.T) {
@@ -474,8 +474,8 @@ func testDenyAll(t *testing.T) {
 			}
 
 			mutated, err := e.Evaluate(ctx, op)
-			require.False(t, mutated)
 			require.ErrorIs(t, err, ErrSourceDenied)
+			require.False(t, mutated)
 		})
 	}
 }
