@@ -1,7 +1,6 @@
 package compression
 
 import (
-	"bytes"
 	"context"
 	"io"
 
@@ -163,16 +162,12 @@ func detectCompressionType(cr *io.SectionReader) (Type, error) {
 		return EStargz, nil
 	}
 
-	for c, m := range map[Type][]byte{
-		Gzip: {0x1F, 0x8B, 0x08},
-		Zstd: {0x28, 0xB5, 0x2F, 0xFD},
-	} {
-		if n < len(m) {
-			continue
-		}
-		if bytes.Equal(m, buf[:len(m)]) {
-			return c, nil
-		}
+	header := buf[:n]
+	switch {
+	case hasGzipPrefix(header):
+		return Gzip, nil
+	case hasZstdPrefix(header):
+		return Zstd, nil
 	}
 
 	return Uncompressed, nil
