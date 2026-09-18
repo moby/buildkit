@@ -277,7 +277,7 @@ func (p *Progress) Decorate(meta map[string]any) *Progress {
 
 type noOpWriter struct{}
 
-func (pw *noOpWriter) Write(_ string, _ any) error {
+func (pw *noOpWriter) Write(string, any) error {
 	return nil
 }
 

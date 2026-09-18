@@ -74,7 +74,7 @@ func runMountPreHook(cmd *RunCommand, req parseRequest) error {
 	return nil
 }
 
-func runMountPostHook(cmd *RunCommand, req parseRequest) error {
+func runMountPostHook(cmd *RunCommand, _ parseRequest) error {
 	return setMountState(cmd, nil)
 }
 

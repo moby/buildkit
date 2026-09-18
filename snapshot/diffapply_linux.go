@@ -471,7 +471,7 @@ func (a *applier) Usage() (snapshots.Usage, error) {
 	// they don't get double counted.
 	inodes := make(map[inode]struct{})
 	var usage snapshots.Usage
-	if err := filepath.WalkDir(a.root, func(path string, dirent gofs.DirEntry, err error) error {
+	if err := filepath.WalkDir(a.root, func(_ string, dirent gofs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

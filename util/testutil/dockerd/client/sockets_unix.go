@@ -29,12 +29,12 @@ func configureUnixTransport(tr *http.Transport, proto, addr string) error {
 	return nil
 }
 
-func configureNpipeTransport(_ *http.Transport, _, _ string) error {
+func configureNpipeTransport(*http.Transport, string, string) error {
 	return errors.New("protocol not available")
 }
 
 // DialPipe connects to a Windows named pipe.
 // This is not supported on other OSes.
-func DialPipe(_ string, _ time.Duration) (net.Conn, error) {
+func DialPipe(string, time.Duration) (net.Conn, error) {
 	return nil, syscall.EAFNOSUPPORT
 }

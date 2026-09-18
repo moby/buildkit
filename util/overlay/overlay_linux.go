@@ -320,9 +320,9 @@ func sameDirent(f1, f2 os.FileInfo, f1fullPath, f2fullPath string) (bool, error)
 		return true, nil
 	}
 
-	equalStat, err := compareSysStat(f1.Sys(), f2.Sys())
-	if err != nil || !equalStat {
-		return equalStat, err
+	equalStat := compareSysStat(f1.Sys(), f2.Sys())
+	if !equalStat {
+		return equalStat, nil
 	}
 
 	if eq, err := compareCapabilities(f1fullPath, f2fullPath); err != nil || !eq {
@@ -361,17 +361,17 @@ func sameDirent(f1, f2 os.FileInfo, f1fullPath, f2fullPath string) (bool, error)
 // Ported from continuity project
 // https://github.com/containerd/continuity/blob/v0.1.0/fs/diff_unix.go#L43-L54
 // Copyright The containerd Authors.
-func compareSysStat(s1, s2 any) (bool, error) {
+func compareSysStat(s1, s2 any) bool {
 	ls1, ok := s1.(*syscall.Stat_t)
 	if !ok {
-		return false, nil
+		return false
 	}
 	ls2, ok := s2.(*syscall.Stat_t)
 	if !ok {
-		return false, nil
+		return false
 	}
 
-	return ls1.Mode == ls2.Mode && ls1.Uid == ls2.Uid && ls1.Gid == ls2.Gid && ls1.Rdev == ls2.Rdev, nil
+	return ls1.Mode == ls2.Mode && ls1.Uid == ls2.Uid && ls1.Gid == ls2.Gid && ls1.Rdev == ls2.Rdev
 }
 
 // Ported from continuity project

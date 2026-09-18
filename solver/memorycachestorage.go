@@ -292,7 +292,7 @@ func (s *inMemoryResultStore) Save(r Result, createdAt time.Time) (CacheResult, 
 	return CacheResult{ID: r.ID(), CreatedAt: createdAt}, nil
 }
 
-func (s *inMemoryResultStore) Load(ctx context.Context, res CacheResult) (Result, error) {
+func (s *inMemoryResultStore) Load(_ context.Context, res CacheResult) (Result, error) {
 	v, ok := s.m.Load(res.ID)
 	if !ok {
 		return nil, errors.WithStack(ErrNotFound)
@@ -300,11 +300,11 @@ func (s *inMemoryResultStore) Load(ctx context.Context, res CacheResult) (Result
 	return v, nil
 }
 
-func (s *inMemoryResultStore) LoadRemotes(_ context.Context, _ CacheResult, _ *compression.Config, _ session.Group) ([]*Remote, error) {
+func (s *inMemoryResultStore) LoadRemotes(context.Context, CacheResult, *compression.Config, session.Group) ([]*Remote, error) {
 	return nil, nil
 }
 
-func (s *inMemoryResultStore) Exists(ctx context.Context, id string) bool {
+func (s *inMemoryResultStore) Exists(_ context.Context, id string) bool {
 	_, ok := s.m.Load(id)
 	return ok
 }

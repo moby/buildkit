@@ -147,7 +147,7 @@ func (m *mockResolverCache) Lock(key any) ([]any, func(any) error, error) {
 
 func TestCombinedResolverCache_BasicMerge(t *testing.T) {
 	rc1 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
+		lockFn: func(any) ([]any, func(any) error, error) {
 			return []any{"a1", "a2"}, func(v any) error {
 				if v != nil {
 					assert.Equal(t, "merged", v)
@@ -157,7 +157,7 @@ func TestCombinedResolverCache_BasicMerge(t *testing.T) {
 		},
 	}
 	rc2 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
+		lockFn: func(any) ([]any, func(any) error, error) {
 			return []any{"b1"}, func(v any) error {
 				if v != nil {
 					assert.Equal(t, "merged", v)
@@ -193,8 +193,8 @@ func TestCombinedResolverCache_ErrorHandlingAndRollback(t *testing.T) {
 	var mu sync.Mutex
 
 	rc1 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
-			return []any{"x"}, func(v any) error {
+		lockFn: func(any) ([]any, func(any) error, error) {
+			return []any{"x"}, func(any) error {
 				mu.Lock()
 				released = append(released, "rc1")
 				mu.Unlock()
@@ -204,7 +204,7 @@ func TestCombinedResolverCache_ErrorHandlingAndRollback(t *testing.T) {
 	}
 
 	rc2 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
+		lockFn: func(any) ([]any, func(any) error, error) {
 			return nil, nil, errors.New("rc2 failed")
 		},
 	}
@@ -224,16 +224,16 @@ func TestCombinedResolverCache_ErrorHandlingAndRollback(t *testing.T) {
 func TestCombinedResolverCache_ParallelReleaseErrorPropagation(t *testing.T) {
 	var count int
 	rc1 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
-			return []any{"v1"}, func(v any) error {
+		lockFn: func(any) ([]any, func(any) error, error) {
+			return []any{"v1"}, func(any) error {
 				count++
 				return errors.New("rc1 release failed")
 			}, nil
 		},
 	}
 	rc2 := &mockResolverCache{
-		lockFn: func(key any) ([]any, func(any) error, error) {
-			return []any{"v2"}, func(v any) error {
+		lockFn: func(any) ([]any, func(any) error, error) {
+			return []any{"v2"}, func(any) error {
 				count++
 				return nil
 			}, nil

@@ -28,7 +28,7 @@ func updateRuncFieldsForHostOS(runtime *runc.Runc) {
 
 func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo, started func(), keep bool) error {
 	killer := newRunProcKiller(w.runc, id)
-	return w.callWithIO(ctx, process, started, killer, func(ctx context.Context, started chan<- int, io runc.IO, pidfile string) error {
+	return w.callWithIO(ctx, process, started, killer, func(ctx context.Context, started chan<- int, io runc.IO, _ string) error {
 		extraArgs := []string{}
 		if keep {
 			extraArgs = append(extraArgs, "--keep")

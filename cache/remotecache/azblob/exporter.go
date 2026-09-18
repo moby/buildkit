@@ -30,7 +30,7 @@ import (
 
 // ResolveCacheExporterFunc for "azblob" cache exporter.
 func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
-	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
+	return func(ctx context.Context, _ session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create azblob config")

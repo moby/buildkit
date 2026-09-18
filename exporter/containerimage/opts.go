@@ -23,7 +23,7 @@ type ImageCommitOpts struct {
 	RewriteTimestamp        bool // rewrite timestamps in layers to match the epoch
 }
 
-func (c *ImageCommitOpts) Load(ctx context.Context, opt map[string]string) (map[string]string, error) {
+func (c *ImageCommitOpts) Load(_ context.Context, opt map[string]string) (map[string]string, error) {
 	rest := make(map[string]string)
 
 	as, optb, err := ParseAnnotations(toBytesMap(opt))

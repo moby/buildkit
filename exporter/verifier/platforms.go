@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func CheckInvalidPlatforms[T comparable](ctx context.Context, res *result.Result[T]) ([]client.VertexWarning, error) {
+func CheckInvalidPlatforms[T comparable](_ context.Context, res *result.Result[T]) ([]client.VertexWarning, error) {
 	req, err := getRequestOpts(res)
 	if err != nil {
 		return nil, err

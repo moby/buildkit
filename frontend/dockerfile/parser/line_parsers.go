@@ -26,7 +26,7 @@ const (
 
 // ignore the current argument. This will still leave a command parsed, but
 // will not incorporate the arguments into the ast.
-func parseIgnore(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseIgnore(string, *directives) (*Node, map[string]bool, error) {
 	return &Node{}, nil, nil
 }
 
@@ -34,6 +34,8 @@ func parseIgnore(rest string, d *directives) (*Node, map[string]bool, error) {
 // statement with sub-statements.
 //
 // ONBUILD RUN foo bar -> (onbuild (run foo bar))
+//
+//nolint:unparam
 func parseSubCommand(rest string, d *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
@@ -197,11 +199,13 @@ func appendKeyValueNode(node, rootNode, prevNode *Node) (*Node, *Node) {
 	return rootNode, prevNode
 }
 
+//nolint:unparam
 func parseEnv(rest string, d *directives) (*Node, map[string]bool, error) {
 	node, err := parseNameVal(rest, "ENV", d)
 	return node, nil, err
 }
 
+//nolint:unparam
 func parseLabel(rest string, d *directives) (*Node, map[string]bool, error) {
 	node, err := parseNameVal(rest, commandLabel, d)
 	return node, nil, err
@@ -215,6 +219,8 @@ func parseLabel(rest string, d *directives) (*Node, map[string]bool, error) {
 // In addition, a keyword definition alone is of the form `keyword` like `name1`
 // above. And the assignments `name2=` and `name3=""` are equivalent and
 // assign an empty value to the respective keywords.
+//
+//nolint:unparam
 func parseNameOrNameVal(rest string, d *directives) (*Node, map[string]bool, error) {
 	words := parseWords(rest, d)
 	if len(words) == 0 {
@@ -241,7 +247,7 @@ func parseNameOrNameVal(rest string, d *directives) (*Node, map[string]bool, err
 
 // parses a whitespace-delimited set of arguments. The result is effectively a
 // linked list of string arguments.
-func parseStringsWhitespaceDelimited(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseStringsWhitespaceDelimited(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}
@@ -265,7 +271,9 @@ func parseStringsWhitespaceDelimited(rest string, d *directives) (*Node, map[str
 }
 
 // parseString just wraps the string in quotes and returns a working node.
-func parseString(rest string, d *directives) (*Node, map[string]bool, error) {
+//
+//nolint:unparam
+func parseString(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}
@@ -308,7 +316,7 @@ func parseJSON(rest string) (*Node, map[string]bool, error) {
 // parseMaybeJSON determines if the argument appears to be a JSON array. If
 // so, passes to parseJSON; if not, quotes the result and returns a single
 // node.
-func parseMaybeJSON(rest string, d *directives) (*Node, map[string]bool, error) {
+func parseMaybeJSON(rest string, _ *directives) (*Node, map[string]bool, error) {
 	if rest == "" {
 		return nil, nil, nil
 	}

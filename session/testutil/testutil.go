@@ -18,7 +18,7 @@ type Dialer func(ctx context.Context, proto string, meta map[string][]string) (n
 // TestStream creates an in memory session dialer for a handler function
 func TestStream(handler Handler) Dialer {
 	s1, s2 := sockPair()
-	return func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error) {
+	return func(ctx context.Context, _ string, meta map[string][]string) (net.Conn, error) {
 		go func() {
 			err := handler(context.WithoutCancel(ctx), s1, meta)
 			if err != nil {
@@ -48,13 +48,13 @@ func (s *sock) LocalAddr() net.Addr {
 func (s *sock) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
-func (s *sock) SetDeadline(t time.Time) error {
+func (s *sock) SetDeadline(time.Time) error {
 	return nil
 }
-func (s *sock) SetReadDeadline(t time.Time) error {
+func (s *sock) SetReadDeadline(time.Time) error {
 	return nil
 }
-func (s *sock) SetWriteDeadline(t time.Time) error {
+func (s *sock) SetWriteDeadline(time.Time) error {
 	return nil
 }
 

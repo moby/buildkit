@@ -17,7 +17,7 @@ import (
 )
 
 func ProvenanceProcessor(slsaVersion provenancetypes.ProvenanceSLSA, attrs map[string]string, customEnv map[string]any) llbsolver.Processor {
-	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job, usage *resources.SysSampler) (*llbsolver.Result, error) {
+	return func(ctx context.Context, res *llbsolver.Result, _ *llbsolver.Solver, j *solver.Job, usage *resources.SysSampler) (*llbsolver.Result, error) {
 		span, ctx := tracing.StartSpan(ctx, "create provenance attestation")
 		defer span.End()
 

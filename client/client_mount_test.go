@@ -584,7 +584,7 @@ func testRawSocketMount(t *testing.T, sb integration.Sandbox) {
 	var called atomic.Bool
 	srv := &http.Server{
 		ReadHeaderTimeout: 10 * time.Second,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			called.Store(true)
 			w.WriteHeader(http.StatusOK)
 		}),

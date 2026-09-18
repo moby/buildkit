@@ -180,7 +180,7 @@ type fileActionMkdir struct {
 	info MkdirInfo
 }
 
-func (a *fileActionMkdir) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionMkdir) toProtoAction(_ context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
 	return &pb.FileAction_Mkdir{
 		Mkdir: &pb.FileActionMkDir{
 			Path:        normalizePath(parent, a.file, false),
@@ -422,7 +422,7 @@ type fileActionMkfile struct {
 	info MkfileInfo
 }
 
-func (a *fileActionMkfile) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionMkfile) toProtoAction(_ context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
 	return &pb.FileAction_Mkfile{
 		Mkfile: &pb.FileActionMkFile{
 			Path:      normalizePath(parent, a.file, false),
@@ -502,7 +502,7 @@ type fileActionRm struct {
 	info RmInfo
 }
 
-func (a *fileActionRm) toProtoAction(ctx context.Context, parent string, base pb.InputIndex) (pb.IsFileAction, error) {
+func (a *fileActionRm) toProtoAction(_ context.Context, parent string, _ pb.InputIndex) (pb.IsFileAction, error) {
 	return &pb.FileAction_Rm{
 		Rm: &pb.FileActionRm{
 			Path:          normalizePath(parent, a.file, false),

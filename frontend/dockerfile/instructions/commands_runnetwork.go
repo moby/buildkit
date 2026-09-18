@@ -37,7 +37,7 @@ func runNetworkPreHook(cmd *RunCommand, req parseRequest) error {
 	return nil
 }
 
-func runNetworkPostHook(cmd *RunCommand, req parseRequest) error {
+func runNetworkPostHook(cmd *RunCommand, _ parseRequest) error {
 	st := cmd.getExternalValue(networkKey).(*networkState)
 	if st == nil {
 		return errors.New("no network state")
