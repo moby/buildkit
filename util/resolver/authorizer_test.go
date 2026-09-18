@@ -3,12 +3,17 @@ package resolver
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
+	dockerauth "github.com/containerd/containerd/v2/core/remotes/docker/auth"
 	"github.com/moby/buildkit/session"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +122,114 @@ func TestBearerAuthFallsBackToAnonymousTokenWithoutSession(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("expected anonymous token request")
 	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestAuthFetcherRetriesTransientTokenError(t *testing.T) {
+	var attempts atomic.Int32
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if attempts.Add(1) == 1 {
+			return nil, syscall.ECONNRESET
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"token":"retry-token","expires_in":60}`)),
+			Request:    req,
+		}, nil
+	})}
+	opts := dockerauth.TokenOptions{
+		Realm: "https://auth.example/token", Service: "registry.example",
+		Scopes: []string{"repository:library/alpine:pull"}, Username: "user", Secret: "password",
+	}
+	fetcher := newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, opts)
+
+	res, err := fetcher.fetchToken(t.Context(), nil, nil, opts)
+	require.NoError(t, err)
+	require.Equal(t, "Bearer retry-token", res.token)
+	require.Equal(t, int32(2), attempts.Load())
+}
+
+func TestAuthFetcherDoesNotRetryPermanentTokenError(t *testing.T) {
+	var attempts atomic.Int32
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		attempts.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Header:     http.Header{"Content-Type": []string{"text/plain"}},
+			Body:       io.NopCloser(strings.NewReader("forbidden")),
+			Request:    req,
+		}, nil
+	})}
+	opts := dockerauth.TokenOptions{
+		Realm: "https://auth.example/token", Service: "registry.example",
+		Scopes: []string{"repository:library/alpine:pull"}, Username: "user", Secret: "password",
+	}
+	fetcher := newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, opts)
+
+	res, err := fetcher.fetchToken(t.Context(), nil, nil, opts)
+	require.Error(t, err)
+	require.Nil(t, res)
+	require.Equal(t, int32(1), attempts.Load())
+}
+
+func TestAuthFetcherPreservesGetToOAuthFallback(t *testing.T) {
+	methods := make([]string, 0, 2)
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		methods = append(methods, req.Method)
+		if req.Method == http.MethodGet {
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Header:     http.Header{"Content-Type": []string{"text/plain"}},
+				Body:       io.NopCloser(strings.NewReader("unauthorized")),
+				Request:    req,
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"access_token":"fallback-token","token_type":"Bearer","expires_in":60}`)),
+			Request:    req,
+		}, nil
+	})}
+	opts := dockerauth.TokenOptions{
+		Realm: "https://auth.example/token", Service: "registry.example",
+		Scopes: []string{"repository:library/alpine:pull"}, Username: "user", Secret: "password",
+	}
+	fetcher := newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, opts)
+
+	res, err := fetcher.fetchToken(t.Context(), nil, nil, opts)
+	require.NoError(t, err)
+	require.Equal(t, "Bearer fallback-token", res.token)
+	require.Equal(t, []string{http.MethodGet, http.MethodPost}, methods)
+}
+
+func TestAuthFetcherRetriesTransientAnonymousTokenError(t *testing.T) {
+	var attempts atomic.Int32
+	client := &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if attempts.Add(1) == 1 {
+			return nil, io.EOF
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"token":"anonymous-token","expires_in":60}`)),
+			Request:    req,
+		}, nil
+	})}
+	opts := dockerauth.TokenOptions{
+		Realm: "https://auth.example/token", Service: "registry.example",
+		Scopes: []string{"repository:library/alpine:pull"},
+	}
+	fetcher := newAuthFetcher("registry.example", client, dockerauth.BearerAuth, nil, opts)
+
+	res, err := fetcher.fetchToken(t.Context(), nil, nil, opts)
+	require.NoError(t, err)
+	require.Equal(t, "Bearer anonymous-token", res.token)
+	require.Equal(t, int32(2), attempts.Load())
 }
