@@ -290,6 +290,7 @@ Keys supported by image output:
 * `name-canonical=true`: add additional canonical name `name@<digest>`
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression-threads=<value>`: number of threads used to compress each layer (zstd only). `0` uses all available CPUs; by default layers are not compressed in parallel
 * `rewrite-timestamp=true`: rewrite the file timestamps to the `SOURCE_DATE_EPOCH` value.
    See [`docs/build-repro.md`](docs/build-repro.md) for how to specify the `SOURCE_DATE_EPOCH` value.
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
@@ -477,6 +478,7 @@ buildctl build ... \
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default: `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
 * `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression-threads=<value>`: number of threads used to compress each layer (zstd only). `0` uses all available CPUs; by default layers are not compressed in parallel
 * `force-compression=true`: forcibly apply `compression` option to all layers
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
@@ -504,6 +506,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
 * `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
 * `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression-threads=<value>`: number of threads used to compress each layer (zstd only). `0` uses all available CPUs; by default layers are not compressed in parallel
 * `force-compression=true`: forcibly apply `compression` option to all layers
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `reset=<true|false>`: remove any blobs in the cache directory that are not referenced by the current manifests in `index.json` (default: `false`). This is useful for keeping the local cache directory from growing indefinitely.
