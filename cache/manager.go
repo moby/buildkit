@@ -1438,9 +1438,16 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			v := m[id]
 			if v.refs == 0 {
 				for _, p := range v.parents {
-					m[p].refs--
+					// Records skipped as duplicates above are absent from m. Skipping
+					// them here also keeps every rescan key resolvable in m.
+					pv, ok := m[p]
+					if !ok {
+						bklog.G(ctx).Warnf("cache record %s references parent %s missing from disk usage map", id, p)
+						continue
+					}
+					pv.refs--
 					if v.doubleRef {
-						m[p].refs--
+						pv.refs--
 					}
 					rescan[p] = struct{}{}
 				}
