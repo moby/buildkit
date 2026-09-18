@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/containerd/v2/plugins/diff/walking"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
@@ -200,8 +201,23 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						enableOverlay = false
 					}
 				}
+				// Every attempt at computing the blob has to use its own ingest
+				// reference. The containerd content store serializes writers per
+				// ref with an in-process lock keyed on the ingest key
+				// (bref = <ns>/<seq>/<ref>), and that lock is released
+				// asynchronously: the gRPC proxy's Close() is a fire-and-forget
+				// CloseSend(), and the local writer only unlocks after its
+				// fp.Sync() has completed. Reusing a ref for a following attempt
+				// (the fallback from the overlay differ, or a retry after
+				// cancellation) therefore races with the lock that is still being
+				// released and fails with "ref ... locked for ...: unavailable".
+				// See moby/moby#52431, moby/moby#52607, moby/buildkit#3270.
+				newIngestRef := func() string {
+					return sr.ID() + "-" + identity.NewID()
+				}
+
 				if enableOverlay {
-					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, sr.ID(), compressorFunc)
+					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, newIngestRef(), compressorFunc)
 					if !ok || err != nil {
 						if !fallback {
 							if !ok {
@@ -224,23 +240,34 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					// These compression types aren't supported by containerd differ. So try to compute diff on buildkit side.
 					// This case can be happen on containerd worker + non-overlayfs snapshotter (e.g. native).
 					// See also: https://github.com/containerd/containerd/issues/4263
+					ref := newIngestRef()
 					desc, err = walking.NewWalkingDiff(sr.cm.ContentStore).Compare(ctx, lower, upper,
 						diff.WithMediaType(mediaType),
-						diff.WithReference(sr.ID()),
+						diff.WithReference(ref),
 						diff.WithCompressor(compressorFunc),
 					)
 					if err != nil {
 						bklog.G(ctx).WithError(err).Warnf("failed to compute blob by buildkit differ")
+						// The differ doesn't clean up the ingest when a reference is
+						// provided, so abort it here instead of leaving it behind
+						// until it expires.
+						if aerr := sr.cm.ContentStore.Abort(context.WithoutCancel(ctx), ref); aerr != nil {
+							bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
+						}
 					}
 				}
 
 				if desc.Digest == "" {
+					ref := newIngestRef()
 					desc, err = sr.cm.Differ.Compare(ctx, lower, upper,
 						diff.WithMediaType(mediaType),
-						diff.WithReference(sr.ID()),
+						diff.WithReference(ref),
 						diff.WithCompressor(compressorFunc),
 					)
 					if err != nil {
+						if aerr := sr.cm.ContentStore.Abort(context.WithoutCancel(ctx), ref); aerr != nil {
+							bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
+						}
 						return nil, err
 					}
 				}

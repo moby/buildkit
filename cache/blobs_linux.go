@@ -48,14 +48,24 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			ctx := context.WithoutCancel(ctx)
 			// after commit success cw will be set to nil, if cw isn't nil, error
 			// happened before commit, we should abort this ingest, and because the
-			// error may incured by ctx cancel, use a new context here. And since
-			// cm.Close will unlock this ref in the content store, we invoke abort
-			// to remove the ingest root in advance.
-			if aerr := sr.cm.ContentStore.Abort(ctx, ref); aerr != nil {
-				bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
-			}
+			// error may incured by ctx cancel, use a new context here.
+			//
+			// The writer must be closed before the ingest is aborted. Aborting
+			// while the writer is still open fails with "directory not empty"
+			// (the ingest directory still holds the data file), which rolls back
+			// the metadata transaction removing the ingest bucket and leaks the
+			// ingest directory on disk.
+			//
+			// Closing before aborting is safe because the ref handed to this
+			// function is unique per attempt (see newIngestRef in
+			// computeBlobChain): no other writer can claim the same ref between
+			// Close and Abort, so there is no ingest for Abort to destroy by
+			// mistake.
 			if cerr := cw.Close(); cerr != nil {
 				bklog.G(ctx).WithError(cerr).Warnf("failed to close writer %q", ref)
+			}
+			if aerr := sr.cm.ContentStore.Abort(ctx, ref); aerr != nil {
+				bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
 			}
 		}
 	}()
