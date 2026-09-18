@@ -2,6 +2,7 @@ package config
 
 import (
 	"github.com/moby/buildkit/cache/remotecache/gha/ghatypes"
+	"github.com/moby/buildkit/util/db/compaction"
 	resolverconfig "github.com/moby/buildkit/util/resolver/config"
 )
 
@@ -54,7 +55,38 @@ type Config struct {
 	// that is added to the provenance of builds. Defaults to /etc/buildkit/provenance.d/ ,
 	ProvenanceEnvDir string `toml:"provenanceEnvDir"`
 
-	Cache CacheConfig `toml:"cache"`
+	Cache      CacheConfig      `toml:"cache"`
+	Compaction CompactionConfig `toml:"compaction"`
+}
+
+type CompactionConfig struct {
+	Enabled           bool      `toml:"enabled"`
+	IdleTimeout       *Duration `toml:"idleTimeout"`
+	MaxRetry          *int      `toml:"maxRetry"`
+	WriteWatermark    *uint64   `toml:"writeWatermark"`
+	MinReclaimBytes   *int64    `toml:"minReclaimBytes"`
+	MinReclaimPercent *int64    `toml:"minReclaimPercent"`
+}
+
+func (c CompactionConfig) Policy() (compaction.Config, error) {
+	policy := compaction.DefaultConfig()
+	policy.ManualOnly = !c.Enabled
+	if c.IdleTimeout != nil {
+		policy.IdleTimeout = c.IdleTimeout.Duration
+	}
+	if c.MaxRetry != nil {
+		policy.MaxRetry = *c.MaxRetry
+	}
+	if c.WriteWatermark != nil {
+		policy.WriteWatermark = *c.WriteWatermark
+	}
+	if c.MinReclaimBytes != nil {
+		policy.MinReclaimBytes = *c.MinReclaimBytes
+	}
+	if c.MinReclaimPercent != nil {
+		policy.MinReclaimPercent = *c.MinReclaimPercent
+	}
+	return policy, policy.Validate()
 }
 
 type CacheConfig struct {
