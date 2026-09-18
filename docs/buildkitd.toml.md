@@ -224,6 +224,13 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # maxRegistryConcurrency sets the maximum number of concurrent connections
   # per registry. If unset, the default concurrency limit is used.
   maxRegistryConcurrency = 4
+  # sessionAuthTimeout sets the timeout for daemon-side authentication
+  # round-trips with the buildx client session (resolving credentials and
+  # fetching auth tokens from the session). Can be a duration string
+  # (e.g. "48h") or a bare integer treated as seconds. If unset, the default
+  # timeout of 60s is used. A value of zero or less disables the timeout
+  # entirely.
+  sessionAuthTimeout = "48h"
 
 
 # optional signed cache configuration for GitHub Actions backend
