@@ -357,8 +357,8 @@ func main() {
 			grpc.StatsHandler(statsHandler),
 			grpc.ChainUnaryInterceptor(unaryInterceptor, grpcerrors.UnaryServerInterceptor),
 			grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
-			grpc.MaxRecvMsgSize(defaults.DefaultMaxRecvMsgSize),
-			grpc.MaxSendMsgSize(defaults.DefaultMaxSendMsgSize),
+			grpc.MaxRecvMsgSize(8 * defaults.DefaultMaxRecvMsgSize),
+			grpc.MaxSendMsgSize(8 * defaults.DefaultMaxSendMsgSize),
 		}
 		server := grpc.NewServer(opts...)
 
