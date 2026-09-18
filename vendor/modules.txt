@@ -500,10 +500,9 @@ github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/cacheutil
 github.com/containerd/stargz-snapshotter/util/namedmutex
 github.com/containerd/stargz-snapshotter/util/testutil
-# github.com/containerd/stargz-snapshotter/estargz v0.18.2
-## explicit; go 1.24.0
+# github.com/containerd/stargz-snapshotter/estargz v0.18.3-0.20260607065519-4daea594a1da
+## explicit; go 1.25.0
 github.com/containerd/stargz-snapshotter/estargz
-github.com/containerd/stargz-snapshotter/estargz/errorutil
 github.com/containerd/stargz-snapshotter/estargz/externaltoc
 github.com/containerd/stargz-snapshotter/estargz/zstdchunked
 # github.com/containerd/ttrpc v1.2.9
