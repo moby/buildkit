@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
-	archivecompression "github.com/moby/go-archive/compression"
 	"github.com/pkg/errors"
 )
 
@@ -226,7 +225,7 @@ func archiveMaxTimeFromHTTPArchive(ctx context.Context, bctx *buildContext) (*ti
 	if err != nil {
 		return nil, err
 	}
-	rc, err := archivecompression.DecompressStream(bytes.NewReader(dt))
+	rc, err := compression.DecompressStream(bytes.NewReader(dt))
 	if err != nil {
 		return nil, err
 	}

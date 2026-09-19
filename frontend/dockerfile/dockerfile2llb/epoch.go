@@ -21,8 +21,8 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
-	archivecompression "github.com/moby/go-archive/compression"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -351,7 +351,7 @@ func archiveMaxTimeFromRef(ctx context.Context, ref gwclient.Reference, filename
 	if err != nil {
 		return nil, err
 	}
-	rc, err := archivecompression.DecompressStream(bytes.NewReader(dt))
+	rc, err := compression.DecompressStream(bytes.NewReader(dt))
 	if err != nil {
 		if allowNonArchive {
 			return nil, nil
