@@ -317,62 +317,65 @@ func cleanRootTarPath(name string) (string, error) {
 // so extraction can replace it and hardlinks can link to a symlink itself.
 func resolveRootPath(root *os.Root, name string) (string, error) {
 	original := name
-	for range 255 {
-		parts := strings.Split(name, string(filepath.Separator))
-		resolved := make([]string, 0, len(parts))
-		followed := false
-		for i, part := range parts {
-			if part == "" || part == "." {
-				continue
+	parts := strings.Split(name, string(filepath.Separator))
+	resolved := make([]string, 0, len(parts))
+	links := 0
+	for len(parts) > 0 {
+		part := parts[0]
+		parts = parts[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if len(resolved) == 0 {
+				return "", errors.Errorf("archive path %q points outside extraction root", original)
 			}
-			candidate := filepath.Join(append(resolved, part)...)
-			if i == len(parts)-1 {
-				resolved = append(resolved, part)
-				continue
-			}
-			fi, err := root.Lstat(candidate)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					resolved = append(resolved, parts[i:]...)
-					return filepath.Join(resolved...), nil
-				}
-				return "", err
-			}
-			if fi.Mode()&os.ModeSymlink == 0 {
-				resolved = append(resolved, part)
-				continue
-			}
-
-			target, err := root.Readlink(candidate)
-			if err != nil {
-				return "", err
-			}
-			if filepath.IsAbs(target) || filepath.VolumeName(target) != "" {
-				name, err = cleanRootTarPath(target)
-				if err != nil {
-					return "", err
-				}
-			} else {
-				name = filepath.Clean(filepath.Join(filepath.Dir(candidate), target))
-				if name == "." {
-					name = ""
-				}
-				if name != "" && !filepath.IsLocal(name) {
-					return "", errors.Errorf("archive symlink %q points outside extraction root", candidate)
-				}
-			}
-			remaining := filepath.Join(parts[i+1:]...)
-			if remaining != "" {
-				name = filepath.Join(name, remaining)
-			}
-			followed = true
+			resolved = resolved[:len(resolved)-1]
+			continue
+		}
+		if len(parts) == 0 {
+			resolved = append(resolved, part)
 			break
 		}
-		if !followed {
-			return filepath.Join(resolved...), nil
+		candidate := filepath.Join(append(resolved, part)...)
+		fi, err := root.Lstat(candidate)
+		if errors.Is(err, os.ErrNotExist) {
+			// A later .. may return to an existing parent, so keep resolving.
+			resolved = append(resolved, part)
+			continue
 		}
+		if err != nil {
+			return "", err
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			if !fi.IsDir() {
+				return "", &os.PathError{Op: "resolve", Path: candidate, Err: syscall.ENOTDIR}
+			}
+			resolved = append(resolved, part)
+			continue
+		}
+		if links == 255 {
+			return "", errors.Errorf("too many symlinks resolving archive path %q", original)
+		}
+		links++
+		target, err := root.Readlink(candidate)
+		if err != nil {
+			return "", err
+		}
+		target = filepath.FromSlash(target)
+		if filepath.VolumeName(target) != "" {
+			return "", errors.Errorf("archive symlink %q points outside extraction root", candidate)
+		}
+		// A root-relative Windows target (\target) has no volume and is not
+		// filepath.IsAbs, but must still resolve from the extraction root.
+		if strings.HasPrefix(target, string(filepath.Separator)) {
+			resolved = resolved[:0]
+		}
+		// Do not clean the target: symlinks must be expanded before a following ..
+		// removes a component, for both relative and root-local absolute targets.
+		parts = append(strings.Split(target, string(filepath.Separator)), parts...)
 	}
-	return "", errors.Errorf("too many symlinks resolving archive path %q", original)
+	return filepath.Join(resolved...), nil
 }
 
 func rootHeaderTimes(hdr *tar.Header) (time.Time, time.Time) {

@@ -129,6 +129,97 @@ func TestUnpackWritesThroughRelativeArchiveSymlinkInsideRoot(t *testing.T) {
 	require.Equal(t, "content", string(dt))
 }
 
+func TestUnpackResolvesSymlinksBeforeParentTraversal(t *testing.T) {
+	for _, target := range []string{
+		"alias/../out",
+		"/alias/../out",
+		"missing/../alias/../out",
+		"alias/../../real/out",
+		"/alias/../../real/out",
+	} {
+		for _, suffix := range []string{"file", "new/child/file"} {
+			t.Run(target+"/"+suffix, func(t *testing.T) {
+				dest := t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(dest, "real", "child"), 0o755))
+				require.NoError(t, os.Mkdir(filepath.Join(dest, "real", "out"), 0o755))
+				require.NoError(t, os.Symlink("real/child", filepath.Join(dest, "alias")))
+
+				buf := bytes.NewBuffer(nil)
+				tw := tar.NewWriter(buf)
+				require.NoError(t, tw.WriteHeader(&tar.Header{
+					Name:     "link",
+					Typeflag: tar.TypeSymlink,
+					Linkname: target,
+					Mode:     0o777,
+				}))
+				writeTarFile(t, tw, "link/"+suffix, "content")
+				require.NoError(t, tw.WriteHeader(&tar.Header{
+					Name:     "hardlink",
+					Typeflag: tar.TypeLink,
+					Linkname: "link/" + suffix,
+					Mode:     0o644,
+				}))
+				require.NoError(t, tw.Close())
+
+				require.NoError(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()))
+				file := filepath.Join(dest, "real", "out", suffix)
+				dt, err := os.ReadFile(file)
+				require.NoError(t, err)
+				require.Equal(t, "content", string(dt))
+				fi, err := os.Stat(file)
+				require.NoError(t, err)
+				hi, err := os.Stat(filepath.Join(dest, "hardlink"))
+				require.NoError(t, err)
+				require.True(t, os.SameFile(fi, hi))
+				_, err = os.Lstat(filepath.Join(dest, "out"))
+				require.ErrorIs(t, err, os.ErrNotExist)
+			})
+		}
+	}
+}
+
+func TestUnpackRejectsParentTraversalThroughRegularFile(t *testing.T) {
+	dest := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dest, "regular"), []byte("keep"), 0o644))
+	require.NoError(t, os.Symlink("regular/../out", filepath.Join(dest, "link")))
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	writeTarFile(t, tw, "link/file", "content")
+	require.NoError(t, tw.Close())
+
+	require.ErrorIs(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()), unix.ENOTDIR)
+	_, err := os.Lstat(filepath.Join(dest, "out"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	dt, err := os.ReadFile(filepath.Join(dest, "regular"))
+	require.NoError(t, err)
+	require.Equal(t, "keep", string(dt))
+}
+
+func TestUnpackRejectsEscapeHiddenByParentTraversal(t *testing.T) {
+	for _, target := range []string{"escape/../out", "/escape/../out", "missing/../escape/../out"} {
+		t.Run(target, func(t *testing.T) {
+			base := t.TempDir()
+			dest := filepath.Join(base, "dest")
+			require.NoError(t, os.Mkdir(dest, 0o755))
+			require.NoError(t, os.Symlink("..", filepath.Join(dest, "escape")))
+			require.NoError(t, os.Symlink(target, filepath.Join(dest, "link")))
+
+			buf := bytes.NewBuffer(nil)
+			tw := tar.NewWriter(buf)
+			writeTarFile(t, tw, "link/file", "content")
+			require.NoError(t, tw.Close())
+
+			require.ErrorContains(t, applyArchiveNoSameOwner(t, dest, buf.Bytes()), "outside extraction root")
+			entries, err := os.ReadDir(base)
+			require.NoError(t, err)
+			require.Len(t, entries, 1)
+			_, err = os.Lstat(filepath.Join(dest, "out"))
+			require.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+}
+
 func TestUnpackRejectsNestedRelativeArchiveSymlinkEscape(t *testing.T) {
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "dest")
