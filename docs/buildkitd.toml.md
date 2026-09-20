@@ -40,7 +40,16 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
 
 [grpc]
   address = [ "tcp://0.0.0.0:1234" ]
-  # debugAddress is address for attaching go profiles and debuggers.
+  # debugAddress is address for attaching go profiles and debuggers. It also
+  # exposes debug maintenance endpoints:
+  #   POST /debug/cache/release-unreferenced runs a ReleaseUnreferenced pass
+  #     on the cache metadata store. The request blocks until the pass
+  #     completes and returns 204 No Content on success. Concurrent calls
+  #     are serialized with background-GC and post-prune cleanup. Requests
+  #     can be canceled while queued or between records; in-flight storage
+  #     operations are not interrupted. Automatic cleanup remains enabled.
+  #     This does not compact cache.db or reclaim snapshots and blobs.
+  # Only expose this listener to trusted operators.
   debugAddress = "0.0.0.0:6060"
   uid = 0
   gid = 0

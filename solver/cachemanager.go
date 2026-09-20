@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -43,15 +44,32 @@ type cacheManager struct {
 }
 
 func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
 	visited := map[string]struct{}{}
 	return c.backend.Walk(func(id string) error {
+		if err := context.Cause(ctx); err != nil {
+			return err
+		}
 		return c.backend.WalkResults(id, func(cr CacheResult) error {
+			if err := context.Cause(ctx); err != nil {
+				return err
+			}
 			if _, ok := visited[cr.ID]; ok {
 				return nil
 			}
 			visited[cr.ID] = struct{}{}
-			if !c.results.Exists(ctx, cr.ID) {
-				c.backend.Release(cr.ID)
+			exists := c.results.Exists(ctx, cr.ID)
+			// Exists returns false on lookup errors, including cancellation.
+			// Do not interpret a canceled lookup as a missing result.
+			if err := context.Cause(ctx); err != nil {
+				return err
+			}
+			if !exists {
+				if err := c.backend.Release(cr.ID); err != nil && !errors.Is(err, ErrNotFound) {
+					return err
+				}
 			}
 			return nil
 		})

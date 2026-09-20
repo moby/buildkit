@@ -30,7 +30,7 @@ import (
 
 var cacheStoreForDebug solver.CacheKeyStorage
 
-func setupDebugHandlers(addr string) error {
+func setupDebugHandlers(addr string, releaseUnreferenced func(context.Context) error) error {
 	m := http.NewServeMux()
 	m.Handle("/debug/vars", expvar.Handler())
 	m.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
@@ -44,6 +44,9 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/cache/lookup", http.HandlerFunc(handleCacheLookup))
 	m.Handle("/debug/cache/store", http.HandlerFunc(handleDebugCacheStore))
 	m.Handle("POST /debug/cache/load", http.HandlerFunc(handleCacheLoad))
+	m.Handle("POST /debug/cache/release-unreferenced", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handleReleaseUnreferenced(w, r, releaseUnreferenced)
+	}))
 
 	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		runtime.GC()
@@ -78,6 +81,29 @@ func setupDebugHandlers(addr string) error {
 		}
 	}()
 	return nil
+}
+
+func handleReleaseUnreferenced(w http.ResponseWriter, r *http.Request, releaseUnreferenced func(context.Context) error) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if releaseUnreferenced == nil {
+		http.Error(w, "cache release is not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
+	start := time.Now()
+	bklog.G(r.Context()).Debug("releasing unreferenced cache metadata from debug endpoint")
+	if err := releaseUnreferenced(r.Context()); err != nil {
+		bklog.G(r.Context()).WithError(err).Warnf("failed to release unreferenced cache metadata after %s", time.Since(start))
+		http.Error(w, "failed to release unreferenced cache metadata: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	bklog.G(r.Context()).Infof("released unreferenced cache metadata in %s", time.Since(start))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleCacheAll(w http.ResponseWriter, r *http.Request) {
