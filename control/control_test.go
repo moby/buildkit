@@ -1,11 +1,96 @@
 package control
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"testing/synctest"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/solver"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/semaphore"
 )
+
+type releaseCacheManager struct {
+	solver.CacheManager
+	release func(context.Context) error
+}
+
+func (m *releaseCacheManager) ReleaseUnreferenced(ctx context.Context) error {
+	return m.release(ctx)
+}
+
+func TestReleaseUnreferencedCacheSerializesCalls(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		entered := make(chan struct{}, 2)
+		unblock := make(chan struct{})
+		manager := &releaseCacheManager{release: func(context.Context) error {
+			entered <- struct{}{}
+			<-unblock
+			return nil
+		}}
+		controller := &Controller{cache: manager, releaseUnreferencedMu: semaphore.NewWeighted(1)}
+		done := make(chan error, 2)
+		go func() { done <- controller.ReleaseUnreferencedCache(t.Context()) }()
+		<-entered
+		go func() { done <- controller.ReleaseUnreferencedCache(t.Context()) }()
+		synctest.Wait()
+		require.Empty(t, entered, "second pass must wait before entering the backend")
+		close(unblock)
+		require.NoError(t, <-done)
+		require.NoError(t, <-done)
+		require.Len(t, entered, 1)
+	})
+}
+
+func TestReleaseUnreferencedCacheCanceledWaiter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		started := make(chan struct{})
+		unblock := make(chan struct{})
+		expectedErr := errors.New("release failed")
+		calls := 0
+		controller := &Controller{
+			releaseUnreferencedMu: semaphore.NewWeighted(1),
+			cache: &releaseCacheManager{release: func(context.Context) error {
+				calls++
+				if calls == 1 {
+					close(started)
+					<-unblock
+					return expectedErr
+				}
+				return nil
+			}},
+		}
+		firstDone := make(chan error, 1)
+		go func() { firstDone <- controller.ReleaseUnreferencedCache(t.Context()) }()
+		<-started
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		waiterDone := make(chan error, 1)
+		go func() { waiterDone <- controller.ReleaseUnreferencedCache(ctx) }()
+		synctest.Wait()
+		cancel()
+		require.ErrorIs(t, <-waiterDone, context.Canceled)
+		require.Equal(t, 1, calls, "canceled waiter must not start a pass")
+		close(unblock)
+		require.ErrorIs(t, <-firstDone, expectedErr)
+		require.NoError(t, controller.ReleaseUnreferencedCache(t.Context()))
+		require.Equal(t, 2, calls, "failed pass must release the permit")
+	})
+}
+
+func TestReleaseUnreferencedCacheClosed(t *testing.T) {
+	controller := &Controller{
+		releaseUnreferencedMu:     semaphore.NewWeighted(1),
+		releaseUnreferencedClosed: true,
+		cache: &releaseCacheManager{release: func(context.Context) error {
+			t.Fatal("closed controller must not access cache storage")
+			return nil
+		}},
+	}
+	require.ErrorContains(t, controller.ReleaseUnreferencedCache(t.Context()), "closed")
+}
 
 func TestDuplicateCacheOptions(t *testing.T) {
 	var testCases = []struct {
