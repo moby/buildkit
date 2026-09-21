@@ -714,11 +714,16 @@ func testCopyChown(t *testing.T, sb integration.Sandbox) {
 FROM busybox AS base
 ENV owner 1000
 RUN mkdir -m 0777 /out
+RUN addgroup -g 2000 testgroup && adduser -D -u 1000 -G testgroup testuser
 COPY --chown=daemon foo /
+COPY --chown=testuser: foo /defaultgroup
+COPY --chown=1000: foo /numericgroup
 COPY --chown=1000:nobody bar /baz
 ARG group
 COPY --chown=${owner}:${group} foo /foobis
 RUN stat -c "%U %G" /foo  > /out/fooowner
+RUN stat -c "%u:%g" /defaultgroup > /out/defaultgroupowner
+RUN stat -c "%u:%g" /numericgroup > /out/numericgroupowner
 RUN stat -c "%u %G" /baz/sub  > /out/subowner
 RUN stat -c "%u %G" /foobis  > /out/foobisowner
 FROM scratch
@@ -759,6 +764,14 @@ COPY --from=base /out /
 	dt, err := os.ReadFile(filepath.Join(destDir, "fooowner"))
 	require.NoError(t, err)
 	require.Equal(t, "daemon daemon\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "defaultgroupowner"))
+	require.NoError(t, err)
+	require.Equal(t, "1000:2000\n", string(dt))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "numericgroupowner"))
+	require.NoError(t, err)
+	require.Equal(t, "1000:1000\n", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
