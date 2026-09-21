@@ -1,4 +1,4 @@
-package compression
+package archiveutil
 
 import (
 	"archive/tar"
@@ -32,7 +32,7 @@ var (
 // IsArchive reports whether header looks like a gzip, bzip2, xz, zstd, or
 // uncompressed tar archive. It does not validate the compressed contents.
 func IsArchive(header []byte) bool {
-	if hasBzip2Prefix(header) || hasGzipPrefix(header) || hasXZPrefix(header) || hasZstdPrefix(header) {
+	if hasBzip2Prefix(header) || HasGzipPrefix(header) || hasXZPrefix(header) || HasZstdPrefix(header) {
 		return true
 	}
 	r := tar.NewReader(bytes.NewReader(header))
@@ -44,7 +44,8 @@ func hasBzip2Prefix(header []byte) bool {
 	return bytes.HasPrefix(header, bzip2Magic)
 }
 
-func hasGzipPrefix(header []byte) bool {
+// HasGzipPrefix reports whether header starts with the gzip magic bytes.
+func HasGzipPrefix(header []byte) bool {
 	return bytes.HasPrefix(header, gzipMagic)
 }
 
@@ -52,7 +53,9 @@ func hasXZPrefix(header []byte) bool {
 	return bytes.HasPrefix(header, xzMagic)
 }
 
-func hasZstdPrefix(header []byte) bool {
+// HasZstdPrefix reports whether header starts with a zstd frame magic or a
+// complete skippable frame header. It does not validate the frame contents.
+func HasZstdPrefix(header []byte) bool {
 	if bytes.HasPrefix(header, zstdMagic) {
 		return true
 	}
