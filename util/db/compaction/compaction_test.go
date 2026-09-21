@@ -97,6 +97,53 @@ func TestTriggersAndIdle(t *testing.T) {
 	})
 }
 
+func TestPeriodicReclaimability(t *testing.T) {
+	for _, manualOnly := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			var calls atomic.Int64
+			b := &testBackend{size: 1000, free: 99, compact: func(context.Context) (db.CompactResult, error) {
+				calls.Add(1)
+				return db.CompactResult{Compacted: true, SizeBefore: 1000, SizeAfter: 500}, nil
+			}}
+			cfg := testConfig()
+			cfg.ManualOnly = manualOnly
+			s, err := New(t.Context(), cfg, State{}, b)
+			require.NoError(t, err)
+			defer s.Close()
+			write(s)
+			time.Sleep(reclaimCheckInterval - time.Nanosecond)
+			synctest.Wait()
+			require.Zero(t, b.checks.Load())
+			time.Sleep(time.Nanosecond)
+			synctest.Wait()
+			require.Zero(t, calls.Load(), "reclaimability thresholds still apply")
+			if manualOnly {
+				require.Zero(t, b.checks.Load())
+				return
+			}
+			require.Equal(t, int64(1), b.checks.Load())
+			b.mu.Lock()
+			b.free = 500
+			b.mu.Unlock()
+			s.Begin(false)
+			time.Sleep(reclaimCheckInterval)
+			synctest.Wait()
+			require.Equal(t, int64(2), b.checks.Load(), "recheck without more writes")
+			require.Zero(t, calls.Load(), "active reader prevents maintenance")
+			s.End(false)
+			time.Sleep(cfg.IdleTimeout - time.Nanosecond)
+			synctest.Wait()
+			require.Zero(t, calls.Load())
+			time.Sleep(time.Nanosecond)
+			synctest.Wait()
+			require.Equal(t, int64(1), calls.Load())
+			time.Sleep(reclaimCheckInterval - time.Nanosecond)
+			synctest.Wait()
+			require.Equal(t, int64(1), calls.Load(), "completed copy resets fallback interval")
+		})
+	}
+}
+
 func TestWriterRetries(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		started := make(chan context.Context, 1)

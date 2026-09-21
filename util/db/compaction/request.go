@@ -110,6 +110,7 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 				s.mu.Lock()
 				s.lastUse = time.Now()
 				if result.Compacted {
+					s.nextPeriodicCheck = time.Now().Add(reclaimCheckInterval)
 					s.state.Writes -= writes
 					s.pending = false
 					s.retries = 0

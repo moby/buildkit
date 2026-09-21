@@ -1,7 +1,7 @@
 // Package compaction schedules database maintenance independently of the storage engine.
-// Compaction becomes pending after enough committed writes and reclaimable space,
-// then waits for an idle period. Arriving writers cancel attempts up to
-// the retry limit; subsequent attempts make writers wait. Unproductive compactions
+// Reclaimability is checked after enough committed writes and periodically even
+// below that watermark. Pending compaction waits for an idle period. Arriving writers
+// cancel attempts up to the retry limit; subsequent attempts make writers wait. Unproductive compactions
 // raise the write watermark. Policy state is checkpointed every five minutes and at close.
 package compaction
 
@@ -16,7 +16,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const checkpointInterval = 5 * time.Minute
+const (
+	checkpointInterval   = 5 * time.Minute
+	reclaimCheckInterval = time.Hour
+)
 
 var (
 	errWriter = errors.New("compaction interrupted by a writer")
@@ -69,20 +72,21 @@ type Scheduler struct {
 	wake    chan struct{}
 	done    chan struct{}
 
-	mu        sync.Mutex
-	state     State
-	active    int
-	lastUse   time.Time
-	notBefore time.Time
-	nextCheck time.Time
-	pending   bool
-	retries   int
-	attempt   context.CancelCauseFunc
-	stopping  bool
-	manual    bool
-	requests  chan *Request
-	path      string
-	metrics   *databaseMetrics
+	mu                sync.Mutex
+	state             State
+	active            int
+	lastUse           time.Time
+	notBefore         time.Time
+	nextCheck         time.Time
+	nextPeriodicCheck time.Time
+	pending           bool
+	retries           int
+	attempt           context.CancelCauseFunc
+	stopping          bool
+	manual            bool
+	requests          chan *Request
+	path              string
+	metrics           *databaseMetrics
 }
 
 // New starts maintenance. Call Close before closing the backend.
@@ -98,16 +102,17 @@ func newScheduler(ctx context.Context, config Config, state State, backend Backe
 	state.WriteWatermark = max(state.WriteWatermark, config.WriteWatermark)
 	ctx, stop := context.WithCancelCause(ctx)
 	s := &Scheduler{
-		config:   config,
-		backend:  backend,
-		ctx:      ctx,
-		stop:     stop,
-		wake:     make(chan struct{}, 1),
-		done:     make(chan struct{}),
-		state:    state,
-		lastUse:  time.Now(),
-		requests: make(chan *Request, 1),
-		metrics:  metrics,
+		config:            config,
+		backend:           backend,
+		ctx:               ctx,
+		stop:              stop,
+		wake:              make(chan struct{}, 1),
+		done:              make(chan struct{}),
+		state:             state,
+		lastUse:           time.Now(),
+		nextPeriodicCheck: time.Now().Add(reclaimCheckInterval),
+		requests:          make(chan *Request, 1),
+		metrics:           metrics,
 	}
 	go s.run()
 	return s, nil
@@ -209,8 +214,12 @@ func (s *Scheduler) run() {
 				at = s.notBefore
 			}
 			delay = max(time.Until(at), 0)
-		} else if !s.config.ManualOnly && !s.pending && s.state.Writes >= s.state.WriteWatermark {
-			delay = max(time.Until(s.nextCheck), 0)
+		} else if !s.config.ManualOnly && !s.pending {
+			at := s.nextCheck
+			if s.state.Writes < s.state.WriteWatermark && s.nextPeriodicCheck.After(at) {
+				at = s.nextPeriodicCheck
+			}
+			delay = max(time.Until(at), 0)
 		}
 		s.mu.Unlock()
 		timer.Reset(delay)
@@ -234,9 +243,11 @@ func (s *Scheduler) check() {
 		return
 	}
 	s.mu.Lock()
-	eligible := !s.pending && s.state.Writes >= s.state.WriteWatermark && !time.Now().Before(s.nextCheck)
+	now := time.Now()
+	eligible := !s.pending && !now.Before(s.nextCheck) && (s.state.Writes >= s.state.WriteWatermark || !now.Before(s.nextPeriodicCheck))
 	if eligible {
-		s.nextCheck = time.Now().Add(checkpointInterval)
+		s.nextCheck = now.Add(checkpointInterval)
+		s.nextPeriodicCheck = now.Add(reclaimCheckInterval)
 	}
 	s.mu.Unlock()
 	if !eligible {
@@ -285,6 +296,7 @@ func (s *Scheduler) compact() {
 	s.attempt = nil
 	s.lastUse = time.Now()
 	if res.Compacted {
+		s.nextPeriodicCheck = time.Now().Add(reclaimCheckInterval)
 		s.state.Writes -= writes
 		s.pending = false
 		s.retries = 0
