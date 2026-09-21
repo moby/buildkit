@@ -2949,19 +2949,23 @@ func TestDetectBundleSHA256(t *testing.T) {
 }
 
 func TestCommitTimeMtimesSHA1(t *testing.T) {
-	testCommitTimeMtimes(t, "sha1", false)
+	testCommitTimeMtimes(t, "sha1", false, "")
 }
 
 func TestCommitTimeMtimesKeepGitDirSHA1(t *testing.T) {
-	testCommitTimeMtimes(t, "sha1", true)
+	testCommitTimeMtimes(t, "sha1", true, "")
+}
+
+func TestCommitTimeMtimesSubdirSHA1(t *testing.T) {
+	testCommitTimeMtimes(t, "sha1", false, "subdir")
 }
 
 func TestCommitTimeMtimesSHA256(t *testing.T) {
-	testCommitTimeMtimes(t, "sha256", false)
+	testCommitTimeMtimes(t, "sha256", false, "")
 }
 
 func TestCommitTimeMtimesKeepGitDirSHA256(t *testing.T) {
-	testCommitTimeMtimes(t, "sha256", true)
+	testCommitTimeMtimes(t, "sha256", true, "")
 }
 
 func TestCompatibility014FileModes(t *testing.T) {
@@ -2983,7 +2987,7 @@ func TestCompatibility014FileModes(t *testing.T) {
 	require.Equal(t, os.FileMode(0o666), compat013Mode)
 }
 
-func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
+func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool, subdir string) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
 	}
@@ -3004,14 +3008,14 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
 	expectedTime := time.Unix(ts, 0)
 
 	// Snapshot without MTime=commit
-	idDefault := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir}
+	idDefault := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Subdir: subdir}
 	gDefault, err := gs.Resolve(ctx, idDefault, nil, nil)
 	require.NoError(t, err)
 	keyDefault, _, _, _, err := gDefault.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	// Snapshot with MTime=commit
-	idCommit := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, MTime: "commit"}
+	idCommit := &GitIdentifier{Remote: repo.mainURL, KeepGitDir: keepGitDir, Subdir: subdir, MTime: "commit"}
 	gCommit, err := gs.Resolve(ctx, idCommit, nil, nil)
 	require.NoError(t, err)
 	keyCommit, _, _, _, err := gCommit.CacheKey(ctx, nil, 0)
@@ -3033,13 +3037,18 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool) {
 	defer lm.Unmount()
 
 	// Verify file mtimes match the commit timestamp
-	fi, err := os.Lstat(filepath.Join(dir, "abc"))
+	filename := "abc"
+	if subdir != "" {
+		filename = "subfile"
+	}
+	fi, err := os.Lstat(filepath.Join(dir, filename))
 	require.NoError(t, err)
 	require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "file mtime should match commit time")
-
-	fi, err = os.Lstat(filepath.Join(dir, "def"))
-	require.NoError(t, err)
-	require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "file mtime should match commit time")
+	if subdir == "" {
+		fi, err = os.Lstat(filepath.Join(dir, "def"))
+		require.NoError(t, err)
+		require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), "file mtime should match commit time")
+	}
 
 	// Verify directory mtime
 	fi, err = os.Lstat(dir)
