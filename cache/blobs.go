@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path"
 	"slices"
 	"strconv"
+	"time"
 
 	obdlabel "github.com/containerd/accelerated-container-image/pkg/label"
 	obdcmd "github.com/containerd/accelerated-container-image/pkg/utils"
@@ -19,7 +21,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/containerd/v2/plugins/diff/walking"
-	"github.com/moby/buildkit/identity"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
@@ -114,7 +116,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 				}()
 
-				compressorFunc, finalize := comp.Type.Compress(ctx, comp)
+				var finalize compression.Finalizer
 
 				var lowerRef *immutableRef
 				switch sr.kind() {
@@ -188,6 +190,10 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				}
 
 				mediaType := comp.Type.MediaType()
+				// A content reference identifies the resumable transaction for this
+				// cache record. Keep it stable so the content store serializes blob
+				// computations from separate callers.
+				ref := sr.ID()
 				if sr.cm.Snapshotter.Name() == "overlaybd" {
 					snStat, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID())
 					if err != nil {
@@ -201,23 +207,9 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						enableOverlay = false
 					}
 				}
-				// Every attempt at computing the blob has to use its own ingest
-				// reference. The containerd content store serializes writers per
-				// ref with an in-process lock keyed on the ingest key
-				// (bref = <ns>/<seq>/<ref>), and that lock is released
-				// asynchronously: the gRPC proxy's Close() is a fire-and-forget
-				// CloseSend(), and the local writer only unlocks after its
-				// fp.Sync() has completed. Reusing a ref for a following attempt
-				// (the fallback from the overlay differ, or a retry after
-				// cancellation) therefore races with the lock that is still being
-				// released and fails with "ref ... locked for ...: unavailable".
-				// See moby/moby#52431, moby/moby#52607, moby/buildkit#3270.
-				newIngestRef := func() string {
-					return sr.ID() + "-" + identity.NewID()
-				}
-
 				if enableOverlay {
-					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, newIngestRef(), compressorFunc)
+					compressorFunc, attemptFinalize := comp.Type.Compress(ctx, comp)
+					computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, ref, compressorFunc)
 					if !ok || err != nil {
 						if !fallback {
 							if !ok {
@@ -233,6 +225,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 					if ok {
 						desc = computed
+						finalize = attemptFinalize
 					}
 				}
 
@@ -240,34 +233,30 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					// These compression types aren't supported by containerd differ. So try to compute diff on buildkit side.
 					// This case can be happen on containerd worker + non-overlayfs snapshotter (e.g. native).
 					// See also: https://github.com/containerd/containerd/issues/4263
-					ref := newIngestRef()
-					desc, err = walking.NewWalkingDiff(sr.cm.ContentStore).Compare(ctx, lower, upper,
+					compressorFunc, attemptFinalize := comp.Type.Compress(ctx, comp)
+					desc, err = walking.NewWalkingDiff(openWriterStore{Store: sr.cm.ContentStore}).Compare(ctx, lower, upper,
 						diff.WithMediaType(mediaType),
 						diff.WithReference(ref),
 						diff.WithCompressor(compressorFunc),
 					)
 					if err != nil {
 						bklog.G(ctx).WithError(err).Warnf("failed to compute blob by buildkit differ")
-						// The differ doesn't clean up the ingest when a reference is
-						// provided, so abort it here instead of leaving it behind
-						// until it expires.
-						if aerr := sr.cm.ContentStore.Abort(context.WithoutCancel(ctx), ref); aerr != nil {
-							bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
-						}
+					} else {
+						finalize = attemptFinalize
 					}
 				}
 
 				if desc.Digest == "" {
-					ref := newIngestRef()
-					desc, err = sr.cm.Differ.Compare(ctx, lower, upper,
-						diff.WithMediaType(mediaType),
-						diff.WithReference(ref),
-						diff.WithCompressor(compressorFunc),
-					)
-					if err != nil {
-						if aerr := sr.cm.ContentStore.Abort(context.WithoutCancel(ctx), ref); aerr != nil {
-							bklog.G(ctx).WithError(aerr).Warnf("failed to abort writer %q", ref)
+					desc, err = compareWithRetry(ctx, sr.cm.Differ, lower, upper, func() []diff.Opt {
+						compressorFunc, attemptFinalize := comp.Type.Compress(ctx, comp)
+						finalize = attemptFinalize
+						return []diff.Opt{
+							diff.WithMediaType(mediaType),
+							diff.WithReference(ref),
+							diff.WithCompressor(compressorFunc),
 						}
+					})
+					if err != nil {
 						return nil, err
 					}
 				}
@@ -560,14 +549,25 @@ func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descr
 	if err != nil {
 		return errors.Wrapf(err, "failed to overlaybd-commit")
 	}
-	cw, err := sr.cm.ContentStore.Writer(ctx, content.WithRef(sr.ID()))
+	cw, err := content.OpenWriter(ctx, sr.cm.ContentStore, content.WithRef(sr.ID()))
 	if err != nil {
 		return errors.Wrapf(err, "failed to open writer")
+	}
+	defer func() {
+		if cw != nil {
+			if err := cw.Close(); err != nil {
+				bklog.G(ctx).WithError(err).Warnf("failed to close overlaybd writer %q", sr.ID())
+			}
+		}
+	}()
+	if err := cw.Truncate(0); err != nil {
+		return errors.Wrap(err, "failed to truncate writer")
 	}
 	fi, err := os.Open(commitPath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to open overlaybd commit file")
 	}
+	defer fi.Close()
 	sz, err := io.Copy(cw, bufio.NewReader(fi))
 	if err != nil {
 		return errors.Wrapf(err, "failed to do io.Copy()")
@@ -579,6 +579,7 @@ func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descr
 		obdlabel.OverlayBDBlobSize:   fmt.Sprintf("%d", sz),
 	}
 	err = cw.Commit(ctx, sz, dgst, content.WithLabels(labels))
+	cw = nil // Commit always closes the writer, including on error.
 	if err != nil {
 		return errors.Wrapf(err, "failed to do cw.Commit")
 	}
@@ -590,4 +591,49 @@ func commitOverlayBD(ctx context.Context, sr *immutableRef, desc *ocispecs.Descr
 		obdlabel.OverlayBDBlobSize:   fmt.Sprintf("%d", desc.Size),
 	}
 	return nil
+}
+
+type openWriterStore struct {
+	content.Store
+}
+
+func (s openWriterStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	return content.OpenWriter(ctx, s.Store, opts...)
+}
+
+func compareWithRetry(ctx context.Context, comparer diff.Comparer, lower, upper []mount.Mount, opts func() []diff.Opt) (ocispecs.Descriptor, error) {
+	retry := 16
+	for {
+		desc, err := comparer.Compare(ctx, lower, upper, opts()...)
+		if err == nil || !cerrdefs.IsUnavailable(err) {
+			return desc, err
+		}
+		if context.Cause(ctx) != nil {
+			return ocispecs.Descriptor{}, err
+		}
+
+		// The comparer owns its writer, so retry the whole operation with the
+		// same stable reference using the same lock-wait behavior as
+		// content.OpenWriter.
+		if !waitForRetry(ctx, retry) {
+			// Match content.OpenWriter: preserve the lock error that explains why
+			// the operation could not proceed when cancellation stopped the wait.
+			return ocispecs.Descriptor{}, err
+		}
+		if retry < 2048 {
+			retry <<= 1
+		}
+	}
+}
+
+func waitForRetry(ctx context.Context, retry int) bool {
+	//nolint:gosec // Backoff jitter does not require cryptographic randomness.
+	timer := time.NewTimer(time.Millisecond * time.Duration(rand.IntN(retry)))
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		return false
+	case <-timer.C:
+		return true
+	}
 }
