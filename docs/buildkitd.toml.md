@@ -76,6 +76,7 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # Opt-in metadata database maintenance, independent of cache GC.
   enabled = false
   # Writes count committed transactions. Low-yield copies raise this watermark.
+  # Reclaimability is also checked hourly below the watermark.
   writeWatermark = 100000
   # Both reclaimability thresholds must also be reached.
   minReclaimBytes = 268435456

@@ -15,13 +15,16 @@ The remaining defaults are:
 
 | Setting             | Default     | Meaning                                                                  |
 |---------------------|-------------|--------------------------------------------------------------------------|
-| `writeWatermark`    | `100000`    | Committed write transactions before checking eligibility.                |
+| `writeWatermark`    | `100000`    | Committed write transactions that trigger earlier eligibility checks.    |
 | `minReclaimBytes`   | `268435456` | Minimum estimated reclaimable bytes (256 MiB).                           |
 | `minReclaimPercent` | `25`        | Minimum estimated reclaimable percentage of the file.                    |
 | `idleTimeout`       | `1m`        | Required interval without database activity.                             |
 | `maxRetry`          | `3`         | Attempts that arriving writers may cancel before a copy makes them wait. |
 
-After reaching the write watermark, the policy checks bbolt free and pending pages.
+The policy checks bbolt free and pending pages after reaching the write watermark,
+and once an hour even below it. After reaching the watermark, unsuccessful checks
+are repeated every five minutes.
+
 Both reclaimability thresholds must be met before compaction becomes pending.
 The policy periodically rechecks reclaimability, so deletions can make a database
 eligible without further file growth. Pending maintenance waits for no active
