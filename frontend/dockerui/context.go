@@ -19,7 +19,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/buildkit/util/gitutil/gitobject"
 	archivecompression "github.com/moby/go-archive/compression"
 	"github.com/pkg/errors"
@@ -133,7 +133,7 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to read downloaded context")
 		}
-		if compression.IsArchive(dt) {
+		if archiveutil.IsArchive(dt) {
 			bc := llb.Scratch().File(llb.Copy(*st, filepath.Join("/", filename), "/", &llb.CopyInfo{
 				AttemptUnpack: true,
 			}))

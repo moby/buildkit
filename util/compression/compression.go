@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/v2/core/images"
 	cdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/moby/buildkit/util/archiveutil"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/iohelper"
 	digest "github.com/opencontainers/go-digest"
@@ -164,9 +165,9 @@ func detectCompressionType(cr *io.SectionReader) (Type, error) {
 
 	header := buf[:n]
 	switch {
-	case hasGzipPrefix(header):
+	case archiveutil.HasGzipPrefix(header):
 		return Gzip, nil
-	case hasZstdPrefix(header):
+	case archiveutil.HasZstdPrefix(header):
 		return Zstd, nil
 	}
 
