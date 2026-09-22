@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/moby/buildkit/cmd/buildkitd/config"
@@ -38,4 +40,43 @@ func runApplyMainFlags(t *testing.T, args []string, cfg *config.Config) error {
 		},
 	}
 	return cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
+}
+
+func TestLoadConfigFile(t *testing.T) {
+	fp := filepath.Join(t.TempDir(), "buildkitd.toml")
+
+	_, _, err := runLoadConfigFile(t, fp, []string{"--config", fp})
+	require.ErrorContains(t, err, fp)
+
+	_, found, err := runLoadConfigFile(t, fp, nil)
+	require.NoError(t, err)
+	require.False(t, found)
+
+	require.NoError(t, os.WriteFile(fp, nil, 0644))
+
+	_, found, err = runLoadConfigFile(t, fp, nil)
+	require.NoError(t, err)
+	require.True(t, found)
+}
+
+func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (config.Config, bool, error) {
+	t.Helper()
+
+	var cfg config.Config
+	var found bool
+	cmd := &cli.Command{
+		Name: "buildkitd",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "config",
+				Value: defaultPath,
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			var err error
+			cfg, found, err = loadConfigFile(cmd)
+			return err
+		},
+	}
+	return cfg, found, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
 }
