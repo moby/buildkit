@@ -314,10 +314,6 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 		default:
 			ch := sw.scanner.Next()
 			if ch == sw.escapeToken {
-				if sw.rawEscapes {
-					result.WriteRune(ch)
-				}
-
 				switch sw.scanner.Peek() {
 				case scanner.EOF:
 					// Ignore \ at end of word
@@ -327,6 +323,9 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 					// Note: for now don't do anything special with ` chars.
 					// Not sure what to do with them anyway since we're not going
 					// to execute the text in there (not now anyway).
+					if sw.rawEscapes {
+						result.WriteRune(ch)
+					}
 					ch = sw.scanner.Next()
 				}
 			}
