@@ -7,7 +7,8 @@ list of global settings followed by a series of sections for specific areas
 of daemon configuration.
 
 The file path is `/etc/buildkit/buildkitd.toml` for rootful mode,
-`~/.config/buildkit/buildkitd.toml` for rootless mode.
+`~/.config/buildkit/buildkitd.toml` for rootless mode. A different path can be
+set with the `--config` flag or the `BUILDKITD_CONFIG` environment variable.
 
 The following is a complete `buildkitd.toml` configuration example.
 Note that some configuration options are only useful in edge cases.
