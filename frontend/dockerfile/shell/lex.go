@@ -327,6 +327,12 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 						result.WriteRune(ch)
 					}
 					ch = sw.scanner.Next()
+				default:
+					// A literal \ only needs escaping in raw mode when the
+					// quotes around it are dropped.
+					if sw.rawEscapes && !sw.RawQuotes {
+						result.WriteRune(ch)
+					}
 				}
 			}
 			result.WriteRune(ch)

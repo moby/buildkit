@@ -499,6 +499,12 @@ func TestProcessWithMatches(t *testing.T) {
 			matches:  map[string]struct{}{"FOO": {}},
 		},
 		{
+			input:    `${FOO#"a\b"}`,
+			envs:     map[string]string{"FOO": `a\bc`},
+			expected: "c",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
 			input:     "${ABC:-.}${FOO%x}${ABC:-.}",
 			envs:      map[string]string{"FOO": "xxyy"},
 			expected:  ".xxyy.",
