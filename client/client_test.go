@@ -21,6 +21,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBasicAzblobCacheImportExport,
 	testBasicInlineCacheImportExport,
 	testBasicLocalCacheImportExport,
+	testConcurrentLocalCacheExport,
 	testBasicRegistryCacheImportExport,
 	testBasicS3CacheImportExport,
 	testCacheExportCacheDeletedContent,

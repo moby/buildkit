@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,13 +16,17 @@ import (
 	"time"
 
 	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
+	contentlocal "github.com/containerd/containerd/v2/plugins/content/local"
 	cerrdefs "github.com/containerd/errdefs"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
+	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/helpers"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -30,7 +35,144 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
+	"golang.org/x/sync/errgroup"
 )
+
+func testConcurrentLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
+
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("concurrent local cache export timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex("sh -c 'echo shared > /out/payload'")).AddMount("/out", llb.Scratch())
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	opened := make(chan struct{}, 2)
+	blocked := make(chan struct{}, 1)
+	releases := [2]chan struct{}{make(chan struct{}), make(chan struct{})}
+	completed := make(chan error, 2)
+	eg, ctx := errgroup.WithContext(ctx)
+	for i := range 2 {
+		store, err := newLocalCacheStore(dir)
+		require.NoError(t, err)
+		s, err := session.NewSession(ctx, "")
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, s.Close()) })
+		s.Allow(sessioncontent.NewAttachable(map[string]content.Store{
+			"local:" + dir: &gatedCacheStore{Store: store, opened: opened, blocked: blocked, release: releases[i]},
+		}))
+		eg.Go(func() error { return s.Run(ctx, c.Dialer()) })
+		eg.Go(func() error {
+			defer s.Close()
+			_, err := c.Solve(ctx, def, SolveOpt{
+				SharedSession:         s,
+				SessionPreInitialized: true,
+				CacheExports: []CacheOptionsEntry{{Type: "local", Attrs: map[string]string{
+					"dest": dir,
+					"tag":  fmt.Sprintf("export-%d", i),
+				}}},
+			}, nil)
+			completed <- err
+			return err
+		})
+		if i == 0 {
+			select {
+			case <-opened:
+			case <-ctx.Done():
+				t.Fatal(context.Cause(ctx))
+			}
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- eg.Wait() }()
+
+	// The first export owns the ingest. The second must retry rather than
+	// opening and modifying the same temporary files.
+	select {
+	case <-blocked:
+	case <-opened:
+		t.Fatal("second export opened an active ingest")
+	case <-ctx.Done():
+		t.Fatal(context.Cause(ctx))
+	}
+
+	entries, err := os.ReadDir(filepath.Join(dir, "ingest"))
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "exports of the same reference must reuse its ingest")
+	// Index updates use a non-blocking lock. Delay the second export's retry
+	// until the first has published its index entry.
+	for _, release := range releases {
+		close(release)
+		require.NoError(t, <-completed)
+	}
+	require.NoError(t, <-done)
+
+	dt, err := os.ReadFile(filepath.Join(dir, "index.json"))
+	require.NoError(t, err)
+	var index ocispecs.Index
+	require.NoError(t, json.Unmarshal(dt, &index))
+	require.Len(t, index.Manifests, 2)
+
+	store, err := contentlocal.NewStore(dir)
+	require.NoError(t, err)
+
+	for _, desc := range index.Manifests {
+		dt, err := content.ReadBlob(sb.Context(), store, desc)
+		require.NoError(t, err)
+		var manifest ocispecs.Manifest
+		require.NoError(t, json.Unmarshal(dt, &manifest))
+		for _, blob := range append(manifest.Layers, manifest.Config) {
+			dt, err := content.ReadBlob(sb.Context(), store, blob)
+			require.NoError(t, err)
+			require.Equal(t, blob.Digest, blob.Digest.Algorithm().FromBytes(dt))
+		}
+	}
+}
+
+// gatedCacheStore pauses the first writer so two exports can overlap without
+// relying on scheduling or a large payload to keep an ingest active.
+type gatedCacheStore struct {
+	content.Store
+	opened  chan<- struct{}
+	blocked chan<- struct{}
+	release <-chan struct{}
+	paused  atomic.Bool
+}
+
+func (s *gatedCacheStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	w, err := s.Store.Writer(ctx, opts...)
+	if err != nil {
+		if errors.Is(err, cerrdefs.ErrUnavailable) {
+			select {
+			case s.blocked <- struct{}{}:
+			default:
+			}
+			select {
+			case <-s.release:
+			case <-ctx.Done():
+				return nil, context.Cause(ctx)
+			}
+		}
+		return nil, err
+	}
+	if s.paused.CompareAndSwap(false, true) {
+		s.opened <- struct{}{}
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			w.Close()
+			return nil, context.Cause(ctx)
+		}
+	}
+	return w, nil
+}
 
 func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
