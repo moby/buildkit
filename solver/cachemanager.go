@@ -42,19 +42,7 @@ type cacheManager struct {
 }
 
 func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
-	visited := map[string]struct{}{}
-	return c.storage.backend.Walk(func(id string) error {
-		return c.storage.backend.WalkResults(id, func(cr CacheResult) error {
-			if _, ok := visited[cr.ID]; ok {
-				return nil
-			}
-			visited[cr.ID] = struct{}{}
-			if !c.storage.results.Exists(ctx, cr.ID) {
-				c.storage.backend.Release(cr.ID)
-			}
-			return nil
-		})
-	})
+	return c.storage.ReleaseUnreferenced(ctx)
 }
 
 func (c *cacheManager) ID() string {
