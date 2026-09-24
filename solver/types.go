@@ -305,6 +305,9 @@ type CacheStorage interface {
 	// possible match.
 	Query(deps []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error)
 
+	// Records returns the cache records associated with a cache key.
+	Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error)
+
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error
 }

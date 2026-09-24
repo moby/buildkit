@@ -90,6 +90,24 @@ func (c *kvCacheStorage) newKeyWithID(id string, dgst digest.Digest, output Inde
 	return k
 }
 
+func (c *kvCacheStorage) Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error) {
+	outs := make([]*CacheRecord, 0)
+	if err := c.backend.WalkResults(ck.ID, func(r CacheResult) error {
+		if c.results.Exists(ctx, r.ID) {
+			outs = append(outs, &CacheRecord{
+				ID:        r.ID,
+				CreatedAt: r.CreatedAt,
+			})
+		} else {
+			c.backend.Release(r.ID)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return outs, nil
+}
+
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
 	visited := map[string]struct{}{}
 	return c.backend.Walk(func(id string) error {
