@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
@@ -155,43 +156,6 @@ func (r *LoadedResult) TraceFields() map[string]any {
 	}
 }
 
-func (c *cacheManager) filterResults(m map[string]Result, ck *CacheKey, visited map[string]struct{}) (results []LoadedResult, err error) {
-	id := c.getID(ck)
-	if _, ok := visited[id]; ok {
-		return nil, nil
-	}
-	visited[id] = struct{}{}
-	if err := c.storage.backend.WalkResults(id, func(cr CacheResult) error {
-		res, ok := m[id]
-		if ok {
-			results = append(results, LoadedResult{
-				Result:      res,
-				CacheKey:    ck,
-				CacheResult: cr,
-			})
-			delete(m, id)
-		}
-		return nil
-	}); err != nil {
-		for _, r := range results {
-			r.Result.Release(context.TODO())
-		}
-	}
-	for _, keys := range ck.Deps() {
-		for _, key := range keys {
-			res, err := c.filterResults(m, key.CacheKey.CacheKey, visited)
-			if err != nil {
-				for _, r := range results {
-					r.Result.Release(context.TODO())
-				}
-				return nil, err
-			}
-			results = append(results, res...)
-		}
-	}
-	return
-}
-
 func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) (rres []LoadedResult, rerr error) {
 	lg := bklog.G(context.TODO()).WithFields(logrus.Fields{
 		"cache_manager": c.id,
@@ -207,42 +171,28 @@ func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) (r
 		lg.WithError(rerr).WithField("return_results", rresField).Trace("cache manager")
 	}()
 
-	lwp, ok := c.storage.results.(interface {
-		LoadWithParents(context.Context, CacheResult) (map[string]Result, error)
-	})
-	if !ok {
-		res, err := c.Load(ctx, rec)
-		if err != nil {
-			return nil, err
-		}
-		return []LoadedResult{{Result: res, CacheKey: rec.key, CacheResult: CacheResult{ID: c.getID(rec.key), CreatedAt: rec.CreatedAt}}}, nil
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	cr, err := c.storage.backend.Load(c.getID(rec.key), rec.ID)
-	if err != nil {
+	key := c.getKey(rec.key)
+	if rres, err := c.storage.LoadWithParents(ctx, key, rec.ID); err == nil {
+		return rres, nil
+	} else if !cerrdefs.IsNotImplemented(err) {
 		return nil, err
 	}
 
-	m, err := lwp.LoadWithParents(ctx, cr)
+	// Fallback to normal load.
+	res, err := c.storage.Load(ctx, key, rec.ID)
 	if err != nil {
 		return nil, err
 	}
-
-	results, err := c.filterResults(m, rec.key, map[string]struct{}{})
-	if err != nil {
-		for _, r := range m {
-			r.Release(context.TODO())
-		}
-	}
-	for _, r := range m {
-		// refs added to results are deleted from m by filterResults
-		// so release any leftovers
-		r.Release(context.TODO())
-	}
-
-	return results, nil
+	return []LoadedResult{
+		{
+			Result:   res,
+			CacheKey: rec.key,
+			CacheResult: CacheResult{
+				ID:        key.ID,
+				CreatedAt: rec.CreatedAt,
+			},
+		},
+	}, nil
 }
 
 func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *ExportableCacheKey, err error) {

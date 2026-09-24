@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/compression"
@@ -299,6 +300,8 @@ type CacheManager interface {
 	ReleaseUnreferenced(context.Context) error
 }
 
+var ErrNotImplemented = cerrdefs.ErrNotImplemented
+
 // CacheStorage is an abstraction over the stored cache database used by the CacheManager.
 type CacheStorage interface {
 	// Query searches for cache paths from one cache key to the output of a
@@ -310,6 +313,11 @@ type CacheStorage interface {
 
 	// Load loads a cache record into a result reference.
 	Load(ctx context.Context, key *CacheKey, id string) (Result, error)
+
+	// LoadWithParents will load the cache record and any parents from the cache storage.
+	// This method may not be implemented by all backends. If it is not implemented,
+	// this method can return ErrNotImplemented.
+	LoadWithParents(ctx context.Context, key *CacheKey, id string) ([]LoadedResult, error)
 
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error

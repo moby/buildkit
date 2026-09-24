@@ -119,6 +119,80 @@ func (c *kvCacheStorage) Load(ctx context.Context, key *CacheKey, id string) (Re
 	return c.results.Load(ctx, res)
 }
 
+func (c *kvCacheStorage) LoadWithParents(ctx context.Context, key *CacheKey, id string) ([]LoadedResult, error) {
+	lwp, ok := c.results.(interface {
+		LoadWithParents(context.Context, CacheResult) (map[string]Result, error)
+	})
+	if !ok {
+		return nil, ErrNotImplemented
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	cr, err := c.backend.Load(key.ID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := lwp.LoadWithParents(ctx, cr)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := c.filterResults(m, key, map[string]struct{}{})
+	if err != nil {
+		for _, r := range m {
+			r.Release(context.TODO())
+		}
+	}
+	for _, r := range m {
+		// refs added to results are deleted from m by filterResults
+		// so release any leftovers
+		r.Release(context.TODO())
+	}
+
+	return results, nil
+}
+
+func (c *kvCacheStorage) filterResults(m map[string]Result, ck *CacheKey, visited map[string]struct{}) (results []LoadedResult, err error) {
+	if _, ok := visited[ck.ID]; ok {
+		return nil, nil
+	}
+
+	visited[ck.ID] = struct{}{}
+	if err := c.backend.WalkResults(ck.ID, func(cr CacheResult) error {
+		res, ok := m[ck.ID]
+		if ok {
+			results = append(results, LoadedResult{
+				Result:      res,
+				CacheKey:    ck,
+				CacheResult: cr,
+			})
+			delete(m, ck.ID)
+		}
+		return nil
+	}); err != nil {
+		for _, r := range results {
+			r.Result.Release(context.TODO())
+		}
+	}
+
+	for _, keys := range ck.Deps() {
+		for _, key := range keys {
+			res, err := c.filterResults(m, key.CacheKey.CacheKey, visited)
+			if err != nil {
+				for _, r := range results {
+					r.Result.Release(context.TODO())
+				}
+				return nil, err
+			}
+			results = append(results, res...)
+		}
+	}
+	return
+}
+
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
 	visited := map[string]struct{}{}
 	return c.backend.Walk(func(id string) error {
