@@ -12,8 +12,7 @@ ARG STARGZ_SNAPSHOTTER_VERSION=v0.18.2
 ARG NERDCTL_VERSION=v2.3.1
 ARG DNSNAME_VERSION=v1.3.1
 ARG NYDUS_VERSION=v2.4.0
-ARG MINIO_VERSION=RELEASE.2025-09-07T16-13-09Z
-ARG MINIO_MC_VERSION=RELEASE.2025-08-13T08-35-41Z
+ARG SILO_VERSION=RELEASE.2026-09-03T13-18-01Z
 ARG AZURITE_VERSION=3.35.0
 ARG GOTESTSUM_VERSION=v1.13.0
 ARG DELVE_VERSION=v1.26.3
@@ -29,9 +28,8 @@ ARG GO_VERSION=1.26
 ARG XX_VERSION=1.9.0
 ARG BUILDKIT_DEBUG
 
-# minio for s3 integration tests
-FROM quay.io/minio/minio:${MINIO_VERSION} AS minio
-FROM quay.io/minio/mc:${MINIO_MC_VERSION} AS minio-mc
+# silo for s3 integration tests
+FROM pgsty/silo:${SILO_VERSION} AS silo
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
@@ -462,8 +460,8 @@ ENV GOTESTSUM_FORMAT=standard-verbose
 COPY --link --from=docker-engine / /usr/bin/
 RUN rm -f /usr/bin/vpnkit
 COPY --link --from=gotestsum /out /usr/bin/
-COPY --link --from=minio /usr/bin/minio /usr/bin/
-COPY --link --from=minio-mc /usr/bin/mc /usr/bin/
+COPY --link --from=silo /usr/bin/silo /usr/bin/
+COPY --link --from=silo /usr/bin/mcli /usr/bin/mc
 COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
