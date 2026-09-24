@@ -298,3 +298,10 @@ type CacheManager interface {
 
 	ReleaseUnreferenced(context.Context) error
 }
+
+// CacheStorage is an abstraction over the stored cache database used by the CacheManager.
+type CacheStorage interface {
+	// Query searches for cache paths from one cache key to the output of a
+	// possible match.
+	Query(deps []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error)
+}
