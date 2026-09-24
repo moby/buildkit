@@ -258,8 +258,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	}
 
 	if !opt.IgnoreBacklinks {
-		for cm, id := range k.ids {
-			_, err := addBacklinks(t, cm, id, bkm)
+		for cm, key := range k.equiv {
+			_, err := addBacklinks(t, cm, key.ID, bkm)
 			if err != nil {
 				return nil, err
 			}

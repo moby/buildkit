@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -349,7 +350,7 @@ func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *Ex
 }
 
 func newKey() *CacheKey {
-	return &CacheKey{ids: map[*cacheManager]string{}}
+	return &CacheKey{equiv: map[*cacheManager]*CacheKey{}}
 }
 
 func (c *cacheManager) newKeyWithID(id string, dgst digest.Digest, output Index) *CacheKey {
@@ -357,7 +358,7 @@ func (c *cacheManager) newKeyWithID(id string, dgst digest.Digest, output Index)
 	k.digest = dgst
 	k.output = output
 	k.ID = id
-	k.ids[c] = id
+	k.equiv[c] = k
 	return k
 }
 
@@ -367,20 +368,20 @@ func (c *cacheManager) newRootKey(dgst digest.Digest, output Index) *CacheKey {
 
 func (c *cacheManager) getID(k *CacheKey) string {
 	k.mu.Lock()
-	id, ok := k.ids[c]
+	key, ok := k.equiv[c]
 	if ok {
 		k.mu.Unlock()
-		return id
+		return key.ID
 	}
 	if len(k.deps) == 0 {
-		k.ids[c] = k.ID
+		k.equiv[c] = k
 		k.mu.Unlock()
 		return k.ID
 	}
-	id = c.getIDFromDeps(k)
-	k.ids[c] = id
+	key = c.getKeyFromDeps(k)
+	k.equiv[c] = key
 	k.mu.Unlock()
-	return id
+	return key.ID
 }
 
 func (c *cacheManager) ensurePersistentKey(k *CacheKey) error {
@@ -407,9 +408,30 @@ func (c *cacheManager) ensurePersistentKey(k *CacheKey) error {
 	return nil
 }
 
-func (c *cacheManager) getIDFromDeps(k *CacheKey) string {
-	matches := map[string]struct{}{}
+func (c *cacheManager) getKeyFromDeps(k *CacheKey) (ck *CacheKey) {
+	ck = k
+	if len(k.equiv) > 0 {
+		// Cannot reuse this cache key since it is already in use
+		// by a separate cache manager so duplicate the contents so
+		// we can resolve the dependencies in relation to this cache
+		// manager.
+		ck = &CacheKey{
+			digest: k.digest,
+			vtx:    k.vtx,
+			output: k.output,
+			equiv:  map[*cacheManager]*CacheKey{},
+			deps:   make([][]CacheKeyWithSelector, len(k.deps)),
+		}
 
+		// Duplicate the dependency slice so we can feel free to modify it
+		// freely.
+		for i, dep := range k.deps {
+			ck.deps[i] = slices.Clone(dep)
+		}
+		ck.equiv[c] = ck
+	}
+
+	matches := map[string]struct{}{}
 	for i, deps := range k.deps {
 		if i == 0 || len(matches) > 0 {
 			for _, ck := range deps {
@@ -442,10 +464,14 @@ func (c *cacheManager) getIDFromDeps(k *CacheKey) string {
 	}
 
 	for k := range matches {
-		return k
+		ck.ID = k
+		return ck
 	}
 
-	return identity.NewID()
+	// Unable to resolve the id to an existing one based
+	// on the dependencies so generate a new id.
+	ck.ID = identity.NewID()
+	return ck
 }
 
 func rootKey(dgst digest.Digest, output Index) digest.Digest {
