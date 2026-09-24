@@ -83,58 +83,27 @@ func (c *cacheManager) Query(deps []CacheKeyWithSelector, input Index, dgst dige
 		lg.WithError(rerr).WithField("return_cachekeys", rcksField).Trace("cache manager")
 	}()
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	// Resolve the cache keys for all dependencies so the underlying
+	// cache storage is only dealing with fresh cache keys.
+	c.resolveDepKeys(deps)
 
-	type dep struct {
-		results map[string]struct{}
-		key     CacheKeyWithSelector
+	// Query the underlying storage.
+	return c.query(deps, input, dgst, output)
+}
+
+func (c *cacheManager) query(deps []CacheKeyWithSelector, input Index, dgst digest.Digest, output Index) ([]*CacheKey, error) {
+	keys, err := c.storage.Query(context.TODO(), deps, input, dgst, output)
+	if err != nil {
+		return nil, err
 	}
 
-	allDeps := make([]dep, 0, len(deps))
-	for _, k := range deps {
-		allDeps = append(allDeps, dep{key: k, results: map[string]struct{}{}})
-	}
-
-	allRes := map[string]*CacheKey{}
-	for _, d := range allDeps {
-		if err := c.storage.backend.WalkLinks(c.getID(d.key.CacheKey.CacheKey), CacheInfoLink{input, output, dgst, d.key.Selector}, func(id string) error {
-			d.results[id] = struct{}{}
-			if _, ok := allRes[id]; !ok {
-				allRes[id] = c.newKeyWithID(id, dgst, output)
-			}
-			return nil
-		}); err != nil {
-			return nil, err
+	for i, ck := range keys {
+		ck.digest = dgst
+		ck.output = output
+		if ck.equiv == nil {
+			ck.equiv = map[*cacheManager]*CacheKey{}
 		}
-	}
-
-	// link the results against the keys that didn't exist
-	for id, key := range allRes {
-		for _, d := range allDeps {
-			if _, ok := d.results[id]; !ok {
-				if err := c.storage.backend.AddLink(c.getID(d.key.CacheKey.CacheKey), CacheInfoLink{
-					Input:    input,
-					Output:   output,
-					Digest:   dgst,
-					Selector: d.key.Selector,
-				}, c.getID(key)); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	if len(deps) == 0 {
-		if !c.storage.backend.Exists(rootKey(dgst, output).String()) {
-			return nil, nil
-		}
-		return []*CacheKey{c.newRootKey(dgst, output)}, nil
-	}
-
-	keys := make([]*CacheKey, 0, len(deps))
-	for _, k := range allRes {
-		keys = append(keys, k)
+		keys[i].equiv[c] = ck
 	}
 	return keys, nil
 }
@@ -347,39 +316,26 @@ func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *Ex
 	}, nil
 }
 
-func newKey() *CacheKey {
-	return &CacheKey{equiv: map[*cacheManager]*CacheKey{}}
-}
-
-func (c *cacheManager) newKeyWithID(id string, dgst digest.Digest, output Index) *CacheKey {
-	k := newKey()
-	k.digest = dgst
-	k.output = output
-	k.ID = id
-	k.equiv[c] = k
-	return k
-}
-
-func (c *cacheManager) newRootKey(dgst digest.Digest, output Index) *CacheKey {
-	return c.newKeyWithID(rootKey(dgst, output).String(), dgst, output)
-}
-
-func (c *cacheManager) getID(k *CacheKey) string {
+func (c *cacheManager) getKey(k *CacheKey) *CacheKey {
 	k.mu.Lock()
 	key, ok := k.equiv[c]
 	if ok {
 		k.mu.Unlock()
-		return key.ID
+		return key
 	}
 	if len(k.deps) == 0 {
 		k.equiv[c] = k
 		k.mu.Unlock()
-		return k.ID
+		return k
 	}
 	key = c.getKeyFromDeps(k)
 	k.equiv[c] = key
 	k.mu.Unlock()
-	return key.ID
+	return key
+}
+
+func (c *cacheManager) getID(k *CacheKey) string {
+	return c.getKey(k).ID
 }
 
 func (c *cacheManager) ensurePersistentKey(k *CacheKey) error {
@@ -429,39 +385,46 @@ func (c *cacheManager) getKeyFromDeps(k *CacheKey) (ck *CacheKey) {
 		ck.equiv[c] = ck
 	}
 
+	// Resolve the cache keys for the dependencies.
+	for _, deps := range ck.deps {
+		c.resolveDepKeys(deps)
+	}
+
+	// Cache keys for dependencies have been fully resolved so we can
+	// send a request to the underlying storage.
+	keys, err := c.query(ck.deps[0], 0, ck.Digest(), ck.Output())
+	if err != nil {
+		return withArbitraryIdentity(ck)
+	}
+
 	matches := map[string]struct{}{}
-loop0:
-		for i, deps := range k.deps {
-			if i > 0 && len(matches) == 0 {
-				break
-			}
-			// Keys within one input are alternatives; different inputs must all match.
-			candidates := map[string]struct{}{}
-			for _, ck := range deps {
-				
-				if err := c.storage.backend.WalkLinks(c.getID(ck.CacheKey.CacheKey), CacheInfoLink{
-					Input:    Index(i),
-					Output:   k.Output(),
-					Digest:   k.Digest(),
-					Selector: ck.Selector,
-				}, func(id string) error {
-					candidates[id] = struct{}{}
-					return nil
-				}); err != nil {
-					matches = nil
-					break loop0
-				}
-			}
-			if i == 0 {
-				matches = candidates
-			} else {
-				for id := range matches {
-					if _, ok := candidates[id]; !ok {
-						delete(matches, id)
-					}
-				}
+	for _, k := range keys {
+		matches[k.ID] = struct{}{}
+	}
+
+	for i, deps := range ck.deps[1:] {
+		if len(matches) == 0 {
+			break
+		}
+
+		keys, err := c.query(deps, Index(i+1), ck.Digest(), ck.Output())
+
+		// Return on error or short circuit if no keys were found.
+		if err != nil || len(keys) == 0 {
+			return withArbitraryIdentity(ck)
+		}
+
+		m2 := make(map[string]struct{}, len(keys))
+		for _, k := range keys {
+			m2[k.ID] = struct{}{}
+		}
+
+		for id := range matches {
+			if _, ok := m2[id]; !ok {
+				delete(matches, id)
 			}
 		}
+	}
 
 	for k := range matches {
 		ck.ID = k
@@ -470,8 +433,16 @@ loop0:
 
 	// Unable to resolve the id to an existing one based
 	// on the dependencies so generate a new id.
-	ck.ID = identity.NewID()
-	return ck
+	return withArbitraryIdentity(ck)
+}
+
+// resolveDepKeys resolves the cache keys in the dependencies
+// to ensure the id is set to one that makes sense for the cache
+// manager it is attached to.
+func (c *cacheManager) resolveDepKeys(deps []CacheKeyWithSelector) {
+	for i, d := range deps {
+		deps[i].CacheKey.CacheKey = c.getKey(d.CacheKey.CacheKey)
+	}
 }
 
 func rootKey(dgst digest.Digest, output Index) digest.Digest {
@@ -480,4 +451,9 @@ func rootKey(dgst digest.Digest, output Index) digest.Digest {
 		return digest.Digest("random:" + dgst.Encoded())
 	}
 	return out
+}
+
+func withArbitraryIdentity(ck *CacheKey) *CacheKey {
+	ck.ID = identity.NewID()
+	return ck
 }
