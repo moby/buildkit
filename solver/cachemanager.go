@@ -109,21 +109,16 @@ func (c *cacheManager) Records(ctx context.Context, ck *CacheKey) (rrecs []*Cach
 		lg.WithError(rerr).WithField("return_records", rrercsField).Trace("cache manager")
 	}()
 
-	outs := make([]*CacheRecord, 0)
-	if err := c.storage.backend.WalkResults(c.getID(ck), func(r CacheResult) error {
-		if c.storage.results.Exists(ctx, r.ID) {
-			outs = append(outs, &CacheRecord{
-				ID:           r.ID,
-				cacheManager: c,
-				key:          ck,
-				CreatedAt:    r.CreatedAt,
-			})
-		} else {
-			c.storage.backend.Release(r.ID)
-		}
-		return nil
-	}); err != nil {
+	outs, err := c.storage.Records(ctx, c.getKey(ck))
+	if err != nil {
 		return nil, err
+	}
+
+	// Set the associated owners for these cache records since the cache storage interface
+	// doesn't have access to these.
+	for _, r := range outs {
+		r.cacheManager = c
+		r.key = ck
 	}
 	return outs, nil
 }
