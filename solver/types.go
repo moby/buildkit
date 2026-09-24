@@ -304,4 +304,7 @@ type CacheStorage interface {
 	// Query searches for cache paths from one cache key to the output of a
 	// possible match.
 	Query(deps []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error)
+
+	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
+	ReleaseUnreferenced(context.Context) error
 }
