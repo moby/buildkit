@@ -30,7 +30,7 @@ func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[st
 
 	m := map[digest.Digest][][]CacheLink{}
 	isRoot := true
-	if err := cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+	if err := cm.storage.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
 		isRoot = false
 		recs, err := addBacklinks(t, cm, id, bkm)
 		if err != nil { // TODO: should we continue on error?
@@ -160,7 +160,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 		cm := v.cacheManager
 		key := cm.getID(v.key)
-		res, err := cm.backend.Load(key, v.ID)
+		res, err := cm.storage.backend.Load(key, v.ID)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				v = nil
@@ -169,7 +169,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
-		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
+		remotes, err := cm.storage.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 
 		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
-			res, err := cm.results.Load(ctx, res)
+			res, err := cm.storage.results.Load(ctx, res)
 			if err != nil {
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
 					return nil, err
@@ -277,12 +277,12 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	if v != nil && len(deps) == 0 {
 		cm := v.cacheManager
 		key := cm.getID(v.key)
-		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
+		if err := cm.storage.backend.WalkIDsByResult(v.ID, func(id string) error {
 			if id == key {
 				return nil
 			}
 			hasBacklinks := false
-			cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+			cm.storage.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
 				hasBacklinks = true
 				return nil
 			})
