@@ -112,7 +112,7 @@ type shellWord struct {
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
-	word, words, err := sw.processStopOn(scanner.EOF, sw.rawEscapes)
+	word, words, err := sw.processStopOn(scanner.EOF, sw.rawEscapes, false)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to process %q", source)
 	}
@@ -164,9 +164,12 @@ func (w *wordsStruct) getWords() []string {
 	return w.words
 }
 
-// Process the word, starting at 'pos', and stop when we get to the
-// end of the word or the 'stopChar' character
-func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []string, error) {
+// processStopOn processes input until stopChar or EOF. rawEscapes retains
+// escape syntax in the result. preservePatternEscapes doubles literal escape
+// tokens inside quoted patterns so the pattern can be parsed again by
+// convertShellPatternToRegex. Pattern operands are the word in ${var#word} and
+// ${var%word}, and the pattern in ${var/pattern/replacement}.
+func (sw *shellWord) processStopOn(stopChar rune, rawEscapes, preservePatternEscapes bool) (string, []string, error) {
 	// result buffer can't be currently shared for shellWord as it is called internally
 	// by processDollar
 	var result strings.Builder
@@ -180,8 +183,12 @@ func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []st
 		'<': sw.processPossibleHeredoc,
 	}
 	if !sw.SkipProcessQuotes {
-		charFuncMapping['\''] = sw.processSingleQuote
-		charFuncMapping['"'] = sw.processDoubleQuote
+		charFuncMapping['\''] = func() (string, error) {
+			return sw.processSingleQuote(preservePatternEscapes)
+		}
+		charFuncMapping['"'] = func() (string, error) {
+			return sw.processDoubleQuote(preservePatternEscapes)
+		}
 	}
 
 	// temporarily set sw.rawEscapes if needed
@@ -243,7 +250,7 @@ func (sw *shellWord) processStopOn(stopChar rune, rawEscapes bool) (string, []st
 	return result.String(), words.getWords(), nil
 }
 
-func (sw *shellWord) processSingleQuote() (string, error) {
+func (sw *shellWord) processSingleQuote(preservePatternEscapes bool) (string, error) {
 	// All chars between single quotes are taken as-is
 	// Note, you can't escape '
 	//
@@ -271,11 +278,14 @@ func (sw *shellWord) processSingleQuote() (string, error) {
 			}
 			return result.String(), nil
 		}
+		if preservePatternEscapes && ch == sw.escapeToken {
+			result.WriteRune(ch)
+		}
 		result.WriteRune(ch)
 	}
 }
 
-func (sw *shellWord) processDoubleQuote() (string, error) {
+func (sw *shellWord) processDoubleQuote(preservePatternEscapes bool) (string, error) {
 	// All chars up to the next " are taken as-is, even ', except any $ chars
 	// But you can escape " with a \ (or ` if escape token set accordingly)
 	//
@@ -328,9 +338,9 @@ func (sw *shellWord) processDoubleQuote() (string, error) {
 					}
 					ch = sw.scanner.Next()
 				default:
-					// A literal \ only needs escaping in raw mode when the
-					// quotes around it are dropped.
-					if sw.rawEscapes && !sw.RawQuotes {
+					// Shell patterns need a doubled escape for
+					// convertShellPatternToRegex even when quotes are kept.
+					if sw.rawEscapes && (!sw.RawQuotes || preservePatternEscapes) {
 						result.WriteRune(ch)
 					}
 				}
@@ -387,7 +397,7 @@ func (sw *shellWord) processDollar() (string, error) {
 		if nullIsUnset && rawEscapes {
 			return "", errors.Errorf("unsupported modifier (%s) in substitution", chs)
 		}
-		word, _, err := sw.processStopOn('}', rawEscapes)
+		word, _, err := sw.processStopOn('}', rawEscapes, rawEscapes)
 		if err != nil {
 			if sw.scanner.Peek() == scanner.EOF {
 				return "", errors.New("syntax error: missing '}'")
@@ -451,7 +461,7 @@ func (sw *shellWord) processDollar() (string, error) {
 			sw.scanner.Next()
 		}
 
-		pattern, _, err := sw.processStopOn('/', true)
+		pattern, _, err := sw.processStopOn('/', true, true)
 		if err != nil {
 			if sw.scanner.Peek() == scanner.EOF {
 				return "", errors.New("syntax error: missing '/' in ${}")
@@ -459,7 +469,7 @@ func (sw *shellWord) processDollar() (string, error) {
 			return "", err
 		}
 
-		replacement, _, err := sw.processStopOn('}', true)
+		replacement, _, err := sw.processStopOn('}', true, false)
 		if err != nil {
 			if sw.scanner.Peek() == scanner.EOF {
 				return "", errors.New("syntax error: missing '}'")

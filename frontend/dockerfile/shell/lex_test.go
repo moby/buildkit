@@ -221,6 +221,24 @@ func TestProcessWordRawEscapes(t *testing.T) {
 	}
 }
 
+func TestProcessWordRawQuotesPatternEscapes(t *testing.T) {
+	envs := EnvsFromSlice([]string{`FOO=a\bc`, "BAR=ok"})
+	for _, input := range []string{
+		`$BAR ${FOO#"a\b"}`,
+		`$BAR ${FOO#'a\b'}`,
+		`$BAR ${FOO/"a\b"/x}`,
+	} {
+		t.Run(input, func(t *testing.T) {
+			shlex := NewLex('\\')
+			shlex.RawQuotes = true
+			shlex.RawEscapes = true
+			w, _, err := shlex.ProcessWord(input, envs)
+			require.NoError(t, err)
+			require.Equal(t, `ok a\bc`, w)
+		})
+	}
+}
+
 func TestGetEnv(t *testing.T) {
 	sw := &shellWord{envs: nil, matches: make(map[string]struct{}), nonmatches: make(map[string]struct{})}
 
@@ -500,6 +518,12 @@ func TestProcessWithMatches(t *testing.T) {
 		},
 		{
 			input:    `${FOO#"a\b"}`,
+			envs:     map[string]string{"FOO": `a\bc`},
+			expected: "c",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
+		{
+			input:    `${FOO#'a\b'}`,
 			envs:     map[string]string{"FOO": `a\bc`},
 			expected: "c",
 			matches:  map[string]struct{}{"FOO": {}},
