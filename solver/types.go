@@ -308,6 +308,9 @@ type CacheStorage interface {
 	// Records returns the cache records associated with a cache key.
 	Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error)
 
+	// Load loads a cache record into a result reference.
+	Load(ctx context.Context, key *CacheKey, id string) (Result, error)
+
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error
 }

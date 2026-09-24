@@ -108,6 +108,17 @@ func (c *kvCacheStorage) Records(ctx context.Context, ck *CacheKey) ([]*CacheRec
 	return outs, nil
 }
 
+func (c *kvCacheStorage) Load(ctx context.Context, key *CacheKey, id string) (Result, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	res, err := c.backend.Load(key.ID, id)
+	if err != nil {
+		return nil, err
+	}
+	return c.results.Load(ctx, res)
+}
+
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
 	visited := map[string]struct{}{}
 	return c.backend.Walk(func(id string) error {

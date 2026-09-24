@@ -138,15 +138,7 @@ func (c *cacheManager) Load(ctx context.Context, rec *CacheRecord) (rres Result,
 		lg.WithError(rerr).WithField("return_result", rresID).Trace("cache manager")
 	}()
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	res, err := c.storage.backend.Load(c.getID(rec.key), rec.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return c.storage.results.Load(ctx, res)
+	return c.storage.Load(ctx, c.getKey(rec.key), rec.ID)
 }
 
 type LoadedResult struct {
