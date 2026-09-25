@@ -38,7 +38,7 @@ type copyConfig struct {
 	checksum        string
 	parents         bool
 	location        []parser.Range
-	ignoreMatcher   *patternmatcher.PatternMatcher
+	ignoreMatcher   func() (*patternmatcher.PatternMatcher, error)
 	opt             dispatchOpt
 	unpack          *bool
 }
@@ -232,7 +232,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				a = a.Copy(st, f, dest, opts...)
 			}
 		} else {
-			validateCopySourcePath(src, &cfg)
+			if err := validateCopySourcePath(src, &cfg); err != nil {
+				return err
+			}
 			var patterns []string
 			var requiredPaths []string
 			if cfg.parents {

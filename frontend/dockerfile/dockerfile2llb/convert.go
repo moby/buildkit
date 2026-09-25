@@ -761,19 +761,21 @@ func (dctx *dispatchContext) dispatchStages(ctx context.Context, allReachable ma
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
 
-	var dockerIgnoreMatcher *patternmatcher.PatternMatcher
-	if dctx.opt.Client != nil {
+	// Loading ignore patterns accesses the local context. Only do so when a
+	// COPY or ADD actually needs to validate a local source path.
+	dockerIgnoreMatcher := sync.OnceValues(func() (*patternmatcher.PatternMatcher, error) {
+		if dctx.opt.Client == nil {
+			return nil, nil
+		}
 		dockerIgnorePatterns, err := dctx.opt.Client.DockerIgnorePatterns(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if len(dockerIgnorePatterns) > 0 {
-			dockerIgnoreMatcher, err = patternmatcher.New(dockerIgnorePatterns)
-			if err != nil {
-				return nil, nil, err
-			}
+			return patternmatcher.New(dockerIgnorePatterns)
 		}
-	}
+		return nil, nil
+	})
 
 	for _, d := range dctx.allDispatchStates.states {
 		if !dctx.opt.AllStages {
@@ -901,11 +903,17 @@ func (dctx *dispatchContext) finalizeResultImage(ctx context.Context, target *di
 	opts := filterPaths(ctxPaths)
 	bctx := dctx.opt.MainContext
 	if dctx.opt.Client != nil {
-		var err error
-		bctx, err = dctx.opt.Client.MainContext(ctx, opts...)
-		if err != nil {
-			return err
-		}
+		// Resolve the context only if its output is used. This also covers
+		// context mounts and explicit SBOM context scans without eagerly
+		// loading .dockerignore for builds that don't use any context files.
+		st := llb.Scratch().Async(func(ctx context.Context, _ llb.State, _ *llb.Constraints) (llb.State, error) {
+			bctx, err := dctx.opt.Client.MainContext(ctx, opts...)
+			if err != nil {
+				return llb.State{}, err
+			}
+			return *bctx, nil
+		})
+		bctx = &st
 	} else if bctx == nil {
 		bctx = dockerui.DefaultMainContext(opts...)
 	}
@@ -999,7 +1007,7 @@ type dispatchOpt struct {
 	llbCaps             *apicaps.CapSet
 	sourceMap           *llb.SourceMap
 	lint                *linter.Linter
-	dockerIgnoreMatcher *patternmatcher.PatternMatcher
+	dockerIgnoreMatcher func() (*patternmatcher.PatternMatcher, error)
 }
 
 func getEnv(state llb.State) shell.EnvGetter {
@@ -1119,7 +1127,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		err = dispatchArg(d, c, &opt)
 	case *instructions.CopyCommand:
 		l := opt.buildContext
-		var ignoreMatcher *patternmatcher.PatternMatcher
+		var ignoreMatcher func() (*patternmatcher.PatternMatcher, error)
 		if len(cmd.sources) != 0 {
 			src := cmd.sources[0]
 			if !src.dispatched {

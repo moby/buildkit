@@ -32,13 +32,20 @@ var reservedStageNames = map[string]struct{}{
 }
 
 func validateCopySourcePath(src string, cfg *copyConfig) error {
+	if cfg.ignoreMatcher == nil {
+		return nil
+	}
+	matcher, err := cfg.ignoreMatcher()
+	if err != nil {
+		return err
+	}
 	// Do not validate copy source paths if there is no dockerignore file
 	// or if the dockerignore file contains exclusions.
 	//
 	// Exclusions are too difficult to statically determine if they're proper
 	// because it's ok for a directory to be excluded and a file inside the directory
 	// to be negated.
-	if cfg.ignoreMatcher == nil || cfg.ignoreMatcher.Exclusions() {
+	if matcher == nil || matcher.Exclusions() {
 		return nil
 	}
 	cmd := "Copy"
@@ -50,11 +57,11 @@ func validateCopySourcePath(src string, cfg *copyConfig) error {
 	if src == "." || src == "/" {
 		// "." and "/" are context roots, not real paths that can be excluded.
 		// Only keep the warning for patterns that exclude all root entries.
-		if !copySourceRootIgnored(cfg.ignoreMatcher) {
+		if !copySourceRootIgnored(matcher) {
 			return nil
 		}
 	}
-	ok, err := cfg.ignoreMatcher.MatchesOrParentMatches(src)
+	ok, err := matcher.MatchesOrParentMatches(src)
 	if err != nil {
 		return err
 	}
