@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
@@ -201,6 +202,54 @@ func (c *kvCacheStorage) LoadRemotes(ctx context.Context, key *CacheKey, id stri
 		return nil, err
 	}
 	return c.results.LoadRemotes(ctx, res, compression, s)
+}
+
+func (c *kvCacheStorage) Save(k *CacheKey, r Result, createdAt time.Time) (*CacheRecord, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	res, err := c.results.Save(r, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.backend.AddResult(k.ID, res); err != nil {
+		return nil, err
+	}
+
+	// Ensure dependencies are linked properly within
+	// this cache key.
+	if err := c.ensurePersistentKey(k); err != nil {
+		return nil, err
+	}
+
+	rec := &CacheRecord{
+		ID:        res.ID,
+		CreatedAt: res.CreatedAt,
+	}
+	return rec, nil
+}
+
+func (c *kvCacheStorage) ensurePersistentKey(k *CacheKey) error {
+	for i, deps := range k.Deps() {
+		for _, ck := range deps {
+			l := CacheInfoLink{
+				Input:    Index(i),
+				Output:   k.Output(),
+				Digest:   k.Digest(),
+				Selector: ck.Selector,
+			}
+			ckID := ck.CacheKey.ID
+			if !c.backend.HasLink(ckID, l, k.ID) {
+				if err := c.ensurePersistentKey(ck.CacheKey.CacheKey); err != nil {
+					return err
+				}
+				if err := c.backend.AddLink(ckID, l, k.ID); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
