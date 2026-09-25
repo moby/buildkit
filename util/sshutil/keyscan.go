@@ -31,6 +31,9 @@ func addDefaultPort(hostport string, defaultPort int) string {
 	if err == nil {
 		return hostport
 	}
+	if strings.HasPrefix(hostport, "[") && strings.HasSuffix(hostport, "]") {
+		hostport = hostport[1 : len(hostport)-1]
+	}
 	hostport = net.JoinHostPort(hostport, strconv.Itoa(defaultPort))
 	return hostport
 }
