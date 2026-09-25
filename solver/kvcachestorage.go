@@ -6,6 +6,8 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -191,6 +193,14 @@ func (c *kvCacheStorage) filterResults(m map[string]Result, ck *CacheKey, visite
 		}
 	}
 	return
+}
+
+func (c *kvCacheStorage) LoadRemotes(ctx context.Context, key *CacheKey, id string, compression *compression.Config, s session.Group) ([]*Remote, error) {
+	res, err := c.backend.Load(key.ID, id)
+	if err != nil {
+		return nil, err
+	}
+	return c.results.LoadRemotes(ctx, res, compression, s)
 }
 
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {

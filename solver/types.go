@@ -319,6 +319,9 @@ type CacheStorage interface {
 	// this method can return ErrNotImplemented.
 	LoadWithParents(ctx context.Context, key *CacheKey, id string) ([]LoadedResult, error)
 
+	// LoadRemotes will load the remote solver objects associated with this cache record.
+	LoadRemotes(ctx context.Context, key *CacheKey, id string, compression *compression.Config, s session.Group) ([]*Remote, error)
+
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error
 }
