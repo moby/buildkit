@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/db/boltutil"
+	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -28,7 +29,7 @@ type Store struct {
 	db db.DB
 }
 
-func NewStore(dbPath string) (*Store, error) {
+func NewStore(dbPath string, policies ...compaction.Config) (*Store, error) {
 	// Check for legacy (v1) cache state.
 	//
 	// Automatic migration was removed in https://github.com/moby/buildkit/pull/6509
@@ -43,7 +44,7 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 	db, err := boltutil.Open(dbPath, 0600, &bolt.Options{
 		FreelistType: bolt.FreelistMapType,
-	})
+	}, policies...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to open database file %s", dbPath)
 	}
