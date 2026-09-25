@@ -211,28 +211,13 @@ func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (rck *Ex
 		lg.Trace("cache manager")
 	}()
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	res, err := c.storage.results.Save(r, createdAt)
+	k = c.getKey(k)
+	rec, err := c.storage.Save(k, r, createdAt)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.storage.backend.AddResult(c.getID(k), res); err != nil {
-		return nil, err
-	}
-
-	if err := c.ensurePersistentKey(k); err != nil {
-		return nil, err
-	}
-
-	rec := &CacheRecord{
-		ID:           res.ID,
-		cacheManager: c,
-		key:          k,
-		CreatedAt:    res.CreatedAt,
-	}
-
+	rec.cacheManager = c
+	rec.key = k
 	return &ExportableCacheKey{
 		CacheKey: k,
 		Exporter: &exporter{k: k, record: rec},
@@ -263,30 +248,6 @@ func (c *cacheManager) getKey(k *CacheKey) *CacheKey {
 
 func (c *cacheManager) getID(k *CacheKey) string {
 	return c.getKey(k).ID
-}
-
-func (c *cacheManager) ensurePersistentKey(k *CacheKey) error {
-	id := c.getID(k)
-	for i, deps := range k.Deps() {
-		for _, ck := range deps {
-			l := CacheInfoLink{
-				Input:    Index(i),
-				Output:   k.Output(),
-				Digest:   k.Digest(),
-				Selector: ck.Selector,
-			}
-			ckID := c.getID(ck.CacheKey.CacheKey)
-			if !c.storage.backend.HasLink(ckID, l, id) {
-				if err := c.ensurePersistentKey(ck.CacheKey.CacheKey); err != nil {
-					return err
-				}
-				if err := c.storage.backend.AddLink(ckID, l, id); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (c *cacheManager) getKeyFromDeps(k *CacheKey) (ck *CacheKey) {

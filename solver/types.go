@@ -322,6 +322,9 @@ type CacheStorage interface {
 	// LoadRemotes will load the remote solver objects associated with this cache record.
 	LoadRemotes(ctx context.Context, key *CacheKey, id string, compression *compression.Config, s session.Group) ([]*Remote, error)
 
+	// Save saves a result based on a cache key
+	Save(k *CacheKey, r Result, createdAt time.Time) (*CacheRecord, error)
+
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error
 }
