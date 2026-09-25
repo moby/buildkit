@@ -19,7 +19,7 @@ type exporter struct {
 	override *bool
 }
 
-func addBacklinks(ctx context.Context, t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
+func addBacklinks(ctx context.Context, t CacheExporterTarget, cm *kvCacheStorage, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
 	out, ok := bkm[id]
 	if ok && out != nil {
 		return out, nil
@@ -258,8 +258,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	if !opt.IgnoreBacklinks {
 		for cm, key := range k.equiv {
-			if _, err := addBacklinks(ctx, t, cm, key.ID, bkm); err != nil {
-				return nil, err
+			if cm, ok := cm.storage.(*kvCacheStorage); ok {
+				if _, err := addBacklinks(ctx, t, cm, key.ID, bkm); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
