@@ -158,19 +158,15 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 				break
 			}
 		}
+
 		cm := v.cacheManager
-		key := cm.getID(v.key)
-		res, err := cm.storage.backend.Load(key, v.ID)
+		key := cm.getKey(v.key)
+		remotes, err := cm.storage.LoadRemotes(ctx, key, v.ID, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				v = nil
 				continue
 			}
-			return nil, err
-		}
-
-		remotes, err := cm.storage.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
-		if err != nil {
 			return nil, err
 		}
 		if len(remotes) > 0 {
@@ -188,7 +184,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 
 		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
-			res, err := cm.storage.results.Load(ctx, res)
+			res, err := cm.storage.Load(ctx, key, v.ID)
 			if err != nil {
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
 					return nil, err
