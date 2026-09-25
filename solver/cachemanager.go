@@ -36,7 +36,7 @@ func NewCacheManager(ctx context.Context, id string, storage CacheKeyStorage, re
 
 type cacheManager struct {
 	id      string
-	storage *kvCacheStorage
+	storage CacheStorage
 }
 
 func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
