@@ -42,7 +42,7 @@ func testClientGatewayEmptyImageExec(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
-	}, "", func(ctx context.Context, c client.Client) (*client.Result, error) {
+	}, "", func(context.Context, client.Client) (*client.Result, error) {
 		return client.NewResult(), nil
 	}, nil)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+	b := func(context.Context, client.Client) (*client.Result, error) {
 		return nil, errors.New("expected to fail")
 	}
 

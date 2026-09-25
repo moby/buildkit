@@ -694,7 +694,7 @@ type cacheExporter struct {
 	m      map[any]struct{}
 }
 
-func (ce *cacheExporter) Add(dgst digest.Digest, deps [][]solver.CacheLink, results []solver.CacheExportResult) (solver.CacheExporterRecord, bool, error) {
+func (ce *cacheExporter) Add(_ digest.Digest, _ [][]solver.CacheLink, results []solver.CacheExportResult) (solver.CacheExporterRecord, bool, error) {
 	for _, res := range results {
 		if res.EdgeVertex == "" {
 			continue

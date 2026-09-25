@@ -98,7 +98,7 @@ func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error 
 			return nil
 		}
 
-		return b.ForEach(func(k, v []byte) error {
+		return b.ForEach(func(_, v []byte) error {
 			var res solver.CacheResult
 			if err := json.Unmarshal(v, &res); err != nil {
 				return err
@@ -182,7 +182,7 @@ func (s *Store) WalkIDsByResult(resultID string, fn func(string) error) error {
 		if b == nil {
 			return nil
 		}
-		return b.ForEach(func(k, v []byte) error {
+		return b.ForEach(func(k, _ []byte) error {
 			ids[string(k)] = struct{}{}
 			return nil
 		})
@@ -207,7 +207,7 @@ func (s *Store) Release(resultID string) error {
 		if b == nil {
 			return errors.WithStack(solver.ErrNotFound)
 		}
-		if err := b.ForEach(func(k, v []byte) error {
+		if err := b.ForEach(func(k, _ []byte) error {
 			return s.releaseHelper(tx, string(k), resultID)
 		}); err != nil {
 			return err
@@ -263,12 +263,12 @@ func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 	}
 
 	if backlinks := tx.Bucket([]byte(backlinksBucket)).Bucket(id); backlinks != nil {
-		if err := backlinks.ForEach(func(k, v []byte) error {
+		if err := backlinks.ForEach(func(k, _ []byte) error {
 			if subLinks := tx.Bucket([]byte(linksBucket)).Bucket(k); subLinks != nil {
 				// Perform deletion outside of the iteration.
 				// https://github.com/etcd-io/bbolt/pull/611
 				var toDelete []string
-				if err := subLinks.ForEach(func(k, v []byte) error {
+				if err := subLinks.ForEach(func(k, _ []byte) error {
 					parts := bytes.Split(k, []byte("@"))
 					if len(parts) != 2 {
 						return errors.Errorf("invalid key %s", k)
@@ -355,7 +355,7 @@ func (s *Store) WalkLinksAll(id string, fn func(id string, link solver.CacheInfo
 		if b == nil {
 			return nil
 		}
-		return b.ForEach(func(k, v []byte) error {
+		return b.ForEach(func(k, _ []byte) error {
 			parts := bytes.Split(k, []byte("@"))
 			if len(parts) != 2 {
 				return errors.Errorf("invalid key %s", k)
@@ -466,12 +466,12 @@ func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInf
 			return nil
 		}
 
-		if err := b.ForEach(func(bid, v []byte) error {
+		if err := b.ForEach(func(bid, _ []byte) error {
 			b = links.Bucket(bid)
 			if b == nil {
 				return nil
 			}
-			if err := b.ForEach(func(k, v []byte) error {
+			if err := b.ForEach(func(k, _ []byte) error {
 				parts := bytes.Split(k, []byte("@"))
 				if len(parts) == 2 {
 					if string(parts[1]) != id {

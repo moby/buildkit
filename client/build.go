@@ -218,7 +218,7 @@ func (g *gatewayClientForBuild) ExecProcess(ctx context.Context, opts ...grpc.Ca
 	return g.gateway.ExecProcess(ctx, opts...)
 }
 
-func (g *gatewayClientForBuild) Warn(ctx context.Context, in *gatewayapi.WarnRequest, opts ...grpc.CallOption) (*gatewayapi.WarnResponse, error) {
+func (g *gatewayClientForBuild) Warn(ctx context.Context, in *gatewayapi.WarnRequest, _ ...grpc.CallOption) (*gatewayapi.WarnResponse, error) {
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Warn(ctx, in)
 }

@@ -93,7 +93,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	var m sync.Mutex
 	manifestStack := []ocispecs.Descriptor{}
 
-	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+	filterHandler := images.HandlerFunc(func(_ context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
 		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest,
 			images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:

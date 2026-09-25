@@ -23,7 +23,7 @@ func runDevicePreHook(cmd *RunCommand, req parseRequest) error {
 	return nil
 }
 
-func runDevicePostHook(cmd *RunCommand, req parseRequest) error {
+func runDevicePostHook(cmd *RunCommand, _ parseRequest) error {
 	return setDeviceState(cmd)
 }
 

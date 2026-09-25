@@ -179,7 +179,7 @@ func newSolveOpt(clicontext *cli.Command, w io.WriteCloser) (*client.SolveOpt, e
 				Attrs: map[string]string{
 					"name": clicontext.String("tag"),
 				},
-				Output: func(_ map[string]string) (io.WriteCloser, error) {
+				Output: func(map[string]string) (io.WriteCloser, error) {
 					return w, nil
 				},
 			},

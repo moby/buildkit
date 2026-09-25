@@ -14,6 +14,6 @@ import (
 // * Remove cgroups
 //
 // See docs/rootless.md for the supported runc revision.
-func ToRootless(spec *specs.Spec) ([]string, error) {
+func ToRootless(*specs.Spec) ([]string, error) {
 	return nil, errors.Errorf("not implemented on %s", runtime.GOOS)
 }

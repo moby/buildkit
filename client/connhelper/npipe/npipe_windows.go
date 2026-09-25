@@ -21,7 +21,7 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 	}
 	address := strings.ReplaceAll(addrParts[1], "/", "\\")
 	return &connhelper.ConnectionHelper{
-		ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
+		ContextDialer: func(ctx context.Context, _ string) (net.Conn, error) {
 			return winio.DialPipeContext(ctx, address)
 		},
 	}, nil

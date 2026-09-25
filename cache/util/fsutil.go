@@ -22,7 +22,7 @@ type FileRange struct {
 	Length int
 }
 
-func ReadFile(ctx context.Context, root string, req ReadRequest) ([]byte, error) {
+func ReadFile(_ context.Context, root string, req ReadRequest) ([]byte, error) {
 	fp, err := fs.RootPath(root, req.Filename)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -77,7 +77,7 @@ func ReadDir(ctx context.Context, root string, req ReadDirRequest) ([]*fstypes.S
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	err = fsutil.Walk(ctx, fp, &fo, func(path string, info os.FileInfo, err error) error {
+	err = fsutil.Walk(ctx, fp, &fo, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
 			return errors.Wrapf(err, "walking %q", root)
 		}
@@ -99,7 +99,7 @@ func ReadDir(ctx context.Context, root string, req ReadDirRequest) ([]*fstypes.S
 	return rd, nil
 }
 
-func StatFile(ctx context.Context, root string, path string) (*fstypes.Stat, error) {
+func StatFile(_ context.Context, root string, path string) (*fstypes.Stat, error) {
 	fp, err := fs.RootPath(root, path)
 	if err != nil {
 		return nil, errors.WithStack(err)

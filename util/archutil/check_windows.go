@@ -6,6 +6,6 @@ import (
 	"errors"
 )
 
-func check(_, _ string) (string, error) {
+func check(string, string) (string, error) {
 	return "", errors.New("binfmt is not supported on Windows")
 }

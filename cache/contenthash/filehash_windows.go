@@ -8,6 +8,6 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func setUnixOpt(_ string, _ os.FileInfo, _ *fstypes.Stat) error {
+func setUnixOpt(string, os.FileInfo, *fstypes.Stat) error {
 	return nil
 }

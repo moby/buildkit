@@ -42,7 +42,7 @@ func TestSessionSharedKeyMetadata(t *testing.T) {
 			var called bool
 			var gotProto string
 			var gotMeta map[string][]string
-			dialer := func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error) {
+			dialer := func(_ context.Context, proto string, meta map[string][]string) (net.Conn, error) {
 				called = true
 				gotProto = proto
 				gotMeta = meta

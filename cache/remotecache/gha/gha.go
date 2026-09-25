@@ -138,7 +138,7 @@ func getConfig(conf *ghatypes.CacheConfig, v VerifierProvider, attrs map[string]
 
 // ResolveCacheExporterFunc for Github actions cache exporter.
 func ResolveCacheExporterFunc(conf *ghatypes.CacheConfig, v VerifierProvider) remotecache.ResolveCacheExporterFunc {
-	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
+	return func(_ context.Context, _ session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		cfg, err := getConfig(conf, v, attrs)
 		if err != nil {
 			return nil, err
@@ -313,7 +313,7 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 		return nil, err
 	}
 
-	if err := ce.cache.SaveMutable(ctx, ce.indexKey(), 15*time.Second, func(old *actionscache.Entry) (actionscache.Blob, error) {
+	if err := ce.cache.SaveMutable(ctx, ce.indexKey(), 15*time.Second, func(*actionscache.Entry) (actionscache.Blob, error) {
 		return actionscache.NewBlob(dt), nil
 	}); err != nil {
 		return nil, err
@@ -422,7 +422,7 @@ func certToStringMap(cert *certificate.Summary) (map[string]string, error) {
 
 // ResolveCacheImporterFunc for Github actions cache importer.
 func ResolveCacheImporterFunc(conf *ghatypes.CacheConfig, v VerifierProvider) remotecache.ResolveCacheImporterFunc {
-	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
+	return func(_ context.Context, _ session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		cfg, err := getConfig(conf, v, attrs)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err

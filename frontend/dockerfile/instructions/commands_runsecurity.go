@@ -33,7 +33,7 @@ func runSecurityPreHook(cmd *RunCommand, req parseRequest) error {
 	return nil
 }
 
-func runSecurityPostHook(cmd *RunCommand, req parseRequest) error {
+func runSecurityPostHook(cmd *RunCommand, _ parseRequest) error {
 	st := cmd.getExternalValue(securityKey).(*securityState)
 	if st == nil {
 		return errors.New("no security state")

@@ -121,7 +121,7 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 	return cc.Checksum(ctx, ref, p, opts, s)
 }
 
-func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadata) (CacheContext, error) {
+func (cm *cacheManager) GetCacheContext(_ context.Context, md cache.RefMetadata) (CacheContext, error) {
 	cm.locker.Lock(md.ID())
 	cm.lruMu.Lock()
 	v, ok := cm.lru.Get(md.ID())
@@ -145,7 +145,7 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md cache.RefMetadat
 	return cc, nil
 }
 
-func (cm *cacheManager) SetCacheContext(ctx context.Context, md cache.RefMetadata, cci CacheContext) error {
+func (cm *cacheManager) SetCacheContext(_ context.Context, md cache.RefMetadata, cci CacheContext) error {
 	cc, ok := cci.(*cacheContext)
 	if !ok {
 		return errors.Errorf("invalid cachecontext: %T", cc)
@@ -306,13 +306,13 @@ func keyPath(p string) string {
 }
 
 // HandleChange notifies the source about a modification operation
-func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) (retErr error) {
+func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, _ error) (retErr error) {
 	p = keyPath(p)
 	k := convertPathToKey(p)
 
 	deleteDir := func(cr *CacheRecord) {
 		if cr.Type == CacheRecordTypeDir {
-			cc.node.WalkPrefix(append(k, 0), func(k []byte, v *CacheRecord) bool {
+			cc.node.WalkPrefix(append(k, 0), func(k []byte, _ *CacheRecord) bool {
 				cc.txn.Delete(k)
 				return false
 			})

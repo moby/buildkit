@@ -38,6 +38,6 @@ func UserConfigDir() string {
 	return ConfigDir
 }
 
-func TraceSocketPath(inUserNS bool) string {
+func TraceSocketPath(bool) string {
 	return `\\.\pipe\buildkit-otel-grpc`
 }

@@ -21,7 +21,7 @@ func newFlightRecorder() *flightRecorder {
 	return dbg
 }
 
-func (r *flightRecorder) StartTrace(w http.ResponseWriter, req *http.Request) {
+func (r *flightRecorder) StartTrace(w http.ResponseWriter, _ *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.recorder.Enabled() {
@@ -34,7 +34,7 @@ func (r *flightRecorder) StartTrace(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (r *flightRecorder) StopTrace(w http.ResponseWriter, req *http.Request) {
+func (r *flightRecorder) StopTrace(w http.ResponseWriter, _ *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.recorder.Enabled() {
@@ -62,7 +62,7 @@ func (r *flightRecorder) SetTracePeriod(w http.ResponseWriter, req *http.Request
 	r.recorder.SetPeriod(period)
 }
 
-func (r *flightRecorder) Trace(w http.ResponseWriter, req *http.Request) {
+func (r *flightRecorder) Trace(w http.ResponseWriter, _ *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	w.Header().Set("Content-Type", "application/octet-stream")

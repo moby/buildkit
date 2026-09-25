@@ -64,7 +64,7 @@ func (es *echoServer) Serve(l net.Listener) error {
 }
 
 func dialerFnToGRPCDialer(dialer func(ctx context.Context) (net.Conn, error)) grpc.DialOption {
-	return grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+	return grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 		return dialer(ctx)
 	})
 }

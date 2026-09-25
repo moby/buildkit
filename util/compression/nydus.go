@@ -41,9 +41,9 @@ func FromMediaType(mediaType string) (Type, error) {
 	return ct, err
 }
 
-func (c nydusType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
+func (c nydusType) Compress(ctx context.Context, _ Config) (compressorFunc Compressor, finalize Finalizer) {
 	digester := digest.Canonical.Digester()
-	return func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
+	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
 			writer := io.MultiWriter(dest, digester.Hash())
 			return nydusify.Pack(ctx, writer, nydusify.PackOption{})
 		}, func(ctx context.Context, cs content.Store) (map[string]string, error) {
@@ -103,7 +103,7 @@ func (c nydusType) NeedsConversion(ctx context.Context, cs content.Store, desc o
 	return true, nil
 }
 
-func (c nydusType) NeedsComputeDiffBySelf(comp Config) bool {
+func (c nydusType) NeedsComputeDiffBySelf(Config) bool {
 	return true
 }
 

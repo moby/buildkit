@@ -55,7 +55,7 @@ func (p *passthroughOp) CacheMap(context.Context, solver.JobContext, int) (*solv
 	return cm, true, nil
 }
 
-func (p *passthroughOp) Exec(ctx context.Context, jobCtx solver.JobContext, inputs []solver.Result) ([]solver.Result, error) {
+func (p *passthroughOp) Exec(_ context.Context, _ solver.JobContext, inputs []solver.Result) ([]solver.Result, error) {
 	outputs := make([]solver.Result, len(p.op.Outputs))
 	for i, inputIndex := range p.op.Outputs {
 		if inputIndex < 0 || inputIndex >= int64(len(inputs)) {
@@ -69,6 +69,6 @@ func (p *passthroughOp) Exec(ctx context.Context, jobCtx solver.JobContext, inpu
 	return outputs, nil
 }
 
-func (p *passthroughOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
+func (p *passthroughOp) Acquire(context.Context) (solver.ReleaseFunc, error) {
 	return func() {}, nil
 }
