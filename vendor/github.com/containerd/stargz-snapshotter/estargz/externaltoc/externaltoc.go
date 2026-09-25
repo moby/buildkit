@@ -126,23 +126,20 @@ const FooterSize = 46
 
 // gzipFooterBytes returns the 104 bytes footer.
 func gzipFooterBytes() ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, FooterSize))
-	gz, _ := gzip.NewWriterLevel(buf, gzip.NoCompression) // MUST be NoCompression to keep 51 bytes
-
-	// Extra header indicating the offset of TOCJSON
+	// Extra header indicating the external toc
 	// https://tools.ietf.org/html/rfc1952#section-2.3.1.1
 	header := make([]byte, 4)
 	header[0], header[1] = 'S', 'G'
 	subfield := "STARGZEXTERNALTOC"                                   // len("STARGZEXTERNALTOC") = 17
 	binary.LittleEndian.PutUint16(header[2:4], uint16(len(subfield))) // little-endian per RFC1952
-	gz.Extra = append(header, []byte(subfield)...)
-	if err := gz.Close(); err != nil {
-		return nil, err
+	extra := append(header, []byte(subfield)...)
+
+	buf := estargz.CreateGzipFooter(extra)
+
+	if len(buf) != FooterSize {
+		panic(fmt.Sprintf("footer buffer = %d, not %d", len(buf), FooterSize))
 	}
-	if buf.Len() != FooterSize {
-		panic(fmt.Sprintf("footer buffer = %d, not %d", buf.Len(), FooterSize))
-	}
-	return buf.Bytes(), nil
+	return buf, nil
 }
 
 func NewGzipDecompressor(provideTOCFunc func() ([]byte, error)) *GzipDecompressor {
