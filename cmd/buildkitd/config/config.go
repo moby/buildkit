@@ -69,6 +69,11 @@ type SystemConfig struct {
 	// MaxRegistryConcurrency sets the maximum number of concurrent
 	// connections per registry.
 	MaxRegistryConcurrency *int `toml:"maxRegistryConcurrency"`
+
+	// SessionAuthTimeout is the timeout for daemon-side session auth
+	// round-trips with the buildx client session. Defaults to 60 seconds.
+	// A value of zero or less disables the deadline entirely.
+	SessionAuthTimeout *Duration `toml:"sessionAuthTimeout"`
 }
 
 type LogConfig struct {

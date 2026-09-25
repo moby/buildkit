@@ -40,6 +40,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
+	sessionauth "github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
@@ -328,6 +329,9 @@ func main() {
 					return errors.Errorf("maxRegistryConcurrency must be greater than zero; set to %d in the configuration file", *v)
 				}
 				limited.SetMaxConcurrency(int64(*v))
+			}
+			if v := sc.SessionAuthTimeout; v != nil {
+				sessionauth.SessionAuthTimeout = v.Duration
 			}
 		}
 
