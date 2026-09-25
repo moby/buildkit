@@ -39,7 +39,7 @@ type cacheManager struct {
 	mu sync.RWMutex
 	id string
 
-	storage *kvCacheStorage
+	storage CacheStorage
 }
 
 func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
