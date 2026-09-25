@@ -44,10 +44,10 @@ func (fs *FS) Add(p string, stat *types.Stat, data []byte) {
 }
 
 func (fs *FS) Walk(ctx context.Context, target string, fn fs.WalkDirFunc) error {
-	target = strings.TrimPrefix(target, "/")
+	target = strings.Trim(target, "/")
 	keys := make([]string, 0, len(fs.files))
 	for k := range fs.files {
-		if !strings.HasPrefix(k, target) {
+		if target != "" && k != target && !strings.HasPrefix(k, target+"/") {
 			continue
 		}
 		keys = append(keys, convertPathToKey(k))

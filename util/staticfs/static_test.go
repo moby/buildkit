@@ -67,3 +67,34 @@ func TestStatic(t *testing.T) {
 	require.Equal(t, []byte("foofoo"), data)
 	require.NoError(t, rc.Close())
 }
+
+func TestWalkTarget(t *testing.T) {
+	fs := NewFS()
+	fs.Add("foo", &types.Stat{Mode: uint32(os.ModeDir | 0755)}, nil)
+	fs.Add("foo/bar", &types.Stat{}, nil)
+	fs.Add("foobar", &types.Stat{Mode: uint32(os.ModeDir | 0755)}, nil)
+	fs.Add("foobar/baz", &types.Stat{}, nil)
+	for _, tc := range []struct {
+		target string
+		want   []string
+	}{
+		{"", []string{"foo", "foo/bar", "foobar", "foobar/baz"}},
+		{"/", []string{"foo", "foo/bar", "foobar", "foobar/baz"}},
+		{"foo", []string{"foo", "foo/bar"}},
+		{"/foo", []string{"foo", "foo/bar"}},
+		{"foo/", []string{"foo", "foo/bar"}},
+		{"foo/bar", []string{"foo/bar"}},
+		{"missing", nil},
+	} {
+		t.Run(tc.target, func(t *testing.T) {
+			var paths []string
+			err := fs.Walk(t.Context(), tc.target, func(path string, _ iofs.DirEntry, err error) error {
+				require.NoError(t, err)
+				paths = append(paths, path)
+				return nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, paths)
+		})
+	}
+}
