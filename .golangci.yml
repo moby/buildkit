@@ -106,6 +106,7 @@ linters:
         - bool-compare
         - len
         - negative-positive
+      enable-all: true
     usetesting:
       context-background: true
       context-todo: true

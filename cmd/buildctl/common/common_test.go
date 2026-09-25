@@ -23,10 +23,10 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		key := writeTempFile(t, dir, "tls.key", "key")
 
 		caOut, certOut, keyOut, err := resolveTLSFilesFromDir(dir)
+		require.NoError(t, err)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
-		require.NoError(t, err)
 	})
 
 	t.Run("all files present for pem style", func(t *testing.T) {
@@ -36,10 +36,10 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		key := writeTempFile(t, dir, "key.pem", "key")
 
 		caOut, certOut, keyOut, err := resolveTLSFilesFromDir(dir)
+		require.NoError(t, err)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
-		require.NoError(t, err)
 	})
 
 	t.Run("mixed set is present", func(t *testing.T) {
@@ -50,10 +50,10 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		// ca for cert-manager, cert and key for pem
 
 		caOut, certOut, keyOut, err := resolveTLSFilesFromDir(dir)
+		require.NoError(t, err)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
-		require.NoError(t, err)
 	})
 
 	t.Run("all files present for cert-manager and pem styles and pem is chosen", func(t *testing.T) {
@@ -66,9 +66,9 @@ func TestResolveTLSFilesFromDir(t *testing.T) {
 		key := writeTempFile(t, dir, "key.pem", "key-pem")
 
 		caOut, certOut, keyOut, err := resolveTLSFilesFromDir(dir)
+		require.NoError(t, err)
 		require.Equal(t, ca, caOut)
 		require.Equal(t, cert, certOut)
 		require.Equal(t, key, keyOut)
-		require.NoError(t, err)
 	})
 }

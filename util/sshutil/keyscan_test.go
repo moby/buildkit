@@ -1,6 +1,10 @@
 package sshutil
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestKnownHostsServerID(t *testing.T) {
 	tests := []struct {
@@ -17,9 +21,7 @@ func TestKnownHostsServerID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := knownHostsServerID(tt.hostname, tt.port); got != tt.want {
-				t.Fatalf("knownHostsServerID(%q, %q) = %q, want %q", tt.hostname, tt.port, got, tt.want)
-			}
+			require.Equalf(t, tt.want, knownHostsServerID(tt.hostname, tt.port), "knownHostsServerID(%q, %q)", tt.hostname, tt.port)
 		})
 	}
 }

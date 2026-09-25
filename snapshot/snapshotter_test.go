@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	overlayutil "github.com/moby/buildkit/util/overlay"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 	libcap "kernel.org/pub/linux/libs/security/libcap/cap"
@@ -56,7 +57,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 		return nil, nil, errors.Errorf("unhandled snapshotter: %s", snapshotterName)
 	}
 	t.Cleanup(func() {
-		require.NoError(t, ctdSnapshotter.Close())
+		assert.NoError(t, ctdSnapshotter.Close())
 	})
 
 	store, err := local.NewStore(tmpdir)
@@ -69,7 +70,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 		return nil, nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, db.Close())
+		assert.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
@@ -85,7 +86,7 @@ func newSnapshotter(ctx context.Context, t *testing.T, snapshotterName string) (
 		snapshotter.tryCrossSnapshotLink = false
 	}
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	leaseID := identity.NewID()

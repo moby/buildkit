@@ -179,7 +179,7 @@ loop0:
 						t.Logf("data: %+v %q", err, string(dt[:n]))
 					}
 				}
-				require.FailNowf(t, "content still exists", "%+v", infos)
+				t.Fatalf("content still exists: %+v", infos)
 			}
 			retries++
 			time.Sleep(500 * time.Millisecond)

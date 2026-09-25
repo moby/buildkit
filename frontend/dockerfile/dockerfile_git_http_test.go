@@ -14,7 +14,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,8 +110,7 @@ COPY --from=build foo bar2
 	require.Equal(t, "fromgit", string(dt))
 
 	_, err = os.Stat(filepath.Join(destDir, "bar2"))
-	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	// second request from master branch contains both files
 	destDir = t.TempDir()

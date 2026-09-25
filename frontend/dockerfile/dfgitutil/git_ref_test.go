@@ -273,8 +273,8 @@ func TestParseGitRef(t *testing.T) {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
 			got, _, err := ParseGitRef(tt.ref)
 			if tt.expected == nil {
-				require.Nil(t, got)
 				require.Error(t, err)
+				require.Nil(t, got)
 				if tt.err != "" {
 					require.ErrorContains(t, err, tt.err)
 				}

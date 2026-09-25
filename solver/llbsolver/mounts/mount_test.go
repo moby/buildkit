@@ -78,7 +78,7 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, e
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, db.Close())
+		assert.NoError(t, db.Close())
 	})
 
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
@@ -98,7 +98,7 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, e
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, md.Close())
+		assert.NoError(t, md.Close())
 	})
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
@@ -116,7 +116,7 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, e
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, cm.Close())
+		assert.NoError(t, cm.Close())
 	})
 
 	return &cmOut{
@@ -144,7 +144,7 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, err := newCacheManager(ctx, t, cmOpt{
@@ -210,7 +210,7 @@ func TestCacheMountSharedRefs(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, err := newCacheManager(ctx, t, cmOpt{
@@ -259,7 +259,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, err := newCacheManager(ctx, t, cmOpt{
@@ -297,7 +297,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 
 	select {
 	case <-gotRef4:
-		require.FailNow(t, "mount did not lock")
+		t.Fatal("mount did not lock")
 	case <-time.After(500 * time.Millisecond):
 	}
 
@@ -307,7 +307,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	select {
 	case <-gotRef4:
 	case <-time.After(2 * time.Second):
-		require.FailNow(t, "mount did not unlock")
+		t.Fatal("mount did not unlock")
 	}
 }
 
@@ -321,7 +321,7 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, snapshotter.Close())
+		assert.NoError(t, snapshotter.Close())
 	})
 
 	co, err := newCacheManager(ctx, t, cmOpt{
@@ -368,6 +368,6 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		require.FailNow(t, "deadlock on releasing while getting new ref")
+		t.Fatal("deadlock on releasing while getting new ref")
 	}
 }

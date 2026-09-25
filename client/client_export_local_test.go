@@ -439,7 +439,6 @@ func testExportLocalNoPlatformSplitOverwrite(t *testing.T, sb integration.Sandbo
 			},
 		},
 	}, "", frontend, nil)
-	require.Error(t, err)
 	require.ErrorContains(t, err, "cannot overwrite hello-linux from")
 	require.ErrorContains(t, err, "when split option is disabled")
 }
@@ -678,7 +677,7 @@ func testMultipleExporters(t *testing.T, sb integration.Sandbox) {
 	for {
 		ev, err := history.Recv()
 		if err != nil {
-			require.Equal(t, io.EOF, err)
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
 		require.Equal(t, ref, ev.Record.Ref)

@@ -16,9 +16,7 @@ func TestSpecFromURL(t *testing.T) {
 	}
 	for s, expected := range cases {
 		u, err := url.Parse(s)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		got, err := SpecFromURL(u)
 		if expected != nil {
 			require.NoError(t, err)

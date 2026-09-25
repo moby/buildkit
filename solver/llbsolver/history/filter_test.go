@@ -133,8 +133,7 @@ func TestHistoryFilters(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			out, err := filterHistoryEvents(testRecords, tcase.filters, tcase.limit)
 			if tcase.err != "" {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tcase.err)
+				require.ErrorContains(t, err, tcase.err)
 				return
 			}
 			require.NoError(t, err)
