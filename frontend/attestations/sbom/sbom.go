@@ -102,7 +102,10 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 				result.AttestationSBOMCore:  []byte(CoreSBOMName),
 			},
 			InToto: result.InTotoAttestation{
-				PredicateType: intoto.PredicateSPDX,
+				// PredicateType is left empty so that the unbundler
+				// detects the format (SPDX or CycloneDX) from the
+				// predicateType field in the scanner's JSON output.
+				// See exporter/attestation/unbundle.go
 			},
 		}, nil
 	}, nil
@@ -121,10 +124,16 @@ func scannerTmpMount(scannerImage llb.State, platform ocispecs.Platform) (llb.St
 func HasSBOM[T comparable](res *result.Result[T]) bool {
 	for _, as := range res.Attestations {
 		for _, a := range as {
-			if a.InToto.PredicateType == intoto.PredicateSPDX {
+			if IsSBOMPredicateType(a.InToto.PredicateType) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// IsSBOMPredicateType returns true if the predicate type represents an SBOM,
+// either SPDX or CycloneDX.
+func IsSBOMPredicateType(predicateType string) bool {
+	return predicateType == intoto.PredicateSPDX || predicateType == intoto.PredicateCycloneDX
 }
