@@ -113,9 +113,10 @@ func TestRuncWorker(t *testing.T) {
 	stderr := bytes.NewBuffer(nil)
 	_, err = w.WorkerOpt.Executor.Run(ctx, "", execMount(snap, true), nil, executor.ProcessInfo{Meta: meta, Stderr: &iohelper.NopWriteCloser{Writer: stderr}}, nil)
 	require.Error(t, err) // Read-only root
-	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
+	// typical error is like `mkdir /.../rootfs/proc: read-only file system` (w/o libpathrs).
+	// or `create next directory component failed: mkdirat([13]<\"/.../rootfs\">, \"proc\", 0o755): Read-only file system (os error 30)` (w/ libpathrs)
 	// make sure the error is caused before running `echo foo > /bar`.
-	require.Contains(t, stderr.String(), "read-only file system")
+	require.Regexp(t, "[Rr]ead-only file system", stderr.String())
 
 	root, err := w.CacheMgr.New(ctx, snap, nil, cache.CachePolicyRetain)
 	require.NoError(t, err)
