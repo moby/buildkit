@@ -2,6 +2,7 @@ package retryhandler
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net"
@@ -36,6 +37,13 @@ type retryContextKey struct{}
 // using the supplied context leave retries to the outer call, including New.
 // f must be safe to retry and preserve retryable errors when wrapping them.
 func WithRetry[T any](ctx context.Context, logger func([]byte), f func(context.Context) (T, error)) (T, error) {
+	return WithRetryIf(ctx, logger, f, nil)
+}
+
+// WithRetryIf applies the normal retry policy only when shouldRetry also
+// accepts the error. A nil predicate accepts all errors in the normal policy.
+// This lets callers avoid retrying errors handled by an enclosing transport.
+func WithRetryIf[T any](ctx context.Context, logger func([]byte), f func(context.Context) (T, error), shouldRetry func(error) bool) (T, error) {
 	if ctx.Value(retryContextKey{}) != nil {
 		return f(ctx)
 	}
@@ -43,7 +51,13 @@ func WithRetry[T any](ctx context.Context, logger func([]byte), f func(context.C
 	backoff := time.Second
 	for {
 		v, err := f(ctx)
-		if err == nil || context.Cause(ctx) != nil || !retryError(err) {
+		if err == nil {
+			return v, nil
+		}
+		if context.Cause(ctx) != nil {
+			return v, contextFailure(ctx)
+		}
+		if !retryError(err) || (shouldRetry != nil && !shouldRetry(err)) {
 			return v, err
 		}
 		if logger != nil {
@@ -57,11 +71,20 @@ func WithRetry[T any](ctx context.Context, logger func([]byte), f func(context.C
 		}
 		select {
 		case <-ctx.Done():
-			return v, err
+			return v, contextFailure(ctx)
 		case <-time.After(backoff):
 		}
 		backoff *= 2
 	}
+}
+
+func contextFailure(ctx context.Context) error {
+	err := ctx.Err() //nolint:forbidigo // Cause can be custom; Err preserves canceled vs deadline exceeded.
+	cause := context.Cause(ctx)
+	if errors.Is(cause, err) {
+		return errors.WithStack(cause)
+	}
+	return errors.WithStack(stderrors.Join(err, cause))
 }
 
 func retryError(err error) bool {
@@ -73,7 +96,7 @@ func retryError(err error) bool {
 		return true
 	}
 
-	if errors.Is(err, io.EOF) || errors.Is(err, errConnectionReset) || errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, errConnectionReset) || errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 	// catches TLS timeout or other network-related temporary errors

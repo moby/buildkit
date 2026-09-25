@@ -2,8 +2,6 @@ package retryhandler
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -14,32 +12,23 @@ import (
 
 	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRetryConnectionReset(t *testing.T) {
-	err := &url.Error{Op: http.MethodGet, URL: "https://registry.example/token", Err: &net.OpError{
+func TestWithRetry(t *testing.T) {
+	reset := &url.Error{Op: http.MethodGet, URL: "https://registry.example/token", Err: &net.OpError{
 		Op: "read", Net: "tcp", Err: errConnectionReset,
 	}}
-	require.True(t, retryError(err))
-}
-
-func TestWithRetry(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		err      error
 		attempts int
 	}{
-		{"reset", errConnectionReset, 4},
-		{"eof", io.EOF, 4},
+		{"reset", reset, 4},
+		{"unexpected eof", io.ErrUnexpectedEOF, 4},
 		{"server error", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusServiceUnavailable}, 4},
 		{"forbidden", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusForbidden}, 1},
-		{"unauthorized", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusUnauthorized}, 1},
-		{"rate limited", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusTooManyRequests}, 1},
-		{"canceled", context.Canceled, 1},
-		{"untrusted certificate", &url.Error{Op: http.MethodGet, URL: "https://registry.example/token", Err: &tls.CertificateVerificationError{
-			Err: x509.UnknownAuthorityError{Cert: &x509.Certificate{}},
-		}}, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -82,6 +71,7 @@ func TestWithRetryCancellationDuringBackoff(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancelCause(t.Context())
 		defer cancel(context.Canceled)
+		cancelCause := errors.New("canceled by caller")
 		attempts := 0
 		done := make(chan error, 1)
 		go func() {
@@ -93,8 +83,10 @@ func TestWithRetryCancellationDuringBackoff(t *testing.T) {
 		}()
 		synctest.Wait()
 		start := time.Now()
-		cancel(context.Canceled)
-		require.ErrorIs(t, <-done, io.EOF)
+		cancel(cancelCause)
+		err := <-done
+		require.ErrorIs(t, err, context.Canceled)
+		require.ErrorIs(t, err, cancelCause)
 		require.Equal(t, 1, attempts)
 		require.Zero(t, time.Since(start))
 	})

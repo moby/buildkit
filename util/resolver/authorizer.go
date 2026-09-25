@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"maps"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -386,7 +388,7 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		}()
 		// try GET first because Docker Hub does not support POST
 		// switch once support has landed
-		resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*auth.FetchTokenResponse, error) {
+		resp, err := retryTokenRequest(ctx, func(ctx context.Context) (*auth.FetchTokenResponse, error) {
 			return auth.FetchToken(ctx, ah.client, nil, to)
 		})
 		if err != nil {
@@ -396,7 +398,7 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == http.StatusMethodNotAllowed && to.Username != "") || errStatus.StatusCode == http.StatusNotFound || errStatus.StatusCode == http.StatusUnauthorized {
-					resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*auth.OAuthTokenResponse, error) {
+					resp, err := retryTokenRequest(ctx, func(ctx context.Context) (*auth.OAuthTokenResponse, error) {
 						return auth.FetchTokenWithOAuth(ctx, ah.client, hdr, "buildkit-client", to)
 					})
 					if err != nil {
@@ -424,7 +426,7 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 		return nil, nil
 	}
 	// do request anonymously
-	resp, err := retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*auth.FetchTokenResponse, error) {
+	resp, err := retryTokenRequest(ctx, func(ctx context.Context) (*auth.FetchTokenResponse, error) {
 		return auth.FetchToken(ctx, ah.client, hdr, to)
 	})
 	if err != nil {
@@ -437,6 +439,20 @@ func (ah *authFetcher) fetchToken(ctx context.Context, sm *session.Manager, g se
 
 	token = resp.Token
 	return nil, nil
+}
+
+// The containerd resolver retries EOF and timeout errors returned by Authorize
+// on the final registry host. Earlier hosts fall through to the next host.
+// Retrying those errors here would multiply the final host's attempts and
+// backoff. Connection resets and token 5xx responses still need a retry here.
+func retryTokenRequest[T any](ctx context.Context, f func(context.Context) (T, error)) (T, error) {
+	return retryhandler.WithRetryIf(ctx, nil, f, func(err error) bool {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return false
+		}
+		var netErr net.Error
+		return !errors.As(err, &netErr) || !netErr.Timeout()
+	})
 }
 
 func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
