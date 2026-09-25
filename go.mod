@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.26.3
+go 1.26.8
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
@@ -21,7 +21,7 @@ require (
 	github.com/containerd/accelerated-container-image v1.3.0
 	github.com/containerd/console v1.0.5
 	github.com/containerd/containerd/api v1.11.1
-	github.com/containerd/containerd/v2 v2.3.5
+	github.com/containerd/containerd/v2 v2.3.6
 	github.com/containerd/continuity v0.5.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/containerd/fuse-overlayfs-snapshotter/v2 v2.1.7
