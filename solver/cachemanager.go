@@ -18,14 +18,19 @@ import (
 
 // NewInMemoryCacheManager creates a new in-memory cache manager
 func NewInMemoryCacheManager() CacheManager {
-	return NewCacheManager(context.TODO(), identity.NewID(), NewInMemoryCacheStorage(), NewInMemoryResultStorage())
+	return NewKeyValueCacheManager(context.TODO(), identity.NewID(), NewInMemoryCacheStorage(), NewInMemoryResultStorage())
 }
 
-// NewCacheManager creates a new cache manager with specific storage backend
-func NewCacheManager(ctx context.Context, id string, storage CacheKeyStorage, results CacheResultStorage) CacheManager {
+// NewKeyValueCacheManager creates a new cache manager with specific storage backend
+func NewKeyValueCacheManager(ctx context.Context, id string, storage CacheKeyStorage, results CacheResultStorage) CacheManager {
+	s := newKvCacheStorage(storage, results)
+	return NewCacheManager(ctx, id, s)
+}
+
+func NewCacheManager(ctx context.Context, id string, storage CacheStorage) CacheManager {
 	cm := &cacheManager{
 		id:      id,
-		storage: newKvCacheStorage(storage, results),
+		storage: storage,
 	}
 
 	if err := cm.ReleaseUnreferenced(ctx); err != nil {
