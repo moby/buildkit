@@ -23,6 +23,12 @@ import (
 
 const (
 	tracingSocketPath = "//./pipe/otel-grpc"
+
+	// NamedPipeMountType marks a mount whose source is a Windows named pipe
+	// (e.g. a forwarded SSH agent). Such mounts are passed straight through to
+	// HCS as a pipe and must not go through the local snapshotter mount path or
+	// have their destination rooted to C:\.
+	NamedPipeMountType = "npipe"
 )
 
 func withProcessArgs(args ...string) oci.SpecOpts {
@@ -256,4 +262,10 @@ func normalizeMountType(_ string) string {
 	// HCS shim doesn't expect a named type
 	// for the mount.
 	return ""
+}
+
+// isNamedPipeMount reports whether the mount source is a Windows named pipe
+// that should be forwarded directly to HCS rather than mounted locally.
+func isNamedPipeMount(m mount.Mount) bool {
+	return m.Type == NamedPipeMountType
 }
