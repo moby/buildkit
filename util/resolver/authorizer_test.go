@@ -3,15 +3,95 @@ package resolver
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/moby/buildkit/session"
 	"github.com/stretchr/testify/require"
 )
+
+type tokenRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f tokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestResolveTokenEOFRetryBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		registryRequests, tokenRequests := 0, 0
+		client := &http.Client{Transport: tokenRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path == "/token" {
+				tokenRequests++
+				return nil, io.EOF
+			}
+			registryRequests++
+			return &http.Response{
+				StatusCode: http.StatusUnauthorized,
+				Header: http.Header{"Www-Authenticate": {
+					`Bearer realm="https://registry.example/token",service="registry.example"`,
+				}},
+				Body:    io.NopCloser(strings.NewReader("")),
+				Request: req,
+			}, nil
+		})}
+		authorizer := newDockerAuthorizer(client, newAuthHandlerNS(nil), nil, nil)
+		resolver := docker.NewResolver(docker.ResolverOptions{Hosts: func(string) ([]docker.RegistryHost, error) {
+			return []docker.RegistryHost{{
+				Client: client, Authorizer: authorizer, Host: "registry.example", Scheme: "https", Path: "/v2",
+				Capabilities: docker.HostCapabilityResolve | docker.HostCapabilityPull,
+			}}, nil
+		}})
+		_, _, err := resolver.Resolve(t.Context(), "registry.example/test:latest")
+		require.ErrorIs(t, err, io.EOF)
+		require.Equal(t, 1, registryRequests)
+		require.Equal(t, 4, tokenRequests)
+	})
+}
+
+func TestResolveTokenServerErrorRetry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		tokenRequests := 0
+		authorized := false
+		client := &http.Client{Transport: tokenRoundTripper(func(req *http.Request) (*http.Response, error) {
+			status := http.StatusUnauthorized
+			body := ""
+			header := http.Header{}
+			if req.URL.Path == "/token" {
+				tokenRequests++
+				status = http.StatusServiceUnavailable
+				if tokenRequests == 2 {
+					status, body = http.StatusOK, `{"token":"retried","expires_in":120}`
+				}
+			} else if req.Header.Get("Authorization") != "" {
+				authorized = req.Header.Get("Authorization") == "Bearer retried"
+				status = http.StatusNotFound
+			} else {
+				header.Set("WWW-Authenticate", `Bearer realm="https://registry.example/token",service="registry.example"`)
+			}
+			return &http.Response{
+				StatusCode: status, Header: header, Body: io.NopCloser(strings.NewReader(body)), Request: req,
+			}, nil
+		})}
+		authorizer := newDockerAuthorizer(client, newAuthHandlerNS(nil), nil, nil)
+		resolver := docker.NewResolver(docker.ResolverOptions{Hosts: func(string) ([]docker.RegistryHost, error) {
+			return []docker.RegistryHost{{
+				Client: client, Authorizer: authorizer, Host: "registry.example", Scheme: "https", Path: "/v2",
+				Capabilities: docker.HostCapabilityResolve | docker.HostCapabilityPull,
+			}}, nil
+		}})
+		_, _, err := resolver.Resolve(t.Context(), "registry.example/test:latest")
+		require.Error(t, err)
+		require.Equal(t, 2, tokenRequests)
+		require.True(t, authorized)
+	})
+}
 
 func TestParseScopes(t *testing.T) {
 	for _, tc := range []struct {
