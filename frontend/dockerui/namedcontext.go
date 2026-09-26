@@ -140,7 +140,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 			*opt.CaptureDigest = dgst
 		}
 		return &st, &img, nil
-	case "git":
+	case "git", "ssh":
 		st, ok, err := DetectGitContext(nc.input, nil, gitAdviceOpts(nc.bc.GitAdvice)...)
 		if !ok {
 			return nil, nil, errors.Errorf("invalid git context %s", nc.input)
