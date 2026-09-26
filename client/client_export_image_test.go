@@ -35,6 +35,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
 	digest "github.com/opencontainers/go-digest"
+	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -173,6 +174,98 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 	require.Empty(t, img.Layers)
 	require.Equal(t, "linux/arm64", platforms.Format(img.Img.Platform))
 	require.Equal(t, "i am platform linux/arm64", img.Img.Config.Labels["foo"])
+}
+
+// testBuildExportUnpackWithRewriteTimestamp verifies that the "unpack" exporter option
+// can be used together with "rewrite-timestamp", and that the image is unpacked to the
+// snapshot that matches the rewritten layers.
+// https://github.com/moby/buildkit/issues/4230
+func testBuildExportUnpackWithRewriteTimestamp(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter, workers.FeatureSourceDateEpoch)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n foo > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	tm := time.Unix(1700000000, 0).UTC()
+	target := "docker.io/buildkit/build/exporter:unpack-rewrite-timestamp"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              target,
+					"unpack":            "true",
+					"rewrite-timestamp": "true",
+					"source-date-epoch": fmt.Sprintf("%d", tm.Unix()),
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	contentStore := client.ContentStore()
+
+	manifest, err := images.Manifest(ctx, contentStore, img.Target, platforms.Default())
+	require.NoError(t, err)
+
+	// all the layers must be rewritten to match the epoch
+	require.NotEmpty(t, manifest.Layers)
+	for _, l := range manifest.Layers {
+		require.Equal(t, fmt.Sprintf("%d", tm.Unix()), l.Annotations["buildkit/rewritten-timestamp"])
+	}
+
+	// the timestamps in the layer blobs must be clamped to the epoch
+	dt, err := content.ReadBlob(ctx, contentStore, manifest.Layers[0])
+	require.NoError(t, err)
+	m, err := testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+	require.Contains(t, m, "data")
+	for name, item := range m {
+		require.False(t, item.Header.ModTime.After(tm), "file %q has timestamp %v, expected not after %v", name, item.Header.ModTime, tm)
+	}
+
+	// the image must be unpacked to the snapshot that matches the rewritten diffIDs
+	dt, err = content.ReadBlob(ctx, contentStore, manifest.Config)
+	require.NoError(t, err)
+	var ociimg ocispecs.Image
+	require.NoError(t, json.Unmarshal(dt, &ociimg))
+	require.NotEmpty(t, ociimg.RootFS.DiffIDs)
+
+	chainID := imagespecidentity.ChainID(ociimg.RootFS.DiffIDs)
+	snapshotService := client.SnapshotService(sb.Snapshotter())
+	_, err = snapshotService.Stat(ctx, chainID.String())
+	require.NoError(t, err)
+
+	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 // testBuildExportWithForeignLayer verifies foreign (non-distributable) layer handling during
