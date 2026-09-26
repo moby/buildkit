@@ -472,7 +472,7 @@ func (sw *shellWord) processDollar() (string, error) {
 			return "", errors.Errorf("invalid pattern (%s) in substitution: %s", pattern, err)
 		}
 		if replaceAll {
-			value = re.ReplaceAllString(value, replacement)
+			value = re.ReplaceAllLiteralString(value, replacement)
 		} else {
 			if idx := re.FindStringIndex(value); idx != nil {
 				value = value[0:idx[0]] + replacement + value[idx[1]:]

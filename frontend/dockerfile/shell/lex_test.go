@@ -550,6 +550,20 @@ func TestProcessWithMatches(t *testing.T) {
 			expected: "\\/tmp\\/foo.txt",
 			matches:  map[string]struct{}{"FOO": {}},
 		},
+		{
+			// test: "$" in the replacement is literal, not a regexp group reference
+			input:    "${FOO/$NEEDLE/$REPLACEMENT} - ${FOO//$NEEDLE/$REPLACEMENT}",
+			envs:     map[string]string{"FOO": "a b c", "NEEDLE": " ", "REPLACEMENT": "$1x"},
+			expected: "a$1xb c - a$1xb$1xc",
+			matches:  map[string]struct{}{"FOO": {}, "NEEDLE": {}, "REPLACEMENT": {}},
+		},
+		{
+			// test: "$$" in the replacement is not collapsed to "$"
+			input:    "${FOO/'$'/'$$'} - ${FOO//'$'/'$$'}",
+			envs:     map[string]string{"FOO": "a$b$c"},
+			expected: "a$$b$c - a$$b$$c",
+			matches:  map[string]struct{}{"FOO": {}},
+		},
 
 		// Following cases with empty/partial values are currently not
 		// guaranteed behavior. Tests are provided to make sure partial
