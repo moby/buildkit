@@ -331,12 +331,6 @@ func main() {
 			}
 		}
 
-		if cfg.GRPC.DebugAddress != "" {
-			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
-				return err
-			}
-		}
-
 		tp, err := newTracerProvider(ctx)
 		if err != nil {
 			return err
@@ -418,6 +412,12 @@ func main() {
 			return err
 		}
 		defer controller.Close()
+
+		if cfg.GRPC.DebugAddress != "" {
+			if err := setupDebugHandlers(cfg.GRPC.DebugAddress, controller.ReleaseUnreferencedCache); err != nil {
+				return err
+			}
+		}
 
 		healthv1.RegisterHealthServer(server, health.NewServer())
 		controller.Register(server)

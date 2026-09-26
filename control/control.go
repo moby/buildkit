@@ -57,6 +57,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -98,6 +99,8 @@ type Controller struct { // TODO: ControlService
 	throttledGC                  func()
 	throttledReleaseUnreferenced func()
 	gcmu                         sync.Mutex
+	releaseUnreferencedMu        *semaphore.Weighted
+	releaseUnreferencedClosed    bool
 	tracev1.UnimplementedTraceServiceServer
 }
 
@@ -134,15 +137,20 @@ func NewController(opt Opt) (*Controller, error) {
 	}
 
 	c := &Controller{
-		opt:              opt,
-		solver:           s,
-		history:          hq,
-		cache:            opt.CacheManager,
-		gatewayForwarder: gatewayForwarder,
+		releaseUnreferencedMu: semaphore.NewWeighted(1),
+		opt:                   opt,
+		solver:                s,
+		history:               hq,
+		cache:                 opt.CacheManager,
+		gatewayForwarder:      gatewayForwarder,
 	}
 	c.throttledGC = throttle.After(time.Minute, c.gc)
-	// use longer interval for releaseUnreferencedCache deleting links quickly is less important
-	c.throttledReleaseUnreferenced = throttle.After(5*time.Minute, func() { c.releaseUnreferencedCache(context.TODO()) })
+	// use longer interval because deleting links quickly is less important
+	c.throttledReleaseUnreferenced = throttle.After(5*time.Minute, func() {
+		if err := c.ReleaseUnreferencedCache(context.TODO()); err != nil {
+			bklog.L.Errorf("failed to release cache metadata: %+v", err)
+		}
+	})
 
 	if opt.TraceCollector != nil {
 		fwd, err := forwarder.New(context.Background(), opt.TraceCollector)
@@ -160,6 +168,13 @@ func NewController(opt Opt) (*Controller, error) {
 }
 
 func (c *Controller) Close() error {
+	// Finish an active release before closing the worker and cache databases.
+	if err := c.releaseUnreferencedMu.Acquire(context.Background(), 1); err != nil {
+		return err
+	}
+	c.releaseUnreferencedClosed = true
+	defer c.releaseUnreferencedMu.Release(1)
+
 	var errs []error
 	if err := c.opt.HistoryDB.Close(); err != nil {
 		errs = append(errs, err)
@@ -234,7 +249,17 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 	return resp, nil
 }
 
-func (c *Controller) releaseUnreferencedCache(ctx context.Context) error {
+// ReleaseUnreferencedCache serializes metadata cleanup across automatic, prune,
+// and debug requests. Waiting callers can cancel without starting another pass.
+func (c *Controller) ReleaseUnreferencedCache(ctx context.Context) error {
+	if err := c.releaseUnreferencedMu.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer c.releaseUnreferencedMu.Release(1)
+
+	if c.releaseUnreferencedClosed {
+		return errors.New("cache metadata release is closed")
+	}
 	return c.cache.ReleaseUnreferenced(ctx)
 }
 
@@ -254,12 +279,9 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	didPrune := false
 	defer func() {
 		if didPrune {
-			if c, ok := c.cache.(interface {
-				ReleaseUnreferenced(context.Context) error
-			}); ok {
-				if err := c.ReleaseUnreferenced(ctx); err != nil {
-					bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
-				}
+			// eg.Wait cancels its context even when pruning succeeds.
+			if err := c.ReleaseUnreferencedCache(stream.Context()); err != nil {
+				bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
 			}
 		}
 	}()
