@@ -4,13 +4,16 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 
 	cerrdefs "github.com/containerd/errdefs"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -155,6 +158,16 @@ func marshalRemote(ctx context.Context, r *solver.Remote, state *marshalState) s
 	desc := r.Descriptors[len(r.Descriptors)-1]
 	if desc.MediaType != "" {
 		desc = compression.ConvertAllLayerMediaTypes(ctx, true, desc)[0]
+	}
+	if ref, ok := desc.Annotations["containerd.io/distribution.source.ref"]; ok {
+		// The registry importer records the cache ref a blob came from. Export it
+		// as the distribution source annotation that lazy refs carry, so pushing
+		// to another repository can mount the blob instead of uploading it.
+		desc.Annotations = maps.Clone(desc.Annotations)
+		delete(desc.Annotations, "containerd.io/distribution.source.ref")
+		if _, err := contentutil.AddSourceAnnotation(desc.Annotations, ref); err != nil {
+			bklog.G(ctx).WithError(err).Debugf("ignoring invalid cache source reference %q", ref)
+		}
 	}
 
 	state.descriptors[desc.Digest] = DescriptorProviderPair{

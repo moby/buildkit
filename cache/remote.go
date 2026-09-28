@@ -2,14 +2,10 @@ package cache
 
 import (
 	"context"
-	"fmt"
 	"maps"
-	"net/url"
 	"slices"
-	"strings"
 
 	"github.com/containerd/containerd/v2/core/content"
-	"github.com/containerd/containerd/v2/pkg/reference"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/session"
@@ -188,30 +184,13 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refC
 		} else if isLazy {
 			imageRefs := ref.getImageRefs()
 			for _, imageRef := range imageRefs {
-				refspec, err := reference.Parse(imageRef)
-				if err != nil {
-					return nil, err
-				}
-
-				u, err := url.Parse("dummy://" + refspec.Locator)
-				if err != nil {
-					return nil, err
-				}
-
-				source, repo := u.Hostname(), strings.TrimPrefix(u.Path, "/")
 				if desc.Annotations == nil {
 					desc.Annotations = make(map[string]string)
 				}
-				dslKey := fmt.Sprintf("%s.%s", "containerd.io/distribution.source", source)
-
-				var existingRepos []string
-				if existings, ok := desc.Annotations[dslKey]; ok {
-					existingRepos = strings.Split(existings, ",")
+				dslKey, err := contentutil.AddSourceAnnotation(desc.Annotations, imageRef)
+				if err != nil {
+					return nil, err
 				}
-				if !slices.Contains(existingRepos, repo) {
-					existingRepos = append(existingRepos, repo)
-				}
-				desc.Annotations[dslKey] = strings.Join(existingRepos, ",")
 				addAnnotations = append(addAnnotations, dslKey)
 			}
 		}

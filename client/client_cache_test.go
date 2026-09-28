@@ -939,6 +939,119 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
+// testRegistryCacheReexportImportedLayers exports a cache imported from a
+// registry. Imported layers that already have the requested compression are
+// exported as they are: their blobs must still be copied, and the importer's
+// source reference must be exported as the distribution source annotation
+// used for cross-repository mounts. Forced compression must still convert
+// every layer.
+func testRegistryCacheReexportImportedLayers(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+		workers.FeatureCacheBackendLocal,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	solve := func(imports, exports []CacheOptionsEntry) {
+		_, err := c.Solve(sb.Context(), def, SolveOpt{
+			Exports:      []ExportEntry{{Type: ExporterLocal, OutputDir: t.TempDir()}},
+			CacheImports: imports,
+			CacheExports: exports,
+		}, nil)
+		require.NoError(t, err)
+	}
+
+	target := registry + "/buildkit/testreexport:cache"
+	solve(nil, []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":            target,
+			"mode":           "max",
+			"oci-mediatypes": "true",
+		},
+	}})
+
+	reexport := func(attrs map[string]string) []ocispecs.Descriptor {
+		ensurePruneAll(t, c, sb)
+		dest := t.TempDir()
+		attrs["dest"] = dest
+		attrs["mode"] = "max"
+		attrs["image-manifest"] = "false"
+		attrs["oci-mediatypes"] = "true"
+		solve(
+			[]CacheOptionsEntry{{Type: "registry", Attrs: map[string]string{"ref": target}}},
+			[]CacheOptionsEntry{{Type: "local", Attrs: attrs}},
+		)
+		return localCacheLayers(t, dest)
+	}
+
+	registryHost, _, _ := strings.Cut(registry, ":")
+	layers := reexport(map[string]string{})
+	require.NotEmpty(t, layers)
+	for _, layer := range layers {
+		require.Equal(t, ocispecs.MediaTypeImageLayerGzip, layer.MediaType)
+		require.NotContains(t, layer.Annotations, "containerd.io/distribution.source.ref")
+		require.Equal(t, "buildkit/testreexport", layer.Annotations["containerd.io/distribution.source."+registryHost])
+	}
+
+	layers = reexport(map[string]string{
+		"compression":       "zstd",
+		"force-compression": "true",
+	})
+	require.NotEmpty(t, layers)
+	for _, layer := range layers {
+		require.Equal(t, ocispecs.MediaTypeImageLayerZstd, layer.MediaType)
+	}
+}
+
+// localCacheLayers returns the layer descriptors of a local cache export and
+// checks that every layer blob was written.
+func localCacheLayers(t *testing.T, dest string) []ocispecs.Descriptor {
+	var index ocispecs.Index
+	dt, err := os.ReadFile(filepath.Join(dest, ocispecs.ImageIndexFile))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(dt, &index))
+	require.Len(t, index.Manifests, 1)
+
+	var cacheList ocispecs.Index
+	dt, err = os.ReadFile(filepath.Join(dest, ocispecs.ImageBlobsDir, "sha256", index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(dt, &cacheList))
+
+	var layers []ocispecs.Descriptor
+	for _, desc := range cacheList.Manifests {
+		if !images.IsLayerType(desc.MediaType) {
+			continue
+		}
+		_, err := os.Stat(filepath.Join(dest, ocispecs.ImageBlobsDir, "sha256", desc.Digest.Hex()))
+		require.NoError(t, err, "missing blob for layer %s", desc.Digest)
+		layers = append(layers, desc)
+	}
+	return layers
+}
+
 func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
