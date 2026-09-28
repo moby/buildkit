@@ -2,11 +2,33 @@ package config
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestLoadGCPolicyInvalidQuote(t *testing.T) {
+	for _, tc := range []struct {
+		field   string
+		wantErr string
+	}{
+		{"keepDuration", "invalid duration"},
+		{"reservedSpace", "invalid disk space"},
+		{"maxUsedSpace", "invalid disk space"},
+		{"minFreeSpace", "invalid disk space"},
+	} {
+		for _, value := range []string{`'"'`, `"\""`} {
+			t.Run(tc.field+"/"+value, func(t *testing.T) {
+				config := fmt.Sprintf("[[worker.oci.gcpolicy]]\n%s = %s\n", tc.field, value)
+				_, err := Load(strings.NewReader(config))
+				require.ErrorContains(t, err, tc.wantErr)
+			})
+		}
+	}
+}
 
 func TestLoad(t *testing.T) {
 	const testConfig = `
