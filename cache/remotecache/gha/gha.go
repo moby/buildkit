@@ -65,6 +65,8 @@ type Config struct {
 	Repository string
 	Version    int
 	Timeout    time.Duration
+	// Compression applies to layers created for the export.
+	Compression compression.Config
 
 	*ghatypes.CacheConfig
 	verifier VerifierProvider
@@ -119,6 +121,11 @@ func getConfig(conf *ghatypes.CacheConfig, v VerifierProvider, attrs map[string]
 		}
 	}
 
+	compressionConfig, err := compression.ParseAttributes(attrs)
+	if err != nil {
+		return nil, err
+	}
+
 	if conf == nil {
 		conf = &ghatypes.CacheConfig{}
 	}
@@ -128,6 +135,7 @@ func getConfig(conf *ghatypes.CacheConfig, v VerifierProvider, attrs map[string]
 		URL:         url,
 		Token:       token,
 		Timeout:     timeout,
+		Compression: compressionConfig,
 		GHToken:     attrs[attrGHToken],
 		Repository:  attrs[attrRepository],
 		Version:     apiVersionInt,
@@ -174,8 +182,12 @@ func (*exporter) Name() string {
 }
 
 func (ce *exporter) Config() remotecache.Config {
+	comp := ce.config.Compression
+	if comp.Type == nil {
+		comp = compression.New(compression.Default)
+	}
 	return remotecache.Config{
-		Compression: compression.New(compression.Default),
+		Compression: comp,
 	}
 }
 

@@ -544,6 +544,9 @@ in your workflow to expose the runtime.
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `timeout=<duration>`: sets the timeout duration for cache export (default: `10m`)
+* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. `estargz` layers are recorded as plain `gzip` layers in the cache manifest (their eStargz annotations are not preserved), so they cannot be lazily pulled from the GitHub Actions cache
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers
 
 `--import-cache` options:
 * `type=gha`
