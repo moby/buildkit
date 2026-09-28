@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/tracing"
 	bkversion "github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
@@ -207,6 +208,31 @@ func indexKey(scope string, config *Config) string {
 	return key
 }
 
+// uploadBlob saves a layer blob unless the cache already has it. Without the
+// active key map, existence is checked with a lookup.
+func (ce *exporter) uploadBlob(ctx context.Context, key string, blob digest.Digest, dgstPair v1.DescriptorProviderPair) error {
+	if ce.keyMap == nil {
+		b, err := ce.cache.Load(ctx, key)
+		if err != nil {
+			return err
+		}
+		if b != nil {
+			return nil
+		}
+	}
+	layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", blob))
+	ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
+	if err != nil {
+		return layerDone(err)
+	}
+	if err := ce.cache.Save(ctx, key, ra); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return layerDone(errors.Wrap(err, "error writing layer blob"))
+		}
+	}
+	return layerDone(nil)
+}
+
 func (ce *exporter) initActiveKeyMap(ctx context.Context) {
 	ce.keyMapOnce.Do(func() {
 		if ce.config.Repository == "" || ce.config.GHToken == "" {
@@ -243,7 +269,14 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 		return nil, err
 	}
 
-	// TODO: push parallel
+	// Existence checks and uploads run in parallel; annotations are set in
+	// place, so the cache config does not depend on their order.
+	ce.initActiveKeyMap(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(int(limited.Default.Size()))
+	// A blob backs one layer per parent chain it appears in; upload it once,
+	// as concurrent uploads of the same key would race each other.
+	uploads := map[string]struct{}{}
 	for i, l := range config.Layers {
 		dgstPair, ok := descs[l.Blob]
 		if !ok {
@@ -262,36 +295,15 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 			return nil, errors.Wrapf(err, "failed to parse uncompressed annotation")
 		}
 		diffID = dgst
-		ce.initActiveKeyMap(ctx)
 
 		key := blobKey(dgstPair.Descriptor.Digest)
-
-		exists := false
-		if ce.keyMap != nil {
-			if _, ok := ce.keyMap[key]; ok {
-				exists = true
-			}
-		} else {
-			b, err := ce.cache.Load(ctx, key)
-			if err != nil {
-				return nil, err
-			}
-			if b != nil {
-				exists = true
-			}
-		}
-		if !exists {
-			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
-			if err != nil {
-				return nil, layerDone(err)
-			}
-			if err := ce.cache.Save(ctx, key, ra); err != nil {
-				if !errors.Is(err, os.ErrExist) {
-					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
-				}
-			}
-			layerDone(nil)
+		_, exists := ce.keyMap[key]
+		_, scheduled := uploads[key]
+		if !exists && !scheduled {
+			uploads[key] = struct{}{}
+			eg.Go(func() error {
+				return ce.uploadBlob(egCtx, key, l.Blob, dgstPair)
+			})
 		}
 		la := &cacheimporttypes.LayerAnnotations{
 			DiffID:    diffID,
@@ -306,6 +318,9 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 			la.CreatedAt = t.UTC()
 		}
 		config.Layers[i].Annotations = la
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
 	dt, err := json.Marshal(config)
