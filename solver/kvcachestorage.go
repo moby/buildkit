@@ -277,6 +277,37 @@ func (c *kvCacheStorage) Parents(ctx context.Context, id string) iterutil.Fallib
 	})
 }
 
+func (c *kvCacheStorage) AlternativeRoots(ctx context.Context, key *CacheKey, rec *CacheRecord) iterutil.FallibleSeq[string] {
+	return iterutil.FallibleSeqFunc(func(yield func(string) bool) error {
+		var alternatives []string
+		if err := c.backend.WalkIDsByResult(rec.ID, func(id string) error {
+			if id == key.ID {
+				return nil
+			}
+
+			hasBacklinks := false
+			c.backend.WalkBacklinks(id, func(_ string, _ CacheInfoLink) error {
+				hasBacklinks = true
+				return nil
+			})
+
+			if !hasBacklinks {
+				alternatives = append(alternatives, id)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		for _, id := range alternatives {
+			if !yield(id) {
+				break
+			}
+		}
+		return nil
+	})
+}
+
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
 	visited := map[string]struct{}{}
 	return c.backend.Walk(func(id string) error {
