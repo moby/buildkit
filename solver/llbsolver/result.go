@@ -72,12 +72,15 @@ func (rp *resultProxy) Provenance() any {
 func (rp *resultProxy) Release(ctx context.Context) (err error) {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
+	remainingErrResults := rp.errResults[:0]
 	for _, res := range rp.errResults {
 		rerr := res.Release(ctx)
 		if rerr != nil {
 			err = rerr
+			remainingErrResults = append(remainingErrResults, res)
 		}
 	}
+	rp.errResults = remainingErrResults
 	if rp.v != nil {
 		if rp.released {
 			bklog.G(ctx).Warnf("release of already released result")
@@ -112,17 +115,36 @@ func (rp *resultProxy) wrapError(err error) error {
 	return err
 }
 
+func (rp *resultProxy) adoptExecErrorRefs(err error) {
+	var ee *llberrdefs.ExecError
+	if !errors.As(err, &ee) {
+		return
+	}
+
+	var refs []solver.Result
+	ee.EachRef(func(res solver.Result) error {
+		refs = append(refs, res)
+		return nil
+	})
+	// Acquire ownership so ExecError finalizer doesn't attempt to release as well.
+	ee.OwnerBorrowed = true
+
+	rp.mu.Lock()
+	if !rp.released {
+		rp.errResults = append(rp.errResults, refs...)
+		rp.mu.Unlock()
+		return
+	}
+	rp.mu.Unlock()
+
+	for _, res := range refs {
+		res.Release(context.TODO())
+	}
+}
+
 func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithProvenance, error) {
 	res, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies)
-	var ee *llberrdefs.ExecError
-	if errors.As(err, &ee) {
-		ee.EachRef(func(res solver.Result) error {
-			rp.errResults = append(rp.errResults, res)
-			return nil
-		})
-		// acquire ownership so ExecError finalizer doesn't attempt to release as well
-		ee.OwnerBorrowed = true
-	}
+	rp.adoptExecErrorRefs(err)
 	return res, err
 }
 
