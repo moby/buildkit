@@ -122,6 +122,9 @@ type CacheExportOpt struct {
 	// IgnoreBacklinks defines if other cache chains for same result that did not
 	// participate in the current build should be exported.
 	IgnoreBacklinks bool
+	// Prepared holds the remotes resolved by PrepareCacheExport, which ExportTo
+	// reuses instead of loading the results again.
+	Prepared *PreparedCacheExport
 }
 
 // CacheExporter can export the artifacts of the build chain

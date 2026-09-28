@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 
-	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 )
@@ -170,7 +169,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			return nil, err
 		}
 
-		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
+		prepared := opt.Prepared.lookup(cm, res.ID)
+		remotes, err := prepared.loadRemotes(ctx, cm, res, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -189,18 +189,13 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 
 		if needsLocalResult(remote, opt) && opt.Mode != CacheExportModeRemoteOnly {
-			res, err := cm.results.Load(ctx, res)
+			remotes, found, err := prepared.resolveRemotes(ctx, cm, res, opt)
 			if err != nil {
-				if !errors.Is(err, cerrdefs.ErrNotFound) {
-					return nil, err
-				}
+				return nil, err
+			}
+			if !found {
 				remote = nil
 			} else {
-				remotes, err := opt.ResolveRemotes(ctx, res)
-				if err != nil {
-					return nil, err
-				}
-				res.Release(context.TODO())
 				if remote == nil && len(remotes) > 0 {
 					remote, remotes = remotes[0], remotes[1:] // pop the first element
 				}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"runtime"
 	"sync"
 	"time"
 
@@ -120,13 +121,22 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					// Configure compression
 					compressionConfig := exp.Config().Compression
 
-					// all keys have same export chain so exporting others is not needed
-					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+					opt := solver.CacheExportOpt{
 						ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
 						Mode:           exp.CacheExportMode,
 						Session:        g,
 						CompressionOpt: &compressionConfig,
-					})
+					}
+					// all keys have same export chain so exporting others is not needed
+					exporter := res.CacheKeys()[0].Exporter
+					if exp.CacheExportMode == solver.CacheExportModeMax {
+						prepared, err := solver.PrepareCacheExport(ctx, exporter, opt, runtime.GOMAXPROCS(0))
+						if err != nil {
+							return err
+						}
+						opt.Prepared = prepared
+					}
+					_, err = exporter.ExportTo(ctx, exp, opt)
 					return err
 				}); err != nil {
 					return prepareDone(err)
