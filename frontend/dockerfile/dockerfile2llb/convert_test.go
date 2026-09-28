@@ -114,6 +114,45 @@ RUN ls -l
 	require.NoError(t, err)
 }
 
+func TestRunCustomNameKeepsEscapes(t *testing.T) {
+	t.Parallel()
+	df := `FROM scratch
+ENV FOO=bar
+RUN echo C:\hello\world\path
+RUN echo "C:\hello\quoted\path"
+RUN echo \$FOO $FOO "a\"b"
+RUN ["echo", "C:\\exec\\path"]
+`
+	assert.ElementsMatch(t, []string{
+		`[1/4] RUN echo C:\hello\world\path`,
+		`[2/4] RUN echo "C:\hello\quoted\path"`,
+		`[3/4] RUN echo \$FOO bar "a\"b"`,
+		`[4/4] RUN ["echo", "C:\\exec\\path"]`,
+	}, customNames(t, df))
+
+	df = "# escape=`\nFROM scratch\nENV FOO=bar\nRUN echo C:\\hello `$FOO $FOO\n"
+	assert.ElementsMatch(t, []string{
+		"[1/1] RUN echo C:\\hello `$FOO bar",
+	}, customNames(t, df))
+}
+
+func customNames(t *testing.T, df string) []string {
+	t.Helper()
+	res, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.NoError(t, err)
+
+	def, err := res.State.Marshal(t.Context())
+	require.NoError(t, err)
+
+	var names []string
+	for _, md := range def.Metadata {
+		if name, ok := md.Description["llb.customname"]; ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 func TestCopyFromKeepsStageLabels(t *testing.T) {
 	t.Parallel()
 
