@@ -226,18 +226,20 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # per registry. If unset, the default concurrency limit is used.
   maxRegistryConcurrency = 4
 
-
 # optional signed cache configuration for GitHub Actions backend
-[ghacache.sign]
-# command that signs the payload in stdin and outputs the signature to stdout. Normally you want cosign to produce the signature bytes.
-cmd = ""
-[ghacache.verify]
-required = false
-[ghacache.verify.policy]
-timestampThreshold = 1
-tlogThreshold = 1
-# cetificate properties that need to match. Simple wildcards (*) are supported.
-certificateIssuer = ""
-subjectAlternativeName = ""
-buildSignerURI = ""
+# [cache.gha.sign]
+#   # command that signs the payload in stdin and outputs the signature to stdout.
+#   # Normally you want cosign to produce the signature bytes.
+#   command = ""
+#
+# [cache.gha.verify]
+#   required = false
+#
+# [cache.gha.verify.policy]
+#   timestampThreshold = 1
+#   tlogThreshold = 1
+#   # certificate properties that need to match. Simple wildcards (*) are supported.
+#   certificateIssuer = ""
+#   subjectAlternativeName = ""
+#   buildSignerURI = ""
 ```
