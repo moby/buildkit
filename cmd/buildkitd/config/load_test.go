@@ -162,7 +162,7 @@ options=["edns0"]
 searchDomains=["example.com"]
 
 [system]
-sessionAuthTimeout="48h"
+sessionAuthTimeout="60s"
 `
 
 	cfg, err := Load(bytes.NewBuffer([]byte(testConfig)))
@@ -239,7 +239,7 @@ sessionAuthTimeout="48h"
 	require.Equal(t, []string{"edns0"}, cfg.DNS.Options)
 
 	require.NotNil(t, cfg.System)
-	require.Equal(t, 48*time.Hour, cfg.System.SessionAuthTimeout.Duration)
+	require.Equal(t, 60*time.Second, cfg.System.SessionAuthTimeout.Duration)
 }
 
 func TestLoadHistoryMaxEntries(t *testing.T) {
@@ -279,7 +279,7 @@ func TestLoadSessionAuthTimeout(t *testing.T) {
 		{name: "unset", toml: "[system]\n"},
 		{name: "disabled", toml: "[system]\nsessionAuthTimeout = 0\n", wantSet: true, want: 0},
 		{name: "configured", toml: "[system]\nsessionAuthTimeout = 300\n", wantSet: true, want: 300 * time.Second},
-		{name: "duration-string", toml: "[system]\nsessionAuthTimeout = \"48h\"\n", wantSet: true, want: 48 * time.Hour},
+		{name: "duration-string", toml: "[system]\nsessionAuthTimeout = \"60s\"\n", wantSet: true, want: 60 * time.Second},
 	}
 
 	for _, tc := range tests {

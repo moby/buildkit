@@ -249,10 +249,10 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # sessionAuthTimeout sets the timeout for daemon-side authentication
   # round-trips with the buildx client session (resolving credentials and
   # fetching auth tokens from the session). Can be a duration string
-  # (e.g. "48h") or a bare integer treated as seconds. If unset, the default
+  # (e.g. "60s") or a bare integer treated as seconds. If unset, the default
   # timeout of 60s is used. A value of zero or less disables the timeout
   # entirely.
-  sessionAuthTimeout = "48h"
+  sessionAuthTimeout = "60s"
 
 # optional signed cache configuration for GitHub Actions backend
 # [cache.gha.sign]
