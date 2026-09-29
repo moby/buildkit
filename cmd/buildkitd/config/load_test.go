@@ -47,7 +47,9 @@ func TestCompactionConfig(t *testing.T) {
 enabled = true
 idleTimeout = "5m"
 maxRetry = 0
-writeWatermark = 1234
+writesPerCheck = 1234
+sizeWatermark = 1073741824
+sizeGrowthPercent = 250
 minReclaimBytes = 536870912
 minReclaimPercent = 40
 `))
@@ -56,7 +58,9 @@ minReclaimPercent = 40
 	require.NoError(t, err)
 	require.Equal(t, 5*time.Minute, policy.IdleTimeout)
 	require.Zero(t, policy.MaxRetry)
-	require.Equal(t, uint64(1234), policy.WriteWatermark)
+	require.Equal(t, uint64(1234), policy.WritesPerCheck)
+	require.Equal(t, int64(1073741824), policy.SizeWatermark)
+	require.Equal(t, int64(250), policy.SizeGrowthPercent)
 	require.Equal(t, int64(536870912), policy.MinReclaimBytes)
 	require.Equal(t, int64(40), policy.MinReclaimPercent)
 }
@@ -66,7 +70,11 @@ func TestInvalidCompactionConfig(t *testing.T) {
 		`idleTimeout = "0s"`,
 		`idleTimeout = "-1s"`,
 		`maxRetry = -1`,
-		`writeWatermark = 0`,
+		`writesPerCheck = 0`,
+		`sizeWatermark = 0`,
+		`sizeWatermark = -1`,
+		`sizeGrowthPercent = 0`,
+		`sizeGrowthPercent = -1`,
 		`minReclaimBytes = 0`,
 		`minReclaimBytes = -1`,
 		`minReclaimPercent = 0`,

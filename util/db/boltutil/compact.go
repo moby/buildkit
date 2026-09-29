@@ -162,11 +162,8 @@ func (d *DB) measure() (dbSize, error) {
 }
 
 func reclaimBelowThreshold(sz dbSize, opt db.CompactOptions) string {
-	if opt.MinReclaimBytes > 0 && sz.free < opt.MinReclaimBytes {
+	if !opt.MeetsReclaimThreshold(sz.file, sz.free) {
 		return "reclaimable space below threshold"
-	}
-	if opt.MinReclaimPercent > 0 && (sz.file <= 0 || sz.free < sz.file/100*opt.MinReclaimPercent+(sz.file%100*opt.MinReclaimPercent+99)/100) {
-		return "reclaimable share of the file below threshold"
 	}
 	return ""
 }

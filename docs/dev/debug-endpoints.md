@@ -32,11 +32,13 @@ curl http://127.0.0.1:6060/debug/compaction
 ```
 
 `POST /debug/compaction?database=<path>` requests one manual attempt for a database
-listed by GET. It bypasses the write watermark but retains the idle period,
-reclaimability thresholds, free-space checks, and serialization with other copies.
+listed by GET. It bypasses the automatic write and size triggers but retains the
+idle period, reclaimability thresholds, free-space checks, and serialization with
+other copies. A successful manual compaction updates the adaptive size watermark.
 This is not a dry run. An arriving writer or a disconnected client cancels the
-attempt cooperatively; manual attempts never escalate to forced copies. A second
-request for the same database returns HTTP 409 while maintenance is in progress.
+attempt cooperatively; manual attempts never escalate to forced copies.
+A second request for the same database returns HTTP 409 while maintenance is in
+progress.
 
 The response streams phase changes and a final result with file sizes and copy
 duration. Use the database path reported by GET:

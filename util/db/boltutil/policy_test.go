@@ -71,7 +71,6 @@ func TestPolicyPersistsCommittedWrites(t *testing.T) {
 	require.NoError(t, d.Close())
 	state := readPolicy(t, path)
 	require.Equal(t, uint64(1), state.Writes)
-	require.Equal(t, compaction.DefaultConfig().WriteWatermark, state.WriteWatermark)
 	d, err = Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
@@ -135,10 +134,7 @@ func TestPolicyReadOnly(t *testing.T) {
 
 func TestNewDatabaseIgnoresOldPolicy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
-	old := compaction.State{Writes: 1000, WriteWatermark: 1 << 40}
-	data, err := json.Marshal(old)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path+".compact-state", data, 0600))
+	require.NoError(t, os.WriteFile(path+".compact-state", []byte(`{"writes":1000,"sizeWatermark":1099511627776}`), 0600))
 	d, err := Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Close())
@@ -148,13 +144,8 @@ func TestNewDatabaseIgnoresOldPolicy(t *testing.T) {
 
 func TestPolicyCompactsWithoutGC(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
-	cfg := compaction.DefaultConfig()
-	cfg.WriteWatermark = 2
-	cfg.MinReclaimBytes = 1
-	cfg.IdleTimeout = 10 * time.Millisecond
-	d, err := Open(path, 0600, nil, cfg)
+	d, err := Open(path, 0600, nil)
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, d.Close()) })
 	require.NoError(t, d.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucket([]byte("data"))
 		if err != nil {
@@ -164,6 +155,15 @@ func TestPolicyCompactsWithoutGC(t *testing.T) {
 	}))
 	before, err := os.Stat(path)
 	require.NoError(t, err)
+	require.NoError(t, d.Close())
+	cfg := compaction.DefaultConfig()
+	cfg.WritesPerCheck = 1
+	cfg.SizeWatermark = 1
+	cfg.MinReclaimBytes = 1
+	cfg.IdleTimeout = 10 * time.Millisecond
+	d, err = Open(path, 0600, nil, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, d.Close()) })
 	require.NoError(t, d.Update(func(tx *bolt.Tx) error { return tx.Bucket([]byte("data")).Delete([]byte("large")) }))
 	require.Eventually(t, func() bool {
 		fi, err := os.Stat(path)
@@ -174,19 +174,20 @@ func TestPolicyCompactsWithoutGC(t *testing.T) {
 		return nil
 	}))
 	require.NoError(t, d.Close())
-	_, err = os.Stat(path + ".compact-state")
-	require.ErrorIs(t, err, os.ErrNotExist)
+	state := readPolicy(t, path)
+	require.Zero(t, state.Writes)
+	require.Greater(t, state.SizeWatermark, cfg.SizeWatermark)
 }
 
-func TestPolicyIgnoresPersistedSizeWatermark(t *testing.T) {
+func TestPolicyIgnoresObsoleteWatermarks(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	d := openTestDB(t, path)
 	require.NoError(t, d.Close())
-	require.NoError(t, os.WriteFile(path+".compact-state", []byte(`{"writes":123,"writeWatermark":200000,"sizeWatermark":9223372036854775807}`), 0600))
+	require.NoError(t, os.WriteFile(path+".compact-state", []byte(`{"writes":123,"writeWatermark":200000}`), 0600))
 	d, err := Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Close())
-	require.Equal(t, compaction.State{Writes: 123, WriteWatermark: 200000}, readPolicy(t, path))
+	require.Equal(t, compaction.State{Writes: 123, SizeWatermark: compaction.DefaultConfig().SizeWatermark}, readPolicy(t, path))
 }
 
 func TestPolicySkipsPackedDatabase(t *testing.T) {
@@ -198,7 +199,8 @@ func TestPolicySkipsPackedDatabase(t *testing.T) {
 	require.True(t, res.Compacted)
 	require.NoError(t, d.Close())
 	cfg := compaction.DefaultConfig()
-	cfg.WriteWatermark = 1
+	cfg.WritesPerCheck = 1
+	cfg.SizeWatermark = 1
 	cfg.MinReclaimBytes = 1 << 20
 	cfg.IdleTimeout = time.Millisecond
 	require.NoError(t, os.WriteFile(path+".compact-state", []byte(`{"writes":1}`), 0600))
@@ -211,5 +213,4 @@ func TestPolicySkipsPackedDatabase(t *testing.T) {
 		return !d.lastCompact.IsZero()
 	}, 50*time.Millisecond, time.Millisecond)
 	require.NoError(t, d.Close())
-	require.Equal(t, uint64(1), readPolicy(t, path).Writes)
 }

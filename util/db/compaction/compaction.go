@@ -1,13 +1,15 @@
 // Package compaction schedules database maintenance independently of the storage engine.
-// Reclaimability is checked after enough committed writes and periodically even
-// below that watermark. Pending compaction waits for an idle period. Arriving writers
-// cancel attempts up to the retry limit; subsequent attempts make writers wait. Unproductive compactions
-// raise the write watermark. Changed policy state is checkpointed every five minutes and at close.
+// Database growth is sampled at most every five minutes after committed writes,
+// and reclaimability is checked after enough writes even without growth.
+// Pending compaction waits for an idle period. Arriving writers
+// cancel attempts up to the retry limit; subsequent attempts make writers wait.
+// Changed policy state is checkpointed every five minutes and at close.
 package compaction
 
 import (
 	"context"
 	"math"
+	"math/bits"
 	"sync"
 	"time"
 
@@ -17,8 +19,8 @@ import (
 )
 
 const (
-	checkpointInterval   = 5 * time.Minute
-	reclaimCheckInterval = time.Hour
+	checkpointInterval = 5 * time.Minute
+	sizeCheckInterval  = 5 * time.Minute
 )
 
 var (
@@ -28,7 +30,9 @@ var (
 
 type Config struct {
 	ManualOnly        bool
-	WriteWatermark    uint64
+	WritesPerCheck    uint64
+	SizeWatermark     int64
+	SizeGrowthPercent int64
 	MinReclaimBytes   int64
 	IdleTimeout       time.Duration
 	MaxRetry          int
@@ -38,7 +42,9 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		WriteWatermark:    100000,
+		WritesPerCheck:    100000,
+		SizeWatermark:     128 << 20,
+		SizeGrowthPercent: 100,
 		MinReclaimBytes:   256 << 20,
 		IdleTimeout:       time.Minute,
 		MaxRetry:          3,
@@ -47,15 +53,15 @@ func DefaultConfig() Config {
 }
 
 func (c Config) Validate() error {
-	if c.WriteWatermark == 0 || c.MinReclaimBytes <= 0 || c.IdleTimeout <= 0 || c.MaxRetry < 0 || c.MinReclaimPercent <= 0 || c.MinReclaimPercent > 100 {
+	if c.WritesPerCheck == 0 || c.SizeWatermark <= 0 || c.SizeGrowthPercent <= 0 || c.MinReclaimBytes <= 0 || c.IdleTimeout <= 0 || c.MaxRetry < 0 || c.MinReclaimPercent <= 0 || c.MinReclaimPercent > 100 {
 		return errors.New("invalid database compaction policy")
 	}
 	return nil
 }
 
 type State struct {
-	WriteWatermark uint64 `json:"writeWatermark"`
-	Writes         uint64 `json:"writes"`
+	Writes        uint64 `json:"writes"`
+	SizeWatermark int64  `json:"sizeWatermark"`
 }
 
 type Backend interface {
@@ -72,22 +78,23 @@ type Scheduler struct {
 	wake    chan struct{}
 	done    chan struct{}
 
-	mu                sync.Mutex
-	state             State
-	saved             State
-	active            int
-	lastUse           time.Time
-	notBefore         time.Time
-	nextCheck         time.Time
-	nextPeriodicCheck time.Time
-	pending           bool
-	retries           int
-	attempt           context.CancelCauseFunc
-	stopping          bool
-	manual            bool
-	requests          chan *Request
-	path              string
-	metrics           *databaseMetrics
+	mu            sync.Mutex
+	state         State
+	saved         State
+	active        int
+	lastUse       time.Time
+	lastSizeCheck time.Time
+	notBefore     time.Time
+	nextCheck     time.Time
+	sizeDue       bool
+	pending       bool
+	retries       int
+	attempt       context.CancelCauseFunc
+	stopping      bool
+	manual        bool
+	requests      chan *Request
+	path          string
+	metrics       *databaseMetrics
 }
 
 // New starts maintenance. Call Close before closing the backend.
@@ -101,25 +108,24 @@ func newScheduler(ctx context.Context, config Config, state State, backend Backe
 		return nil, err
 	}
 	saved := state
-	state.WriteWatermark = max(state.WriteWatermark, config.WriteWatermark)
+	state.SizeWatermark = max(state.SizeWatermark, config.SizeWatermark)
 	if saved == (State{}) {
 		// An absent checkpoint needs no write until the policy state changes.
 		saved = state
 	}
 	ctx, stop := context.WithCancelCause(ctx)
 	s := &Scheduler{
-		config:            config,
-		backend:           backend,
-		ctx:               ctx,
-		stop:              stop,
-		wake:              make(chan struct{}, 1),
-		done:              make(chan struct{}),
-		state:             state,
-		saved:             saved,
-		lastUse:           time.Now(),
-		nextPeriodicCheck: time.Now().Add(reclaimCheckInterval),
-		requests:          make(chan *Request, 1),
-		metrics:           metrics,
+		config:   config,
+		backend:  backend,
+		ctx:      ctx,
+		stop:     stop,
+		wake:     make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		state:    state,
+		saved:    saved,
+		lastUse:  time.Now(),
+		requests: make(chan *Request, 1),
+		metrics:  metrics,
 	}
 	go s.run()
 	return s, nil
@@ -138,15 +144,22 @@ func (s *Scheduler) Begin(write bool) {
 // End counts only committed writes. It must also run after callback errors or panics.
 func (s *Scheduler) End(committed bool) {
 	s.mu.Lock()
+	now := time.Now()
 	s.active--
 	idle := s.active == 0
 	if idle {
-		s.lastUse = time.Now()
+		s.lastUse = now
 	}
 	crossed := false
-	if committed && s.state.Writes < math.MaxUint64 {
-		s.state.Writes++
-		crossed = s.state.Writes == s.state.WriteWatermark
+	if committed {
+		if s.state.Writes < math.MaxUint64 {
+			s.state.Writes++
+			crossed = s.state.Writes == s.config.WritesPerCheck
+		}
+		if !s.sizeDue && now.Sub(s.lastSizeCheck) >= sizeCheckInterval {
+			s.sizeDue = true
+			crossed = true
+		}
 	}
 	wake := idle && (s.pending || s.stopping || s.manual) || crossed
 	s.mu.Unlock()
@@ -231,12 +244,8 @@ func (s *Scheduler) run() {
 				at = s.notBefore
 			}
 			delay = max(time.Until(at), 0)
-		} else if !s.config.ManualOnly && !s.pending {
-			at := s.nextCheck
-			if s.state.Writes < s.state.WriteWatermark && s.nextPeriodicCheck.After(at) {
-				at = s.nextPeriodicCheck
-			}
-			delay = max(time.Until(at), 0)
+		} else if !s.config.ManualOnly && !s.pending && (s.state.Writes >= s.config.WritesPerCheck || s.sizeDue) {
+			delay = max(time.Until(s.nextCheck), 0)
 		}
 		s.mu.Unlock()
 		timer.Reset(delay)
@@ -261,29 +270,39 @@ func (s *Scheduler) check() {
 	}
 	s.mu.Lock()
 	now := time.Now()
-	eligible := !s.pending && !now.Before(s.nextCheck) && (s.state.Writes >= s.state.WriteWatermark || !now.Before(s.nextPeriodicCheck))
-	if eligible {
-		s.nextCheck = now.Add(checkpointInterval)
-		s.nextPeriodicCheck = now.Add(reclaimCheckInterval)
-	}
+	writes := s.state.Writes
+	fullCheck := writes >= s.config.WritesPerCheck
+	sizeCheck := s.sizeDue
+	eligible := !s.pending && (fullCheck || sizeCheck) && !now.Before(s.nextCheck)
+	watermark := s.state.SizeWatermark
 	s.mu.Unlock()
 	if !eligible {
 		return
 	}
 	stats, err := s.stats()
 	if err != nil {
+		s.mu.Lock()
+		s.nextCheck = now.Add(checkpointInterval)
+		s.mu.Unlock()
 		if !errors.Is(err, db.ErrCompactionBusy) {
 			bklog.G(s.ctx).WithError(err).Warn("failed to check database compaction watermark")
 		}
 		return
 	}
-	percent := s.config.MinReclaimPercent
-	if stats.Size > 0 && stats.Reclaimable >= s.config.MinReclaimBytes && stats.Reclaimable >= stats.Size/100*percent+(stats.Size%100*percent+99)/100 {
-		s.mu.Lock()
+	opt := db.CompactOptions{MinReclaimBytes: s.config.MinReclaimBytes, MinReclaimPercent: s.config.MinReclaimPercent}
+	sizeReached := stats.Size >= watermark
+	writesReached := fullCheck && stats.Size >= s.config.SizeWatermark
+	pending := (sizeReached || writesReached) && opt.MeetsReclaimThreshold(stats.Size, stats.Reclaimable)
+	s.mu.Lock()
+	s.sizeDue = false
+	s.lastSizeCheck = now
+	if pending {
 		s.pending = true
 		s.metrics.wait(false, true)
-		s.mu.Unlock()
+	} else if fullCheck {
+		s.state.Writes -= min(s.state.Writes, writes)
 	}
+	s.mu.Unlock()
 }
 
 func (s *Scheduler) compact() {
@@ -311,15 +330,15 @@ func (s *Scheduler) compact() {
 	<-capacity
 	s.mu.Lock()
 	s.attempt = nil
-	s.lastUse = time.Now()
+	now := time.Now()
+	s.lastUse = now
 	if res.Compacted {
-		s.nextPeriodicCheck = time.Now().Add(reclaimCheckInterval)
 		s.state.Writes -= writes
+		s.state.SizeWatermark = nextWatermark(res.SizeAfter, s.config.SizeWatermark, s.config.SizeGrowthPercent)
+		s.sizeDue = false
+		s.lastSizeCheck = now
 		s.pending = false
 		s.retries = 0
-		if res.SizeAfter > 0 && res.SizeBefore > 0 && float64(res.SizeBefore-res.SizeAfter)/float64(res.SizeBefore)*100 < float64(s.config.MinReclaimPercent) {
-			s.state.WriteWatermark += min(s.state.WriteWatermark, math.MaxUint64-s.state.WriteWatermark)
-		}
 	} else if errors.Is(cause, errWriter) {
 		s.retries++
 		s.metrics.wait(false, true)
@@ -336,4 +355,22 @@ func (s *Scheduler) compact() {
 	if res.Compacted {
 		bklog.G(s.ctx).Infof("compacted database from %d to %d bytes in %s", res.SizeBefore, res.SizeAfter, res.Duration)
 	}
+}
+
+func nextWatermark(size, minimum, growthPercent int64) int64 {
+	if size <= 0 {
+		return minimum
+	}
+	// Calculate size + ceil(size * growthPercent / 100), saturating instead
+	// of overflowing for unusually large configured percentages.
+	productHi, productLo := bits.Mul64(uint64(size), uint64(growthPercent))
+	availableHi, availableLo := bits.Mul64(uint64(math.MaxInt64-size), 100)
+	if productHi > availableHi || productHi == availableHi && productLo > availableLo {
+		return math.MaxInt64
+	}
+	growth, remainder := bits.Div64(productHi, productLo, 100)
+	if remainder != 0 {
+		growth++
+	}
+	return max(minimum, size+int64(growth))
 }

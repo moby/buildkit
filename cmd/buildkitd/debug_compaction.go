@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/moby/buildkit/util/disk"
 	"github.com/pkg/errors"
@@ -33,9 +34,9 @@ func handleCompactionStatus(w http.ResponseWriter, r *http.Request) {
 				entry.Reason = err.Error()
 			} else {
 				entry.Available = space.Available
-				p := s.Config.MinReclaimPercent
+				opt := db.CompactOptions{MinReclaimBytes: s.Config.MinReclaimBytes, MinReclaimPercent: s.Config.MinReclaimPercent}
 				switch {
-				case s.Stats.Size <= 0 || s.Stats.Reclaimable < s.Config.MinReclaimBytes || s.Stats.Reclaimable < s.Stats.Size/100*p+(s.Stats.Size%100*p+99)/100:
+				case !opt.MeetsReclaimThreshold(s.Stats.Size, s.Stats.Reclaimable):
 					entry.Reason = "reclaimable space below threshold"
 				case entry.Available < entry.Required:
 					entry.Reason = "insufficient free disk space"

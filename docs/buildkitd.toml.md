@@ -75,10 +75,15 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
 [compaction]
   # Opt-in metadata database maintenance, independent of cache GC.
   enabled = false
-  # Writes count committed transactions. Low-yield copies raise this watermark.
-  # Reclaimability is also checked hourly below the watermark.
-  writeWatermark = 100000
-  # Both reclaimability thresholds must also be reached.
+  # Committed write transactions between automatic eligibility checks.
+  writesPerCheck = 100000
+  # Database size is sampled at most every five minutes after committed writes.
+  # Initial minimum database size for growth-triggered eligibility checks.
+  sizeWatermark = 134217728
+  # After compaction, grow the next size watermark from the compacted size by
+  # this percentage.
+  sizeGrowthPercent = 100
+  # Compaction is eligible when either reclaimability threshold is reached.
   minReclaimBytes = 268435456
   # Percentage of the database file estimated to be reclaimable.
   minReclaimPercent = 25

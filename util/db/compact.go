@@ -9,7 +9,8 @@ import (
 
 var ErrCompactionBusy = errors.New("database maintenance in progress")
 
-// CompactOptions controls when a database is compacted. Zero thresholds disable checks.
+// CompactOptions controls when a database is compacted. When both reclaim
+// thresholds are set, satisfying either threshold permits compaction.
 type CompactOptions struct {
 	MinReclaimBytes   int64
 	MinReclaimPercent int64
@@ -22,6 +23,22 @@ type CompactOptions struct {
 	CopyTimeout time.Duration
 	// Progress receives phase changes without blocking maintenance. A full channel drops updates.
 	Progress chan<- string
+}
+
+// MeetsReclaimThreshold reports whether the reclaimable space satisfies at
+// least one configured threshold. With no configured thresholds, it returns true.
+func (o CompactOptions) MeetsReclaimThreshold(size, reclaimable int64) bool {
+	if o.MinReclaimBytes <= 0 && o.MinReclaimPercent <= 0 {
+		return true
+	}
+	if o.MinReclaimBytes > 0 && reclaimable >= o.MinReclaimBytes {
+		return true
+	}
+	if o.MinReclaimPercent <= 0 || size <= 0 {
+		return false
+	}
+	percent := o.MinReclaimPercent
+	return reclaimable >= size/100*percent+(size%100*percent+99)/100
 }
 
 type CompactResult struct {

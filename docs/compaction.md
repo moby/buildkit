@@ -15,20 +15,28 @@ The remaining defaults are:
 
 | Setting             | Default     | Meaning                                                                  |
 |---------------------|-------------|--------------------------------------------------------------------------|
-| `writeWatermark`    | `100000`    | Committed write transactions that trigger earlier eligibility checks.    |
+| `writesPerCheck`    | `100000`    | Committed write transactions between automatic eligibility checks.       |
+| `sizeWatermark`     | `134217728` | Initial database size watermark (128 MiB).                               |
+| `sizeGrowthPercent` | `100`       | Growth over the compacted size before the next size-triggered check.     |
 | `minReclaimBytes`   | `268435456` | Minimum estimated reclaimable bytes (256 MiB).                           |
 | `minReclaimPercent` | `25`        | Minimum estimated reclaimable percentage of the file.                    |
 | `idleTimeout`       | `1m`        | Required interval without database activity.                             |
 | `maxRetry`          | `3`         | Attempts that arriving writers may cancel before a copy makes them wait. |
 
-The policy checks bbolt free and pending pages after reaching the write watermark,
-and once an hour even below it. After reaching the watermark, unsuccessful checks
-are repeated every five minutes.
+The policy checks database size at most every five minutes, after committed
+writes. Reaching the size watermark makes the database eligible for a
+reclaimability check. After a successful compaction, the next watermark is the
+compacted size plus `sizeGrowthPercent`, with `sizeWatermark` as the minimum.
 
-Both reclaimability thresholds must be met before compaction becomes pending.
-The policy periodically rechecks reclaimability, so deletions can make a database
-eligible without further file growth. Pending maintenance waits for no active
-transactions and the configured idle period; reads and writes both count as activity.
+Every `writesPerCheck` committed writes, reclaimability is checked without waiting
+for the adaptive watermark, while the configured initial watermark remains the
+minimum file size. This catches space released by deletions when bbolt reuses free
+pages without growing the file. Idle databases are not polled.
+
+Either reclaimability threshold must be met before compaction becomes pending.
+Deletion writes can therefore make a database eligible without further file growth.
+Pending maintenance waits for no active transactions and the configured idle
+period; reads and writes both count as activity.
 
 Copies are serialized across databases in the daemon. Before copying, the wrapper
 drains transactions and checks reclaimability and filesystem headroom again.
@@ -36,18 +44,18 @@ New transactions wait during the copy. Arriving writers cancel automatic attempt
 up to `maxRetry`; subsequent attempts let the copy finish while transactions wait.
 Setting `maxRetry = 0` makes the first automatic attempt follow that behavior.
 
-When changed, the write counter and adaptive write watermark are checkpointed
-beside each database every five minutes and during orderly shutdown. Completed
-low-yield copies raise the write watermark; failures and skips do not.
+When changed, the write counter and adaptive size watermark are checkpointed
+beside each database every five minutes and during orderly shutdown.
 
 ## Manual compaction
 
 The [debug HTTP listener](dev/debug-endpoints.md#metadata-database-compaction) provides
 inspection and streamed manual attempts independently of automatic scheduling.
 Enabling the listener is sufficient to make these operations available, even with
-`[compaction].enabled = false`. Manual attempts bypass the write watermark but
-retain the idle period, reclaimability thresholds, and free-space checks. They
-remain cancellable by arriving writers and never escalate to forced copies.
+`[compaction].enabled = false`. Manual attempts bypass `writesPerCheck` and
+`sizeWatermark` but retain the idle period, reclaimability thresholds, and
+free-space checks. They remain cancellable by arriving writers and never escalate
+to forced copies.
 
 ## Operational limits
 

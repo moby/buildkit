@@ -63,7 +63,9 @@ type CompactionConfig struct {
 	Enabled           bool      `toml:"enabled"`
 	IdleTimeout       *Duration `toml:"idleTimeout"`
 	MaxRetry          *int      `toml:"maxRetry"`
-	WriteWatermark    *uint64   `toml:"writeWatermark"`
+	WritesPerCheck    *uint64   `toml:"writesPerCheck"`
+	SizeWatermark     *int64    `toml:"sizeWatermark"`
+	SizeGrowthPercent *int64    `toml:"sizeGrowthPercent"`
 	MinReclaimBytes   *int64    `toml:"minReclaimBytes"`
 	MinReclaimPercent *int64    `toml:"minReclaimPercent"`
 }
@@ -77,8 +79,14 @@ func (c CompactionConfig) Policy() (compaction.Config, error) {
 	if c.MaxRetry != nil {
 		policy.MaxRetry = *c.MaxRetry
 	}
-	if c.WriteWatermark != nil {
-		policy.WriteWatermark = *c.WriteWatermark
+	if c.WritesPerCheck != nil {
+		policy.WritesPerCheck = *c.WritesPerCheck
+	}
+	if c.SizeWatermark != nil {
+		policy.SizeWatermark = *c.SizeWatermark
+	}
+	if c.SizeGrowthPercent != nil {
+		policy.SizeGrowthPercent = *c.SizeGrowthPercent
 	}
 	if c.MinReclaimBytes != nil {
 		policy.MinReclaimBytes = *c.MinReclaimBytes

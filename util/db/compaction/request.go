@@ -48,7 +48,8 @@ func (r *Request) Done() <-chan Outcome {
 	return r.done
 }
 
-// Request bypasses the write watermark for one cancellable attempt after an idle period.
+// Request bypasses the automatic write interval and size watermark for one
+// cancellable attempt after an idle period.
 // It never consumes automatic retries or forces writers to wait for completion.
 func (s *Scheduler) Request(ctx context.Context) (*Request, error) {
 	s.mu.Lock()
@@ -108,10 +109,13 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 					outcome.Error = err.Error()
 				}
 				s.mu.Lock()
-				s.lastUse = time.Now()
+				now := time.Now()
+				s.lastUse = now
 				if result.Compacted {
-					s.nextPeriodicCheck = time.Now().Add(reclaimCheckInterval)
 					s.state.Writes -= writes
+					s.state.SizeWatermark = nextWatermark(result.SizeAfter, s.config.SizeWatermark, s.config.SizeGrowthPercent)
+					s.sizeDue = false
+					s.lastSizeCheck = now
 					s.pending = false
 					s.retries = 0
 					s.metrics.wait(false, false)

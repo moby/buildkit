@@ -33,7 +33,7 @@ func TestMetricsInvalidConfig(t *testing.T) {
 	m, _ := testMetrics(t)
 	config := DefaultConfig()
 	config.Metrics = m
-	config.WriteWatermark = 0
+	config.SizeWatermark = 0
 	s, err := New(t.Context(), config, State{}, nil)
 	require.Error(t, err)
 	require.Nil(t, s)
@@ -202,7 +202,7 @@ func TestMetricsAutomaticAttempt(t *testing.T) {
 		}
 		cfg := testConfig()
 		cfg.Metrics = m
-		s, err := New(t.Context(), cfg, State{Writes: cfg.WriteWatermark}, b)
+		s, err := New(t.Context(), cfg, State{Writes: cfg.WritesPerCheck}, b)
 		require.NoError(t, err)
 		defer s.Close()
 		time.Sleep(cfg.IdleTimeout)

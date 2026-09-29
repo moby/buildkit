@@ -32,6 +32,7 @@ func TestManualRequest(t *testing.T) {
 		synctest.Wait()
 		require.True(t, (<-r.Done()).Result.Compacted)
 		require.True(t, called)
+		require.Equal(t, int64(1000), s.state.SizeWatermark)
 	})
 }
 
