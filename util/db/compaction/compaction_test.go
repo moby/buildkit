@@ -205,6 +205,33 @@ func TestCheckpointAndAdaptation(t *testing.T) {
 	})
 }
 
+func TestCheckpointSkipsUnchangedState(t *testing.T) {
+	for _, initial := range []State{
+		{},
+		{WriteWatermark: 2, Writes: 1},
+	} {
+		synctest.Test(t, func(t *testing.T) {
+			b := &testBackend{}
+			cfg := testConfig()
+			cfg.ManualOnly = true
+			s, err := New(t.Context(), cfg, initial, b)
+			require.NoError(t, err)
+			time.Sleep(2 * checkpointInterval)
+			synctest.Wait()
+			require.Empty(t, b.checkpoints())
+			write(s)
+			time.Sleep(checkpointInterval)
+			synctest.Wait()
+			require.Len(t, b.checkpoints(), 1)
+			time.Sleep(2 * checkpointInterval)
+			synctest.Wait()
+			require.Len(t, b.checkpoints(), 1)
+			require.NoError(t, s.Close())
+			require.Len(t, b.checkpoints(), 1)
+		})
+	}
+}
+
 func TestShutdownCancelsForcedAttempt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		started := make(chan struct{})

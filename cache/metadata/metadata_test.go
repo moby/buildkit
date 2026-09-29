@@ -15,6 +15,7 @@ func TestCompactionPolicy(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "metadata.db")
 	s, err := NewStore(path, compaction.DefaultConfig())
 	require.NoError(t, err)
+	require.NoError(t, s.Update("record", func(*bolt.Bucket) error { return nil }))
 	require.NoError(t, s.Close())
 	require.FileExists(t, path+".compact-state")
 }

@@ -71,11 +71,29 @@ func TestPolicyPersistsCommittedWrites(t *testing.T) {
 	require.NoError(t, d.Close())
 	state := readPolicy(t, path)
 	require.Equal(t, uint64(1), state.Writes)
+	require.Equal(t, compaction.DefaultConfig().WriteWatermark, state.WriteWatermark)
 	d, err = Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
 	require.NoError(t, d.Close())
 	require.Equal(t, uint64(2), readPolicy(t, path).Writes)
+}
+
+func TestPolicyDoesNotRewriteUnchangedState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d, err := Open(path, 0600, nil, compaction.DefaultConfig())
+	require.NoError(t, err)
+	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
+	require.NoError(t, d.Close())
+	before, err := os.Stat(path + ".compact-state")
+	require.NoError(t, err)
+
+	d, err = Open(path, 0600, nil, compaction.DefaultConfig())
+	require.NoError(t, err)
+	require.NoError(t, d.Close())
+	after, err := os.Stat(path + ".compact-state")
+	require.NoError(t, err)
+	require.True(t, os.SameFile(before, after))
 }
 
 func TestPolicyStateFailurePreservesDatabase(t *testing.T) {
@@ -105,7 +123,8 @@ func TestPolicyReadOnly(t *testing.T) {
 	d, err := Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Close())
-	require.NoError(t, os.Remove(path+".compact-state"))
+	_, err = os.Stat(path + ".compact-state")
+	require.ErrorIs(t, err, os.ErrNotExist)
 	d, err = Open(path, 0600, &bolt.Options{ReadOnly: true}, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.Nil(t, d.policy)
@@ -123,9 +142,8 @@ func TestNewDatabaseIgnoresOldPolicy(t *testing.T) {
 	d, err := Open(path, 0600, nil, compaction.DefaultConfig())
 	require.NoError(t, err)
 	require.NoError(t, d.Close())
-	state := readPolicy(t, path)
-	require.Zero(t, state.Writes)
-	require.Equal(t, compaction.DefaultConfig().WriteWatermark, state.WriteWatermark)
+	_, err = os.Stat(path + ".compact-state")
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestPolicyCompactsWithoutGC(t *testing.T) {
@@ -156,11 +174,8 @@ func TestPolicyCompactsWithoutGC(t *testing.T) {
 		return nil
 	}))
 	require.NoError(t, d.Close())
-	data, err := os.ReadFile(path + ".compact-state")
-	require.NoError(t, err)
-	var state compaction.State
-	require.NoError(t, json.Unmarshal(data, &state))
-	require.Zero(t, state.Writes)
+	_, err = os.Stat(path + ".compact-state")
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestPolicyIgnoresPersistedSizeWatermark(t *testing.T) {
@@ -172,9 +187,6 @@ func TestPolicyIgnoresPersistedSizeWatermark(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, d.Close())
 	require.Equal(t, compaction.State{Writes: 123, WriteWatermark: 200000}, readPolicy(t, path))
-	data, err := os.ReadFile(path + ".compact-state")
-	require.NoError(t, err)
-	require.NotContains(t, string(data), "sizeWatermark")
 }
 
 func TestPolicySkipsPackedDatabase(t *testing.T) {

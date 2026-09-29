@@ -29,7 +29,12 @@ func Files() map[string]*Scheduler {
 func NewFile(config Config, path string, fresh bool, database db.Compactor) (*Scheduler, error) {
 	backend := fileBackend{path: path, database: database}
 	var state State
-	if !fresh {
+	if fresh {
+		// An old sidecar cannot describe a newly created database.
+		if err := os.Remove(path + ".compact-state"); err != nil && !errors.Is(err, os.ErrNotExist) {
+			bklog.L.WithError(err).Warnf("failed to remove stale compaction policy for %s", path)
+		}
+	} else {
 		state = backend.load()
 	}
 	ctx := bklog.WithLogger(context.Background(), bklog.L.WithField("database", path))

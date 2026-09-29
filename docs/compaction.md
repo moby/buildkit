@@ -36,9 +36,9 @@ New transactions wait during the copy. Arriving writers cancel automatic attempt
 up to `maxRetry`; subsequent attempts let the copy finish while transactions wait.
 Setting `maxRetry = 0` makes the first automatic attempt follow that behavior.
 
-The write counter and adaptive write watermark are checkpointed beside each
-database every five minutes and during orderly shutdown. Completed low-yield
-copies raise the write watermark; failures and skips do not.
+When changed, the write counter and adaptive write watermark are checkpointed
+beside each database every five minutes and during orderly shutdown. Completed
+low-yield copies raise the write watermark; failures and skips do not.
 
 ## Manual compaction
 

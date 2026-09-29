@@ -2,7 +2,7 @@
 // Reclaimability is checked after enough committed writes and periodically even
 // below that watermark. Pending compaction waits for an idle period. Arriving writers
 // cancel attempts up to the retry limit; subsequent attempts make writers wait. Unproductive compactions
-// raise the write watermark. Policy state is checkpointed every five minutes and at close.
+// raise the write watermark. Changed policy state is checkpointed every five minutes and at close.
 package compaction
 
 import (
@@ -74,6 +74,7 @@ type Scheduler struct {
 
 	mu                sync.Mutex
 	state             State
+	saved             State
 	active            int
 	lastUse           time.Time
 	notBefore         time.Time
@@ -99,7 +100,12 @@ func newScheduler(ctx context.Context, config Config, state State, backend Backe
 		metrics.close()
 		return nil, err
 	}
+	saved := state
 	state.WriteWatermark = max(state.WriteWatermark, config.WriteWatermark)
+	if saved == (State{}) {
+		// An absent checkpoint needs no write until the policy state changes.
+		saved = state
+	}
 	ctx, stop := context.WithCancelCause(ctx)
 	s := &Scheduler{
 		config:            config,
@@ -109,6 +115,7 @@ func newScheduler(ctx context.Context, config Config, state State, backend Backe
 		wake:              make(chan struct{}, 1),
 		done:              make(chan struct{}),
 		state:             state,
+		saved:             saved,
 		lastUse:           time.Now(),
 		nextPeriodicCheck: time.Now().Add(reclaimCheckInterval),
 		requests:          make(chan *Request, 1),
@@ -180,8 +187,18 @@ func (s *Scheduler) Close() error {
 func (s *Scheduler) save() error {
 	s.mu.Lock()
 	state := s.state
+	if state == s.saved {
+		s.mu.Unlock()
+		return nil
+	}
 	s.mu.Unlock()
-	return s.backend.Save(state)
+	if err := s.backend.Save(state); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.saved = state
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *Scheduler) run() {
