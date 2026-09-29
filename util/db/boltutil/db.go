@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
@@ -26,11 +27,13 @@ type DB struct {
 	gate gate
 
 	// hmu serializes operations that close or replace the handle.
-	hmu         sync.Mutex
-	bdb         *bolt.DB
-	closed      bool
-	lastCompact time.Time
-	policy      *compaction.Scheduler
+	hmu          sync.Mutex
+	reopenMu     sync.Mutex //nolint:unused,nolintlint // Used only on Windows.
+	reopenNeeded atomic.Bool
+	bdb          *bolt.DB
+	closed       bool
+	lastCompact  time.Time
+	policy       *compaction.Scheduler
 }
 
 var (
@@ -88,7 +91,11 @@ func (d *DB) View(fn func(*bolt.Tx) error) error {
 		return bolterrors.ErrDatabaseNotOpen
 	}
 	defer d.gate.exit()
-	return d.bdb.View(fn)
+	bdb, err := d.transactionDB()
+	if err != nil {
+		return err
+	}
+	return bdb.View(fn)
 }
 
 func (d *DB) Update(fn func(*bolt.Tx) error) error {
@@ -101,7 +108,11 @@ func (d *DB) Update(fn func(*bolt.Tx) error) error {
 		return bolterrors.ErrDatabaseNotOpen
 	}
 	defer d.gate.exit()
-	err := d.bdb.Update(fn)
+	bdb, err := d.transactionDB()
+	if err != nil {
+		return err
+	}
+	err = bdb.Update(fn)
 	committed = err == nil
 	return err
 }

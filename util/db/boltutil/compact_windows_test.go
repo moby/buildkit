@@ -9,7 +9,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
-	errbolt "go.etcd.io/bbolt/errors"
 	"golang.org/x/sys/windows"
 )
 
@@ -54,11 +53,35 @@ func TestCompactWindowsReplacementFailures(t *testing.T) {
 			require.NoFileExists(t, compactPath(d.path))
 			if tc.failReopen {
 				require.ErrorIs(t, err, reopenErr)
-				require.ErrorIs(t, d.View(func(*bolt.Tx) error { return nil }), errbolt.ErrDatabaseNotOpen)
+				require.ErrorIs(t, d.View(func(*bolt.Tx) error { return nil }), reopenErr)
 				require.NoError(t, d.Close())
 				d = openTestDB(t, d.path)
 			}
 			checkTestDB(t, d, 0, 100, 500)
 		})
 	}
+}
+
+func TestCompactWindowsRetriesFailedReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := openTestDB(t, path)
+	fillTestDB(t, d, 500)
+	deleteTestKeys(t, d, 100, 500)
+	first := true
+	reopenErr := errors.New("temporary reopen failure")
+	d.opts.OpenFile = func(name string, flags int, mode os.FileMode) (*os.File, error) {
+		if first {
+			first = false
+			return nil, reopenErr
+		}
+		return os.OpenFile(name, flags, mode)
+	}
+	res, err := d.Compact(t.Context(), db.CompactOptions{})
+	require.True(t, res.Compacted)
+	require.ErrorIs(t, err, reopenErr)
+	require.True(t, d.reopenNeeded.Load())
+	require.NoError(t, d.View(func(*bolt.Tx) error { return nil }))
+	require.False(t, d.reopenNeeded.Load())
+	checkTestDB(t, d, 0, 100, 500)
+	require.NoError(t, d.Close())
 }

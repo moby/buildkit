@@ -37,6 +37,9 @@ func (d *DB) CompactionStats() (db.CompactionStats, error) {
 	if d.closed {
 		return db.CompactionStats{}, errors.New("database is closed")
 	}
+	if d.reopenNeeded.Load() {
+		return db.CompactionStats{}, errors.New("database unavailable after compaction")
+	}
 	sz, err := d.measure()
 	return db.CompactionStats{Size: sz.file, Reclaimable: sz.free}, err
 }
@@ -51,6 +54,9 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 
 	if d.closed {
 		return db.CompactResult{}, errors.New("database is closed")
+	}
+	if d.reopenNeeded.Load() {
+		return db.CompactResult{}, errors.New("database unavailable after compaction")
 	}
 	if d.opts.ReadOnly {
 		return db.CompactResult{Reason: "read-only database"}, nil
