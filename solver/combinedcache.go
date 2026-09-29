@@ -58,8 +58,18 @@ func (cm *combinedCacheManager) Query(inp []CacheKeyWithSelector, inputIndex Ind
 				}
 				mu.Lock()
 				for _, r := range recs {
-					if _, ok := keys[r.ID]; !ok || c == cm.main {
+					prev, ok := keys[r.ID]
+					if !ok {
 						keys[r.ID] = r
+						continue
+					}
+					// keep one object per ID, but remember every manager that
+					// returned it so each can still resolve the key later
+					if c == cm.main {
+						mergeCacheKeyIDs(r, prev)
+						keys[r.ID] = r
+					} else {
+						mergeCacheKeyIDs(prev, r)
 					}
 				}
 				mu.Unlock()
@@ -159,4 +169,17 @@ func (cm *combinedCacheManager) Records(ctx context.Context, ck *CacheKey) ([]*C
 		out = append(out, rec)
 	}
 	return out, nil
+}
+
+// mergeCacheKeyIDs records on dst every manager-specific ID known by src.
+func mergeCacheKeyIDs(dst, src *CacheKey) {
+	src.mu.RLock()
+	defer src.mu.RUnlock()
+	dst.mu.Lock()
+	defer dst.mu.Unlock()
+	for m, id := range src.ids {
+		if _, ok := dst.ids[m]; !ok {
+			dst.ids[m] = id
+		}
+	}
 }
