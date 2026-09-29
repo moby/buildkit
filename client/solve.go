@@ -33,7 +33,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
-	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -113,12 +112,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	callerCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 
-	statusContext, cancelStatus := context.WithCancelCause(context.Background())
+	statusContext, cancelStatus := context.WithCancelCause(context.WithoutCancel(ctx))
 	defer cancelStatus(errors.WithStack(context.Canceled))
-
-	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-		statusContext = trace.ContextWithSpan(statusContext, span)
-	}
 
 	s := opt.SharedSession
 
