@@ -23,3 +23,21 @@ func TestKnownHostsServerID(t *testing.T) {
 		})
 	}
 }
+
+func TestAddDefaultPort(t *testing.T) {
+	for _, tc := range []struct{ server, want string }{
+		{"example.com", "example.com:22"},
+		{"example.com:2222", "example.com:2222"},
+		{"127.0.0.1", "127.0.0.1:22"},
+		{"::1", "[::1]:22"},
+		{"[::1]", "[::1]:22"},
+		{"[::1]:2222", "[::1]:2222"},
+		{"[fe80::1%eth0]", "[fe80::1%eth0]:22"},
+	} {
+		t.Run(tc.server, func(t *testing.T) {
+			if got := addDefaultPort(tc.server, 22); got != tc.want {
+				t.Fatalf("addDefaultPort(%q, 22) = %q, want %q", tc.server, got, tc.want)
+			}
+		})
+	}
+}
