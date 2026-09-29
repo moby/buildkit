@@ -98,7 +98,8 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	}
 
 	db, err := boltutil.Open(filepath.Join(root, "containerdmeta.db"), 0644, &bolt.Options{
-		FreelistType: bolt.FreelistMapType,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	}, policies...)
 	if err != nil {
 		return opt, err

@@ -27,8 +27,9 @@ type Store struct {
 
 func NewStore(dbPath string, policies ...compaction.Config) (*Store, error) {
 	db, err := boltutil.SafeOpen(dbPath, 0600, &bolt.Options{
-		NoSync:       true,
-		FreelistType: bolt.FreelistMapType,
+		NoSync:         true,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	}, policies...)
 	if err != nil {
 		return nil, err

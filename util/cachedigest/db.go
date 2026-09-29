@@ -34,7 +34,8 @@ func GetDefaultDB() *DB {
 
 func NewDB(path string) (*DB, error) {
 	db, err := boltutil.SafeOpen(path, 0600, &bolt.Options{
-		FreelistType: bolt.FreelistMapType,
+		FreelistType:   bolt.FreelistMapType,
+		NoFreelistSync: true,
 	})
 	if err != nil {
 		return nil, err
