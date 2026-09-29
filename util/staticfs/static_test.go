@@ -84,6 +84,9 @@ func TestWalkTarget(t *testing.T) {
 		{"/foo", []string{"foo", "foo/bar"}},
 		{"foo/", []string{"foo", "foo/bar"}},
 		{"foo/bar", []string{"foo/bar"}},
+		{"./foo", []string{"foo", "foo/bar"}},
+		{"foo//bar", []string{"foo/bar"}},
+		{"../foo", []string{"foo", "foo/bar"}},
 		{"missing", nil},
 	} {
 		t.Run(tc.target, func(t *testing.T) {
