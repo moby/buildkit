@@ -374,9 +374,10 @@ func (lbf *llbBridgeForwarder) Discard() {
 		mount.Unmount()
 	}
 
-	for id, workerRef := range lbf.workerRefByID {
-		workerRef.Release(context.TODO())
-		delete(lbf.workerRefByID, id)
+	lbf.discarded = true
+	for id, res := range lbf.resultByID {
+		res.Release(context.TODO())
+		delete(lbf.resultByID, id)
 	}
 	if lbf.err != nil && lbf.result != nil {
 		lbf.result.EachRef(func(r solver.ResultProxy) error {
@@ -433,19 +434,19 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 
 func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
-		callCtx:       ctx,
-		llbBridge:     llbBridge,
-		refs:          map[string]solver.ResultProxy{},
-		workerRefByID: map[string]*worker.WorkerRef{},
-		doneCh:        make(chan struct{}),
-		pipe:          newPipe(),
-		workers:       workers,
-		inputs:        inputs,
-		sid:           sid,
-		sm:            sm,
-		ctrs:          map[string]gwclient.Container{},
-		mounts:        map[string]snapshot.Mounter{},
-		executor:      exec,
+		callCtx:    ctx,
+		llbBridge:  llbBridge,
+		refs:       map[string]solver.ResultProxy{},
+		resultByID: map[string]solver.Result{},
+		doneCh:     make(chan struct{}),
+		pipe:       newPipe(),
+		workers:    workers,
+		inputs:     inputs,
+		sid:        sid,
+		sm:         sm,
+		ctrs:       map[string]gwclient.Container{},
+		mounts:     map[string]snapshot.Mounter{},
+		executor:   exec,
 	}
 	return lbf
 }
@@ -540,11 +541,12 @@ type LLBBridgeForwarder interface {
 }
 
 type llbBridgeForwarder struct {
-	mu            sync.Mutex
-	callCtx       context.Context
-	llbBridge     frontend.FrontendLLBBridge
-	refs          map[string]solver.ResultProxy
-	workerRefByID map[string]*worker.WorkerRef
+	mu         sync.Mutex
+	callCtx    context.Context
+	llbBridge  frontend.FrontendLLBBridge
+	refs       map[string]solver.ResultProxy
+	resultByID map[string]solver.Result
+	discarded  bool
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
@@ -685,7 +687,7 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 	}
 	if errors.As(solveErr, &sce) {
 		var err error
-		inputIDs, err = lbf.registerResultIDs(sce.Result)
+		inputIDs, err = lbf.registerSlowCacheResult(sce.Result)
 		if err != nil {
 			return err
 		}
@@ -698,6 +700,28 @@ func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids 
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
+	return lbf.registerResultIDsLocked(results...)
+}
+
+// registerSlowCacheResult registers a clone of a result borrowed from the
+// solver job. The clone is only taken before the forwarder is discarded, as the
+// job may be released after that.
+func (lbf *llbBridgeForwarder) registerSlowCacheResult(res solver.Result) ([]string, error) {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	if lbf.discarded {
+		return nil, nil
+	}
+	// Validate before cloning so a type error can't leak the clone. Once
+	// cloned, registerResultIDsLocked either keeps or releases it.
+	if _, ok := res.Sys().(*worker.WorkerRef); !ok {
+		return nil, errors.Errorf("unexpected type for result, got %T", res.Sys())
+	}
+	return lbf.registerResultIDsLocked(res.Clone())
+}
+
+func (lbf *llbBridgeForwarder) registerResultIDsLocked(results ...solver.Result) (ids []string, err error) {
 	ids = make([]string, len(results))
 	for i, res := range results {
 		if res == nil {
@@ -709,15 +733,16 @@ func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids 
 		}
 		id := workerRef.ID()
 		ids[i] = id
-		if existing, ok := lbf.workerRefByID[id]; ok {
-			if existing != workerRef {
-				if err := workerRef.Release(context.TODO()); err != nil {
+		if existing, ok := lbf.resultByID[id]; ok {
+			if existing != res {
+				if err := res.Release(context.TODO()); err != nil {
 					return ids, errors.WithStack(err)
 				}
 			}
 			continue
 		}
-		lbf.workerRefByID[id] = workerRef
+		// Keep the result wrapper so Release balances split-result ownership.
+		lbf.resultByID[id] = res
 	}
 	return ids, nil
 }
@@ -1113,7 +1138,10 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		var workerRef *worker.WorkerRef
 		if m.ResultID != "" {
 			var ok bool
-			workerRef, ok = lbf.workerRefByID[m.ResultID]
+			res, found := lbf.resultByID[m.ResultID]
+			if found {
+				workerRef, ok = res.Sys().(*worker.WorkerRef)
+			}
 			if !ok {
 				refProxy, err := lbf.convertRef(m.ResultID)
 				if err != nil {

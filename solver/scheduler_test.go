@@ -1108,7 +1108,7 @@ func TestSlowCache(t *testing.T) {
 	j1 = nil
 }
 
-func TestSlowCacheErrorResultCloneRelease(t *testing.T) {
+func TestSlowCacheErrorResultReleasedWithJob(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -1160,14 +1160,13 @@ func TestSlowCacheErrorResultCloneRelease(t *testing.T) {
 	require.ErrorAs(t, err, &sce)
 	require.NotNil(t, sce.Result)
 
-	require.NoError(t, j.Discard())
-	j = nil
-
 	require.Never(t, func() bool {
 		return releaseCount.Load() != 0
 	}, 100*time.Millisecond, 10*time.Millisecond)
 
-	require.NoError(t, sce.Result.Release(ctx))
+	require.NoError(t, j.Discard())
+	j = nil
+
 	require.Eventually(t, func() bool {
 		return releaseCount.Load() == 1
 	}, time.Second, 10*time.Millisecond)

@@ -67,6 +67,28 @@ FROM nanoserver
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testMissingCopySourceReleasesCache(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	dir := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte("FROM scratch\nCOPY missing.txt /\n"), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for range 2 {
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.ErrorContains(t, err, "missing.txt")
+	}
+	checkAllReleasable(t, c, sb, false)
+}
+
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheImport, workers.FeatureCacheBackendLocal)
 	f := getFrontend(t, sb)
