@@ -30,13 +30,13 @@ func setRootSymlinkXattr(root *os.Root, name, key string, value []byte) error {
 
 func setRootXattr(root *os.Root, file *os.File, name, key string, value []byte) error {
 	if file != nil {
-		return fsetRootXattr(file, name, key, value)
+		return setRootXattrDefault(root, file, name, key, value)
 	}
 
 	file, err := root.OpenFile(name, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err == nil {
 		defer file.Close()
-		return fsetRootXattr(file, name, key, value)
+		return setRootXattrDefault(root, file, name, key, value)
 	}
 	if isBestEffortRootXattrError(err) {
 		return nil
