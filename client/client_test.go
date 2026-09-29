@@ -172,6 +172,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_local_source_test.go
 	testLocalSourceDiffer,
+	testLocalSourceFilterOpt,
 	testLocalSourceWithHardlinksFilter,
 	testLocalSymlinkEscape,
 	testMetadataOnlyLocal,

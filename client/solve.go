@@ -42,6 +42,7 @@ type SolveOpt struct {
 	CompatibilityVersion  int
 	EnableSessionExporter bool
 	LocalMounts           map[string]fsutil.FS
+	LocalFilterOpt        filesync.FilterOptFunc
 	OCIStores             map[string]content.Store
 	SharedKey             string
 	Frontend              string
@@ -140,7 +141,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
-			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
+			s.Allow(filesync.NewFSSyncProvider(syncedDirs, opt.LocalFilterOpt))
 		}
 
 		for _, a := range opt.Session {
