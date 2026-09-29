@@ -348,6 +348,7 @@ func containerdWorkerInitializer(c *cli.Command, common workerInitializerOpt) ([
 	}
 
 	workerOpts := containerd.WorkerOptions{
+		Compaction:      common.compaction,
 		Root:            common.config.Root,
 		Address:         cfg.Address,
 		SnapshotterName: snapshotter,

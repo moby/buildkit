@@ -54,3 +54,4 @@ We also have a number of more specific guides:
 There are also guides on specific ways of working on the buildkit repository:
 
 - [Remote Debugging Guide](./remote-debugging.md) - learn how to utilize the debugger when running buildkit in docker.
+- [Debug HTTP endpoints](./debug-endpoints.md) - inspect and trigger database maintenance through the debug listener.

@@ -72,6 +72,27 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # active-build events. Existing records remain available until normal GC.
   maxEntries = 50
 
+[compaction]
+  # Opt-in metadata database maintenance, independent of cache GC.
+  enabled = false
+  # Committed write transactions between automatic eligibility checks.
+  writesPerCheck = 10000
+  # Database size is sampled at most every five minutes after committed writes.
+  # Initial minimum database size for growth-triggered eligibility checks.
+  sizeWatermark = 134217728
+  # After compaction, grow the next size watermark from the compacted size by
+  # this percentage.
+  sizeGrowthPercent = 100
+  # Compaction is eligible when either reclaimability threshold is reached.
+  minReclaimBytes = 268435456
+  # Percentage of the database file estimated to be reclaimable.
+  minReclaimPercent = 25
+  # Wait for no active transactions and this interval without database activity.
+  idleTimeout = "1m"
+  # Cancel this many attempts for arriving writers, then let the next copy finish.
+  # Writers may wait for the full copy duration. Zero forces the first attempt.
+  maxRetry = 3
+
 [worker.oci]
   enabled = true
   # platforms is manually configure platforms, detected automatically if unset.
