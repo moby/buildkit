@@ -105,8 +105,9 @@ attempt starts or its request is canceled.
 
 Collection only reads cached measurements. Policy checks, debug inspection, and
 attempt completion refresh them without adding per-transaction instrumentation.
-In manual-only mode, sizes can remain unobserved or stale until inspection or an
-attempt; collection does not poll the database or filesystem.
+Sizes can remain unobserved or stale in either mode. Automatic policy checks
+depend on write activity; inspection and attempt completion also refresh the
+measurements. Collection does not poll the database or filesystem.
 
 The Prometheus exporter translates instrument names and units, for example
 `buildkit.compaction.database.size` becomes
