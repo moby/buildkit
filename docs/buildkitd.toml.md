@@ -76,7 +76,7 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # Opt-in metadata database maintenance, independent of cache GC.
   enabled = false
   # Committed write transactions between automatic eligibility checks.
-  writesPerCheck = 100000
+  writesPerCheck = 10000
   # Database size is sampled at most every five minutes after committed writes.
   # Initial minimum database size for growth-triggered eligibility checks.
   sizeWatermark = 134217728

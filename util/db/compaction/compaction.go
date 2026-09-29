@@ -42,7 +42,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		WritesPerCheck:    100000,
+		WritesPerCheck:    10000,
 		SizeWatermark:     128 << 20,
 		SizeGrowthPercent: 100,
 		MinReclaimBytes:   256 << 20,

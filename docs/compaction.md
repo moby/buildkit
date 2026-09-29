@@ -15,7 +15,7 @@ The remaining defaults are:
 
 | Setting             | Default     | Meaning                                                                  |
 |---------------------|-------------|--------------------------------------------------------------------------|
-| `writesPerCheck`    | `100000`    | Committed write transactions between automatic eligibility checks.       |
+| `writesPerCheck`    | `10000`     | Committed write transactions between automatic eligibility checks.       |
 | `sizeWatermark`     | `134217728` | Initial database size watermark (128 MiB).                               |
 | `sizeGrowthPercent` | `100`       | Growth over the compacted size before the next size-triggered check.     |
 | `minReclaimBytes`   | `268435456` | Minimum estimated reclaimable bytes (256 MiB).                           |
