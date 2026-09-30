@@ -342,6 +342,9 @@ are resolved within the build result: a link pointing at `/etc` refers to `/etc`
 inside the result, never on the host running BuildKit. With a multi-platform
 build, `src` is applied to each platform.
 
+Use a BuildKit daemon that supports `src`. Older daemons ignore unknown exporter
+options and may export the entire build result instead.
+
 With a [multi-platform build](docs/multi-platform.md), a subfolder matching
 each target platform will be created in the destination directory:
 

@@ -1005,6 +1005,32 @@ func testExportLocalSource(t *testing.T, sb integration.Sandbox) {
 	)))
 }
 
+func testExportLocalSourceModeDelete(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := sourceTestState().Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "stale.txt"), []byte("stale"), 0600))
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: destDir,
+			Attrs:     map[string]string{"src": "/sub", "mode": "delete"},
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(
+		fstest.CreateFile("nested.txt", []byte("nested"), 0600),
+		fstest.CreateDir("deeper", 0755),
+		fstest.CreateFile("deeper/deep.txt", []byte("deep"), 0600),
+	)))
+}
+
 func testExportLocalSourceNotFound(t *testing.T, sb integration.Sandbox) {
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1023,34 +1049,38 @@ func testExportLocalSourceNotFound(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, nil)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "src=/nope no such file or directory")
+	require.ErrorContains(t, err, "src=/nope:")
 	// the mountpoint of the ref inside the daemon must never reach the client
 	require.NotContains(t, err.Error(), "buildkit-mount")
 }
 
 func testExportLocalSourceMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureMultiPlatform)
+	testExportLocalSourceMultiPlatformSplit(t, sb, true)
+}
+
+func testExportLocalSourceNoPlatformSplit(t *testing.T, sb integration.Sandbox) {
+	testExportLocalSourceMultiPlatformSplit(t, sb, false)
+}
+
+func testExportLocalSourceMultiPlatformSplit(t *testing.T, sb integration.Sandbox, split bool) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureMultiPlatform)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
 	platformsToTest := []string{"linux/amd64", "linux/arm64"}
 
-	// every platform builds the same layout and differs only in file contents,
-	// so the exported platform directories can be compared against each other
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		res := gateway.NewResult()
 		expPlatforms := &exptypes.Platforms{
 			Platforms: make([]exptypes.Platform, len(platformsToTest)),
 		}
 		for i, platform := range platformsToTest {
+			name := strings.ReplaceAll(platform, "/", "_") + ".txt"
 			st := llb.Scratch().
 				File(llb.Mkfile("top.txt", 0600, []byte("top"))).
 				File(llb.Mkdir("sub", 0755)).
-				File(llb.Mkfile("sub/nested.txt", 0600, []byte(platform))).
-				File(llb.Mkdir("sub/deeper", 0755)).
-				File(llb.Mkfile("sub/deeper/deep.txt", 0600, []byte(platform)))
+				File(llb.Mkfile("sub/"+name, 0600, []byte(platform)))
 
 			def, err := st.Marshal(ctx)
 			if err != nil {
@@ -1084,22 +1114,29 @@ func testExportLocalSourceMultiPlatform(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:      ExporterLocal,
 				OutputDir: destDir,
-				Attrs:     map[string]string{"src": "/sub"},
+				Attrs:     map[string]string{"src": "/sub", "platform-split": fmt.Sprint(split)},
 			},
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	// src is applied per platform: every platform directory holds the same
-	// re-rooted layout, with only the file contents telling them apart
 	for _, platform := range platformsToTest {
-		platDir := filepath.Join(destDir, strings.ReplaceAll(platform, "/", "_"))
-		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(platDir, fstest.Apply(
-			fstest.CreateFile("nested.txt", []byte(platform), 0600),
-			fstest.CreateDir("deeper", 0755),
-			fstest.CreateFile("deeper/deep.txt", []byte(platform), 0600),
-		)), "unexpected content for %s", platform)
+		name := strings.ReplaceAll(platform, "/", "_") + ".txt"
+		outputDir := destDir
+		if split {
+			outputDir = filepath.Join(destDir, strings.ReplaceAll(platform, "/", "_"))
+			require.NoError(t, fstest.CheckDirectoryEqualWithApplier(outputDir, fstest.Apply(
+				fstest.CreateFile(name, []byte(platform), 0600),
+			)), "unexpected content for %s", platform)
+			continue
+		}
+		dt, err := os.ReadFile(filepath.Join(outputDir, name))
+		require.NoError(t, err)
+		require.Equal(t, platform, string(dt))
 	}
+	entries, err := os.ReadDir(destDir)
+	require.NoError(t, err)
+	require.Len(t, entries, len(platformsToTest))
 }
 
 func testExportTarSource(t *testing.T, sb integration.Sandbox) {

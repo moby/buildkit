@@ -76,11 +76,10 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 				return nil, err
 			}
 		case keySource:
-			var src = strings.TrimSpace(v)
-			if src == "" {
-				return nil, errors.Errorf("empty value for %s omit it to export the entire filesystem", keySource)
+			if v == "" {
+				return nil, errors.Errorf("empty value for %s; omit it to export the entire filesystem", keySource)
 			}
-			c.Source = path.Join("/", src)
+			c.Source = v
 		default:
 			rest[k] = v
 		}
@@ -89,9 +88,11 @@ func (c *CreateFSOpts) Load(opt map[string]string) (map[string]string, error) {
 	return rest, nil
 }
 
-// Resolves source inside mountRoot and prevents path traversal
+// resolveSafeSource resolves source inside mountRoot and prevents path traversal.
 // An empty source returns mountRoot itself.
 func resolveSafeSource(mountRoot, source string) (fsutil.FS, error) {
+	// RootPath must see the original path so it can resolve symlinks before "..".
+	// The mounted ref must remain read-only while the returned FS is in use.
 	root, err := fs.RootPath(mountRoot, source)
 	if err != nil {
 		return nil, sourceError(err, source)
@@ -105,7 +106,7 @@ func resolveSafeSource(mountRoot, source string) (fsutil.FS, error) {
 	return outputFS, nil
 }
 
-// Reports err against the source the client asked for, hiding the
+// sourceError reports err against the source the client asked for, hiding the
 // daemon-side mountpoint that RootPath and NewFS name.
 func sourceError(err error, source string) error {
 	if source == "" {
@@ -113,12 +114,14 @@ func sourceError(err error, source string) error {
 	}
 	// the innermost *os.PathError carries the bare syscall error, with no path
 	cause := err
-	for e := err; e != nil; e = errors.Unwrap(e) {
-		if pe, ok := e.(*os.PathError); ok {
-			cause = pe.Err
+	for {
+		var pe *os.PathError
+		if !errors.As(cause, &pe) {
+			break
 		}
+		cause = pe.Err
 	}
-	return errors.Errorf("%s=%s %v", keySource, source, cause)
+	return errors.Wrapf(cause, "%s=%s", keySource, source)
 }
 
 func CreateFS(ctx context.Context, sessionID string, k string, ref cache.ImmutableRef, attestations []exporter.Attestation, defaultTime time.Time, isMap bool, opt CreateFSOpts) (fsutil.FS, func() error, error) {
@@ -149,6 +152,12 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 
 		cleanup = lm.Unmount
 	}
+	releaseOnError := true
+	defer func() {
+		if releaseOnError && cleanup != nil {
+			_ = cleanup()
+		}
+	}()
 
 	outputFS, err := resolveSafeSource(src, opt.Source)
 	if err != nil {
@@ -260,5 +269,6 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 		outputFS = staticfs.NewMergeFS(outputFS, stmtFS)
 	}
 
+	releaseOnError = false
 	return outputFS, cleanup, nil
 }
