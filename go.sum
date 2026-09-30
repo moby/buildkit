@@ -185,8 +185,8 @@ github.com/dimchansky/utfbom v1.1.1 h1:vV6w1AhK4VMnhBno/TPVCoK9U/LP0PkLCS9tbxHdi
 github.com/dimchansky/utfbom v1.1.1/go.mod h1:SxdoEBH5qIqFocHMyGOXVAybYJdr71b1Q/j0mACtrfE=
 github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
 github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
-github.com/docker/cli v29.8.0+incompatible h1:ih0c2jq/nN7QfES8zIfwSzIhRScjs4ehER+kZ60aeSk=
-github.com/docker/cli v29.8.0+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
+github.com/docker/cli v29.8.1+incompatible h1:qYL1bCp6cRw2SB1xmLlIOPyV171dilw9W2Jew38vy9c=
+github.com/docker/cli v29.8.1+incompatible/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
 github.com/docker/docker-credential-helpers v0.9.9 h1:BkydjIgZ46JnDbqyM2p2fc63KMw6y+KHL3Em/2AGJ7w=
 github.com/docker/docker-credential-helpers v0.9.9/go.mod h1:v1S+hepowrQXITkEfw6o4+BMbGot02wiKpzWhGUZK6c=
 github.com/docker/go-metrics v0.1.0 h1:r76KPNpstz+IvQKSWpYegSkkyzex0V3A1ZGVx6bhGlY=
@@ -352,8 +352,8 @@ github.com/jellydator/ttlcache/v3 v3.4.0 h1:YS4P125qQS0tNhtL6aeYkheEaB/m8HCqdMMP
 github.com/jellydator/ttlcache/v3 v3.4.0/go.mod h1:Hw9EgjymziQD3yGsQdf1FqFdpp7YjFMd4Srg5EJlgD4=
 github.com/keybase/go-keychain v0.0.1 h1:way+bWYa6lDppZoZcgMbYsvC7GxljxrskdNInRtuthU=
 github.com/keybase/go-keychain v0.0.1/go.mod h1:PdEILRW3i9D8JcdM+FmY6RwkHGnhHxXwkPPMeUgOK1k=
-github.com/klauspost/compress v1.20.0 h1:a3C1ke2ohxFymNlb2HWAHjDeKCI90scRskErZkR0ezA=
-github.com/klauspost/compress v1.20.0/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/klauspost/compress v1.20.1 h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
+github.com/klauspost/compress v1.20.1/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/letsencrypt/boulder v0.20260309.0 h1:kZynrxK3QfqLGx6hhoz+Rfs3hgltJs1p9Mp+4+VwnY0=
@@ -376,8 +376,8 @@ github.com/moby/patternmatcher v0.6.1 h1:qlhtafmr6kgMIJjKJMDmMWq7WLkKIo23hsrpR3x
 github.com/moby/patternmatcher v0.6.1/go.mod h1:hDPoyOpDY7OrrMDLaYoY3hf52gNCR/YOUYxkhApJIxc=
 github.com/moby/policy-helpers v0.0.0-20260901104222-dd6c5499c491 h1:5qXAyBr9AXXAqPoFK/wY85wggaKyYSMCNh8QF/O21Rk=
 github.com/moby/policy-helpers v0.0.0-20260901104222-dd6c5499c491/go.mod h1:77BSYHqLljY8i6FWZhQ2V7xmgNP3eftoIRV5yHYspDs=
-github.com/moby/profiles/seccomp v0.2.3 h1:nrHNSiECQQvq4WjgceCUgJXIXUJBIswVQ133k4Do2mA=
-github.com/moby/profiles/seccomp v0.2.3/go.mod h1:8m3qkkWZXrRsMqlUUN2zyccnYmBf3EAdQYPMVJ3NBhk=
+github.com/moby/profiles/seccomp v0.2.4 h1:CNKIR4jNYCGIdstSZ3plN/yF3WCqlupmNLwO1ckLwz4=
+github.com/moby/profiles/seccomp v0.2.4/go.mod h1:H3JkVP4MWq+Q87sSWRUEdiZvK52WErUbcxr+mJHKVoM=
 github.com/moby/sys/mount v0.3.5 h1:eS3fsZTjHaBihwjp4/+5Z3jxqLXYsbwxqpVSfFv3M00=
 github.com/moby/sys/mount v0.3.5/go.mod h1:WUQDO+/uCiCIkIztx8SrwIDVn2dtMFRBebRhpDFT71M=
 github.com/moby/sys/mountinfo v0.7.2 h1:1shs6aH5s4o5H2zQLn796ADW1wMrIwHsyJ2v9KouLrg=

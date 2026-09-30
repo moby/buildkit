@@ -562,7 +562,7 @@ github.com/dimchansky/utfbom
 # github.com/distribution/reference v0.6.0
 ## explicit; go 1.20
 github.com/distribution/reference
-# github.com/docker/cli v29.8.0+incompatible
+# github.com/docker/cli v29.8.1+incompatible
 ## explicit
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
@@ -780,7 +780,7 @@ github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1
-# github.com/klauspost/compress v1.20.0
+# github.com/klauspost/compress v1.20.1
 ## explicit; go 1.25
 github.com/klauspost/compress
 github.com/klauspost/compress/flate
@@ -822,7 +822,7 @@ github.com/moby/policy-helpers/image
 github.com/moby/policy-helpers/roots
 github.com/moby/policy-helpers/roots/dhi
 github.com/moby/policy-helpers/types
-# github.com/moby/profiles/seccomp v0.2.3
+# github.com/moby/profiles/seccomp v0.2.4
 ## explicit; go 1.23.0
 github.com/moby/profiles/seccomp
 # github.com/moby/sys/mount v0.3.5

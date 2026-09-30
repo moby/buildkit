@@ -36,7 +36,7 @@ require (
 	github.com/containernetworking/plugins v1.9.1
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/cli v29.8.0+incompatible
+	github.com/docker/cli v29.8.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/gofrs/flock v0.13.1
 	github.com/gohugoio/hashstructure v0.6.0
@@ -47,13 +47,13 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hiddeco/sshsig v0.2.0
 	github.com/in-toto/in-toto-golang v0.11.0
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.1
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/moby/policy-helpers v0.0.0-20260901104222-dd6c5499c491
-	github.com/moby/profiles/seccomp v0.2.3
+	github.com/moby/profiles/seccomp v0.2.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/moby/sys/reexec v0.1.0
 	github.com/moby/sys/signal v0.7.1
