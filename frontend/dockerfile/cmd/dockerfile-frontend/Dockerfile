@@ -24,8 +24,8 @@ RUN --mount=target=. <<EOT
     exit 1
   fi
   if [ "$CHANNEL" = "mainline" ]; then
-    VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*")
-    EXACT_TAG=$(git describe --exact-match --tags --match "dockerfile/[0-9]*" 2>/dev/null || true)
+    VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*" --exclude "dockerfile/*-labs*")
+    EXACT_TAG=$(git describe --exact-match --tags --match "dockerfile/[0-9]*" --exclude "dockerfile/*-labs*" 2>/dev/null || true)
   else
     VERSION=$(git describe --always --tags --match "dockerfile/[0-9]*-$CHANNEL")
     EXACT_TAG=$(git describe --exact-match --tags --match "dockerfile/[0-9]*-$CHANNEL" 2>/dev/null || true)
