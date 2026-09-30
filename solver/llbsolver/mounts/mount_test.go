@@ -43,6 +43,11 @@ type cmOut struct {
 	cs      content.Store
 }
 
+func TestMountableSSHRequiresOptions(t *testing.T) {
+	_, err := (&MountManager{}).MountableSSH(t.Context(), &pb.Mount{MountType: pb.MountType_SSH}, nil)
+	require.ErrorContains(t, err, "invalid SSH mount options")
+}
+
 func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {

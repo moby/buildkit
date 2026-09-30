@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -383,4 +384,106 @@ func testClientGatewayContainerSecretEnv(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerReadFileSpecial checks that ReadFile only reads
+// regular files. A container can mknod a device node or mkfifo with the default
+// capability set; reading the former daemon-side would resolve its rdev against
+// the host device table, and the latter would block the daemon in open(2).
+func testClientGatewayContainerReadFileSpecial(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	// a user namespace cannot mknod a device node, so the device case is only
+	// reachable, and only testable, on a rootful worker
+	withDevice := !sb.Rootless()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		setup := `mkfifo /fifo && printf 0123456789 > /regular`
+		if withDevice {
+			// 5,0 is /dev/tty, which fails open with ENXIO when the daemon has
+			// no controlling terminal. Rejecting it as a non-regular file
+			// therefore shows the driver was never entered, which a device
+			// like /dev/null could not distinguish.
+			setup = `mknod /dev-node c 5 0 && ` + setup
+		}
+		st := llb.Image("busybox:latest").Run(
+			llb.Shlexf(`sh -c %q`, setup),
+		).Root()
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, client.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer ctr.Release(context.WithoutCancel(ctx))
+
+		read := func(name string, rng *client.FileRange) ([]byte, error) {
+			return ctr.ReadFile(ctx, client.ReadContainerRequest{
+				ReadRequest: client.ReadRequest{Filename: name, Range: rng},
+				MountIndex:  0,
+			})
+		}
+
+		if withDevice {
+			_, err = read("/dev-node", nil)
+			require.ErrorContains(t, err, "not a regular file")
+		}
+
+		// Bound this one. Against vulnerable code the daemon blocks in open(2)
+		// on a fifo with no writer and never answers, so an unbounded call would
+		// hang the suite instead of failing it.
+		fifoCtx, cancel := context.WithTimeoutCause(ctx, 30*time.Second,
+			errors.New("fifo read did not return"))
+		defer cancel()
+		_, err = ctr.ReadFile(fifoCtx, client.ReadContainerRequest{
+			ReadRequest: client.ReadRequest{Filename: "/fifo"},
+			MountIndex:  0,
+		})
+		require.ErrorContains(t, err, "not a regular file")
+
+		dt, err := read("/regular", nil)
+		require.NoError(t, err)
+		require.Equal(t, []byte("0123456789"), dt)
+
+		dt, err = read("/regular", &client.FileRange{Offset: 2, Length: 3})
+		require.NoError(t, err)
+		require.Equal(t, []byte("234"), dt)
+
+		// a negative range must not reach ReadAt, whose error names the
+		// daemon-side path
+		for _, rng := range []client.FileRange{{Offset: -1, Length: 3}, {Offset: 0, Length: -1}} {
+			_, err = read("/regular", &rng)
+			require.ErrorContains(t, err, "invalid range")
+		}
+
+		_, err = read("/missing", nil)
+		require.ErrorContains(t, err, "/missing")
+		require.NotContains(t, err.Error(), "/tmp/", "daemon-side path leaked")
+
+		return client.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
 }

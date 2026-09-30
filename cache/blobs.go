@@ -353,6 +353,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 	}
 
 	sr.queueDiffID(diffID)
+	sr.queueLayerIdentity(diffID)
 	sr.queueBlob(desc.Digest)
 	sr.queueMediaType(desc.MediaType)
 	sr.queueBlobSize(desc.Size)
@@ -362,6 +363,18 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (
 	}
 
 	return nil
+}
+
+// layerIdentity returns the snapshot-sharing identity for this layer.
+func (sr *immutableRef) layerIdentity() digest.Digest {
+	if isLegacyLayerSnapshotID(sr) {
+		return ""
+	}
+	if identity := sr.getLayerIdentity(); identity != "" {
+		return identity
+	}
+	// Records created before layer identities were persisted used the DiffID.
+	return sr.getDiffID()
 }
 
 func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[string]struct{}) error {
@@ -375,6 +388,11 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 	if sr.getChainID() != "" {
 		return nil
 	}
+	// Do not make unverified pre-versioning snapshots addressable through a
+	// newly created Layer, Diff, or Merge record.
+	if hasLegacyLayerSnapshotID(sr) {
+		return nil
+	}
 
 	var chainID digest.Digest
 	var blobChainID digest.Digest
@@ -385,7 +403,10 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			return nil
 		}
 		diffID := sr.getDiffID()
-		chainID = diffID
+		chainID = sr.layerIdentity()
+		if chainID == "" {
+			return nil
+		}
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 	case Layer:
 		if _, ok := filter[sr.ID()]; !ok {
@@ -404,7 +425,11 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			}
 		}
 		diffID := sr.getDiffID()
-		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
+		layerIdentity := sr.layerIdentity()
+		if layerIdentity == "" {
+			return nil
+		}
+		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, layerIdentity})
 		blobID := imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 	case Merge:
@@ -422,7 +447,11 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 					return nil
 				}
 				diffID := layer.getDiffID()
-				chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
+				layerIdentity := layer.layerIdentity()
+				if layerIdentity == "" {
+					return nil
+				}
+				chainID = imagespecidentity.ChainID([]digest.Digest{chainID, layerIdentity})
 				blobID := imagespecidentity.ChainID([]digest.Digest{layer.getBlob(), diffID})
 				blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 			}
@@ -431,7 +460,10 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 		if _, ok := filter[sr.ID()]; ok {
 			// this diff is its own blob
 			diffID := sr.getDiffID()
-			chainID = diffID
+			chainID = sr.layerIdentity()
+			if chainID == "" {
+				return nil
+			}
 			blobChainID = imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 		} else {
 			// re-using upper blob
