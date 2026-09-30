@@ -190,6 +190,47 @@ func TestWithProxyNetworkHostEgressRequiresEntitlement(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestValidateEntitlementsRejectsDevicesWhenCDIDisabled(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.CdiDevices = []*pb.CDIDevice{
+			{Name: "example.invalid/device=optional", Optional: true},
+			{Name: "example.invalid/device=required"},
+		}
+	})
+	setExecCustomName(t, def, "RUN --device=example.invalid/device=required true")
+
+	for _, tt := range []struct {
+		name         string
+		entitlements entitlements.Set
+	}{
+		{
+			name:         "no device entitlement",
+			entitlements: entitlements.Set{},
+		},
+		{
+			name: "unrestricted device entitlement",
+			entitlements: entitlements.Set{
+				entitlements.EntitlementDevice: &entitlements.DevicesConfig{All: true},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(t.Context(), def, nil, ValidateEntitlements(tt.entitlements, nil))
+			require.EqualError(t, err, `CDI device "example.invalid/device=required" is required by step "RUN --device=example.invalid/device=required true", but CDI device support is disabled`)
+		})
+	}
+}
+
+func TestValidateEntitlementsDropsOptionalDevicesWhenCDIDisabled(t *testing.T) {
+	def := proxyNetworkTestDefinition(t, func(exec *pb.ExecOp) {
+		exec.CdiDevices = []*pb.CDIDevice{{Name: "example.invalid/device=optional", Optional: true}}
+	})
+
+	edge, err := Load(t.Context(), def, nil, ValidateEntitlements(entitlements.Set{}, nil))
+	require.NoError(t, err)
+	require.Empty(t, requireVertexOp(t, edge.Vertex).GetExec().CdiDevices)
+}
+
 func TestBridgeUsesDefaultProxyNetwork(t *testing.T) {
 	s := &Solver{proxyNetwork: true}
 
@@ -218,6 +259,71 @@ func TestLoadRejectsNegativeInputIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := Load(t.Context(), inputIndexTestDefinition(t, tt.execInputIndex, tt.rootInputIndex), nil)
 			require.ErrorContains(t, err, "invalid input 0 output index -1")
+		})
+	}
+}
+
+func TestLoadRejectsDependencyCountMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		op      func(digest.Digest) *pb.Op
+		wantErr string
+	}{
+		{
+			name: "source",
+			op: func(input digest.Digest) *pb.Op {
+				return &pb.Op{
+					Inputs: []*pb.Input{{Digest: string(input)}},
+					Op:     &pb.Op_Source{Source: &pb.SourceOp{Identifier: "local://malformed"}},
+				}
+			},
+			wantErr: "invalid source op with 1 inputs",
+		},
+		{
+			name: "diff",
+			op: func(input digest.Digest) *pb.Op {
+				return &pb.Op{
+					Inputs: []*pb.Input{{Digest: string(input)}},
+					Op: &pb.Op_Diff{Diff: &pb.DiffOp{
+						Lower: &pb.LowerDiffInput{Input: int64(pb.Empty)},
+						Upper: &pb.UpperDiffInput{Input: int64(pb.Empty)},
+					}},
+				}
+			},
+			wantErr: "invalid diff op with 0 inner inputs and 1 outer inputs",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			baseDigest, baseBytes := marshalTestOp(t, &pb.Op{
+				Op: &pb.Op_Source{Source: &pb.SourceOp{Identifier: "local://base"}},
+			})
+			malformedDigest, malformedBytes := marshalTestOp(t, tc.op(baseDigest))
+			_, rootBytes := marshalTestOp(t, &pb.Op{
+				Inputs: []*pb.Input{{Digest: string(malformedDigest)}},
+			})
+
+			_, err := Load(t.Context(), &pb.Definition{
+				Def: [][]byte{baseBytes, malformedBytes, rootBytes},
+			}, nil)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestLoadRejectsInvalidSourceIndex(t *testing.T) {
+	for _, sourceIndex := range []int32{-1, 1} {
+		t.Run(fmt.Sprintf("index=%d", sourceIndex), func(t *testing.T) {
+			def := proxyNetworkTestDefinition(t)
+			dgst := digest.FromBytes(def.Def[0])
+			def.Source = &pb.Source{
+				Infos: []*pb.SourceInfo{{Filename: "Dockerfile"}},
+				Locations: map[string]*pb.Locations{
+					string(dgst): {Locations: []*pb.Location{{SourceIndex: sourceIndex}}},
+				},
+			}
+
+			_, err := Load(t.Context(), def, nil)
+			require.ErrorContains(t, err, fmt.Sprintf("invalid source index %d for vertex %s", sourceIndex, dgst))
 		})
 	}
 }
@@ -292,6 +398,24 @@ func marshalTestOp(t *testing.T, op *pb.Op) (digest.Digest, []byte) {
 	dt, err := op.Marshal()
 	require.NoError(t, err)
 	return digest.FromBytes(dt), dt
+}
+
+func setExecCustomName(t *testing.T, def *pb.Definition, name string) {
+	t.Helper()
+	for _, dt := range def.Def {
+		op := new(pb.Op)
+		require.NoError(t, op.Unmarshal(dt))
+		if op.GetExec() == nil {
+			continue
+		}
+		def.Metadata = map[string]*pb.OpMetadata{
+			digest.FromBytes(dt).String(): {
+				Description: map[string]string{"llb.customname": name},
+			},
+		}
+		return
+	}
+	require.FailNow(t, "definition does not contain an exec op")
 }
 
 func requireVertexOp(t *testing.T, v interface{ Sys() any }) *pb.Op {

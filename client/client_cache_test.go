@@ -475,7 +475,7 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, 3, len(cc.Layers))
-	require.Equal(t, 5, len(cc.Records))
+	require.Equal(t, 4, len(cc.Records))
 
 	var runLayer *int
 	for i, l := range cc.Layers {
@@ -551,7 +551,7 @@ func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, 1, len(cc2.Layers))
-	require.Equal(t, 5, len(cc2.Records))
+	require.Equal(t, len(cc.Records), len(cc2.Records))
 
 	for i, r := range cc.Records {
 		require.Equal(t, cc2.Records[i].Digest, r.Digest)

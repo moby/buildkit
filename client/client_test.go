@@ -165,6 +165,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_image_source_test.go
 	testClientGatewayCanceledCredentialsCallbackReturns,
+	testBuildWithInvalidChainID,
 	testPullWithLayerLimit,
 	testValidateDigestOrigin,
 
@@ -266,6 +267,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 
 		// gateway_container_mount_test.go
 		testClientGatewayContainerMounts,
+		testClientGatewayContainerReadFileSpecial,
 		testClientGatewayContainerPlatformPATH,
 		testClientGatewayContainerSecretEnv,
 

@@ -98,6 +98,47 @@ func testProxyNetworkNoRootless(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, int32(0), leakHit.Load())
 
+	cleanupDestDir := t.TempDir()
+	cleanupFailure := llb.Image("alpine:latest").
+		Run(
+			llb.Shlex(
+				`sh -c 'touch /exec-completed && dd if=/dev/zero bs=1048576 count=11 >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null'`,
+			),
+			llb.IgnoreCache,
+		).
+		Root()
+	def, err = cleanupFailure.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: cleanupDestDir,
+		}},
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "failed to clean up proxy CA")
+	require.ErrorContains(t, err, "exceeds 10485760 bytes")
+	require.NoFileExists(t, filepath.Join(cleanupDestDir, "exec-completed"))
+
+	processAndCleanupFailure := llb.Image("alpine:latest").
+		Run(
+			llb.Shlex(
+				`sh -c 'dd if=/dev/zero bs=1048576 count=11 >> /etc/ssl/certs/ca-certificates.crt 2>/dev/null && exit 42'`,
+			),
+			llb.IgnoreCache,
+		).
+		Root()
+	def, err = processAndCleanupFailure.Marshal(ctx)
+	require.NoError(t, err)
+	_, err = c.Solve(ctx, def, SolveOpt{
+		ProxyNetwork: true,
+	}, nil)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "exit code: 42")
+	require.ErrorContains(t, err, "failed to clean up proxy CA")
+	require.ErrorContains(t, err, "exceeds 10485760 bytes")
+
 	var checked atomic.Int32
 	denyProvider := policysession.NewPolicyProvider(func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
 		if req.Source.Source.Identifier != httpURL+"/allowed" {
@@ -661,6 +702,29 @@ func testSourcePolicySession(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 			expectedError: "policy denied",
+		},
+		{
+			name: "deny git bundle",
+			state: func() llb.State {
+				return llb.Git(
+					"https://example.com/repo.git",
+					"",
+					llb.GitChecksum("1111111111111111111111111111111111111111"),
+					llb.GitBundleURL("oci-layout+blob://local/git-bundle@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+				)
+			},
+			callbacks: []policysession.PolicyCallback{
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "git://example.com/repo.git", req.Source.Source.Identifier)
+					return &policysession.DecisionResponse{Action: sourcepolicypb.PolicyAction_ALLOW}, nil, nil
+				},
+				func(ctx context.Context, req *policysession.CheckPolicyRequest) (*policysession.DecisionResponse, *pb.ResolveSourceMetaRequest, error) {
+					require.Equal(t, "oci-layout+blob://local/git-bundle@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", req.Source.Source.Identifier)
+					require.Equal(t, "local/git-bundle", req.Source.Source.Attrs[opspb.AttrOCILayoutStoreID])
+					return &policysession.DecisionResponse{Action: sourcepolicypb.PolicyAction_DENY}, nil, nil
+				},
+			},
+			expectedError: "not allowed by policy",
 		},
 		{
 			name:  "alpine with digest policy",
@@ -1794,6 +1858,50 @@ func testSourcePolicy(t *testing.T, sb integration.Sandbox) {
 			},
 		}, "", frontend, nil)
 		require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+	})
+
+	t.Run("deny git bundle source", func(t *testing.T) {
+		const checksum = "1111111111111111111111111111111111111111"
+		bundles := []string{
+			"docker-image+blob://registry.example.com/buildkit/git-bundle@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"oci-layout+blob://local/git-bundle@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		}
+		for _, bundle := range bundles {
+			scheme, _, _ := strings.Cut(bundle, "://")
+			t.Run(scheme, func(t *testing.T) {
+				frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+					st := llb.Git("https://example.com/repo.git", "", llb.GitChecksum(checksum), llb.GitBundleURL(bundle))
+					def, err := st.Marshal(sb.Context())
+					if err != nil {
+						return nil, err
+					}
+					return c.Solve(ctx, gateway.SolveRequest{Definition: def.ToPB()})
+				}
+
+				selector := &sourcepolicypb.Selector{
+					Identifier: bundle,
+					MatchType:  sourcepolicypb.MatchType_EXACT,
+				}
+				if scheme == "oci-layout+blob" {
+					selector.Constraints = []*sourcepolicypb.AttrConstraint{
+						{
+							Key:       opspb.AttrOCILayoutStoreID,
+							Value:     "local/git-bundle",
+							Condition: sourcepolicypb.AttrMatch_EQUAL,
+						},
+					}
+				}
+				_, err := c.Build(sb.Context(), SolveOpt{
+					SourcePolicy: &sourcepolicypb.Policy{Rules: []*sourcepolicypb.Rule{
+						{
+							Action:   sourcepolicypb.PolicyAction_DENY,
+							Selector: selector,
+						},
+					}},
+				}, "", frontend, nil)
+				require.ErrorContains(t, err, sourcepolicy.ErrSourceDenied.Error())
+			})
+		}
 	})
 
 	t.Run("Frontend policies", func(t *testing.T) {
