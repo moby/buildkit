@@ -573,7 +573,7 @@ func (h *Queue) AcquireFinalizer(ref string) (<-chan struct{}, func()) {
 	})
 }
 
-func (h *Queue) Finalize(ctx context.Context, ref string) error {
+func (h *Queue) Finalize(_ context.Context, ref string) error {
 	h.mu.Lock()
 	f, ok := h.finalizers[ref]
 	h.mu.Unlock()

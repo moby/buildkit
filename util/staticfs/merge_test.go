@@ -88,7 +88,7 @@ func TestMerge(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 
 	files = nil
-	err = fs.Walk(t.Context(), "", func(path string, entry iofs.DirEntry, err error) error {
+	err = fs.Walk(t.Context(), "", func(path string, _ iofs.DirEntry, err error) error {
 		require.NoError(t, err)
 		files = append(files, path)
 		return nil

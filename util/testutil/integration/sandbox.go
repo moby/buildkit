@@ -169,7 +169,7 @@ func printBuildkitdDebugLogs(t *testing.T, addr string) {
 		return
 	}
 
-	client := &http.Client{Transport: &http.Transport{DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+	client := &http.Client{Transport: &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
 		return dialPipe(strings.TrimPrefix(addr, socketScheme))
 	}}}
 

@@ -616,7 +616,7 @@ func (fn StateOption) SetRunOption(ei *ExecInfo) {
 	ei.State = ei.State.With(fn)
 }
 
-var _ RunOption = StateOption(func(_ State) State { return State{} })
+var _ RunOption = StateOption(func(State) State { return State{} })
 
 func Shlex(str string) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {

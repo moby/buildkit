@@ -133,10 +133,7 @@ func ParseDirective(key string, dt []byte) (string, string, []Range, bool) {
 
 func parseDirective(key string, dt []byte, anyFormat bool) (string, string, []Range, bool) {
 	dt = discardBOM(dt)
-	dt, hadShebang, err := discardShebang(dt)
-	if err != nil {
-		return "", "", nil, false
-	}
+	dt, hadShebang := discardShebang(dt)
 	line := 0
 	if hadShebang {
 		line++
@@ -187,12 +184,12 @@ func detectDirectiveFromParser(key string, dt []byte, parser DirectiveParser) (s
 	return "", "", nil, false
 }
 
-func discardShebang(dt []byte) ([]byte, bool, error) {
+func discardShebang(dt []byte) ([]byte, bool) {
 	line, rest, _ := bytes.Cut(dt, []byte("\n"))
 	if bytes.HasPrefix(line, []byte("#!")) {
-		return rest, true, nil
+		return rest, true
 	}
-	return dt, false, nil
+	return dt, false
 }
 
 func discardBOM(dt []byte) []byte {

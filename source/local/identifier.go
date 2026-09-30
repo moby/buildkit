@@ -34,7 +34,7 @@ func (*LocalIdentifier) Scheme() string {
 
 var _ source.Identifier = (*LocalIdentifier)(nil)
 
-func (id *LocalIdentifier) Capture(c *provenance.Capture, pin string) error {
+func (id *LocalIdentifier) Capture(c *provenance.Capture, _ string) error {
 	c.AddLocal(provenancetypes.LocalSource{
 		Name: id.Name,
 	})

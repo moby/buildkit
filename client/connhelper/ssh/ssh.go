@@ -22,7 +22,7 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 		return nil, err
 	}
 	return &connhelper.ConnectionHelper{
-		ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
+		ContextDialer: func(context.Context, string) (net.Conn, error) {
 			args := []string{}
 			if sp.User != "" {
 				args = append(args, "-l", sp.User)

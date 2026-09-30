@@ -198,7 +198,7 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 		}
 	}
 
-	xattrErrorHandler := func(dst, src, key string, err error) error {
+	xattrErrorHandler := func(_, _, _ string, err error) error {
 		log.Println(err)
 		return nil
 	}
@@ -286,7 +286,7 @@ type Backend struct {
 	readUser ReadUserCallback
 }
 
-func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkDir) error {
+func (fb *Backend) Mkdir(_ context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -307,7 +307,7 @@ func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, 
 	return mkdir(dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkFile) error {
+func (fb *Backend) Mkfile(_ context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -328,7 +328,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 	return mkfile(dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Symlink(ctx context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionSymlink) error {
+func (fb *Backend) Symlink(_ context.Context, m, user, group fileoptypes.Mount, action *pb.FileActionSymlink) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -349,7 +349,7 @@ func (fb *Backend) Symlink(ctx context.Context, m, user, group fileoptypes.Mount
 	return symlink(dir, action, u, mnt.m.IdentityMapping())
 }
 
-func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action *pb.FileActionRm) error {
+func (fb *Backend) Rm(_ context.Context, m fileoptypes.Mount, action *pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)

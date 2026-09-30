@@ -13,7 +13,7 @@ import (
 
 // AddBuildConfig populates the build configuration and source info
 // on a SLSA v1 provenance predicate from the given capture and result.
-func AddBuildConfig(ctx context.Context, p *provenancetypes.ProvenancePredicateSLSA1, c *Capture, rp solver.ResultProxy, withUsage bool) (map[digest.Digest]int, error) {
+func AddBuildConfig(_ context.Context, p *provenancetypes.ProvenancePredicateSLSA1, c *Capture, rp solver.ResultProxy, withUsage bool) (map[digest.Digest]int, error) {
 	def := rp.Definition()
 	steps, indexes, err := toBuildSteps(def, c, withUsage)
 	if err != nil {

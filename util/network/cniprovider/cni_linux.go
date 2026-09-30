@@ -91,7 +91,7 @@ func withDetachedNetNSIfAny(ctx context.Context, fn func(context.Context) error)
 		defer root.Close()
 		if _, err := root.Lstat("netns"); err == nil {
 			detachedNetNS := filepath.Join(stateDir, "netns")
-			return netns.WithNetNSPath(detachedNetNS, func(_ netns.NetNS) error {
+			return netns.WithNetNSPath(detachedNetNS, func(netns.NetNS) error {
 				ctx := context.WithValue(ctx, contextKeyDetachedNetNS, detachedNetNS)
 				bklog.G(ctx).Debugf("Entering RootlessKit's detached netns %q", detachedNetNS)
 				err2 := fn(ctx)
@@ -159,7 +159,7 @@ func (ns *cniNS) dialInNS(ctx context.Context, networkName, address string, dial
 
 func dialInNetNS(ctx context.Context, targetNS netns.NetNS, networkName, address string, dialer *net.Dialer) (net.Conn, error) {
 	var conn net.Conn
-	err := targetNS.Do(func(_ netns.NetNS) error {
+	err := targetNS.Do(func(netns.NetNS) error {
 		var err error
 		conn, err = dialer.DialContext(ctx, networkName, address)
 		return err

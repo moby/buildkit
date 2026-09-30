@@ -95,10 +95,10 @@ func TestParseOpt(t *testing.T) {
 			opt, err := ParseOpt(tc.opts)
 			if tc.expectedErr != "" {
 				require.EqualError(t, err, tc.expectedErr)
-				return
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, opt)
 			}
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, opt)
 		})
 	}
 }

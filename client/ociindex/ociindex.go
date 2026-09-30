@@ -134,9 +134,7 @@ func (s StoreIndex) Put(desc ocispecs.Descriptor, names ...NameOrTag) error {
 	}
 
 	for _, name := range namesp {
-		if err = insertDesc(&idx, desc, name); err != nil {
-			return err
-		}
+		insertDesc(&idx, desc, name)
 	}
 
 	idxData, err = json.Marshal(idx)
@@ -199,9 +197,9 @@ func setOCIIndexDefaults(index *ocispecs.Index) {
 
 // insertDesc puts desc to index with tag.
 // Existing manifests with the same tag will be removed from the index.
-func insertDesc(index *ocispecs.Index, in ocispecs.Descriptor, name *NameOrTag) error {
+func insertDesc(index *ocispecs.Index, in ocispecs.Descriptor, name *NameOrTag) {
 	if index == nil {
-		return nil
+		return
 	}
 
 	// make a copy to not modify the input descriptor
@@ -233,7 +231,6 @@ func insertDesc(index *ocispecs.Index, in ocispecs.Descriptor, name *NameOrTag) 
 		index.Manifests = manifests
 	}
 	index.Manifests = append(index.Manifests, desc)
-	return nil
 }
 
 // ociReferenceName takes the loosely defined reference name same way as

@@ -39,7 +39,7 @@ func (s *OCI) NetNSDetached() bool {
 	return s.Rootless() && s.RootlessKitDetachNetNS
 }
 
-func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integration.Backend, func() error, error) {
+func (s *OCI) New(_ context.Context, cfg *integration.BackendConfig) (integration.Backend, func() error, error) {
 	if err := integration.LookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func configureUnixTransport(_ *http.Transport, _, _ string) error {
+func configureUnixTransport(*http.Transport, string, string) error {
 	return errors.New("protocol not available")
 }
 

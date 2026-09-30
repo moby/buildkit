@@ -50,7 +50,7 @@ func New(opt Opt) (network.Provider, error) {
 	}
 
 	var cniHandle cni.CNI
-	fn := func(_ context.Context) error {
+	fn := func(context.Context) error {
 		var err error
 		cniHandle, err = cni.New(cniOptions...)
 		return err
@@ -263,7 +263,7 @@ func (ns *cniNS) Sample() (*resourcestypes.NetworkSample, error) {
 		return nil, nil
 	}
 	var s *resourcestypes.NetworkSample
-	fn := func(_ context.Context) error {
+	fn := func(context.Context) error {
 		var err error
 		s, err = ns.sample()
 		return err

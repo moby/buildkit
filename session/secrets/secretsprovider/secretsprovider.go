@@ -51,7 +51,7 @@ func FromMap(m map[string][]byte) session.Attachable {
 
 type mapStore map[string][]byte
 
-func (m mapStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
+func (m mapStore) GetSecret(_ context.Context, id string) ([]byte, error) {
 	v, ok := m[id]
 	if !ok {
 		return nil, errors.WithStack(secrets.ErrNotFound)

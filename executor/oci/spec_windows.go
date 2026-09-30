@@ -52,7 +52,7 @@ func withGetUserInfoMount() oci.SpecOpts {
 	}
 }
 
-func generateMountOpts(_, _ string) []oci.SpecOpts {
+func generateMountOpts(string, string) []oci.SpecOpts {
 	return []oci.SpecOpts{
 		withGetUserInfoMount(),
 	}
@@ -252,7 +252,7 @@ func generateCDIOpts(_ *cdidevices.Manager, devices []*pb.CDIDevice) ([]oci.Spec
 	return nil, errors.New("no support for CDI on Windows")
 }
 
-func normalizeMountType(_ string) string {
+func normalizeMountType(string) string {
 	// HCS shim doesn't expect a named type
 	// for the mount.
 	return ""

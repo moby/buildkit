@@ -47,7 +47,7 @@ func setupDebugHandlers(addr string) error {
 	m.HandleFunc("GET /debug/compaction", handleCompactionStatus)
 	m.HandleFunc("POST /debug/compaction", handleCompactionRequest)
 
-	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	m.Handle("/debug/gc", http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		runtime.GC()
 		bklog.G(req.Context()).Debugf("triggered GC from debug endpoint")
 	}))
@@ -57,7 +57,7 @@ func setupDebugHandlers(addr string) error {
 	setupDebugFlight(m)
 
 	// setting debugaddr is opt-in. permission is defined by listener address
-	trace.AuthRequest = func(_ *http.Request) (bool, bool) {
+	trace.AuthRequest = func(*http.Request) (bool, bool) {
 		return true, true
 	}
 

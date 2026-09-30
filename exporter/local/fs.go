@@ -119,7 +119,7 @@ func CreateFS(ctx context.Context, sessionID string, k string, ref cache.Immutab
 	filterOpt := &fsutil.FilterOpt{}
 	var idMapFunc func(p string, st *fstypes.Stat) fsutil.MapResult
 	if idmap != nil {
-		idMapFunc = func(p string, st *fstypes.Stat) fsutil.MapResult {
+		idMapFunc = func(_ string, st *fstypes.Stat) fsutil.MapResult {
 			uid, gid, err := idmap.ToContainer(int(st.Uid), int(st.Gid))
 			if err != nil {
 				return fsutil.MapResultExclude

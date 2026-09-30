@@ -1573,6 +1573,7 @@ func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRe
 	return ref
 }
 
+//nolint:unparam
 func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snapshotter snapshots.Snapshotter) (cache.Manager, func()) {
 	store, err := local.NewStore(tmpdir)
 	require.NoError(t, err)
@@ -1612,7 +1613,7 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 
 type badMountable struct{}
 
-func (bm *badMountable) Mount(ctx context.Context, readonly bool, _ session.Group) (snapshot.Mountable, error) {
+func (bm *badMountable) Mount(context.Context, bool, session.Group) (snapshot.Mountable, error) {
 	return nil, errors.New("tried to mount bad mountable")
 }
 

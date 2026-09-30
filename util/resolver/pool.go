@@ -175,7 +175,7 @@ type Resolver struct {
 // HostsFunc implements registry configuration of this Resolver
 func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 	return func(domain string) ([]docker.RegistryHost, error) {
-		v, err := r.handler.g.Do(context.TODO(), domain, func(ctx context.Context) ([]docker.RegistryHost, error) {
+		v, err := r.handler.g.Do(context.TODO(), domain, func(context.Context) ([]docker.RegistryHost, error) {
 			// long lock not needed because flightcontrol.Do
 			r.handler.muHosts.Lock()
 			v, ok := r.handler.hosts[domain]

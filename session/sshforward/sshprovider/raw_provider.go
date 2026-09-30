@@ -16,7 +16,7 @@ type socketProvider struct {
 	m map[string]dialerFn
 }
 
-func (p *socketProvider) CheckAgent(ctx context.Context, req *sshforward.CheckAgentRequest) (*sshforward.CheckAgentResponse, error) {
+func (p *socketProvider) CheckAgent(_ context.Context, req *sshforward.CheckAgentRequest) (*sshforward.CheckAgentResponse, error) {
 	id := sshforward.DefaultID
 	if req.ID != "" {
 		id = req.ID

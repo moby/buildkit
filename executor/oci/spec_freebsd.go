@@ -15,7 +15,7 @@ func withProcessArgs(args ...string) oci.SpecOpts {
 	return oci.WithProcessArgs(args...)
 }
 
-func generateMountOpts(_, _ string) []oci.SpecOpts {
+func generateMountOpts(string, string) []oci.SpecOpts {
 	return nil
 }
 
@@ -53,7 +53,7 @@ func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
 }
 
 // tracing is not implemented on FreeBSD
-func getTracingSocketMount(_ string) *specs.Mount {
+func getTracingSocketMount(string) *specs.Mount {
 	return nil
 }
 

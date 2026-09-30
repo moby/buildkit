@@ -29,7 +29,7 @@ import (
 
 // ResolveCacheImporterFunc for "azblob" cache importer.
 func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
-	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
+	return func(ctx context.Context, _ session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		config, err := getConfig(attrs)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, errors.Wrap(err, "failed to create azblob config")

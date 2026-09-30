@@ -82,7 +82,7 @@ func TestDialContextDialsInsideNetNS(t *testing.T) {
 	nsPath := createTestNetNS(t)
 
 	var ln net.Listener
-	require.NoError(t, netns.WithNetNSPath(nsPath, func(_ netns.NetNS) error {
+	require.NoError(t, netns.WithNetNSPath(nsPath, func(netns.NetNS) error {
 		lo, err := netlink.LinkByName("lo")
 		if err != nil {
 			return err
@@ -126,7 +126,7 @@ func TestLoopbackDNSUsesCallerNetNS(t *testing.T) {
 	require.NotNil(t, dialer.Resolver.Dial)
 
 	var conn net.Conn
-	require.NoError(t, netns.WithNetNSPath(nsPath, func(_ netns.NetNS) error {
+	require.NoError(t, netns.WithNetNSPath(nsPath, func(netns.NetNS) error {
 		ctx, cancel := context.WithTimeoutCause(t.Context(), 3*time.Second, nil)
 		defer cancel()
 		var err error

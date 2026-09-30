@@ -202,6 +202,7 @@ func depth(e solver.Edge) int {
 	return i
 }
 
+//nolint:unparam
 func parent(e solver.Edge, i int) solver.Edge {
 	return e.Vertex.Inputs()[i]
 }
@@ -224,6 +225,7 @@ func mount(e solver.Edge, target string) solver.Edge {
 	panic("could not find mount " + target)
 }
 
+//nolint:unparam
 func getenv(e solver.Edge, k string) (string, bool) {
 	env := toOp(e).GetExec().Meta.Env
 	k = k + "="

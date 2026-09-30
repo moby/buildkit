@@ -18,7 +18,7 @@ import (
 )
 
 func SBOMProcessor(scannerRef string, scannerPlatform ocispecs.Platform, useCache bool, resolveMode string, params map[string]string) llbsolver.Processor {
-	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job, usage *resources.SysSampler) (*llbsolver.Result, error) {
+	return func(ctx context.Context, res *llbsolver.Result, s *llbsolver.Solver, j *solver.Job, _ *resources.SysSampler) (*llbsolver.Result, error) {
 		// skip sbom generation if we already have an sbom
 		if sbom.HasSBOM(res.Result) {
 			return res, nil

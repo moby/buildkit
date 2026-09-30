@@ -92,7 +92,7 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 	var m sync.Mutex
 	manifestStack := []ocispecs.Descriptor{}
 
-	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+	filterHandler := images.HandlerFunc(func(_ context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		if _, ok := visited.Load(desc.Digest); ok {
 			return nil, images.ErrStopHandler
 		}
@@ -111,7 +111,7 @@ func copyChain(ctx context.Context, ingester content.Ingester, provider content.
 	handlers := []images.Handler{
 		annotateDistributionSourceHandler(images.ChildrenHandler(provider), desc.Annotations),
 		filterHandler,
-		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func([]byte) {}),
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

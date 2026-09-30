@@ -76,7 +76,7 @@ loop0:
 			if err := workers.HasFeatureCompat(t, sb, workers.FeatureContentCheck); err == nil {
 				store := proxy.NewContentStore(c.ContentClient())
 				count := 0
-				err := store.Walk(sb.Context(), func(info content.Info) error {
+				err := store.Walk(sb.Context(), func(content.Info) error {
 					count++
 					return nil
 				})
@@ -249,6 +249,7 @@ func parseFSMetadata(t *testing.T, dt []byte) []fsutiltypes.Stat {
 	return m
 }
 
+//nolint:unparam
 func readFileInImage(ctx context.Context, t *testing.T, c *Client, ref, path string) ([]byte, error) {
 	def, err := llb.Image(ref).Marshal(ctx)
 	if err != nil {
