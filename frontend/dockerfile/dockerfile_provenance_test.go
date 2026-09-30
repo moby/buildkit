@@ -261,6 +261,7 @@ RUN echo ok> /foo
 					require.True(t, pred.RunDetails.Metadata.StartedOn.Before(*pred.RunDetails.Metadata.FinishedOn))
 
 					require.Equal(t, platforms.Format(platforms.Normalize(platforms.DefaultSpec())), pred.BuildDefinition.InternalParameters.BuilderPlatform)
+					require.Equal(t, platforms.FormatAll(platforms.Normalize(platforms.DefaultSpec())), pred.BuildDefinition.InternalParameters.TargetPlatform)
 					if isClient || isGateway {
 						require.Empty(t, pred.BuildDefinition.InternalParameters.DockerfileVersion)
 					} else {
@@ -2714,13 +2715,16 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.NotEqual(t, 0, len(dt))
 
-	var pred provenancetypes.ProvenancePredicateSLSA1
-	require.NoError(t, json.Unmarshal(dt, &pred))
+	var stmt struct {
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(dt, &stmt))
+	require.Equal(t, platforms.FormatAll(platforms.Normalize(platforms.DefaultSpec())), stmt.Predicate.BuildDefinition.InternalParameters.TargetPlatform)
 }
 
 /*
 testProvenanceExportLocalForceSplit verifies that the local exporter writes build output and a
-valid provenance.json (SLSA 0.2) into a platform-specific subdirectory (e.g., linux_amd64/)
+valid provenance.json (SLSA v1) into a platform-specific subdirectory (e.g., linux_amd64/)
 when platform-split is enabled.
 
 Skipped on Windows: same provenance generation issue as testProvenanceExportLocal — fs.go does
@@ -2782,13 +2786,16 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	require.NotEqual(t, 0, len(dt))
 
-	var pred provenancetypes.ProvenancePredicateSLSA1
-	require.NoError(t, json.Unmarshal(dt, &pred))
+	var stmt struct {
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+	require.NoError(t, json.Unmarshal(dt, &stmt))
+	require.Equal(t, platforms.FormatAll(platforms.Normalize(platforms.DefaultSpec())), stmt.Predicate.BuildDefinition.InternalParameters.TargetPlatform)
 }
 
 /*
 testProvenanceExportLocalMultiPlatform verifies that a multi-platform build (linux/amd64, linux/arm64)
-exported locally writes each platform's output and provenance.json (SLSA 0.2) into separate
+exported locally writes each platform's output and provenance.json (SLSA v1) into separate
 platform-specific subdirectories.
 
 Skipped on Windows: same provenance generation issue as testProvenanceExportLocal — fs.go does
@@ -2847,8 +2854,11 @@ COPY --from=base /out /
 		require.NoError(t, err)
 		require.NotEqual(t, 0, len(dt))
 
-		var pred provenancetypes.ProvenancePredicateSLSA1
-		require.NoError(t, json.Unmarshal(dt, &pred))
+		var stmt struct {
+			Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+		}
+		require.NoError(t, json.Unmarshal(dt, &stmt))
+		require.Equal(t, strings.ReplaceAll(platform, "_", "/"), stmt.Predicate.BuildDefinition.InternalParameters.TargetPlatform)
 	}
 }
 
@@ -2856,7 +2866,7 @@ COPY --from=base /out /
 testProvenanceExportLocalMultiPlatformNoSplit verifies that a multi-platform build (linux/amd64,
 linux/arm64) exported locally with platform-split disabled writes all platform outputs into a
 single directory, with per-platform provenance files (e.g., provenance.linux_amd64.json) each
-containing a valid SLSA 0.2 predicate.
+containing a valid SLSA v1 predicate.
 
 Skipped on Windows: same provenance generation issue as testProvenanceExportLocal — fs.go does
 not acquire SeBackupPrivilege, causing "Access is denied" on system-protected paths.
@@ -2918,8 +2928,11 @@ COPY --from=base /out /
 		require.NoError(t, err)
 		require.NotEqual(t, 0, len(dt))
 
-		var pred provenancetypes.ProvenancePredicateSLSA1
-		require.NoError(t, json.Unmarshal(dt, &pred))
+		var stmt struct {
+			Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+		}
+		require.NoError(t, json.Unmarshal(dt, &stmt))
+		require.Equal(t, "linux/"+arch, stmt.Predicate.BuildDefinition.InternalParameters.TargetPlatform)
 	}
 }
 

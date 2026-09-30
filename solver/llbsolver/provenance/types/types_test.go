@@ -16,6 +16,7 @@ func TestMarsalBuildDefinitionSLSA1(t *testing.T) {
 },
 "internalParameters": {
 		"builderPlatform": "linux/amd64",
+		"targetPlatform": "linux/arm64",
 		"dockerfileVersion": "1.24.0-dev",
 		"foo": "bar",
 		"abc": 123,
@@ -29,6 +30,7 @@ func TestMarsalBuildDefinitionSLSA1(t *testing.T) {
 
 	require.Equal(t, "btype1", def.BuildType)
 	require.Equal(t, "linux/amd64", def.InternalParameters.BuilderPlatform)
+	require.Equal(t, "linux/arm64", def.InternalParameters.TargetPlatform)
 	require.Equal(t, "1.24.0-dev", def.InternalParameters.DockerfileVersion)
 	require.Equal(t, "bar", def.InternalParameters.ProvenanceCustomEnv["foo"])
 	require.InEpsilon(t, float64(123), def.InternalParameters.ProvenanceCustomEnv["abc"], 0.001)
@@ -38,6 +40,19 @@ func TestMarsalBuildDefinitionSLSA1(t *testing.T) {
 	require.NoError(t, err)
 
 	require.JSONEq(t, inp, string(out))
+}
+
+func TestTargetPlatformNotOverriddenByCustomEnv(t *testing.T) {
+	params := ProvenanceInternalParametersSLSA1{
+		TargetPlatform: "linux/arm64",
+		ProvenanceCustomEnv: ProvenanceCustomEnv{
+			"targetPlatform": "linux/amd64",
+		},
+	}
+
+	dt, err := json.Marshal(params)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"builderPlatform":"","targetPlatform":"linux/arm64"}`, string(dt))
 }
 
 func TestMarshalInvocation(t *testing.T) {

@@ -187,6 +187,12 @@ func TestCaptureMergeNil(t *testing.T) {
 	require.NoError(t, c.Merge(nil))
 }
 
+func TestCaptureCloneTargetPlatform(t *testing.T) {
+	t.Parallel()
+	c := &Capture{TargetPlatform: "linux/arm64"}
+	require.Equal(t, c.TargetPlatform, c.Clone().TargetPlatform)
+}
+
 func TestCaptureSort(t *testing.T) {
 	t.Parallel()
 	c := &Capture{}
