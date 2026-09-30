@@ -1045,8 +1045,8 @@ github.com/tonistiigi/dchapes-mode
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
-# github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
-## explicit; go 1.23.0
+# github.com/tonistiigi/go-actions-cache v0.0.0-20260930145529-afe8013b5ac4
+## explicit; go 1.25.0
 github.com/tonistiigi/go-actions-cache
 # github.com/tonistiigi/go-archvariant v1.0.0
 ## explicit; go 1.17
