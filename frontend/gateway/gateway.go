@@ -472,7 +472,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		cancelContainerCtx: cancelContainerCtx,
 		llbBridge:          llbBridge,
 		refs:               map[string]solver.ResultProxy{},
-		resultByID:        map[string]solver.Result{},
+		resultByID:         map[string]solver.Result{},
 		doneCh:             make(chan struct{}),
 		pipe:               newPipe(),
 		workers:            workers,
@@ -583,12 +583,12 @@ type llbBridgeForwarder struct {
 	containerCtx       context.Context
 	cancelContainerCtx context.CancelCauseFunc
 	// newContainer is overridden by tests.
-	newContainer  func(context.Context, container.NewContainerRequest) (gwclient.Container, error)
-	callCtx       context.Context
-	llbBridge     frontend.FrontendLLBBridge
-	refs          map[string]solver.ResultProxy
-	resultByID    map[string]solver.Result
-	discarded     bool
+	newContainer func(context.Context, container.NewContainerRequest) (gwclient.Container, error)
+	callCtx      context.Context
+	llbBridge    frontend.FrontendLLBBridge
+	refs         map[string]solver.ResultProxy
+	resultByID   map[string]solver.Result
+	discarded    bool
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error

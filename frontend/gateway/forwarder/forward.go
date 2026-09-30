@@ -59,18 +59,18 @@ type BridgeClient struct {
 	containerCtx       context.Context
 	cancelContainerCtx context.CancelCauseFunc
 	// newContainer is overridden by tests.
-	newContainer  func(context.Context, container.NewContainerRequest) (client.Container, error)
-	opts          map[string]string
-	inputs        map[string]*opspb.Definition
-	sid           string
-	sm            *session.Manager
-	refs          []*ref
-	workers       worker.Infos
-	resultByID    map[string]solver.Result
-	discarded     bool
-	buildOpts     client.BuildOpts
-	ctrs          []client.Container
-	executor      executor.Executor
+	newContainer func(context.Context, container.NewContainerRequest) (client.Container, error)
+	opts         map[string]string
+	inputs       map[string]*opspb.Definition
+	sid          string
+	sm           *session.Manager
+	refs         []*ref
+	workers      worker.Infos
+	resultByID   map[string]solver.Result
+	discarded    bool
+	buildOpts    client.BuildOpts
+	ctrs         []client.Container
+	executor     executor.Executor
 
 	mounts       map[string]snapshot.Mounter
 	mountsMu     sync.Mutex
