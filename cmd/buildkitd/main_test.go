@@ -112,40 +112,45 @@ func TestLoadConfigFile(t *testing.T) {
 	fp := filepath.Join(t.TempDir(), "buildkitd.toml")
 	explicit := []string{"--config", fp}
 
-	warnings, err := runLoadConfigFile(t, fp, nil)
+	path, warnings, err := runLoadConfigFile(t, fp, nil)
 	require.NoError(t, err)
+	require.Empty(t, path)
 	require.Empty(t, warnings)
 
-	warnings, err = runLoadConfigFile(t, fp, explicit)
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
 	require.NoError(t, err)
+	require.Empty(t, path)
 	require.Len(t, warnings, 1)
 	require.Contains(t, warnings[0], fp)
 	require.Contains(t, warnings[0], configMissingErrorEnv)
 
 	t.Setenv(configMissingErrorEnv, "0")
-	warnings, err = runLoadConfigFile(t, fp, explicit)
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
 	require.NoError(t, err)
+	require.Empty(t, path)
 	require.Len(t, warnings, 1)
 	require.NotContains(t, warnings[0], configMissingErrorEnv)
 
 	t.Setenv(configMissingErrorEnv, "1")
-	_, err = runLoadConfigFile(t, fp, explicit)
+	_, _, err = runLoadConfigFile(t, fp, explicit)
 	require.ErrorContains(t, err, fp)
 
 	t.Setenv(configMissingErrorEnv, "bogus")
-	_, err = runLoadConfigFile(t, fp, explicit)
+	_, _, err = runLoadConfigFile(t, fp, explicit)
 	require.ErrorContains(t, err, configMissingErrorEnv)
 
 	require.NoError(t, os.WriteFile(fp, nil, 0644))
 
-	warnings, err = runLoadConfigFile(t, fp, explicit)
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
 	require.NoError(t, err)
+	require.Equal(t, fp, path)
 	require.Empty(t, warnings)
 }
 
-func runLoadConfigFile(t *testing.T, defaultPath string, args []string) ([]string, error) {
+func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (string, []string, error) {
 	t.Helper()
 
+	var path string
 	var warnings []string
 	cmd := &cli.Command{
 		Name: "buildkitd",
@@ -156,9 +161,10 @@ func runLoadConfigFile(t *testing.T, defaultPath string, args []string) ([]strin
 			},
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			_, err := loadConfigFile(cmd, &warnings)
+			var err error
+			path, _, err = loadConfigFile(cmd, &warnings)
 			return err
 		},
 	}
-	return warnings, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
+	return path, warnings, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
 }
