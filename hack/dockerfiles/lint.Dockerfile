@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.26
+ARG GO_VERSION=1.27rc2
 ARG ALPINE_VERSION=3.23
 ARG XX_VERSION=1.9.0
 ARG PROTOLINT_VERSION=0.56.4
 ARG GOLANGCI_LINT_VERSION=v2.12.2
+ARG STATICCHECK_VERSION=v0.8.0-rc.1
 ARG GOLANGCI_FROM_SOURCE=false
 ARG GOPLS_VERSION=v0.38.0
 # GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated simplifyrange unusedfunc unusedvariable
@@ -18,7 +19,9 @@ FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 FROM golang-base AS golangci-build
 WORKDIR /src
 ARG GOLANGCI_LINT_VERSION
+ARG STATICCHECK_VERSION
 ADD https://github.com/golangci/golangci-lint.git#${GOLANGCI_LINT_VERSION} .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/ go get honnef.co/go/tools@${STATICCHECK_VERSION}
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/ go mod download
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/ mkdir -p out && go build -o /out/golangci-lint ./cmd/golangci-lint
 

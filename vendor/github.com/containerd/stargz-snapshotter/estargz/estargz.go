@@ -38,7 +38,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/stargz-snapshotter/estargz/errorutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/vbatts/tar-split/archive/tar"
 )
@@ -164,7 +163,7 @@ func Open(sr *io.SectionReader, opt ...OpenOption) (*Reader, error) {
 		allErr = append(allErr, err)
 	}
 	if !found {
-		return nil, errorutil.Aggregate(allErr)
+		return nil, errors.Join(allErr...)
 	}
 	if err := r.initFields(); err != nil {
 		return nil, fmt.Errorf("failed to initialize fields of entries: %v", err)
@@ -192,7 +191,7 @@ func OpenFooter(sr *io.SectionReader) (tocOffset int64, footerSize int64, rErr e
 		}
 		allErr = append(allErr, err)
 	}
-	return 0, 0, errorutil.Aggregate(allErr)
+	return 0, 0, errors.Join(allErr...)
 }
 
 // initFields populates the Reader from r.toc after decoding it from
