@@ -1763,7 +1763,7 @@ func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
 		conn.Close()
 	}()
 	bklog.G(ctx).Debugf("serving grpc connection")
-	(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: grpcServer})
+	(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: grpcServer}) //nolint:staticcheck // This existing HTTP/2 connection is already established.
 }
 
 type markTypeFrontend struct{}
