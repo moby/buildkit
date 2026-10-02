@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/iterutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -326,6 +327,9 @@ type CacheStorage interface {
 
 	// Save saves a result based on a cache key
 	Save(k *CacheKey, r Result, createdAt time.Time) (*CacheRecord, error)
+
+	// Parents returns an iterator to the parents of the cache key with the given id.
+	Parents(ctx context.Context, id string) iterutil.FallibleSeq2[string, CacheInfoLink]
 
 	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error

@@ -9,6 +9,7 @@ import (
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/iterutil"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -250,6 +251,30 @@ func (c *kvCacheStorage) ensurePersistentKey(k *CacheKey) error {
 		}
 	}
 	return nil
+}
+
+func (c *kvCacheStorage) Parents(ctx context.Context, id string) iterutil.FallibleSeq2[string, CacheInfoLink] {
+	return iterutil.FallibleSeq2Func(func(yield func(string, CacheInfoLink) bool) error {
+		type elem struct {
+			Key   string
+			Value CacheInfoLink
+		}
+
+		var elems []elem
+		if err := c.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+			elems = append(elems, elem{id, link})
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		for _, e := range elems {
+			if !yield(e.Key, e.Value) {
+				break
+			}
+		}
+		return nil
+	})
 }
 
 func (c *kvCacheStorage) ReleaseUnreferenced(ctx context.Context) error {
