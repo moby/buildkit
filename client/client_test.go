@@ -263,6 +263,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerCancelExecTty,
 		testClientGatewayContainerCancelOnRelease,
 		testClientGatewayContainerCancelPID1Tty,
+		testClientGatewayContainerExecLargeStdio,
 		testClientGatewayContainerExecPipe,
 		testClientGatewayContainerExecPipeRelease,
 		testClientGatewayContainerExecPipeSignalKill,
