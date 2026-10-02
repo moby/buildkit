@@ -3299,7 +3299,7 @@ func TestCacheErrNotFound(t *testing.T) {
 
 	key := res.CacheKeys()[0]
 	internal := cm.CacheManager.(*cacheManager)
-	store := internal.backend.(*inMemoryStore)
+	store := internal.storage.(*kvCacheStorage).backend.(*inMemoryStore)
 	exporter := key.Exporter.(*mergedExporter).exporters[0].(*exporter)
 	record := exporter.record
 

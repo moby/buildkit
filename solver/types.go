@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/iterutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -296,5 +298,40 @@ type CacheManager interface {
 	// Save saves a result based on a cache key
 	Save(key *CacheKey, s Result, createdAt time.Time) (*ExportableCacheKey, error)
 
+	ReleaseUnreferenced(context.Context) error
+}
+
+var ErrNotImplemented = cerrdefs.ErrNotImplemented
+
+// CacheStorage is an abstraction over the stored cache database used by the CacheManager.
+type CacheStorage interface {
+	// Query searches for cache paths from one cache key to the output of a
+	// possible match.
+	Query(deps []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error)
+
+	// Records returns the cache records associated with a cache key.
+	Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error)
+
+	// Load loads a cache record into a result reference.
+	Load(ctx context.Context, key *CacheKey, id string) (Result, error)
+
+	// LoadWithParents will load the cache record and any parents from the cache storage.
+	// This method may not be implemented by all backends. If it is not implemented,
+	// this method can return ErrNotImplemented.
+	LoadWithParents(ctx context.Context, key *CacheKey, id string) ([]LoadedResult, error)
+
+	// LoadRemotes will load the remote solver objects associated with this cache record.
+	LoadRemotes(ctx context.Context, key *CacheKey, id string, compression *compression.Config, s session.Group) ([]*Remote, error)
+
+	// Save saves a result based on a cache key
+	Save(k *CacheKey, r Result, createdAt time.Time) (*CacheRecord, error)
+
+	// Parents returns an iterator to the parents of the cache key with the given id.
+	Parents(ctx context.Context, id string) iterutil.FallibleSeq2[string, CacheInfoLink]
+
+	// AlternativeRoots returns an iterator that returns alternative roots for the given cache record.
+	AlternativeRoots(ctx context.Context, key *CacheKey, rec *CacheRecord) iterutil.FallibleSeq[string]
+
+	// ReleaseUnreferenced will release any unreferenced keys in the cache storage.
 	ReleaseUnreferenced(context.Context) error
 }
