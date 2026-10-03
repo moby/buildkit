@@ -1185,6 +1185,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 
 	ctrProc.eg.Go(func() error {
 		var closeDoneOnce sync.Once
+		defer closeDoneOnce.Do(func() { close(done) })
 		var exitError error
 		for {
 			msg, ok := msgs.Recv(ctx)

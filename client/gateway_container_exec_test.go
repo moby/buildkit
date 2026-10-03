@@ -558,6 +558,71 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+func testClientGatewayContainerOutputError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("gateway output-error test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		def, err := llb.Image("busybox:latest").Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, client.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer ctr.Release(context.WithoutCancel(ctx))
+
+		stdinReader, stdinWriter := io.Pipe()
+		defer stdinReader.Close()
+		defer stdinWriter.Close()
+		stdoutReader, stdoutWriter := io.Pipe()
+		stdoutReader.Close()
+		defer stdoutWriter.Close()
+
+		// Keep stdin open: an output error must release its cleanup waiter
+		// without waiting for the caller to close the input.
+		process, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh", "-c", "printf output; cat >/dev/null"},
+			Stdin:  stdinReader,
+			Stdout: stdoutWriter,
+		})
+		if err != nil {
+			return nil, err
+		}
+		wait := make(chan error, 1)
+		go func() { wait <- process.Wait() }()
+		select {
+		case err := <-wait:
+			if !errors.Is(err, io.ErrClosedPipe) {
+				return nil, errors.Errorf("process Wait returned %v, expected %v", err, io.ErrClosedPipe)
+			}
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		}
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+}
+
 // testClientGatewayContainerPID1Exit is testing that all process started
 // via `Exec` are shutdown when the primary pid1 process exits
 func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {

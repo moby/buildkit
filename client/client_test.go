@@ -268,6 +268,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExecPipeRelease,
 		testClientGatewayContainerExecPipeSignalKill,
 		testClientGatewayContainerExecTty,
+		testClientGatewayContainerOutputError,
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Tty,
