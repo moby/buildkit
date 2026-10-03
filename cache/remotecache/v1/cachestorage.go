@@ -249,6 +249,11 @@ func (cs *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solv
 
 func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.CacheResult) (map[string]solver.Result, error) {
 	m := map[string]solver.Result{}
+	releaseAll := func() {
+		for _, v := range m {
+			v.Release(context.TODO())
+		}
+	}
 
 	visited := make(map[*item]struct{})
 
@@ -259,36 +264,77 @@ func (cs *cacheResultStorage) LoadWithParents(ctx context.Context, res solver.Ca
 
 	for id := range ids {
 		v, ok := cs.byID[id]
-		if ok {
-			if _, ok := visited[v.item]; ok {
+		if !ok {
+			continue
+		}
+		if _, ok := visited[v.item]; ok {
+			continue
+		}
+		for _, result := range v.results {
+			resultID := remoteID(result.Result)
+			if resultID != res.ID {
 				continue
 			}
-			for _, result := range v.results {
-				resultID := remoteID(result.Result)
-				if resultID == res.ID {
-					if err := v.walkAllResults(func(i *item) error {
-						for _, subRes := range i.results {
-							id, ok := cs.byItem[i]
-							if !ok {
-								return nil
-							}
-							if isSubRemote(*subRes.Result, *result.Result) {
-								ref, err := cs.w.FromRemote(ctx, subRes.Result)
-								if err != nil {
-									return err
-								}
-								m[id] = worker.NewWorkerRefResult(ref, cs.w)
-							}
-						}
-						return nil
-					}, visited); err != nil {
-						for _, v := range m {
-							v.Release(context.TODO())
-						}
-						return nil, err
+			// Every record in the parent chain has a remote that is a prefix
+			// of the matched result's remote, so instead of loading each of
+			// them separately (which would verify the same parent layers over
+			// and over again), collect the records with the depth of their
+			// remote and load the full chain only once.
+			type entry struct {
+				id     string
+				remote *solver.Remote
+			}
+			var entries []entry
+			if err := v.walkAllResults(func(i *item) error {
+				id, ok := cs.byItem[i]
+				if !ok {
+					return nil
+				}
+				for _, subRes := range i.results {
+					if isSubRemote(*subRes.Result, *result.Result) {
+						entries = append(entries, entry{id: id, remote: subRes.Result})
 					}
 				}
+				return nil
+			}, visited); err != nil {
+				releaseAll()
+				return nil, err
 			}
+			if len(entries) == 0 {
+				continue
+			}
+
+			ref, err := cs.w.FromRemote(ctx, result.Result)
+			if err != nil {
+				releaseAll()
+				return nil, err
+			}
+			chain := ref.LayerChain()
+			ref.Release(context.TODO())
+
+			for _, e := range entries {
+				depth := len(e.remote.Descriptors)
+				var res solver.Result
+				if depth > 0 && depth <= len(chain) && len(chain) == len(result.Result.Descriptors) {
+					res = worker.NewWorkerRefResult(chain[depth-1].Clone(), cs.w)
+				} else {
+					// the worker returned a ref with a layer chain that does
+					// not map 1:1 to the remote descriptors; load this record
+					// directly
+					ref, err := cs.w.FromRemote(ctx, e.remote)
+					if err != nil {
+						chain.Release(context.TODO())
+						releaseAll()
+						return nil, err
+					}
+					res = worker.NewWorkerRefResult(ref, cs.w)
+				}
+				if prev, ok := m[e.id]; ok {
+					prev.Release(context.TODO())
+				}
+				m[e.id] = res
+			}
+			chain.Release(context.TODO())
 		}
 	}
 
