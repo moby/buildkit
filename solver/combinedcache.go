@@ -34,6 +34,9 @@ func (cm *combinedCacheManager) ID() string {
 }
 
 func (cm *combinedCacheManager) ReleaseUnreferenced(ctx context.Context) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, c := range cm.cms {
 		func(c CacheManager) {
