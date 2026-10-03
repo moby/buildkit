@@ -8,10 +8,18 @@ import (
 	"strings"
 
 	"github.com/Microsoft/go-winio"
+	"github.com/moby/buildkit/session/sshforward"
 	_ "github.com/moby/buildkit/solver/llbsolver/ops"
 	_ "github.com/moby/buildkit/util/system/getuserinfo"
 	"github.com/pkg/errors"
 )
+
+// applyAgentPipeSecurityDescriptor forwards an operator-configured security
+// descriptor to the SSH agent named pipe so a locked-down daemon applies the
+// same ACL to forwarded agent pipes. An empty descriptor keeps the default.
+func applyAgentPipeSecurityDescriptor(sd string) {
+	sshforward.SetAgentPipeSecurityDescriptor(sd)
+}
 
 const socketScheme = "npipe://"
 

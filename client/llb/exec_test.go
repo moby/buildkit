@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,4 +171,57 @@ func TestExecOpMarshalConsistency(t *testing.T) {
 
 		prevDef = def.Def
 	}
+}
+
+var windowsPlatform = Platform(ocispecs.Platform{OS: "windows", Architecture: "amd64"})
+
+// TestSSHWindowsDuplicateTargetError verifies that on Windows two SSH mounts
+// that resolve to the same named-pipe destination (e.g. both defaulting to the
+// OpenSSH agent pipe) are rejected at marshal time rather than silently
+// colliding.
+func TestSSHWindowsDuplicateTargetError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket(), AddSSHSocket()).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "same Windows pipe")
+}
+
+// TestSSHWindowsExplicitDuplicateTargetError verifies the guard also catches
+// two mounts explicitly configured with the same target.
+func TestSSHWindowsExplicitDuplicateTargetError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\openssh-ssh-agent`)),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\openssh-ssh-agent`)),
+	).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "same Windows pipe")
+}
+
+// TestSSHWindowsDistinctTargetsOK verifies distinct targets marshal cleanly on
+// Windows.
+func TestSSHWindowsDistinctTargetsOK(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"),
+		AddSSHSocket(),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\custom-agent`)),
+	).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+}
+
+// TestSSHMultipleDefaultsNonWindowsOK verifies the duplicate guard is
+// Windows-only: on other platforms multiple default SSH mounts get distinct
+// per-index socket targets and marshal without error.
+func TestSSHMultipleDefaultsNonWindowsOK(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket(), AddSSHSocket()).Root()
+	_, err := st.Marshal(t.Context(), LinuxAmd64)
+	require.NoError(t, err)
 }

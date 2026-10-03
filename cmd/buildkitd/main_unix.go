@@ -65,3 +65,8 @@ func getLocalListener(listenerPath, _ string) (net.Listener, error) {
 func groupToSecurityDescriptor(_ string) (string, error) {
 	return "", nil
 }
+
+// applyAgentPipeSecurityDescriptor is a no-op on non-Windows platforms, where
+// SSH agents are forwarded over UNIX sockets guarded by chown/chmod instead of
+// a security descriptor.
+func applyAgentPipeSecurityDescriptor(_ string) {}
