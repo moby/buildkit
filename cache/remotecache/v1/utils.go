@@ -210,15 +210,21 @@ func marshalItem(ctx context.Context, it *item, state *marshalState) error {
 		}
 	}
 
-	if res := it.bestResult(); res != nil {
+	for _, res := range it.sortedResults() {
 		id := marshalRemote(ctx, res.Result, state)
-		if id != "" {
-			idx, ok := state.chainsByID[id]
-			if !ok {
-				return errors.New("parent chainid not found")
-			}
-			rec.Results = append(rec.Results, cacheimporttypes.CacheResult{LayerIndex: idx, CreatedAt: res.CreatedAt})
+		if id == "" {
+			// The remote could not be marshalled, usually because its provider
+			// cannot resolve the descriptors. Another result of the same record
+			// may still be usable, so keep looking instead of exporting a record
+			// with no layers at all.
+			continue
 		}
+		idx, ok := state.chainsByID[id]
+		if !ok {
+			return errors.New("parent chainid not found")
+		}
+		rec.Results = append(rec.Results, cacheimporttypes.CacheResult{LayerIndex: idx, CreatedAt: res.CreatedAt})
+		break
 	}
 
 	state.recordsByItem[it] = len(state.records)
