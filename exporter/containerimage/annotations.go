@@ -71,7 +71,7 @@ func (ag AnnotationsGroup) Platform(p *ocispecs.Platform) *Annotations {
 
 	ps := []string{""}
 	if p != nil {
-		ps = append(ps, platforms.FormatAll(*p))
+		ps = append(ps, platforms.FormatAll(platforms.Normalize(*p)))
 	}
 
 	for _, a := range ag {
