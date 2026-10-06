@@ -34,7 +34,11 @@ func handleCompactionStatus(w http.ResponseWriter, r *http.Request) {
 				entry.Reason = err.Error()
 			} else {
 				entry.Available = space.Available
-				opt := db.CompactOptions{MinReclaimBytes: s.Config.MinReclaimBytes, MinReclaimPercent: s.Config.MinReclaimPercent}
+				opt := db.CompactOptions{
+					MinReclaimBytes:        s.Config.MinReclaimBytes,
+					MinReclaimPercent:      s.Config.MinReclaimPercent,
+					MinReclaimPercentFloor: s.Config.MinReclaimPercentFloor,
+				}
 				switch {
 				case !opt.MeetsReclaimThreshold(s.Stats.Size, s.Stats.Reclaimable):
 					entry.Reason = "reclaimable space below threshold"

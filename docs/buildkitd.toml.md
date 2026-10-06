@@ -83,10 +83,12 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # After compaction, grow the next size watermark from the compacted size by
   # this percentage.
   sizeGrowthPercent = 100
-  # Compaction is eligible when either reclaimability threshold is reached.
+  # Either threshold can trigger compaction, subject to the percentage floor.
   minReclaimBytes = 268435456
   # Percentage of the database file estimated to be reclaimable.
-  minReclaimPercent = 25
+  minReclaimPercent = 30
+  # Minimum reclaimable percentage, even when minReclaimBytes is reached.
+  minReclaimPercentFloor = 10
   # Wait for no active transactions and this interval without database activity.
   idleTimeout = "1m"
   # Cancel this many attempts for arriving writers, then let the next copy finish.
