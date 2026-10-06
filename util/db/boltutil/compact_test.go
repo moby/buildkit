@@ -315,6 +315,11 @@ func TestCompactSkipsBelowThresholds(t *testing.T) {
 	require.NotEmpty(t, res.Reason)
 
 	require.Equal(t, before, fileSize(t, path))
+	res, err = d.Compact(t.Context(), db.CompactOptions{MinReclaimBytes: res.Reclaimable, MinReclaimPercentFloor: 100})
+	require.NoError(t, err)
+	require.False(t, res.Compacted)
+	require.NotEmpty(t, res.Reason)
+
 	res, err = d.Compact(t.Context(), db.CompactOptions{MinReclaimBytes: res.Reclaimable, MinReclaimPercent: 100})
 	require.NoError(t, err)
 	require.True(t, res.Compacted, res.Reason)
