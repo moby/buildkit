@@ -1021,8 +1021,6 @@ type sharedOp struct {
 	execRes  *execRes
 	execDone bool
 	execErr  error
-	// execErrRefs retains error refs while execErr is cached.
-	execErrRefs []Result
 
 	cacheRes  []*CacheMap
 	cacheDone bool
@@ -1296,9 +1294,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 
 				s.execRes = &execRes{execRes: wrapShared(res), execExporters: subExporters}
 			}
-			if err != nil {
-				s.execErrRefs = cloneErrorRefs(err)
-			}
+			s.st.cloneErrorRefs(err)
 			s.execErr = err
 		}
 		if s.execRes == nil || err != nil {
@@ -1348,9 +1344,6 @@ func (s *sharedOp) release() {
 		for _, r := range s.execRes.execRes {
 			go r.Release(context.TODO())
 		}
-	}
-	for _, r := range s.execErrRefs {
-		go r.Release(context.TODO())
 	}
 }
 
@@ -1447,18 +1440,18 @@ func WrapSlowCache(err error, index Index, res Result) error {
 	return &SlowCacheError{Index: index, Result: res, error: err}
 }
 
-func cloneErrorRefs(err error) (refs []Result) {
+// cloneErrorRefs retains a cached error's refs until the state is released.
+func (s *state) cloneErrorRefs(err error) {
 	for ; err != nil; err = errors.Unwrap(err) {
 		if re, ok := err.(interface {
 			EachRef(func(Result) error) error
 		}); ok {
 			re.EachRef(func(r Result) error {
-				refs = append(refs, r.Clone())
+				s.cloneUntilRelease(r)
 				return nil
 			})
 		}
 	}
-	return refs
 }
 
 func releaseError(err error) {
