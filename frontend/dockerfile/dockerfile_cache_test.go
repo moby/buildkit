@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/workers"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
@@ -87,6 +89,61 @@ func testMissingCopySourceReleasesCache(t *testing.T, sb integration.Sandbox) {
 		require.ErrorContains(t, err, "missing.txt")
 	}
 	checkAllReleasable(t, c, sb, false)
+}
+
+func testCanceledRunReleasesCache(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", []byte(`FROM busybox
+ARG BUST
+RUN echo "$BUST" > /parent && dd if=/dev/zero of=/a bs=1M count=1
+RUN dd if=/dev/zero of=/b bs=1M count=1 && echo CANCEL-READY && sleep 120
+`), 0600))
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for i := range 2 {
+		ctx, cancel := context.WithCancelCause(sb.Context())
+		ctx, timeoutCancel := context.WithTimeoutCause(ctx, time.Minute, errors.New("RUN did not reach cancellation point"))
+		status := make(chan *client.SolveStatus)
+		done := make(chan bool, 1)
+		go func() {
+			started := false
+			for st := range status {
+				for _, log := range st.Logs {
+					if strings.Contains(string(log.Data), "CANCEL-READY") {
+						started = true
+						cancel(errors.WithStack(context.Canceled))
+					}
+				}
+			}
+			done <- started
+		}()
+		_, err := f.Solve(ctx, c, client.SolveOpt{
+			FrontendAttrs: map[string]string{"build-arg:BUST": strconv.Itoa(i)},
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, status)
+		timeoutCancel()
+		cancel(errors.WithStack(context.Canceled))
+		require.True(t, <-done, "build must be cancelled during RUN")
+		require.Error(t, err)
+	}
+	// Cancellation must release the cache even while build history is retained.
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		du, err := c.DiskUsage(sb.Context())
+		require.NoError(t, err)
+		for _, record := range du {
+			require.False(t, record.InUse, "cache record %s is still in use", record.ID)
+		}
+	}, 10*time.Second, 100*time.Millisecond)
+	require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
+	du, err := c.DiskUsage(sb.Context())
+	require.NoError(t, err)
+	require.Empty(t, du)
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
