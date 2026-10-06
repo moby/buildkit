@@ -53,7 +53,7 @@ require (
 	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
-	github.com/moby/policy-helpers v0.0.0-20260901142052-72f704e6cdb6
+	github.com/moby/policy-helpers v0.0.0-20261006174519-bd98f4747414
 	github.com/moby/profiles/seccomp v0.2.4
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/moby/sys/reexec v0.1.0
