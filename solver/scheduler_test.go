@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1170,6 +1171,66 @@ func TestSlowCacheErrorResultReleasedWithJob(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return releaseCount.Load() == 1
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestExecErrorRefsReleasedAfterJobDiscard(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("exec error ref test timed out"))
+	defer cancel()
+
+	started := make(chan struct{})
+	resume := make(chan struct{})
+	resumeExec := sync.OnceFunc(func() { close(resume) })
+
+	var cloneCount, releaseCount atomic.Int64
+	failedRef := &countedResult{
+		id:           identity.NewID(),
+		cloneCount:   &cloneCount,
+		releaseCount: &releaseCount,
+	}
+	g := Edge{Vertex: vtx(vtxOpt{
+		name: "failed-exec",
+		execPreFunc: func(context.Context) error {
+			close(started)
+			<-resume
+			return &execRefError{error: errors.New("exec failed"), ref: failedRef}
+		},
+	})}
+
+	l := NewSolver(SolverOpt{ResolveOpFunc: testOpResolver})
+	defer l.Close()
+	j, err := l.NewJob("j0")
+	require.NoError(t, err)
+	defer j.Discard()
+	defer resumeExec()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := j.Build(ctx, g)
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("exec did not start")
+	}
+
+	// A failed exec can finish after its job has released the vertex.
+	require.NoError(t, j.Discard())
+	resumeExec()
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "exec failed")
+	case <-ctx.Done():
+		t.Fatal("build did not finish")
+	}
+
+	// Retaining no clones is also valid once the vertex has been released.
+	require.Eventually(t, func() bool {
+		return releaseCount.Load() == cloneCount.Load()
+	}, time.Second, 10*time.Millisecond,
+		"failed exec error refs must not outlive the job (clones=%d, releases=%d)",
+		cloneCount.Load(), releaseCount.Load())
 }
 
 // TestParallelInputs validates that inputs are processed in parallel
@@ -4110,6 +4171,7 @@ func (r *dummyResult) Clone() Result                 { return r }
 type countedResult struct {
 	id           string
 	value        string
+	cloneCount   *atomic.Int64
 	releaseCount *atomic.Int64
 }
 
@@ -4122,11 +4184,26 @@ func (r *countedResult) Release(context.Context) error {
 }
 func (r *countedResult) Sys() any { return &dummyResult{id: r.id, value: r.value} }
 func (r *countedResult) Clone() Result {
+	if r.cloneCount != nil {
+		r.cloneCount.Add(1)
+	}
 	return &countedResult{
 		id:           r.id,
 		value:        r.value,
+		cloneCount:   r.cloneCount,
 		releaseCount: r.releaseCount,
 	}
+}
+
+// execRefError models an exec error owning a failed snapshot without
+// importing llbsolver/errdefs, which depends on this package.
+type execRefError struct {
+	error
+	ref Result
+}
+
+func (e *execRefError) EachRef(fn func(Result) error) error {
+	return fn(e.ref)
 }
 
 func testOpResolver(v Vertex, b Builder) (Op, error) {
