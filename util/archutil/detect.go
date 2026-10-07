@@ -92,14 +92,18 @@ func SupportedPlatforms(noCache bool) []ocispecs.Platform {
 	}
 	if p := "arm"; def.Architecture != p {
 		if _, err := armSupported(); err == nil {
-			p := linux("arm")
-			p.Variant = "v6"
-			arr = append(arr, linux("arm"), p)
+			v6 := linux("arm")
+			v6.Variant = "v6"
+			v5 := linux("arm")
+			v5.Variant = "v5"
+			arr = append(arr, linux("arm"), v6, v5)
 		}
 	} else if def.Variant == "" {
-		p := linux("arm")
-		p.Variant = "v6"
-		arr = append(arr, p)
+		v6 := linux("arm")
+		v6.Variant = "v6"
+		v5 := linux("arm")
+		v5.Variant = "v5"
+		arr = append(arr, v6, v5)
 	}
 	return arr
 }
