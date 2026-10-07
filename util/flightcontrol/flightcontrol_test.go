@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -243,6 +244,51 @@ func TestMassiveParallel(t *testing.T) {
 	err := eg.Wait()
 	require.Error(t, err)
 	assert.Equal(t, int64(0), retryCount)
+}
+
+func TestCompletionAndWriterRemoval(t *testing.T) {
+	pr, _, closeProgress := progress.NewContext(t.Context())
+	closeProgress(nil)
+
+	ps := newProgressState()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	first := &closeWriter{onClose: func() {
+		close(entered)
+		<-release
+	}}
+	closes := 0
+	last := &closeWriter{onClose: func() { closes++ }}
+	ps.add(first)
+	ps.add(last)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ps.run(pr)
+	}()
+	// Cancel the second writer while completion is closing the first.
+	<-entered
+	ps.close(last)
+	close(release)
+	<-done
+	require.Equal(t, 1, closes, "each writer must be closed exactly once")
+}
+
+type closeWriter struct {
+	onClose func()
+}
+
+func (*closeWriter) Write(string, any) error {
+	return nil
+}
+
+func (*closeWriter) WriteRawProgress(*progress.Progress) error {
+	return nil
+}
+
+func (w *closeWriter) Close() error {
+	w.onClose()
+	return nil
 }
 
 func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.Context) (string, error) {
