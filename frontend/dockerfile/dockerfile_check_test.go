@@ -285,6 +285,8 @@ func testCopyIgnoredFileNegation(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateFile("sub/a.txt", []byte("one"), 0o600),
 		fstest.CreateFile("sub/b.txt", []byte("two"), 0o600),
 		fstest.CreateFile("other.txt", []byte("three"), 0o600),
+		fstest.CreateDir("su.b", 0o755),
+		fstest.CreateFile("su.b/keep.txt", []byte("four"), 0o600),
 	}
 
 	// A negation that cannot re-include the copied path must not disable the
@@ -343,10 +345,10 @@ COPY sub/a.txt /
 	// A negation that re-includes a path below the copied path means the copy
 	// still has content, so the rule must stay silent.
 	t.Run("reincluded", func(t *testing.T) {
-		dockerignore := []byte("sub\n!sub/a.txt\n")
 		for _, tc := range []struct {
-			name       string
-			dockerfile []byte
+			name         string
+			dockerfile   []byte
+			dockerignore []byte
 		}{
 			{
 				name: "copy of the excluded directory",
@@ -369,8 +371,27 @@ FROM scratch
 COPY sub/a.txt /
 `),
 			},
+			{
+				name: "wildcard copy from the excluded directory",
+				dockerfile: []byte(`
+FROM scratch
+COPY sub/*.txt /
+`),
+			},
+			{
+				name: "escaped negation",
+				dockerfile: []byte(`
+FROM scratch
+COPY su.b /sub
+`),
+				dockerignore: []byte("su.b\n!su\\.b/keep.txt\n"),
+			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
+				dockerignore := tc.dockerignore
+				if dockerignore == nil {
+					dockerignore = []byte("sub\n!sub/a.txt\n")
+				}
 				files := append([]fstest.Applier{
 					fstest.CreateFile("Dockerfile", tc.dockerfile, 0o600),
 					fstest.CreateFile(".dockerignore", dockerignore, 0o600),

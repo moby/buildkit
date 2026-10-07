@@ -86,40 +86,67 @@ func copySourceRootIgnored(matcher *patternmatcher.PatternMatcher) bool {
 }
 
 // copySourceNegated reports whether the dockerignore patterns contain a
-// negation that could re-include a path at or below src. Patterns with
-// wildcards cannot be statically resolved, so they are assumed to match
-// anything at or below the longest path prefix that precedes the first
-// wildcard.
+// negation that could re-include a path at or below src. Patterns and sources
+// with wildcards or escapes cannot be statically resolved, so they are assumed
+// to match anything at or below the longest path prefix that precedes the
+// first such element.
 func copySourceNegated(matcher *patternmatcher.PatternMatcher, src string) bool {
-	src = strings.TrimPrefix(src, "/")
+	src, srcWildcard := patternLiteralPrefix(strings.TrimPrefix(src, "/"))
 	if src == "." {
 		src = ""
 	}
-	for _, pattern := range matcher.Patterns() {
+	patterns := matcher.Patterns()
+	for i, pattern := range patterns {
 		if !pattern.Exclusion() {
 			continue
 		}
 		p := filepath.ToSlash(pattern.String())
 		prefix, wildcard := patternLiteralPrefix(p)
+		if !wildcard && negationOverridden(p, patterns[i+1:]) {
+			continue
+		}
 		if pathAtOrBelow(prefix, src) {
 			return true
 		}
-		// A pattern with a wildcard may still match a path below src even if
-		// its literal prefix is above src, e.g. "*/keep.txt" and "sub".
-		if wildcard && pathAtOrBelow(src, prefix) {
+		// A pattern or source with a wildcard may still match a path below
+		// the other even if its literal prefix is above it, e.g. "*/keep.txt"
+		// and "sub", or "sub/keep.txt" and "*/*.txt".
+		if (wildcard || srcWildcard) && pathAtOrBelow(src, prefix) {
 			return true
 		}
 	}
 	return false
 }
 
+// negationOverridden reports whether a literal negated path is excluded again
+// by the patterns that follow it, in which case the negation has no effect.
+func negationOverridden(path string, later []*patternmatcher.Pattern) bool {
+	if len(later) == 0 {
+		return false
+	}
+	strs := make([]string, 0, len(later))
+	for _, p := range later {
+		s := p.String()
+		if p.Exclusion() {
+			s = "!" + s
+		}
+		strs = append(strs, s)
+	}
+	pm, err := patternmatcher.New(strs)
+	if err != nil {
+		return false
+	}
+	ok, err := pm.MatchesOrParentMatches(path)
+	return err == nil && ok
+}
+
 // patternLiteralPrefix returns the path prefix of the pattern that precedes
-// the first path element containing a wildcard, and whether the pattern
-// contains a wildcard at all.
+// the first path element containing a wildcard or escape character, and
+// whether the pattern contains one at all.
 func patternLiteralPrefix(pattern string) (string, bool) {
 	elems := strings.Split(pattern, "/")
 	for i, elem := range elems {
-		if strings.ContainsAny(elem, "*?[") {
+		if strings.ContainsAny(elem, `*?[\`) {
 			return strings.Join(elems[:i], "/"), true
 		}
 	}

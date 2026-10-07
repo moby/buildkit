@@ -96,6 +96,13 @@ func TestValidateCopySourcePath(t *testing.T) {
 			expected: []string{`Attempting to Copy file "sub/a.txt" that is excluded by .dockerignore`},
 		},
 
+		{
+			name:     "negation inside the source path overridden by a later exclusion",
+			patterns: []string{"!sub/keep.txt", "sub"},
+			src:      "sub",
+			expected: []string{`Attempting to Copy file "sub" that is excluded by .dockerignore`},
+		},
+
 		// Negations that re-include a path at or below the source path make
 		// the exclusion impossible to determine statically, so the check has
 		// to stay silent for that source path.
@@ -110,11 +117,6 @@ func TestValidateCopySourcePath(t *testing.T) {
 			src:      "sub",
 		},
 		{
-			name:     "directory excluded and file inside it negated before the exclusion",
-			patterns: []string{"!sub/keep.txt", "sub"},
-			src:      "sub",
-		},
-		{
 			name:     "directory excluded and wildcard negation inside it",
 			patterns: []string{"sub", "!sub/*.txt"},
 			src:      "sub",
@@ -122,6 +124,26 @@ func TestValidateCopySourcePath(t *testing.T) {
 		{
 			name:     "negation with a wildcard that may match the source path",
 			patterns: []string{"sub", "!*/keep.txt"},
+			src:      "sub",
+		},
+		{
+			name:     "wildcard source in an excluded directory with a negated file",
+			patterns: []string{"sub", "!sub/keep.txt"},
+			src:      "sub/*.txt",
+		},
+		{
+			name:     "wildcard source directory with a negated file",
+			patterns: []string{"sub", "!sub/keep.txt"},
+			src:      "*/keep.txt",
+		},
+		{
+			name:     "escaped negation inside the source path",
+			patterns: []string{"su.b", `!su\.b/keep.txt`},
+			src:      "su.b",
+		},
+		{
+			name:     "negation overridden and then negated again",
+			patterns: []string{"!sub/keep.txt", "sub", "!sub/keep.txt"},
 			src:      "sub",
 		},
 		{
