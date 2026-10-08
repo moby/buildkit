@@ -166,7 +166,8 @@ Run `sysctl -w user.max_user_namespaces=N` (N=positive integer, like 63359) on t
 See [`../examples/kubernetes/sysctl-userns.privileged.yaml`](../examples/kubernetes/sysctl-userns.privileged.yaml).
 
 ### Error `fork/exec /proc/self/exe: permission denied` with `This error might have happened because /proc/sys/kernel/apparmor_restrict_unprivileged_userns is set to 1`
-Add `kernel.apparmor_restrict_unprivileged_userns=0` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
+Prefer granting `userns` to `rootlesskit` with a per-binary AppArmor profile (see [Ubuntu, 24.04 or later](#ubuntu-2404-or-later)).
+Only as a last resort, add `kernel.apparmor_restrict_unprivileged_userns=0` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`, which disables the restriction for every unprivileged binary on the host.
 
 ### Error `mount proc:/proc (via /proc/self/fd/6), flags: 0xe: operation not permitted`
 This error is known to happen when BuildKit is executed in a container without the `--security-opt systempaths=unconfined` flag.
@@ -176,7 +177,35 @@ Make sure to specify it (See [above](#docker)).
 Using Ubuntu kernel is recommended.
 
 ### Ubuntu, 24.04 or later
-Add `kernel.apparmor_restrict_unprivileged_userns=0` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
+
+Ubuntu 24.04 restricts unprivileged user namespace creation through
+`kernel.apparmor_restrict_unprivileged_userns`. Since `buildkitd` is launched
+via `rootlesskit` (the binary that actually creates the user namespace), you
+can grant `userns` to `rootlesskit` alone with a per-binary AppArmor profile
+instead of disabling the restriction for every unprivileged binary on the host.
+
+Create a profile whose file name and path match wherever `rootlesskit` is
+actually installed (for example `/usr/local/bin/rootlesskit`):
+
+```console
+$ cat <<EOT | sudo tee /etc/apparmor.d/usr.local.bin.rootlesskit
+abi <abi/4.0>,
+include <tunables/global>
+
+/usr/local/bin/rootlesskit flags=(unconfined) {
+  userns,
+}
+EOT
+$ sudo systemctl restart apparmor.service
+```
+
+This is the approach [rootlesskit's own CI](https://github.com/rootless-containers/rootlesskit/blob/master/.github/workflows/main.yaml)
+uses.
+
+If a per-binary profile is not an option, you can disable the restriction
+system-wide (not recommended, as it re-opens the attack surface the restriction
+was introduced to close): add `kernel.apparmor_restrict_unprivileged_userns=0`
+to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
 
 ### Container-Optimized OS from Google
 Make sure to have an `emptyDir` volume below:
