@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,4 +172,184 @@ func TestExecOpMarshalConsistency(t *testing.T) {
 
 		prevDef = def.Def
 	}
+}
+
+var windowsPlatform = Platform(ocispecs.Platform{OS: "windows", Architecture: "amd64"})
+
+// TestSSHWindowsDuplicateTargetError verifies that on Windows two SSH mounts
+// that resolve to the same named-pipe destination (e.g. both defaulting to the
+// OpenSSH agent pipe) are rejected at marshal time rather than silently
+// colliding.
+func TestSSHWindowsDuplicateTargetError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket(), AddSSHSocket()).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "same Windows pipe")
+}
+
+// TestSSHWindowsExplicitDuplicateTargetError verifies the guard also catches
+// two mounts explicitly configured with the same target.
+func TestSSHWindowsExplicitDuplicateTargetError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\openssh-ssh-agent`)),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\openssh-ssh-agent`)),
+	).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "same Windows pipe")
+}
+
+func TestSSHWindowsCaseInsensitiveDuplicateTargetError(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"),
+		AddSSHSocket(),
+		AddSSHSocket(SSHSocketTarget(`\\.\PIPE\OPENSSH-SSH-AGENT`)),
+	).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "same Windows pipe")
+}
+
+// TestSSHWindowsDistinctTargetsOK verifies distinct targets marshal cleanly on
+// Windows.
+func TestSSHWindowsDistinctTargetsOK(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"),
+		AddSSHSocket(),
+		AddSSHSocket(SSHSocketTarget(`\\.\pipe\custom-agent`)),
+	).Root()
+	_, err := st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+}
+
+func TestSSHWindowsImagePlatformDefaults(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo", windowsPlatform).Run(Shlex("args"), AddSSHSocket()).Root()
+	def, err := st.Marshal(t.Context(), LinuxAmd64)
+	require.NoError(t, err)
+
+	exec := findExecOp(t, def)
+	require.NotNil(t, exec.platform)
+	require.Equal(t, "windows", exec.platform.OS)
+	require.Equal(t, windowsSSHAgentPipe, exec.exec.Mounts[1].Dest)
+	require.Contains(t, exec.exec.Meta.Env, "SSH_AUTH_SOCK="+windowsSSHAgentPipe)
+}
+
+func TestSSHMarshalDoesNotReuseDefaultTarget(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket()).Root()
+	linuxDef, err := st.Marshal(t.Context(), LinuxAmd64)
+	require.NoError(t, err)
+	require.Equal(t, "/run/buildkit/ssh_agent.0", findExecOp(t, linuxDef).exec.Mounts[1].Dest)
+
+	windowsDef, err := st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+	exec := findExecOp(t, windowsDef)
+	require.Equal(t, windowsSSHAgentPipe, exec.exec.Mounts[1].Dest)
+	require.Contains(t, exec.exec.Meta.Env, "SSH_AUTH_SOCK="+windowsSSHAgentPipe)
+}
+
+func TestSSHWindowsCustomTargetEnv(t *testing.T) {
+	t.Parallel()
+
+	const target = `\\.\pipe\custom-agent`
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket(SSHSocketTarget(target))).Root()
+	def, err := st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+	require.Contains(t, findExecOp(t, def).exec.Meta.Env, "SSH_AUTH_SOCK="+target)
+
+	st = Image("foo").
+		AddEnv("SSH_AUTH_SOCK", `\\.\pipe\provided-agent`).
+		Run(Shlex("args"), AddSSHSocket(SSHSocketTarget(target))).
+		Root()
+	def, err = st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+	require.Contains(t, findExecOp(t, def).exec.Meta.Env, `SSH_AUTH_SOCK=\\.\pipe\provided-agent`)
+
+	st = Image("foo").
+		AddEnv("ssh_auth_sock", `\\.\pipe\lowercase-agent`).
+		Run(Shlex("args"), AddSSHSocket(SSHSocketTarget(target))).
+		Root()
+	def, err = st.Marshal(t.Context(), windowsPlatform)
+	require.NoError(t, err)
+	env := findExecOp(t, def).exec.Meta.Env
+	require.Contains(t, env, `ssh_auth_sock=\\.\pipe\lowercase-agent`)
+	require.NotContains(t, env, "SSH_AUTH_SOCK="+target)
+}
+
+// TestSSHMultipleDefaultsNonWindowsOK verifies the duplicate guard is
+// Windows-only: on other platforms multiple default SSH mounts get distinct
+// per-index socket targets and marshal without error.
+func TestSSHMultipleDefaultsNonWindowsOK(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").Run(Shlex("args"), AddSSHSocket(), AddSSHSocket()).Root()
+	def, err := st.Marshal(t.Context(), LinuxAmd64)
+	require.NoError(t, err)
+	exec := findExecOp(t, def).exec
+	require.Len(t, exec.Mounts, 3)
+	require.Equal(t, "/run/buildkit/ssh_agent.0", exec.Mounts[1].Dest)
+	require.Equal(t, "/run/buildkit/ssh_agent.1", exec.Mounts[2].Dest)
+	require.Contains(t, exec.Meta.Env, "SSH_AUTH_SOCK=/run/buildkit/ssh_agent.0")
+}
+
+func TestExecPathFallbackMarshalPlatform(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		imagePlatform   ConstraintsOpt
+		marshalPlatform ConstraintsOpt
+		wantPath        bool
+	}{
+		{"linux marshal", windowsPlatform, LinuxAmd64, true},
+		{"windows marshal", LinuxAmd64, windowsPlatform, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			caps := pb.Caps.All()
+			for _, cap := range caps {
+				if cap.ID == string(pb.CapExecMetaSetsDefaultPath) {
+					cap.Enabled = false
+				}
+			}
+			st := Image("foo", tc.imagePlatform).Run(Shlex("args")).Root()
+			def, err := st.Marshal(t.Context(), tc.marshalPlatform, WithCaps(pb.Caps.CapSet(caps)))
+			require.NoError(t, err)
+			env := findExecOp(t, def).exec.Meta.Env
+			if tc.wantPath {
+				require.Contains(t, env, "PATH="+system.DefaultPathEnvUnix)
+			} else {
+				for _, entry := range env {
+					require.NotContains(t, entry, "PATH=")
+				}
+			}
+		})
+	}
+}
+
+type execOpWithPlatform struct {
+	exec     *pb.ExecOp
+	platform *pb.Platform
+}
+
+func findExecOp(t *testing.T, def *Definition) execOpWithPlatform {
+	t.Helper()
+	_, ops := parseDef(t, def.Def)
+	for _, op := range ops {
+		if exec := op.GetExec(); exec != nil {
+			return execOpWithPlatform{exec: exec, platform: op.Platform}
+		}
+	}
+	t.Fatal("exec op not found")
+	return execOpWithPlatform{}
 }

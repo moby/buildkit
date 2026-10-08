@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/containerd/containerd/v2/core/containers"
 	"github.com/containerd/containerd/v2/core/mount"
@@ -15,6 +16,7 @@ import (
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/user"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -23,6 +25,12 @@ import (
 
 const (
 	tracingSocketPath = "//./pipe/otel-grpc"
+
+	// NamedPipeMountType marks a mount whose source is a Windows named pipe
+	// (e.g. a forwarded SSH agent). Such mounts are passed straight through to
+	// HCS as a pipe and must not go through the local snapshotter mount path or
+	// have their destination rooted to C:\.
+	NamedPipeMountType = "npipe"
 )
 
 func withProcessArgs(args ...string) oci.SpecOpts {
@@ -256,4 +264,23 @@ func normalizeMountType(_ string) string {
 	// HCS shim doesn't expect a named type
 	// for the mount.
 	return ""
+}
+
+// isNamedPipeMount reports whether the mount source is a Windows named pipe
+// that should be forwarded directly to HCS rather than mounted locally.
+func isNamedPipeMount(m mount.Mount) bool {
+	return m.Type == NamedPipeMountType
+}
+
+func normalizeNamedPipeDestination(dest string) (string, error) {
+	if !system.IsNamedPipePath(dest, "windows") {
+		return "", errors.Errorf("invalid Windows named pipe destination %q", dest)
+	}
+	normalized := system.ToSlash(dest, "windows")
+	const prefix = "//./pipe/"
+	name := normalized[len(prefix):]
+	if name == "" || strings.Contains(name, "/") || strings.ContainsRune(name, '\x00') || len(utf16.Encode([]rune(dest))) > 256 {
+		return "", errors.Errorf("invalid Windows named pipe destination %q", dest)
+	}
+	return `\\.\pipe\` + name, nil
 }
