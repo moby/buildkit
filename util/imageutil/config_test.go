@@ -73,8 +73,8 @@ func TestConfigMultiplatform(t *testing.T) {
 
 	check(t)
 
-	// Shuffle the manifests around and make sure it still works
-	rand.Shuffle(len(idx.Manifests), func(i, j int) {
+	// Shuffle the manifests around and make sure it still works.
+	rand.Shuffle(len(idx.Manifests), func(i, j int) { //nolint:gosec // Randomness is only used for test ordering.
 		idx.Manifests[i], idx.Manifests[j] = idx.Manifests[j], idx.Manifests[i]
 	})
 	check(t)
