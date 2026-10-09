@@ -187,8 +187,9 @@ func TestExternalData(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
+	require.NoError(t, s.Update("foo", func(*bolt.Bucket) error { return nil }))
 	si, ok := s.Get("foo")
-	require.False(t, ok)
+	require.True(t, ok)
 
 	err = si.SetExternal("ext1", []byte("data"))
 	require.NoError(t, err)
@@ -214,6 +215,52 @@ func TestExternalData(t *testing.T) {
 	si, _ = s.Get("foo")
 	_, err = si.GetExternal("ext1")
 	require.Error(t, err)
+
+	require.ErrorIs(t, si.SetExternal("ext1", []byte("late")), errNotFound)
+	_, err = si.GetExternal("ext1")
+	require.Error(t, err)
+}
+
+func TestClearOrphans(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "storage.db")
+
+	s, err := NewStore(dbPath)
+	require.NoError(t, err)
+
+	require.NoError(t, s.Update("live", func(*bolt.Bucket) error { return nil }))
+	si, _ := s.Get("live")
+	require.NoError(t, si.SetExternal("ext1", []byte("data")))
+
+	require.NoError(t, s.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(externalBucket))
+		if err != nil {
+			return err
+		}
+		b, err = b.CreateBucket([]byte("gone"))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte("ext1"), []byte("leaked"))
+	}))
+
+	n, err := s.ClearOrphans()
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	dt, err := si.GetExternal("ext1")
+	require.NoError(t, err)
+	require.Equal(t, "data", string(dt))
+
+	gone, _ := s.Get("gone")
+	_, err = gone.GetExternal("ext1")
+	require.Error(t, err)
+
+	n, err = s.ClearOrphans()
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+	require.NoError(t, s.Close())
 }
 
 func TestIndexReplacement(t *testing.T) {
