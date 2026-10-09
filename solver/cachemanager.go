@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -41,9 +40,7 @@ func NewCacheManager(ctx context.Context, id string, storage CacheStorage) Cache
 }
 
 type cacheManager struct {
-	mu sync.RWMutex
-	id string
-
+	id      string
 	storage CacheStorage
 }
 

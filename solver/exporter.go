@@ -19,7 +19,7 @@ type exporter struct {
 	override *bool
 }
 
-func addBacklinks(ctx context.Context, t CacheExporterTarget, cm *kvCacheStorage, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
+func addBacklinks(ctx context.Context, t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
 	out, ok := bkm[id]
 	if ok && out != nil {
 		return out, nil
@@ -258,10 +258,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	if !opt.IgnoreBacklinks {
 		for cm, key := range k.equiv {
-			if cm, ok := cm.storage.(*kvCacheStorage); ok {
-				if _, err := addBacklinks(ctx, t, cm, key.ID, bkm); err != nil {
-					return nil, err
-				}
+			if _, err := addBacklinks(ctx, t, cm, key.ID, bkm); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -276,31 +274,20 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	if v != nil && len(deps) == 0 {
 		cm := v.cacheManager
-		key := cm.getID(v.key)
+		alts := cm.storage.AlternativeRoots(ctx, v.key, v)
+		for id := range alts.Iterate() {
+			dgst, err := digest.Parse(id)
+			if err != nil {
+				continue
+			}
 
-		if cm, ok := cm.storage.(*kvCacheStorage); ok {
-			if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
-				if id == key {
-					return nil
-				}
-				hasBacklinks := false
-				cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
-					hasBacklinks = true
-					return nil
-				})
-				if hasBacklinks {
-					return nil
-				}
-
-				dgst, err := digest.Parse(id)
-				if err != nil {
-					return nil
-				}
-				_, _, err = t.Add(dgst, nil, results)
-				return err
-			}); err != nil {
+			if _, _, err := t.Add(dgst, nil, results); err != nil {
 				return nil, err
 			}
+		}
+
+		if err := alts.Err(); err != nil {
+			return nil, err
 		}
 	}
 

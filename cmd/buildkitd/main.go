@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/user"
@@ -20,6 +21,7 @@ import (
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/containerd/containerd/v2/pkg/sys"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/gofrs/flock"
@@ -44,6 +46,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/solver/sqlitecachestorage"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -914,12 +917,6 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 		frontends["gateway.v0"] = gwfe
 	}
 
-	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"), policies...)
-	if err != nil {
-		return nil, err
-	}
-	cacheStoreForDebug = cacheStorage
-
 	historyDB, err := boltutil.SafeOpen(filepath.Join(cfg.Root, "history.db"), 0600, &bolt.Options{
 		FreelistType:   bolt.FreelistMapType,
 		NoFreelistSync: true,
@@ -965,18 +962,23 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 		return nil, err
 	}
 
+	cm, cs, err := newCacheManager(context.TODO(), "local", cfg, wc, policies)
+	if err != nil {
+		return nil, err
+	}
+
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
 		Frontends:                 frontends,
 		ResolveCacheExporterFuncs: remoteCacheExporterFuncs,
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
-		CacheManager:              solver.NewKeyValueCacheManager(context.TODO(), "local", cacheStorage, worker.NewCacheResultStorage(wc)),
+		CacheManager:              cm,
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
 		MeterProvider:             mp,
 		HistoryDB:                 historyDB,
-		CacheStore:                cacheStorage,
+		CacheStore:                cs,
 		LeaseManager:              w.LeaseManager(),
 		ContentStore:              w.ContentStore(),
 		HistoryConfig:             cfg.History,
@@ -1246,4 +1248,35 @@ func newVerifierProvider(root string) func() (*policy.Verifier, error) {
 		})
 		return verifier, initErr
 	}
+}
+
+func newCacheManager(ctx context.Context, id string, cfg *config.Config, wc *worker.Controller, policies []compaction.Config) (solver.CacheManager, io.Closer, error) {
+	results := worker.NewCacheResultStorage(wc)
+
+	boltDBPath := filepath.Join(cfg.Root, "cache.db")
+	if _, err := os.Stat(boltDBPath); os.IsNotExist(err) {
+		// Attempt to use the sqlite database.
+		fpath := filepath.Join(cfg.Root, "buildkitd.db")
+		store, err := sqlitecachestorage.NewStore(fpath, results)
+		if err == nil {
+			bklog.G(ctx).Info("using sqlite database")
+			return solver.NewCacheManager(ctx, id, store), store, nil
+		} else if !errors.Is(err, cerrdefs.ErrNotImplemented) {
+			return nil, nil, err
+		}
+		bklog.G(ctx).WithField("reason", err).Warn("not using sqlite database")
+	} else {
+		bklog.G(ctx).WithFields(logrus.Fields{
+			"reason": "bolt database exists",
+			"path":   boltDBPath,
+		}).Info("not using sqlite database")
+	}
+
+	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"), policies...)
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheStoreForDebug = cacheStorage
+
+	return solver.NewKeyValueCacheManager(ctx, id, cacheStorage, worker.NewCacheResultStorage(wc)), cacheStorage, nil
 }
