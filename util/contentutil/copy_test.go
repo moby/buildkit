@@ -77,7 +77,9 @@ func TestCopyRegistryRetryAfterEOF(t *testing.T) {
 	defer registry.Close()
 
 	ref := strings.TrimPrefix(registry.URL, "http://") + "/cache:latest"
-	resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+	resolver := docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(docker.WithPlainHTTP(docker.MatchAllHosts)),
+	})
 	pusher, err := resolver.Pusher(ctx, ref)
 	require.NoError(t, err)
 	provider := NewBuffer()
