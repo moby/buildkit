@@ -430,7 +430,7 @@ func (i *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string
 		return nil, err
 	}
 
-	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
+	return solver.NewKeyValueCacheManager(ctx, id, keysStorage, resultStorage), nil
 }
 
 type readerAt struct {

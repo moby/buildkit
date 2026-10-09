@@ -19,7 +19,7 @@ type exporter struct {
 	override *bool
 }
 
-func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
+func addBacklinks(ctx context.Context, t CacheExporterTarget, cm *cacheManager, id string, bkm map[string][]CacheExporterRecord) ([]CacheExporterRecord, error) {
 	out, ok := bkm[id]
 	if ok && out != nil {
 		return out, nil
@@ -30,11 +30,13 @@ func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[st
 
 	m := map[digest.Digest][][]CacheLink{}
 	isRoot := true
-	if err := cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
+
+	parents := cm.storage.Parents(ctx, id)
+	for id, link := range parents.Iterate() {
 		isRoot = false
-		recs, err := addBacklinks(t, cm, id, bkm)
+		recs, err := addBacklinks(ctx, t, cm, id, bkm)
 		if err != nil { // TODO: should we continue on error?
-			return err
+			return nil, err
 		}
 		links := m[link.Digest]
 		for int(link.Input) >= len(links) {
@@ -44,8 +46,9 @@ func addBacklinks(t CacheExporterTarget, cm *cacheManager, id string, bkm map[st
 			links[int(link.Input)] = append(links[int(link.Input)], CacheLink{Src: rec, Selector: link.Selector.String()})
 		}
 		m[link.Digest] = links
-		return nil
-	}); err != nil {
+	}
+
+	if err := parents.Err(); err != nil {
 		return nil, err
 	}
 
@@ -158,19 +161,15 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 				break
 			}
 		}
+
 		cm := v.cacheManager
-		key := cm.getID(v.key)
-		res, err := cm.backend.Load(key, v.ID)
+		key := cm.getKey(v.key)
+		remotes, err := cm.storage.LoadRemotes(ctx, key, v.ID, opt.CompressionOpt, opt.Session)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				v = nil
 				continue
 			}
-			return nil, err
-		}
-
-		remotes, err := cm.results.LoadRemotes(ctx, res, opt.CompressionOpt, opt.Session)
-		if err != nil {
 			return nil, err
 		}
 		if len(remotes) > 0 {
@@ -188,7 +187,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 
 		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
-			res, err := cm.results.Load(ctx, res)
+			res, err := cm.storage.Load(ctx, key, v.ID)
 			if err != nil {
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
 					return nil, err
@@ -258,9 +257,8 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 	}
 
 	if !opt.IgnoreBacklinks {
-		for cm, id := range k.ids {
-			_, err := addBacklinks(t, cm, id, bkm)
-			if err != nil {
+		for cm, key := range k.equiv {
+			if _, err := addBacklinks(ctx, t, cm, key.ID, bkm); err != nil {
 				return nil, err
 			}
 		}
@@ -276,27 +274,19 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 
 	if v != nil && len(deps) == 0 {
 		cm := v.cacheManager
-		key := cm.getID(v.key)
-		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
-			if id == key {
-				return nil
-			}
-			hasBacklinks := false
-			cm.backend.WalkBacklinks(id, func(id string, link CacheInfoLink) error {
-				hasBacklinks = true
-				return nil
-			})
-			if hasBacklinks {
-				return nil
-			}
-
+		alts := cm.storage.AlternativeRoots(ctx, v.key, v)
+		for id := range alts.Iterate() {
 			dgst, err := digest.Parse(id)
 			if err != nil {
-				return nil
+				continue
 			}
-			_, _, err = t.Add(dgst, nil, results)
-			return err
-		}); err != nil {
+
+			if _, _, err := t.Add(dgst, nil, results); err != nil {
+				return nil, err
+			}
+		}
+
+		if err := alts.Err(); err != nil {
 			return nil, err
 		}
 	}

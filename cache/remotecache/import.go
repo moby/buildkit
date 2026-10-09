@@ -126,7 +126,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispecs.Descr
 	if err != nil {
 		return nil, err
 	}
-	return solver.NewCacheManager(ctx, id, keysStorage, resultStorage), nil
+	return solver.NewKeyValueCacheManager(ctx, id, keysStorage, resultStorage), nil
 }
 
 func readBlob(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor) ([]byte, error) {
@@ -261,7 +261,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 		if err != nil {
 			return nil, err
 		}
-		cms = append(cms, solver.NewCacheManager(ctx, id, keysStorage, resultStorage))
+		cms = append(cms, solver.NewKeyValueCacheManager(ctx, id, keysStorage, resultStorage))
 	}
 
 	return solver.NewCombinedCacheManager(cms, nil), nil
