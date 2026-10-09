@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/plugins/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
@@ -1434,6 +1435,33 @@ func TestPersistence(t *testing.T) {
 	dgst, err = Checksum(t.Context(), ref, "foo", ChecksumOpts{FollowLinks: true}, nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
+}
+
+func TestNoPersistenceAfterRecordRemoval(t *testing.T) {
+	t.Parallel()
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm, cleanup := setupCacheManager(t, tmpdir, "native", snapshotter)
+	t.Cleanup(cleanup)
+
+	ref := createRef(t, cm, []string{"ADD foo file data0"})
+	md := ensureOriginMetadata(ref)
+	require.NotEqual(t, ref.ID(), md.ID())
+
+	cc, err := newCacheContext(md)
+	require.NoError(t, err)
+	dgst, err := cc.Checksum(t.Context(), ref, "foo", ChecksumOpts{}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	require.NoError(t, ref.Release(t.Context()))
+	require.NoError(t, cm.Prune(t.Context(), nil, client.PruneInfo{All: true}))
+
+	require.Error(t, cc.save())
+	_, err = md.GetExternal(keyContentHash)
+	require.Error(t, err)
 }
 
 func TestChecksumUpdateDirectory(t *testing.T) {
