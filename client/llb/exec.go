@@ -14,6 +14,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// windowsSSHAgentPipe is the fixed named pipe that Windows OpenSSH uses to
+// reach the SSH agent. It is the default SSH mount target on Windows.
+const windowsSSHAgentPipe = `\\.\pipe\openssh-ssh-agent`
+
 func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *ExecOp {
 	e := &ExecOp{base: base, constraints: c, proxyEnv: proxyEnv}
 	root := base.Output()
@@ -131,6 +135,52 @@ func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 	return nil
 }
 
+func (e *ExecOp) marshalOS(ctx context.Context, c *Constraints) (string, error) {
+	if e.constraints.Platform != nil {
+		return e.constraints.Platform.OS, nil
+	}
+	p, err := getPlatform(e.base)(ctx, c)
+	if err != nil {
+		return "", err
+	}
+	if p != nil {
+		return p.OS, nil
+	}
+	if c.Platform != nil {
+		return c.Platform.OS, nil
+	}
+	return "linux", nil
+}
+
+func prepareWindowsSSHMounts(ssh []SSHInfo) error {
+	seen := make(map[string]struct{}, len(ssh))
+	for i := range ssh {
+		if ssh[i].Target == "" {
+			ssh[i].Target = windowsSSHAgentPipe
+		}
+		normalizedTarget := strings.ToLower(system.ToSlash(ssh[i].Target, "windows"))
+		if _, ok := seen[normalizedTarget]; ok {
+			return errors.Errorf("multiple SSH mounts target the same Windows pipe %q; specify a distinct target for each", ssh[i].Target)
+		}
+		seen[normalizedTarget] = struct{}{}
+	}
+	return nil
+}
+
+func hasSSHAuthSock(env *EnvList, marshalOS string) bool {
+	if _, ok := env.Get("SSH_AUTH_SOCK"); ok {
+		return true
+	}
+	if marshalOS == "windows" {
+		for _, key := range env.Keys() {
+			if strings.EqualFold(key, "SSH_AUTH_SOCK") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	cache := e.cache.Acquire()
 	defer cache.Release()
@@ -152,14 +202,25 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return "", nil, nil, nil, err
 	}
 
-	if len(e.ssh) > 0 {
-		for i, s := range e.ssh {
-			if s.Target == "" {
-				e.ssh[i].Target = fmt.Sprintf("/run/buildkit/ssh_agent.%d", i)
+	ssh := slices.Clone(e.ssh)
+	if len(ssh) > 0 {
+		marshalOS, err := e.marshalOS(ctx, c)
+		if err != nil {
+			return "", nil, nil, nil, err
+		}
+		if marshalOS == "windows" {
+			if err := prepareWindowsSSHMounts(ssh); err != nil {
+				return "", nil, nil, nil, err
+			}
+		} else {
+			for i, s := range ssh {
+				if s.Target == "" {
+					ssh[i].Target = fmt.Sprintf("/run/buildkit/ssh_agent.%d", i)
+				}
 			}
 		}
-		if _, ok := env.Get("SSH_AUTH_SOCK"); !ok {
-			env = env.AddOrReplace("SSH_AUTH_SOCK", e.ssh[0].Target)
+		if !hasSSHAuthSock(env, marshalOS) {
+			env = env.AddOrReplace("SSH_AUTH_SOCK", ssh[0].Target)
 		}
 	}
 	if c.Caps != nil {
@@ -457,7 +518,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 	}
 
-	for _, s := range e.ssh {
+	for _, s := range ssh {
 		pm := &pb.Mount{
 			Input:     int64(pb.Empty),
 			Dest:      s.Target,
