@@ -304,7 +304,9 @@ func testBuildWithInvalidChainID(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	ensurePruneAll(t, c, sb)
 
-	resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+	resolver := docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(docker.WithPlainHTTP(docker.MatchAllHosts)),
+	})
 	ctx := sb.Context()
 	originalName, originalDesc, err := resolver.Resolve(ctx, originalTarget)
 	require.NoError(t, err)
