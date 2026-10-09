@@ -1159,6 +1159,8 @@ func testWriteAndOpen(t *TestRunner, controllers ...TestingControllerFactory) {
 		wantNumGzLossLess  int // expected number of streams (> 0) in lossless mode if it's different from wantNumGz
 		wantFailOnLossLess bool
 		wantTOCVersion     int // default = 1
+
+		wantOpenError bool // opening this blob should fail with returning an error
 	}{
 		{
 			name:      "empty",
@@ -1473,6 +1475,13 @@ func testWriteAndOpen(t *TestRunner, controllers ...TestingControllerFactory) {
 				hasFileContentsRange("foo3", len(data64KB)-1, data64KB[len(data64KB)-1:]),
 			),
 		},
+		{
+			name: "cyclic_hardlink",
+			in: tarOf(
+				link("foo", "foo"),
+			),
+			wantOpenError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1544,6 +1553,9 @@ func testWriteAndOpen(t *TestRunner, controllers ...TestingControllerFactory) {
 								WithTelemetry(telemetry),
 							)
 							if err != nil {
+								if tt.wantOpenError {
+									return
+								}
 								t.Fatalf("stargz.Open: %v", err)
 							}
 							if _, ok := r.Lookup(""); !ok {
@@ -1620,24 +1632,24 @@ func newCalledTelemetry() (telemetry *Telemetry, check func(needsGetTOC bool) er
 	var getTocLatencyCalled bool
 	var deserializeTocLatencyCalled bool
 	return &Telemetry{
-			func(time.Time) { getFooterLatencyCalled = true },
-			func(time.Time) { getTocLatencyCalled = true },
-			func(time.Time) { deserializeTocLatencyCalled = true },
-		}, func(needsGetTOC bool) error {
-			var allErr []error
-			if !getFooterLatencyCalled {
-				allErr = append(allErr, fmt.Errorf("metrics GetFooterLatency isn't called"))
-			}
-			if needsGetTOC {
-				if !getTocLatencyCalled {
-					allErr = append(allErr, fmt.Errorf("metrics GetTocLatency isn't called"))
-				}
-			}
-			if !deserializeTocLatencyCalled {
-				allErr = append(allErr, fmt.Errorf("metrics DeserializeTocLatency isn't called"))
-			}
-			return errors.Join(allErr...)
+		func(time.Time) { getFooterLatencyCalled = true },
+		func(time.Time) { getTocLatencyCalled = true },
+		func(time.Time) { deserializeTocLatencyCalled = true },
+	}, func(needsGetTOC bool) error {
+		var allErr []error
+		if !getFooterLatencyCalled {
+			allErr = append(allErr, fmt.Errorf("metrics GetFooterLatency isn't called"))
 		}
+		if needsGetTOC {
+			if !getTocLatencyCalled {
+				allErr = append(allErr, fmt.Errorf("metrics GetTocLatency isn't called"))
+			}
+		}
+		if !deserializeTocLatencyCalled {
+			allErr = append(allErr, fmt.Errorf("metrics DeserializeTocLatency isn't called"))
+		}
+		return errors.Join(allErr...)
+	}
 }
 
 func digestFor(content string) string {
@@ -2150,15 +2162,19 @@ func file(name, contents string, opts ...any) tarEntry {
 		if len(xattrs) > 0 {
 			format = tar.FormatPAX // only PAX supports xattrs
 		}
+		xattrsPAXRecords := make(map[string]string)
+		for k, v := range xattrs {
+			xattrsPAXRecords["SCHILY.xattr."+k] = v
+		}
 		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     prefix + name,
-			Mode:     tm,
-			Xattrs:   xattrs,
-			Size:     int64(len(contents)),
-			Uid:      o.uid,
-			Gid:      o.gid,
-			Format:   format,
+			Typeflag:   tar.TypeReg,
+			Name:       prefix + name,
+			Mode:       tm,
+			PAXRecords: xattrsPAXRecords,
+			Size:       int64(len(contents)),
+			Uid:        o.uid,
+			Gid:        o.gid,
+			Format:     format,
 		}); err != nil {
 			return err
 		}

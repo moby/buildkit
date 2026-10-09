@@ -285,7 +285,7 @@ func (r *Reader) initFields() error {
 		pdir := r.getOrCreateDir(pdirName)
 		ent.NumLink++ // at least one name(ent.Name) references this entry.
 		if ent.Type == "hardlink" {
-			org, err := r.getSource(ent)
+			org, err := r.getSource(ent, make(map[string]struct{}))
 			if err != nil {
 				return err
 			}
@@ -318,13 +318,18 @@ func (r *Reader) initFields() error {
 	return nil
 }
 
-func (r *Reader) getSource(ent *TOCEntry) (_ *TOCEntry, err error) {
+func (r *Reader) getSource(ent *TOCEntry, visited map[string]struct{}) (_ *TOCEntry, err error) {
 	if ent.Type == "hardlink" {
-		org, ok := r.m[cleanEntryName(ent.LinkName)]
+		entName := cleanEntryName(ent.LinkName)
+		if _, ok := visited[entName]; ok {
+			return nil, fmt.Errorf("cyclic hardlink detected")
+		}
+		visited[entName] = struct{}{}
+		org, ok := r.m[entName]
 		if !ok {
 			return nil, fmt.Errorf("%q is a hardlink but the linkname %q isn't found", ent.Name, ent.LinkName)
 		}
-		ent, err = r.getSource(org)
+		ent, err = r.getSource(org, visited)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +497,7 @@ func (r *Reader) Lookup(path string) (e *TOCEntry, ok bool) {
 	e, ok = r.m[path]
 	if ok && e.Type == "hardlink" {
 		var err error
-		e, err = r.getSource(e)
+		e, err = r.getSource(e, make(map[string]struct{}))
 		if err != nil {
 			return nil, false
 		}

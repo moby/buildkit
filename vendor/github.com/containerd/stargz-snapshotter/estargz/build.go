@@ -51,6 +51,7 @@ type options struct {
 	compression            Compression
 	ctx                    context.Context
 	minChunkSize           int
+	parallelism            int
 	gzipHelperFunc         GzipHelperFunc
 }
 
@@ -125,6 +126,20 @@ func WithContext(ctx context.Context) Option {
 func WithMinChunkSize(minChunkSize int) Option {
 	return func(o *options) error {
 		o.minChunkSize = minChunkSize
+		return nil
+	}
+}
+
+// WithParallelism option specifies the number of workers used to build the
+// layer. The tar is sliced into this many parts that are compressed
+// concurrently, so the value also fixes the resulting chunk boundaries: pinning
+// it makes builds reproducible across machines regardless of their CPU count.
+// Zero (the default) selects runtime.GOMAXPROCS(0); a value of 1 forces a fully
+// sequential build. This has no effect together with WithMinChunkSize, which is
+// always built with a single worker.
+func WithParallelism(workers int) Option {
+	return func(o *options) error {
+		o.parallelism = workers
 		return nil
 	}
 }
@@ -223,13 +238,20 @@ func Build(tarBlob *io.SectionReader, opt ...Option) (_ *Blob, rErr error) {
 	if err != nil {
 		return nil, err
 	}
+	// The worker count slices the tar and so fixes the chunk boundaries; an
+	// explicit value is honored verbatim, which keeps builds reproducible across
+	// machines. Zero falls back to GOMAXPROCS.
+	workers := opts.parallelism
+	if workers <= 0 {
+		workers = runtime.GOMAXPROCS(0)
+	}
 	var tarParts [][]*entry
 	if opts.minChunkSize > 0 {
 		// Each entry needs to know the size of the current gzip stream so they
 		// cannot be processed in parallel.
 		tarParts = [][]*entry{entries}
 	} else {
-		tarParts = divideEntries(entries, runtime.GOMAXPROCS(0))
+		tarParts = divideEntries(entries, workers)
 	}
 	writers := make([]*Writer, len(tarParts))
 	payloads := make([]*os.File, len(tarParts))
