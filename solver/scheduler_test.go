@@ -4316,3 +4316,56 @@ type testExporterRecord struct {
 	results int
 	links   int
 }
+
+func TestLoadOntoMergedEdgeSurvivesOwnerDiscard(t *testing.T) {
+	// A job that loads a vertex whose edge was already merged into another
+	// state must keep that owner state, and its inputs, active.
+	t.Parallel()
+	ctx := t.Context()
+
+	s := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer s.Close()
+
+	depV0 := vtxConst(1, vtxOpt{name: "depV0"})
+	depV1 := vtxConst(1, vtxOpt{name: "depV1"})
+	v0 := vtxAdd(2, vtxOpt{name: "v0", inputs: []Edge{{Vertex: depV0}}})
+	v1 := vtxAdd(2, vtxOpt{name: "v1", inputs: []Edge{{Vertex: depV1}}})
+
+	j0, err := s.NewJob("job0")
+	require.NoError(t, err)
+	_, err = j0.Build(ctx, Edge{Vertex: v0})
+	require.NoError(t, err)
+
+	// j1's v1 edge merges into v0's state
+	j1, err := s.NewJob("job1")
+	require.NoError(t, err)
+	_, err = j1.Build(ctx, Edge{Vertex: v1})
+	require.NoError(t, err)
+	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
+
+	// j2 loads v1 itself after the merge, so it lands on the merge source
+	j2, err := s.NewJob("job2")
+	require.NoError(t, err)
+	_, err = j2.Build(ctx, Edge{Vertex: v1})
+	require.NoError(t, err)
+
+	require.NoError(t, j0.Discard())
+	require.NoError(t, j1.Discard())
+
+	require.Contains(t, s.actives, v1.Digest())
+	require.Contains(t, s.actives, v0.Digest(), "owner of j2's merged v1 edge was deleted")
+	require.Contains(t, s.actives, depV0.Digest(), "input of the owner of j2's merged v1 edge was deleted")
+
+	// j2 builds on v1 again through a new vertex
+	v2 := vtxSum(1, vtxOpt{name: "v2", inputs: []Edge{{Vertex: v1}}})
+	res, err := j2.Build(ctx, Edge{Vertex: v2})
+	require.NoError(t, err)
+	require.Equal(t, 4, unwrapInt(res))
+
+	require.NoError(t, j2.Discard())
+	for _, v := range []Vertex{v0, v1, v2, depV0, depV1} {
+		require.NotContains(t, s.actives, v.Digest())
+	}
+}
