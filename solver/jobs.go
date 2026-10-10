@@ -312,6 +312,21 @@ func (s *state) addJobs(srcState *state, memo map[*state]struct{}) {
 	}
 }
 
+// addJobsToOwners adds the jobs of s to the states that own its merged edges,
+// and to their ancestors.
+// requires that Solver.mu is locked and s.mu is locked
+func (s *state) addJobsToOwners() {
+	memo := map[*state]struct{}{s: {}}
+	for _, e := range s.edges {
+		for e.owner != nil {
+			e = e.owner
+			if ownerState, ok := s.solver.actives[e.edge.Vertex.Digest()]; ok {
+				ownerState.addJobs(s, memo)
+			}
+		}
+	}
+}
+
 func (s *state) combinedCacheManager() CacheManager {
 	s.mu.RLock()
 	cms := make([]CacheManager, 0, len(s.cache)+1)
@@ -657,6 +672,10 @@ func (jl *Solver) loadUnlocked(ctx context.Context, v, parent Vertex, j *Job, ca
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
 			st.jobs[j] = struct{}{}
+			// An edge of st may already be merged into another state. setEdge
+			// only gave the owner the jobs st had at merge time, so give it this
+			// one too, or discarding the owner's jobs deletes states j still uses.
+			st.addJobsToOwners()
 		}
 	}
 	st.mu.Unlock()
