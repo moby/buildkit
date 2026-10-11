@@ -128,6 +128,15 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	var a *llb.FileAction
 
 	for _, src := range cfg.params.SourcePaths {
+		if src == "" {
+			// NormalizePath treats an empty path as the parent, which is the
+			// build context root. Reject it before that rewrite.
+			name := "COPY"
+			if cfg.isAddCommand {
+				name = "ADD"
+			}
+			return errors.Errorf("%s source can't be empty", name)
+		}
 		commitMessage.WriteString(" " + src)
 		gitRef, isGit, gitRefErr := dfgitutil.ParseGitRef(src)
 		if gitRefErr != nil && isGit {

@@ -545,3 +545,39 @@ func TestCopyLinkChownByName(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyEmptySource(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		df   string
+		err  string
+	}{
+		{
+			name: "json",
+			df:   "FROM scratch\nCOPY [\"\", \"/tmp/file\"]\n",
+			err:  "COPY source can't be empty",
+		},
+		{
+			name: "quoted",
+			df:   "FROM scratch\nCOPY \"\" /tmp/file\n",
+			err:  "COPY source can't be empty",
+		},
+		{
+			name: "expanded",
+			df:   "FROM scratch\nARG EMPTY\nCOPY ${EMPTY} /tmp/file\n",
+			err:  "COPY source can't be empty",
+		},
+		{
+			name: "add",
+			df:   "FROM scratch\nADD [\"\", \"/tmp/file\"]\n",
+			err:  "ADD source can't be empty",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Dockerfile2LLB(appcontext.Context(), []byte(tc.df), ConvertOpt{})
+			require.ErrorContains(t, err, tc.err)
+		})
+	}
+}
