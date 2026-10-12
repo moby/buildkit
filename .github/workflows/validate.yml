@@ -24,7 +24,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       includes: ${{ steps.matrix.outputs.includes }}
     steps:
@@ -54,9 +54,9 @@ jobs:
             const privateRepo = core.getBooleanInput('private-repo');
             matrix.forEach(job => {
               if (job.platforms && job.platforms.startsWith('linux/arm') && !privateRepo) {
-                job.runner = 'ubuntu-24.04-arm';
+                job.runner = 'ubuntu-26.04-arm';
               } else {
-                job.runner = 'ubuntu-24.04';
+                job.runner = 'ubuntu-26.04';
               }
             });
             core.info(JSON.stringify(matrix, null, 2));
