@@ -42,7 +42,7 @@ jobs:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       includes: ${{ steps.set.outputs.includes }}
       tag: ${{ steps.set.outputs.tag }}
@@ -137,7 +137,7 @@ jobs:
       contents: read # same as global permission
       id-token: write # for signing attestations, cache entries and logging in to Docker Hub with GitHub OIDC
     with:
-      runner: ubuntu-24.04
+      runner: ubuntu-26.04
       target: frontend-image-cross
       cache: true
       cache-scope: frontend-${{ matrix.channel }}
@@ -187,7 +187,7 @@ jobs:
           connection_id: ${{ vars.DOCKERFILE_OIDC_CONNECTIONID }}
 
   scout:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ github.repository == 'moby/buildkit' && github.ref == 'refs/heads/master' }}
     permissions:
       contents: read # same as global permission
@@ -230,7 +230,7 @@ jobs:
           sarif_file: ${{ steps.scout.outputs.result-file }}
 
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: startsWith(github.ref, 'refs/tags/dockerfile')
     permissions:
       # required to create GitHub release

@@ -37,7 +37,7 @@ env:
 jobs:
   create:
     if: ${{ github.repository == 'moby/buildkit' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read # same as global permission
       id-token: write # for logging in to Docker Hub with GitHub OIDC
