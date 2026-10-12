@@ -21,37 +21,21 @@ type Store struct {
 	results solver.CacheResultStorage
 }
 
-func NewStore(path string, results solver.CacheResultStorage) (*Store, error) {
+func NewStore(ctx context.Context, path string, results solver.CacheResultStorage) (*Store, error) {
 	db, err := sqliteOpen(path)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &Store{
-		db:      db,
-		results: results,
-	}
-	if err := s.autoMigrate(); err != nil {
-		_ = s.db.Close()
+	if err := Migrate(ctx, db); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
-	return s, nil
-}
 
-func (s *Store) autoMigrate() error {
-	for _, stmt := range []string{
-		createTableRecordsSQL,
-		createTableLinksSQL,
-		createIndexLinksSourceRecordSQL,
-		createIndexRecordsIDSQL,
-		createIndexRecordsIDAndRecordSQL,
-		createIndexSearchLinksSQL,
-	} {
-		if _, err := s.db.ExecContext(context.TODO(), stmt); err != nil {
-			return err
-		}
-	}
-	return nil
+	return &Store{
+		db:      db,
+		results: results,
+	}, nil
 }
 
 func (s *Store) Query(deps []solver.CacheKeyWithSelector, input solver.Index, dgst digest.Digest, output solver.Index) ([]*solver.CacheKey, error) {

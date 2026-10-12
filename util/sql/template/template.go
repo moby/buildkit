@@ -28,6 +28,10 @@ func New(name string) *Template {
 	}
 }
 
+func (t *Template) Name() string {
+	return t.inner.Name()
+}
+
 func (t *Template) Parse(text string) (*Template, error) {
 	inner, err := t.inner.Parse(text)
 	if err != nil {
@@ -63,13 +67,12 @@ func (t *Template) ExecContext(ctx context.Context, db StatementPreparer, data a
 	})
 }
 
-func withStmt[Result any](ctx context.Context, t *Template, db StatementPreparer, data any, fn func(*sql.Stmt, []any) (Result, error)) (res Result, _ error) {
+func (t *Template) PrepareContext(ctx context.Context, db StatementPreparer, data any) (_ *sql.Stmt, args []any, _ error) {
 	tmpl, err := t.inner.Clone()
 	if err != nil {
-		return res, err
+		return nil, nil, err
 	}
 
-	var args []any
 	tmpl = tmpl.Funcs(text.FuncMap{
 		"bind": func(arg any) string {
 			args = append(args, arg)
@@ -80,10 +83,18 @@ func withStmt[Result any](ctx context.Context, t *Template, db StatementPreparer
 
 	var sb strings.Builder
 	if err := tmpl.Execute(&sb, data); err != nil {
-		return res, err
+		return nil, nil, err
 	}
 
 	stmt, err := db.PrepareContext(ctx, sb.String())
+	if err != nil {
+		return nil, nil, err
+	}
+	return stmt, args, nil
+}
+
+func withStmt[Result any](ctx context.Context, t *Template, db StatementPreparer, data any, fn func(*sql.Stmt, []any) (Result, error)) (res Result, _ error) {
+	stmt, args, err := t.PrepareContext(ctx, db, data)
 	if err != nil {
 		return res, err
 	}

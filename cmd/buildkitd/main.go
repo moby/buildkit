@@ -1257,7 +1257,7 @@ func newCacheManager(ctx context.Context, id string, cfg *config.Config, wc *wor
 	if _, err := os.Stat(boltDBPath); os.IsNotExist(err) {
 		// Attempt to use the sqlite database.
 		fpath := filepath.Join(cfg.Root, "buildkitd.db")
-		store, err := sqlitecachestorage.NewStore(fpath, results)
+		store, err := sqlitecachestorage.NewStore(ctx, fpath, results)
 		if err == nil {
 			bklog.G(ctx).Info("using sqlite database")
 			return solver.NewCacheManager(ctx, id, store), store, nil

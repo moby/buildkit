@@ -8,7 +8,7 @@ import (
 
 const (
 	createTableLinksSQL = `
-CREATE TABLE IF NOT EXISTS cache_links (
+CREATE TABLE cache_links (
 	source_record text NOT NULL,
 	digest text NOT NULL,
 	output_index NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS cache_links (
 `
 
 	createTableRecordsSQL = `
-CREATE TABLE IF NOT EXISTS cache_records (
+CREATE TABLE cache_records (
 	id text NOT NULL,
 	record_id NOT NULL,
 	created_at datetime,
@@ -29,17 +29,17 @@ CREATE TABLE IF NOT EXISTS cache_records (
 `
 
 	createIndexLinksSourceRecordSQL = `
-CREATE INDEX IF NOT EXISTS cache_links_source_record_index
+CREATE INDEX cache_links_source_record_index
 ON cache_links (source_record);
 `
 
 	createIndexRecordsIDSQL = `
-CREATE INDEX IF NOT EXISTS cache_records_id_index
+CREATE INDEX cache_records_id_index
 ON cache_records (id);
 `
 
 	createIndexRecordsIDAndRecordSQL = `
-CREATE INDEX IF NOT EXISTS cache_records_id_index
+CREATE INDEX cache_records_id_and_record_id_index
 ON cache_records (id, record_id);
 `
 
@@ -132,7 +132,7 @@ WHERE target_record NOT IN live_records
 	// before the digest and selector since the indices are constants and
 	// the digest and selector may have multiple possible options.
 	createIndexSearchLinksSQL = `
-CREATE INDEX IF NOT EXISTS cache_links_search_links_index
+CREATE INDEX cache_links_search_links_index
 ON cache_links (output_index, input_index, digest, selector)
 `
 )
