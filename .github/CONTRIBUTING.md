@@ -40,6 +40,20 @@ inline.
 **Do not forget to remove sensitive data from your logfiles before submitting**
  (you can replace those parts with "REDACTED").
 
+## AI-Assisted contributions
+
+Most BuildKit maintainers use AI development tools, and contributions created with the help of such tools are welcome.
+
+That said, if you are new to the project or not yet familiar with the codebase, we generally prefer that you open an issue instead of submitting a pull request. Reviewing an AI-generated PR can require a maintainer to spend more time verifying that every part of the patch is correct than it took to generate the patch in the first place. Such PRs are therefore more likely to stall in the review queue.
+
+In these cases, it is usually more efficient for maintainers to take a well-described issue and use AI tooling themselves, in a workflow where they can verify the analysis and ensure that any resulting patch is appropriate for the BuildKit codebase.
+
+Feel free to use AI tools when preparing issues. We especially appreciate reports that include a reproducer or a failing integration test demonstrating the problem. Preliminary analysis of the possible root cause or a potential fix is also useful.
+
+If you submit patches, issues, or other content produced by AI tooling whose correctness you were not able to verify yourself, make that clear. In particular, please attribute GitHub comments to AI when you did not write or independently verify them yourself.
+
+Contribution farming or impersonating someone with incorrect profile information is prohibited and will not be tolerated. See [Moby AI Usage Policy](https://github.com/moby/.github/blob/main/AI_POLICY.md) for more details.
+
 ## Quick contribution tips and guidelines
 
 This section gives the experienced contributor some tips and guidelines.
