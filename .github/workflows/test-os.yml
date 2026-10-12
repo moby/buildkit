@@ -218,12 +218,11 @@ jobs:
             freebsd-version -kru
             kldstat -m nullfs >/dev/null 2>&1 || kldload nullfs
             pkg bootstrap -y
-            # TODO: Remove once latest packages include a fix for the runj exit notification regression.
-            mkdir -p /usr/local/etc/pkg/repos
-            cat > /usr/local/etc/pkg/repos/FreeBSD.conf <<'EOF'
-            FreeBSD: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/quarterly" }
-            EOF
-            pkg install -y git runj
+            pkg install -y git
+            # TODO: Pin runj until https://github.com/samuelkarp/runj/issues/72 is fixed.
+            fetch -o /tmp/runj.pkg https://pkg.FreeBSD.org/FreeBSD:14:amd64/release_5/All/runj-0.2.0_9.pkg
+            test "$(sha256 -q /tmp/runj.pkg)" = c653f741c87e0764e1ede0e3bc711c412f727aa42ab0a205ba189589e40349bc
+            pkg -o ASSUME_ALWAYS_YES=yes add /tmp/runj.pkg
       -
         name: Start daemons
         shell: freebsd {0}
