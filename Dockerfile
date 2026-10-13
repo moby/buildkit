@@ -20,7 +20,7 @@ ARG DOCKER_CLI_VERSION=${DOCKER_VERSION}
 ARG BUILDX_VERSION=0.37.1
 
 ARG EXPORT_BASE=alpine
-ARG ALPINE_VERSION=3.23
+ARG ALPINE_VERSION=3.24
 ARG UBUNTU_VERSION=24.04
 
 ARG GO_VERSION=1.27
@@ -327,6 +327,7 @@ RUN wget https://github.com/dragonflyoss/nydus/releases/download/$NYDUS_VERSION/
 RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
 
 FROM gobuild-base AS gotestsum
+ENV CGO_ENABLED=0
 ARG GOTESTSUM_VERSION
 ARG TARGETPLATFORM
 RUN --mount=target=/root/.cache,type=cache <<EOT
