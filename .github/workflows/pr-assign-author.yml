@@ -13,6 +13,6 @@ jobs:
   run:
     if: ${{ github.repository == 'moby/buildkit' }}
     uses: crazy-max/.github/.github/workflows/pr-assign-author.yml@f91220cba053bd54299ba645a599ee8ed436f222 # v1.11.0
-    permissions:
+    permissions:admin
       contents: read
       pull-requests: write
