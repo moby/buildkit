@@ -4,7 +4,7 @@ ARG RUNC_VERSION=v1.5.2
 ARG CONTAINERD_VERSION=v2.4.1
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
 ARG CONTAINERD_ALT_VERSION_23=v2.3.6
-ARG REGISTRY_VERSION=v2.8.3
+ARG REGISTRY_VERSION=v3.1.2
 ARG ROOTLESSKIT_VERSION=v3.2.0
 ARG CNI_VERSION=v1.9.1
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.18.2
@@ -290,12 +290,9 @@ ARG TARGETPLATFORM
 RUN --mount=target=/root/.cache,type=cache <<EOT
   set -ex
   mkdir /out
-  export GOPATH="$(pwd)/Godeps/_workspace:$GOPATH"
-  GO111MODULE=off CGO_ENABLED=0 xx-go build -o /out/registry ./cmd/registry
-  xx-verify --static /out/registry
-  if [ "$(xx-info os)" = "windows" ]; then
-    mv /out/registry /out/registry.exe
-  fi
+  ext=$(xx-go env GOEXE)
+  CGO_ENABLED=0 xx-go build -o "/out/registry${ext}" ./cmd/registry
+  xx-verify --static "/out/registry${ext}"
 EOT
 
 FROM gobuild-base AS rootlesskit
