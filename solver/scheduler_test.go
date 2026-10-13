@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -206,6 +208,84 @@ func TestSingleLevelActiveGraph(t *testing.T) {
 
 	require.Equal(t, int64(1), *g4.Vertex.(*vertex).cacheCallCount)
 	require.Equal(t, int64(1), *g4.Vertex.(*vertex).execCallCount)
+}
+
+func TestProgressSnapshotDuringCompletion(t *testing.T) {
+	t.Parallel()
+	for range 100 {
+		pr, ctx, cancel := progress.NewContext(t.Context())
+		pw, _, _ := progress.NewFromContext(ctx)
+		j := &Job{pw: pw}
+		st := &state{
+			mpw:   progress.NewMultiWriter(),
+			allPw: map[progress.Writer]struct{}{},
+			jobs:  map[*Job]struct{}{j: {}},
+		}
+		completed := st.notifyStarted(progress.WithProgress(ctx, st.mpw), false)
+		start := make(chan struct{})
+		var eg errgroup.Group
+		eg.Go(func() error {
+			<-start
+			completed(nil, false)
+			return nil
+		})
+		eg.Go(func() error {
+			<-start
+			(&Solver{}).connectProgressFromState(st, st)
+			return nil
+		})
+		close(start)
+		err := eg.Wait()
+		pw.Close()
+		cancel(nil)
+		require.NoError(t, err)
+		items, err := pr.Read(t.Context())
+		require.NoError(t, err)
+		require.NotEmpty(t, items)
+		last := items[len(items)-1].Sys.(client.Vertex)
+		require.NotNil(t, last.Completed, "snapshot must not overwrite completion")
+	}
+}
+
+func TestCacheOptsDuringProgress(t *testing.T) {
+	t.Parallel()
+	st := &state{
+		op: &sharedOp{
+			cacheRes: []*CacheMap{{Opts: CacheOpts{"test": "value"}}},
+		},
+	}
+	ctx := withAncestorCacheOpts(t.Context(), st)
+	getter := CacheOptGetterOf(ctx)
+
+	completed := st.notifyStarted(ctx, false)
+	require.Equal(t, "value", getter(false, "test")["test"])
+	completed(errors.New("operation failed"), false)
+	require.Empty(t, getter(false, "test"))
+
+	completed = st.notifyStarted(ctx, false)
+	completed(nil, false)
+	require.Equal(t, "value", getter(false, "test")["test"])
+
+	// Cache option lookups can run while another operation reports progress.
+	var eg errgroup.Group
+	eg.Go(func() error {
+		for range 100 {
+			completed := st.notifyStarted(ctx, false)
+			completed(errors.New("operation failed"), false)
+			completed = st.notifyStarted(ctx, true)
+			completed(nil, true)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		for range 100 {
+			if value, ok := getter(false, "test")["test"]; ok {
+				require.Equal(t, "value", value)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, eg.Wait())
 }
 
 func TestSingleLevelCache(t *testing.T) {
