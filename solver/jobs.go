@@ -57,7 +57,7 @@ type state struct {
 
 	mpw      *progress.MultiWriter
 	allPw    map[progress.Writer]struct{}
-	allPwMu  sync.Mutex // protects allPw
+	allPwMu  sync.Mutex // protects allPw and clientVertex
 	mspan    *tracing.MultiSpan
 	execSpan trace.Span
 
@@ -689,7 +689,11 @@ func (jl *Solver) connectProgressFromState(target, src *state) {
 		if _, ok := target.allPw[pw]; !ok {
 			target.mpw.Add(pw)
 			target.allPw[pw] = struct{}{}
-			pw.Write(identity.NewID(), target.clientVertex)
+			// clientVertex is mutated under allPwMu by notifyStarted, so
+			// read a copy of it under the same mutex before writing to the
+			// progress writer.
+			vtx := target.clientVertex
+			pw.Write(identity.NewID(), vtx)
 			if span != nil && span.SpanContext().IsValid() {
 				target.mspan.Add(span)
 			}
@@ -1058,7 +1062,7 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, fun
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 	s.st.execSpan = span
-	notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, true)
+	notifyCompleted := notifyStarted(ctx, s.st, true)
 	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
 	tracing.FinishWithError(span, err)
 	notifyCompleted(err, true)
@@ -1145,7 +1149,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		if s.st.mspan.Span != nil {
 			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 		}
-		notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyCompleted := notifyStarted(ctx, s.st, false)
 		notifyCompleted(err, false)
 		return "", err
 	}
@@ -1177,7 +1181,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
 			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
-			notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+			notifyCompleted := notifyStarted(ctx, s.st, false)
 			defer func() {
 				tracing.FinishWithError(span, retErr)
 				notifyCompleted(retErr, false)
@@ -1263,7 +1267,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		// no cache hit. start evaluating the node
 		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 		s.st.execSpan = span
-		notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyCompleted := notifyStarted(ctx, s.st, false)
 		defer func() {
 			tracing.FinishWithError(span, retErr)
 			notifyCompleted(retErr, false)
@@ -1390,25 +1394,35 @@ func (v *vertexWithCacheOptions) Inputs() []Edge {
 	return v.inputs
 }
 
-func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) func(err error, cached bool) {
+func notifyStarted(ctx context.Context, st *state, cached bool) func(err error, cached bool) {
 	pw, _, _ := progress.NewFromContext(ctx)
+	// clientVertex is read by connectProgressFromState under allPwMu when
+	// another job attaches to this vertex, so every write here must hold the
+	// same mutex. Copy under the lock, then emit outside it - pw.Write can
+	// block and must not be called while allPwMu is held.
 	start := time.Now()
-	v.Started = &start
-	v.Completed = nil
-	v.Cached = cached
+	st.allPwMu.Lock()
+	st.clientVertex.Started = &start
+	st.clientVertex.Completed = nil
+	st.clientVertex.Cached = cached
+	v := st.clientVertex
+	st.allPwMu.Unlock()
 	id := identity.NewID()
-	pw.Write(id, *v)
+	pw.Write(id, v)
 	return func(err error, cached bool) {
 		defer pw.Close()
 		stop := time.Now()
-		v.Completed = &stop
-		v.Cached = cached
+		st.allPwMu.Lock()
+		st.clientVertex.Completed = &stop
+		st.clientVertex.Cached = cached
 		if err != nil {
-			v.Error = err.Error()
+			st.clientVertex.Error = err.Error()
 		} else {
-			v.Error = ""
+			st.clientVertex.Error = ""
 		}
-		pw.Write(id, *v)
+		v := st.clientVertex
+		st.allPwMu.Unlock()
+		pw.Write(id, v)
 	}
 }
 
