@@ -761,19 +761,22 @@ func (dctx *dispatchContext) dispatchStages(ctx context.Context, allReachable ma
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
 
-	var dockerIgnoreMatcher *patternmatcher.PatternMatcher
-	if dctx.opt.Client != nil {
+	// .dockerignore lives in the build context, so reading it makes the
+	// context part of the build (and of its provenance). Only load it once an
+	// instruction actually copies from the context.
+	dockerIgnoreMatcher := sync.OnceValues(func() (*patternmatcher.PatternMatcher, error) {
+		if dctx.opt.Client == nil {
+			return nil, nil
+		}
 		dockerIgnorePatterns, err := dctx.opt.Client.DockerIgnorePatterns(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if len(dockerIgnorePatterns) > 0 {
-			dockerIgnoreMatcher, err = patternmatcher.New(dockerIgnorePatterns)
-			if err != nil {
-				return nil, nil, err
-			}
+		if len(dockerIgnorePatterns) == 0 {
+			return nil, nil
 		}
-	}
+		return patternmatcher.New(dockerIgnorePatterns)
+	})
 
 	for _, d := range dctx.allDispatchStates.states {
 		if !dctx.opt.AllStages {
@@ -901,16 +904,23 @@ func (dctx *dispatchContext) finalizeResultImage(ctx context.Context, target *di
 	opts := filterPaths(ctxPaths)
 	bctx := dctx.opt.MainContext
 	if dctx.opt.Client != nil {
-		var err error
-		bctx, err = dctx.opt.Client.MainContext(ctx, opts...)
-		if err != nil {
-			return err
+		// Resolving the main context reads its .dockerignore. Skip it when no
+		// instruction and no SBOM scan references the context; buildContext is
+		// then never marshaled, so leaving its output unset is safe.
+		if len(ctxPaths) > 0 || target.scanContext {
+			var err error
+			bctx, err = dctx.opt.Client.MainContext(ctx, opts...)
+			if err != nil {
+				return err
+			}
 		}
 	} else if bctx == nil {
 		bctx = dockerui.DefaultMainContext(opts...)
 	}
 
-	buildContext.Output = bctx.Output()
+	if bctx != nil {
+		buildContext.Output = bctx.Output()
+	}
 
 	defaults := []llb.ConstraintsOpt{
 		llb.Platform(dctx.platformOpt.targetPlatform),
@@ -999,7 +1009,7 @@ type dispatchOpt struct {
 	llbCaps             *apicaps.CapSet
 	sourceMap           *llb.SourceMap
 	lint                *linter.Linter
-	dockerIgnoreMatcher *patternmatcher.PatternMatcher
+	dockerIgnoreMatcher func() (*patternmatcher.PatternMatcher, error)
 }
 
 func getEnv(state llb.State) shell.EnvGetter {
@@ -1072,6 +1082,13 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true, &opt)
 	case *instructions.AddCommand:
+		var ignoreMatcher *patternmatcher.PatternMatcher
+		if slices.ContainsFunc(c.SourcePaths, isContextSourcePath) {
+			ignoreMatcher, err = opt.dockerIgnoreMatcher()
+			if err != nil {
+				return err
+			}
+		}
 		err = dispatchCopy(d, copyConfig{
 			params:          c.SourcesAndDest,
 			excludePatterns: c.ExcludePatterns,
@@ -1085,12 +1102,12 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			checksum:        c.Checksum,
 			unpack:          c.Unpack,
 			location:        c.Location(),
-			ignoreMatcher:   opt.dockerIgnoreMatcher,
+			ignoreMatcher:   ignoreMatcher,
 			opt:             opt,
 		})
 		if err == nil {
 			for _, src := range c.SourcePaths {
-				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+				if isContextSourcePath(src) {
 					d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
 				}
 			}
@@ -1126,8 +1143,12 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 				return errors.Errorf("cannot copy from stage %q, it needs to be defined before current stage %q", c.From, d.stageName)
 			}
 			l = src.state
-		} else {
-			ignoreMatcher = opt.dockerIgnoreMatcher
+		} else if len(c.SourcePaths) > 0 {
+			// heredoc-only COPY has no source paths and does not read the context
+			ignoreMatcher, err = opt.dockerIgnoreMatcher()
+			if err != nil {
+				return err
+			}
 		}
 		err = dispatchCopy(d, copyConfig{
 			params:          c.SourcesAndDest,
@@ -1863,6 +1884,12 @@ func normalizeContextPaths(paths map[string]struct{}) []string {
 
 	slices.Sort(pathSlice)
 	return pathSlice
+}
+
+// isContextSourcePath reports whether an ADD source refers to the build
+// context rather than to a remote URL.
+func isContextSourcePath(src string) bool {
+	return !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://")
 }
 
 // filterPaths returns the local options required to filter an llb.Local

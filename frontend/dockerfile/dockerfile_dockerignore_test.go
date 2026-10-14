@@ -204,3 +204,67 @@ foo
 	}, nil)
 	require.NoError(t, err)
 }
+
+// testDockerignoreInvalidUnusedContext verifies that a Dockerfile which never
+// reads from the build context does not load (or validate) the context's
+// .dockerignore, so an invalid ignore file is not an error in that case.
+func testDockerignoreInvalidUnusedContext(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	for _, tc := range []struct {
+		name       string
+		dockerfile []byte
+	}{
+		{
+			name: "env-only",
+			dockerfile: []byte(integration.UnixOrWindows(
+				`
+FROM scratch
+ENV FOO=bar
+`,
+				`
+FROM nanoserver
+ENV FOO=bar
+`,
+			)),
+		},
+		{
+			// a heredoc COPY has no source paths, so it does not read the context
+			name: "heredoc-copy",
+			dockerfile: []byte(integration.UnixOrWindows(
+				`
+FROM scratch
+COPY <<EOF /foo
+hello
+EOF
+`,
+				`
+FROM nanoserver
+COPY <<EOF foo
+hello
+EOF
+`,
+			)),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := integration.Tmpdir(
+				t,
+				fstest.CreateFile("Dockerfile", tc.dockerfile, 0600),
+				fstest.CreateFile(".dockerignore", []byte("!\n"), 0600),
+			)
+
+			c, err := client.New(sb.Context(), sb.Address())
+			require.NoError(t, err)
+			defer c.Close()
+
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
+				},
+			}, nil)
+			require.NoError(t, err)
+		})
+	}
+}
