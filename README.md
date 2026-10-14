@@ -283,7 +283,8 @@ Keys supported by image output:
 * `push=true`: push after creating the image
 * `push-by-digest=true`: push unnamed image
 * `registry.insecure=true`: push to insecure HTTP registry
-* `oci-mediatypes=<true|false>`: use OCI media types for image manifests, indexes and configuration JSON instead of Docker's
+* `oci-mediatypes=<true|false>`: use OCI media types for image manifests, indexes and configuration JSON instead of Docker's.
+  See [media type defaults and attestation requirements](docs/build-repro.md#compatibility-version).
 * `oci-artifact=true`: use OCI artifact format for attestations when OCI media types are enabled. Set to `false` to use the legacy attestation image manifest format.
 * `unpack=true`: unpack image after creation (for use with containerd)
 * `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
@@ -299,20 +300,6 @@ Keys supported by image output:
   * `<type>` specifies what object to attach to, and can be any of `manifest` (the default), `manifest-descriptor`, `index` and `index-descriptor`
   * `<platform>` specifies which objects to attach to (by default, all), and is the same key passed into the `platform` opt, see [`docs/multi-platform.md`](docs/multi-platform.md).
   * See [`docs/annotations.md`](docs/annotations.md) for more details.
-
-Image outputs use OCI media types by default. To select Docker media types, set
-`oci-mediatypes=false`. See [`docs/build-repro.md`](docs/build-repro.md#compatibility-version)
-for the defaults used by older `compatibility-version` values.
-
-Exporting attestations, such as provenance or SBOM, requires OCI media types.
-Annotations on the `index`, `index-descriptor` or `manifest-descriptor` also require
-OCI media types. Combining these with `oci-mediatypes=false` fails the export
-instead of overriding the explicit setting. Manifest annotations can also be
-exported with Docker media types.
-
-Buildx enables [minimal provenance attestations](https://docs.docker.com/build/metadata/attestations/)
-by default. When selecting Docker media types with Buildx, disable attestations
-with `--provenance=false --sbom=false` as well as setting `oci-mediatypes=false`.
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
