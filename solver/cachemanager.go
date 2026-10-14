@@ -89,6 +89,8 @@ func (c *cacheManager) query(deps []CacheKeyWithSelector, input Index, dgst dige
 	}
 
 	for i, ck := range keys {
+		ck.digest = dgst
+		ck.output = output
 		if ck.equiv == nil {
 			ck.equiv = map[*cacheManager]*CacheKey{}
 		}

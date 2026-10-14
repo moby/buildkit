@@ -75,6 +75,7 @@ func (s *Store) Query(deps []solver.CacheKeyWithSelector, input solver.Index, dg
 			rows.Close()
 			return nil, err
 		}
+		keys = append(keys, key)
 	}
 
 	if err := rows.Close(); err != nil {
@@ -98,10 +99,11 @@ func (s *Store) Records(ctx context.Context, ck *solver.CacheKey) ([]*solver.Cac
 		}
 		records = append(records, &record)
 	}
-	if err := rows.Err(); err != nil {
+
+	if err := rows.Close(); err != nil {
 		return nil, err
 	}
-	return records, nil
+	return records, rows.Err()
 }
 
 func (s *Store) Load(ctx context.Context, key *solver.CacheKey, id string) (solver.Result, error) {
@@ -228,7 +230,17 @@ func (s *Store) Parents(ctx context.Context, id string) iterutil.FallibleSeq2[st
 		}
 
 		for _, e := range elems {
-			if !yield(e.Key, e.Value) {
+			// WalkBacklinks in bbolt cache storage does this and I don't
+			// really know why but it's needed for the two to be compatible.
+			// Might be good if this functionality was moved out of WalkBacklinks
+			// and into the exporter directly if this behavior is required.
+			// TODO: It should be pretty easy to move this logic actually
+			// so let's do that after everything else is shown to have feature parity.
+			link := e.Value
+			link.Digest = digest.FromBytes(fmt.Appendf(nil, "%s@%d", link.Digest, link.Output))
+			link.Output = 0
+
+			if !yield(e.Key, link) {
 				break
 			}
 		}

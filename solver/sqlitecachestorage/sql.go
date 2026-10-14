@@ -128,27 +128,27 @@ WHERE target_record NOT IN live_records
 	// createIndexSearchLinksSQL creates an index used by queryLinksSQL
 	// to search for source records based on digest and selector.
 	//
-	// The order of the index here is important with the indices being
-	// before the digest and selector since the indices are constants and
-	// the digest and selector may have multiple possible options.
+	// The order of the index here is important with the constants being
+	// before the dependency keys.
 	createIndexSearchLinksSQL = `
 CREATE INDEX cache_links_search_links_index
-ON cache_links (output_index, input_index, digest, selector)
+ON cache_links (digest, output_index, input_index, source_record, selector)
 `
 )
 
 var (
 	queryLinksSQL = tmpl("queryLinksSQL", `
 WITH
-	cache_link_candidates (source_record, digest, selector) AS (
-		SELECT source_record, digest, selector
+	cache_link_candidates (source_record, selector, target_record) AS (
+		SELECT source_record, selector, target_record
 		FROM cache_links
-		WHERE output_index = {{bind .Output}}
+		WHERE digest = {{bind .Digest}}
+		  AND output_index = {{bind .Output}}
 		  AND input_index = {{bind .Input}}
 	)
-SELECT DISTINCT source_record AS id
+SELECT DISTINCT target_record AS id
 FROM cache_link_candidates
-WHERE (digest, selector) IN ({{range $i, $d := .Deps}}{{if ne $i 0}},{{end}}({{bind $d.CacheKey.ID}}, {{bind $d.Selector}}){{end}})
+WHERE (source_record, selector) IN ({{range $i, $d := .Deps}}{{if ne $i 0}},{{end}}({{bind $d.CacheKey.ID}}, {{bind $d.Selector}}){{end}})
 ORDER BY id ASC
 `)
 
