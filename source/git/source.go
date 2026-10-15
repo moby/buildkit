@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -293,6 +294,8 @@ type gitSourceHandler struct {
 	src         GitIdentifier
 	cacheKey    string
 	cacheCommit string
+	cacheRef    string
+	tags        []string
 	sha256      bool
 	sm          *session.Manager
 	authArgs    []string
@@ -311,11 +314,16 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 		if ref != "" {
 			key += "#" + ref
 		}
-		if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
-			key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
-		}
-		if gs.src.FetchTags && (gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0) {
-			key += "(fetch-tags=true)"
+		if path.Join("/", gs.src.Subdir) == "/" {
+			if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
+				key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
+			}
+			if gs.src.FetchTags && (gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0) {
+				key += "(fetch-tags=true)"
+			}
+			if gs.tags != nil {
+				key += "(tags=" + digest.FromString(strings.Join(gs.tags, "\n")).String() + ")"
+			}
 		}
 	}
 	if gs.src.Subdir != "" {
@@ -355,6 +363,7 @@ func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *se
 	}
 
 	gsh.cacheCommit = md.Checksum
+	gsh.cacheRef = md.Ref
 	gsh.sha256 = len(md.Checksum) == 64
 
 	if !opt.ReturnObject && id.VerifySignature == nil {
@@ -787,6 +796,25 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobConte
 	}
 
 	gs.sha256 = len(md.Checksum) == 64
+	gs.cacheRef = md.Ref
+	if gs.src.Bundle == "" && !gs.src.CheckoutBundle && gs.src.KeepGitDir && path.Join("/", gs.src.Subdir) == "/" && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
+		var g session.Group
+		if jobCtx != nil {
+			g = jobCtx.Session()
+		}
+		gs.getAuthToken(ctx, g)
+		git, cleanup, err := gs.emptyGitCli(ctx, g)
+		if err != nil {
+			return "", "", nil, false, err
+		}
+		defer cleanup()
+		out, err := git.Run(ctx, "ls-remote", "--refs", "--tags", "--", gs.src.Remote)
+		if err != nil {
+			return "", "", nil, false, errors.Wrap(err, "failed to resolve git tags")
+		}
+		gs.tags = strings.Split(strings.TrimSpace(string(out)), "\n")
+		slices.Sort(gs.tags)
+	}
 
 	if gs.src.VerifySignature != nil {
 		gs.cacheCommit = md.Checksum
@@ -859,6 +887,9 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	// bare repo, so resolve the checksum directly.
 	if gs.src.FetchByCommit && gs.src.Checksum != "" {
 		ref = gs.src.Checksum
+	}
+	if repo.checkoutRef != "" {
+		ref = repo.checkoutRef
 	}
 	git := repo.GitCLI
 	if gs.src.Checksum != "" {
@@ -947,8 +978,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 
 type gitRepo struct {
 	*gitutil.GitCLI
-	dir       string
-	releasers []func() error
+	dir         string
+	checkoutRef string
+	releasers   []func() error
 }
 
 func (g *gitRepo) Release() error {
@@ -984,6 +1016,76 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		return nil, err
 	}
 	repo.releasers = append(repo.releasers, cleanup)
+
+	// Tag-enabled fetches must not inherit or mutate the shared repository's
+	// refs and shallow boundaries. Only the finished snapshot is cached.
+	if gs.src.Bundle == "" && !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
+		dir, err := os.MkdirTemp("", "buildkit-git-tags-")
+		if err != nil {
+			return nil, err
+		}
+		repo.releasers = append(repo.releasers, func() error { return os.RemoveAll(dir) })
+		repo.dir = dir
+		repo.GitCLI = git.New(gitutil.WithGitDir(dir))
+		repo.checkoutRef = "refs/buildkit/checkout"
+		args := []string{"init", "--bare"}
+		if gs.sha256 {
+			args = append(args, "--object-format=sha256")
+		}
+		if _, err := repo.Run(ctx, args...); err != nil {
+			return nil, err
+		}
+		if _, err := repo.Run(ctx, "remote", "add", "origin", gs.src.Remote); err != nil {
+			return nil, err
+		}
+		fetchRef := gs.cacheRef
+		if gs.src.FetchByCommit && gs.src.Checksum != "" {
+			fetchRef = gs.src.Checksum
+		}
+		args = []string{"fetch", "--tags"}
+		if gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0 {
+			depth := 1
+			if gs.src.FetchDepth != nil {
+				depth = *gs.src.FetchDepth
+			}
+			args = append(args, "--depth="+strconv.Itoa(depth))
+		}
+		args = append(args, "--", "origin")
+		if gitutil.IsCommitSHA(fetchRef) {
+			// Keep the SHA bare so GitCLI can retry without it when the server
+			// disallows fetching unadvertised objects directly.
+			args = append(args, fetchRef)
+		} else {
+			args = append(args, fetchRef+":"+repo.checkoutRef)
+		}
+		if _, err := repo.Run(ctx, args...); err != nil {
+			return nil, errors.Wrap(err, "failed to fetch git history and tags")
+		}
+		if gitutil.IsCommitSHA(fetchRef) {
+			if _, err := repo.Run(ctx, "update-ref", repo.checkoutRef, gs.cacheCommit); err != nil {
+				return nil, err
+			}
+		}
+		out, err := repo.Run(ctx, "rev-parse", repo.checkoutRef)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(string(out)) != gs.cacheCommit {
+			return nil, errors.New("git ref changed between resolution and fetch")
+		}
+		if gs.tags != nil {
+			out, err := repo.Run(ctx, "for-each-ref", "--format=%(objectname)%09%(refname)", "refs/tags/")
+			if err != nil {
+				return nil, err
+			}
+			tags := strings.Split(strings.TrimSpace(string(out)), "\n")
+			slices.Sort(tags)
+			if !slices.Equal(gs.tags, tags) {
+				return nil, errors.New("git tags changed between resolution and fetch")
+			}
+		}
+		return repo, nil
+	}
 
 	// Bundle mode may need to create the shared bare repo before the main
 	// fetch. Stage the bundle first so stageBundle can probe the bundle's
@@ -1203,6 +1305,9 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	// fetch-by-commit, the user-provided ref is not written into the bare
 	// repo, so fall back to the commit checksum which is always present.
 	refOrCommit := ref
+	if repo.checkoutRef != "" {
+		refOrCommit = repo.checkoutRef
+	}
 	if gs.src.FetchByCommit && gs.src.Checksum != "" {
 		refOrCommit = gs.src.Checksum
 	}
@@ -1281,7 +1386,12 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		isAnnotatedTag := strings.TrimSpace(string(gitCatFileBuf)) == "tag"
 
 		pullref := ref
-		if isAnnotatedTag {
+		if repo.checkoutRef != "" {
+			pullref = repo.checkoutRef
+			if strings.HasPrefix(gs.cacheRef, "refs/") && !strings.HasPrefix(gs.cacheRef, "refs/tags/") {
+				pullref += ":" + gs.cacheRef
+			}
+		} else if isAnnotatedTag {
 			targetRef := pullref
 			if !strings.HasPrefix(pullref, "refs/tags/") {
 				targetRef = "refs/tags/" + pullref

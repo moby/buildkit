@@ -438,6 +438,223 @@ func testFetchDepthPullRefKeepGitDir(t *testing.T, format string) {
 	requireGitDescribe(t, dir2, "lightweight-tag-2-g", "--match", "lightweight-tag*")
 }
 
+func TestFetchOptionsSubdirCacheKey(t *testing.T) {
+	for _, subdir := range []string{"", ".", "subdir"} {
+		t.Run(subdir, func(t *testing.T) {
+			gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: true, Subdir: subdir}}
+			key := gs.shaToCacheKey("commit", "refs/heads/main")
+			gs.src.FetchDepth = new(0)
+			gs.src.FetchTags = true
+			if subdir == "subdir" {
+				require.Equal(t, key, gs.shaToCacheKey("commit", "refs/heads/main"))
+			} else {
+				require.NotEqual(t, key, gs.shaToCacheKey("commit", "refs/heads/main"))
+			}
+		})
+	}
+}
+
+func TestFetchTagSnapshot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		for _, full := range []bool{false, true} {
+			for _, pinned := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/full=%t/pinned=%t", format, full, pinned), func(t *testing.T) {
+					t.Parallel()
+					ctx := logProgressStreams(t.Context(), t)
+					gs := setupGitSource(t, t.TempDir())
+					repo := setupGitRepo(t, format)
+					gitOutput := func(dir string, args ...string) string {
+						cmd := exec.CommandContext(ctx, "git", args...)
+						cmd.Dir = dir
+						out, err := cmd.CombinedOutput()
+						require.NoError(t, err, "%s", out)
+						return strings.TrimSpace(string(out))
+					}
+					id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true, FetchTags: true}
+					if full {
+						id.FetchDepth = new(0)
+					}
+					if pinned {
+						id.Ref = gitOutput(repo.mainPath, "rev-parse", "feature")
+					}
+					fetch := func() (string, string, string) {
+						g, err := gs.Resolve(ctx, id, nil, nil)
+						require.NoError(t, err)
+						key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+						require.NoError(t, err)
+						ref, err := g.Snapshot(ctx, nil)
+						require.NoError(t, err)
+						t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+						return mountRef(ctx, t, ref), key, ref.ID()
+					}
+					dir, key, snapshotID := fetch()
+					if full {
+						requireGitDescribe(t, dir, "lightweight-tag-2-g")
+					}
+					_, sameKey, sameID := fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+					for _, command := range []string{
+						"git tag release feature",
+						"git tag -f release feature~1",
+						"git tag -af -m annotated release feature~1",
+						"git tag -af -m changed-annotation release feature~1",
+						"git tag -d release lightweight-tag",
+						"git tag -l | xargs -r git tag -d",
+					} {
+						runShell(t, repo.mainPath, command)
+						dir, nextKey, nextID := fetch()
+						require.NotEqual(t, key, nextKey, command)
+						require.NotEqual(t, snapshotID, nextID, command)
+						require.Equal(t,
+							gitOutput(repo.mainPath, "for-each-ref", "--format=%(objectname) %(refname)", "refs/tags/"),
+							gitOutput(dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/tags/"), command)
+						key, snapshotID = nextKey, nextID
+					}
+					// Branch-only changes do not affect the requested tag set or selected commit.
+					runShell(t, repo.mainPath, "git branch unrelated feature~1")
+					_, sameKey, sameID = fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+
+					// A tag change between resolution and fetch must not poison the resolved key.
+					runShell(t, repo.mainPath, "git tag race feature")
+					g, err := gs.Resolve(ctx, id, nil, nil)
+					require.NoError(t, err)
+					_, _, _, _, err = g.CacheKey(ctx, nil, 0)
+					require.NoError(t, err)
+					runShell(t, repo.mainPath, "git tag -f race feature~1")
+					_, err = g.Snapshot(ctx, nil)
+					require.ErrorContains(t, err, "tags changed")
+					fetch()
+
+					// Without .git, the same tree keeps its key and snapshot after tag changes.
+					id.KeepGitDir = false
+					_, key, snapshotID = fetch()
+					runShell(t, repo.mainPath, "git tag tree-only feature")
+					_, sameKey, sameID = fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+				})
+			}
+		}
+	}
+}
+
+func TestFetchTagsRefs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			ctx := logProgressStreams(t.Context(), t)
+			repo := setupGitRepo(t, format)
+			runShell(t, repo.mainPath, "git tag feature master")
+			gitOutput := func(t *testing.T, dir string, args ...string) string {
+				t.Helper()
+				cmd := exec.CommandContext(ctx, "git", args...)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "%s", out)
+				return strings.TrimSpace(string(out))
+			}
+			sha := gitOutput(t, repo.mainPath, "rev-parse", "refs/heads/feature")
+			for _, tc := range []struct {
+				ref           string
+				checksum      string
+				fetchByCommit bool
+				branch        string
+			}{
+				{
+					ref:      "feature",
+					checksum: sha,
+					branch:   "refs/heads/feature",
+				},
+				{
+					ref:      "refs/heads/feature",
+					checksum: sha,
+					branch:   "refs/heads/feature",
+				},
+				{
+					ref:      "v1.2.3",
+					checksum: gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/v1.2.3^{}"),
+				},
+				{
+					ref:           "local-branch",
+					checksum:      sha,
+					fetchByCommit: true,
+					branch:        "refs/heads/local-branch",
+				},
+				{
+					ref:           sha,
+					fetchByCommit: true,
+				},
+			} {
+				t.Run(tc.ref, func(t *testing.T) {
+					gs := setupGitSource(t, t.TempDir())
+					id := &GitIdentifier{Remote: repo.mainURL, Ref: tc.ref, Checksum: tc.checksum, FetchByCommit: tc.fetchByCommit, KeepGitDir: true, SkipSubmodules: true, FetchTags: true, FetchDepth: new(2)}
+					g, err := gs.Resolve(ctx, id, nil, nil)
+					require.NoError(t, err)
+					ref, err := g.Snapshot(ctx, nil)
+					require.NoError(t, err)
+					t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+					dir := mountRef(ctx, t, ref)
+					expected := tc.checksum
+					if expected == "" {
+						expected = sha
+					}
+					require.Equal(t, expected, gitOutput(t, dir, "rev-parse", "HEAD"))
+					if tc.branch != "" {
+						require.Equal(t, expected, gitOutput(t, dir, "rev-parse", tc.branch))
+					}
+					require.Empty(t, gitOutput(t, dir, "for-each-ref", "refs/buildkit/"))
+				})
+			}
+		})
+	}
+}
+
+func TestFetchTagsDefaultIsolation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			ctx := logProgressStreams(t.Context(), t)
+			repo := setupGitRepo(t, format)
+			runShell(t, repo.mainPath, "git tag release-tip feature")
+			gs := setupGitSource(t, t.TempDir())
+			fetch := func(id *GitIdentifier) (string, string) {
+				g, err := gs.Resolve(ctx, id, nil, nil)
+				require.NoError(t, err)
+				key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+				require.NoError(t, err)
+				ref, err := g.Snapshot(ctx, nil)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+				cmd := exec.CommandContext(ctx, "git", "tag", "--list")
+				cmd.Dir = mountRef(ctx, t, ref)
+				out, err := cmd.Output()
+				require.NoError(t, err)
+				return string(out), key
+			}
+			id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true, FetchDepth: new(0)}
+			fetch(id)
+			id.FetchDepth = nil
+			warmTags, warmKey := fetch(id)
+			gs = setupGitSource(t, t.TempDir())
+			coldTags, coldKey := fetch(id)
+			require.Equal(t, coldKey, warmKey)
+			require.Equal(t, coldTags, warmTags)
+		})
+	}
+}
+
 func mountRef(ctx context.Context, t *testing.T, ref cache.ImmutableRef) string {
 	t.Helper()
 

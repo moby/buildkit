@@ -149,6 +149,7 @@ var allTests = integration.TestFuncs(
 	// dockerfile_git_http_test.go
 	testDockerfileFromGitSHA1,
 	testDockerfileFromGitSHA256,
+	testDockerfileGitTagsCache,
 	testDockerfileFromHTTP,
 	testHTTPDockerfile,
 
