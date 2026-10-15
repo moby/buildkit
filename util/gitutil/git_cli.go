@@ -25,6 +25,7 @@ type GitCLI struct {
 	streams       StreamFunc
 	advice        *bool
 	debugCommands bool
+	quiet         bool
 
 	workTree string
 	gitDir   string
@@ -98,6 +99,14 @@ func WithGitDir(gitDir string) Option {
 func WithDebugCommands(debugCommands bool) Option {
 	return func(b *GitCLI) {
 		b.debugCommands = debugCommands
+	}
+}
+
+// WithQuiet suppresses stdout streaming. Captured output, stderr diagnostics,
+// and command tracing are retained.
+func WithQuiet() Option {
+	return func(b *GitCLI) {
+		b.quiet = true
 	}
 }
 
@@ -209,7 +218,9 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 				flush = flushStream
 			}
 			if stdoutStream != nil {
-				cmd.Stdout = io.MultiWriter(stdoutStream, cmd.Stdout)
+				if !cli.quiet {
+					cmd.Stdout = io.MultiWriter(stdoutStream, cmd.Stdout)
+				}
 				defer stdoutStream.Close()
 			}
 			if stderrStream != nil {

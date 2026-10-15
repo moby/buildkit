@@ -1784,6 +1784,7 @@ func (md cacheRefMetadata) clearGitRemote() error {
 
 func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 	opts = append([]gitutil.Option{
+		gitutil.WithQuiet(),
 		gitutil.WithExec(runWithStandardUmask),
 		gitutil.WithStreams(func(ctx context.Context) (stdout, stderr io.WriteCloser, flush func()) {
 			return logs.NewLogStreams(ctx, false)

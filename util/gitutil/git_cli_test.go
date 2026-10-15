@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -209,6 +210,49 @@ func TestGitCLIStreamsAllowNil(t *testing.T) {
 	)
 	_, err := cli.Run(t.Context(), "status")
 	require.NoError(t, err)
+}
+
+func TestGitCLIQuiet(t *testing.T) {
+	for _, debug := range []bool{false, true} {
+		for _, command := range []string{"init", "fetch", "ls-remote", "for-each-ref"} {
+			t.Run(command+"/debug="+strconv.FormatBool(debug), func(t *testing.T) {
+				stdout, err := os.CreateTemp(t.TempDir(), "stdout")
+				require.NoError(t, err)
+				t.Cleanup(func() { stdout.Close() })
+				stderr, err := os.CreateTemp(t.TempDir(), "stderr")
+				require.NoError(t, err)
+				t.Cleanup(func() { stderr.Close() })
+				cli := NewGitCLI(
+					WithQuiet(),
+					WithDebugCommands(debug),
+					WithStreams(func(context.Context) (io.WriteCloser, io.WriteCloser, func()) {
+						return stdout, stderr, nil
+					}),
+					WithExec(func(_ context.Context, cmd *exec.Cmd) error {
+						require.Equal(t, []string{"git", "-c", "protocol.file.allow=user", command}, cmd.Args)
+						_, err := io.WriteString(cmd.Stdout, "query result\n")
+						require.NoError(t, err)
+						_, err = io.WriteString(cmd.Stderr, "warning\n")
+						return err
+					}),
+				)
+				out, err := cli.Run(t.Context(), command)
+				require.NoError(t, err)
+				require.Equal(t, "query result\n", string(out))
+				logged, err := os.ReadFile(stdout.Name())
+				require.NoError(t, err)
+				require.Empty(t, logged)
+				logged, err = os.ReadFile(stderr.Name())
+				require.NoError(t, err)
+				require.Contains(t, string(logged), "warning\n")
+				if debug {
+					require.Contains(t, string(logged), "+ git ")
+				} else {
+					require.Equal(t, "warning\n", string(logged))
+				}
+			})
+		}
+	}
 }
 
 func TestFormatDebugCommand(t *testing.T) {
