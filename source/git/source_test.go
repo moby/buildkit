@@ -454,6 +454,54 @@ func TestFetchOptionsSubdirCacheKey(t *testing.T) {
 	}
 }
 
+func TestBundleFetchOptionsCacheKey(t *testing.T) {
+	for _, opt := range []struct {
+		name  string
+		depth *int
+		tags  bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name: "tags",
+			tags: true,
+		},
+		{
+			name:  "full",
+			depth: new(0),
+		},
+		{
+			name:  "depth-one",
+			depth: new(1),
+		},
+		{
+			name:  "depth-two",
+			depth: new(2),
+		},
+	} {
+		for _, subdir := range []string{"", "subdir"} {
+			for _, keepGitDir := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/subdir=%s/keepgitdir=%t", opt.name, subdir, keepGitDir), func(t *testing.T) {
+					gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: keepGitDir, Subdir: subdir, FetchDepth: opt.depth, FetchTags: opt.tags}}
+					originKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					gs.src.Bundle = "oci-layout+blob://store@sha256:" + strings.Repeat("a", 64)
+					bundleKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					gs.src.Bundle = "oci-layout+blob://store@sha256:" + strings.Repeat("b", 64)
+					otherBundleKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					if keepGitDir && subdir == "" && (opt.depth != nil || opt.tags) {
+						require.NotEqual(t, originKey, bundleKey)
+						require.NotEqual(t, bundleKey, otherBundleKey)
+					} else {
+						require.Equal(t, originKey, bundleKey)
+						require.Equal(t, bundleKey, otherBundleKey)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestFetchTagSnapshot(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")

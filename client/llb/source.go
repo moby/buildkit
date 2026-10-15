@@ -701,8 +701,9 @@ func (fn gitBundleOptionFunc) SetGitBundleOption(bi *GitBundleInfo) {
 // identifies must be reachable from a ref inside the bundle (i.e. the bundle
 // must contain that commit; BuildKit validates this after import). Auth and
 // SSH options are ignored in bundle mode. Submodules, if present, still fetch
-// from their own remotes. See [GitCheckoutBundle] for the checkout side; it
-// is mutually exclusive with [KeepGitDir] and [GitSubDir].
+// from their own remotes. [GitFetchDepth] and [GitFetchTags] use only the
+// history and tags in the bundle, never the upstream Git remote.
+// See [GitCheckoutBundle] for the checkout side and its option restrictions.
 //
 // Scheme-specific behavior can be tuned via [GitBundleOption] values, e.g.
 // [GitBundleOCIStore] for the "oci-layout+blob://" scheme.
@@ -735,9 +736,9 @@ func GitBundleOCIStore(sessionID, storeID string) GitBundleOption {
 
 // GitCheckoutBundle produces a single-file git bundle at the checkout mount
 // root (filename "bundle") containing the resolved commit, instead of a
-// worktree. Mutually exclusive with [KeepGitDir] and [GitSubDir]. Submodules
-// are not included in the bundle. Pair with [GitBundleURL] to re-import the
-// bundle back into a later build.
+// worktree. Mutually exclusive with [KeepGitDir], [GitSubDir], [GitFetchDepth],
+// and [GitFetchTags]. Submodules are not included in the bundle. Pair with
+// [GitBundleURL] to re-import the bundle back into a later build.
 func GitCheckoutBundle() GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.CheckoutBundle = true

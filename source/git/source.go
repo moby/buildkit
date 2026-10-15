@@ -315,6 +315,11 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 			key += "#" + ref
 		}
 		if path.Join("/", gs.src.Subdir) == "/" {
+			// Bundle metadata must not reuse a checkout populated from origin
+			// or another bundle, even when the pinned commit is identical.
+			if gs.src.Bundle != "" && (gs.src.FetchDepth != nil || gs.src.FetchTags) {
+				key += "(bundle=" + digest.FromString(gs.src.Bundle).String() + ")"
+			}
 			if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
 				key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
 			}
@@ -797,18 +802,26 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobConte
 
 	gs.sha256 = len(md.Checksum) == 64
 	gs.cacheRef = md.Ref
-	if gs.src.Bundle == "" && !gs.src.CheckoutBundle && gs.src.KeepGitDir && path.Join("/", gs.src.Subdir) == "/" && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
+	if !gs.src.CheckoutBundle && gs.src.KeepGitDir && path.Join("/", gs.src.Subdir) == "/" && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
 		var g session.Group
 		if jobCtx != nil {
 			g = jobCtx.Session()
 		}
-		gs.getAuthToken(ctx, g)
+		remote := gs.src.Remote
+		if gs.src.Bundle != "" {
+			remote, err = gs.ensureStagedBundle(ctx, jobCtx, g)
+			if err != nil {
+				return "", "", nil, false, err
+			}
+		} else {
+			gs.getAuthToken(ctx, g)
+		}
 		git, cleanup, err := gs.emptyGitCli(ctx, g)
 		if err != nil {
 			return "", "", nil, false, err
 		}
 		defer cleanup()
-		out, err := git.Run(ctx, "ls-remote", "--refs", "--tags", "--", gs.src.Remote)
+		out, err := git.Run(ctx, "ls-remote", "--refs", "--tags", "--", remote)
 		if err != nil {
 			return "", "", nil, false, errors.Wrap(err, "failed to resolve git tags")
 		}
@@ -1017,9 +1030,17 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	}
 	repo.releasers = append(repo.releasers, cleanup)
 
-	// Tag-enabled fetches must not inherit or mutate the shared repository's
-	// refs and shallow boundaries. Only the finished snapshot is cached.
-	if gs.src.Bundle == "" && !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
+	// Opted-in fetches must not inherit or mutate the shared repository's
+	// refs and shallow boundaries. Bundles are the sole source of their
+	// requested history and tags. Only the finished snapshot is cached.
+	if !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil && (*gs.src.FetchDepth == 0 || gs.src.Bundle != "")) {
+		remote := "origin"
+		if gs.src.Bundle != "" {
+			remote, err = gs.ensureStagedBundle(ctx, jobCtx, g)
+			if err != nil {
+				return nil, err
+			}
+		}
 		dir, err := os.MkdirTemp("", "buildkit-git-tags-")
 		if err != nil {
 			return nil, err
@@ -1042,7 +1063,12 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		if gs.src.FetchByCommit && gs.src.Checksum != "" {
 			fetchRef = gs.src.Checksum
 		}
-		args = []string{"fetch", "--tags"}
+		args = []string{"fetch"}
+		if gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
+			args = append(args, "--tags")
+		} else {
+			args = append(args, "--no-tags")
+		}
 		if gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0 {
 			depth := 1
 			if gs.src.FetchDepth != nil {
@@ -1050,7 +1076,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 			}
 			args = append(args, "--depth="+strconv.Itoa(depth))
 		}
-		args = append(args, "--", "origin")
+		args = append(args, "--", remote)
 		if gitutil.IsCommitSHA(fetchRef) {
 			// Keep the SHA bare so GitCLI can retry without it when the server
 			// disallows fetching unadvertised objects directly.

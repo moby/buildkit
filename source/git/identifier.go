@@ -220,6 +220,9 @@ func validateBundleAttrs(id *GitIdentifier) error {
 		}
 	}
 	if id.CheckoutBundle {
+		if id.FetchDepth != nil || id.FetchTags {
+			return errors.New("git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags")
+		}
 		if id.KeepGitDir {
 			return errors.New("git.checkoutbundle is incompatible with git.keepgitdir")
 		}

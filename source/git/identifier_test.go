@@ -476,6 +476,24 @@ func TestIdentifierBundleValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "checkoutbundle with fetch depth",
+			url:  "https://example.com/repo.git",
+			attrs: map[string]string{
+				pb.AttrGitCheckoutBundle: "true",
+				pb.AttrGitFetchDepth:     "0",
+			},
+			wantErr: "git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags",
+		},
+		{
+			name: "checkoutbundle with fetch tags",
+			url:  "https://example.com/repo.git",
+			attrs: map[string]string{
+				pb.AttrGitCheckoutBundle: "true",
+				pb.AttrGitFetchTags:      "true",
+			},
+			wantErr: "git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags",
+		},
+		{
 			name: "git advice",
 			url:  "https://example.com/repo.git",
 			attrs: map[string]string{
