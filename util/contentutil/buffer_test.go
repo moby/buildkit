@@ -20,7 +20,7 @@ func TestReadWrite(t *testing.T) {
 
 	b := NewBuffer()
 
-	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo0")), ocispecs.Descriptor{Size: -1})
+	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo0")), ocispecs.Descriptor{})
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo1")), ocispecs.Descriptor{Size: 4})
@@ -29,10 +29,10 @@ func TestReadWrite(t *testing.T) {
 	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo2")), ocispecs.Descriptor{Size: 3})
 	require.Error(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo3")), ocispecs.Descriptor{Size: -1, Digest: digest.FromBytes([]byte("foo4"))})
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo3")), ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo4"))})
 	require.Error(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo4")), ocispecs.Descriptor{Size: -1, Digest: digest.FromBytes([]byte("foo4"))})
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo4")), ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo4"))})
 	require.NoError(t, err)
 
 	dt, err := content.ReadBlob(ctx, b, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foo1"))})
@@ -50,7 +50,7 @@ func TestReaderAt(t *testing.T) {
 
 	b := NewBuffer()
 
-	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{Size: -1})
+	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{})
 	require.NoError(t, err)
 
 	rdr, err := b.ReaderAt(ctx, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
@@ -78,7 +78,7 @@ func TestLabels(t *testing.T) {
 
 	b := NewBuffer()
 
-	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{Size: -1})
+	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{})
 	require.NoError(t, err)
 
 	_, err = b.Info(ctx, digest.FromBytes([]byte("abc")))
