@@ -18,6 +18,51 @@ func TestGetGitSSHCommandUsesConfigPath(t *testing.T) {
 	require.Equal(t, "ssh -F "+os.DevNull+" -o UserKnownHostsFile=/known-hosts", cmd)
 }
 
+func TestArgsNoDepth(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "default",
+			args: []string{"fetch", "--depth=1", "origin", "main"},
+			want: []string{"fetch", "origin", "main"},
+		},
+		{
+			name: "positive",
+			args: []string{"fetch", "--depth=3", "--tags", "origin", "main"},
+			want: []string{"fetch", "--tags", "origin", "main"},
+		},
+		{
+			name: "separate argument",
+			args: []string{"fetch", "--depth", "2", "origin", "main"},
+			want: []string{"fetch", "origin", "main"},
+		},
+		{
+			name: "ref after separator",
+			args: []string{"fetch", "--depth=2", "origin", "--", "--depth=1"},
+			want: []string{"fetch", "origin", "--", "--depth=1"},
+		},
+		{
+			name: "invalid depth",
+			args: []string{"fetch", "--depth=invalid", "origin"},
+			want: []string{"fetch", "--depth=invalid", "origin"},
+		},
+		{
+			name: "zero depth",
+			args: []string{"fetch", "--depth=0", "origin"},
+			want: []string{"fetch", "--depth=0", "origin"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := append([]string(nil), tc.args...)
+			require.Equal(t, tc.want, argsNoDepth(tc.args))
+			require.Equal(t, original, tc.args)
+		})
+	}
+}
+
 func TestGitCLIConfigEnv(t *testing.T) {
 	t.Setenv("HOME", "/tmp/home")
 	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg")

@@ -150,6 +150,7 @@ var allTests = integration.TestFuncs(
 	testDockerfileFromGitSHA1,
 	testDockerfileFromGitSHA256,
 	testDockerfileGitTagsCache,
+	testDockerfileGitFetchDepth,
 	testDockerfileFromHTTP,
 	testHTTPDockerfile,
 

@@ -367,10 +367,23 @@ func getGitSSHCommand(knownHosts string) string {
 
 func argsNoDepth(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a != "--depth=1" {
-			out = append(out, a)
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			out = append(out, args[i:]...)
+			break
 		}
+		if value, ok := strings.CutPrefix(args[i], "--depth="); ok {
+			if depth, err := strconv.Atoi(value); err == nil && depth > 0 {
+				continue
+			}
+		}
+		if args[i] == "--depth" && i+1 < len(args) {
+			if depth, err := strconv.Atoi(args[i+1]); err == nil && depth > 0 {
+				i++
+				continue
+			}
+		}
+		out = append(out, args[i])
 	}
 	return out
 }

@@ -439,18 +439,25 @@ func testFetchDepthPullRefKeepGitDir(t *testing.T, format string) {
 }
 
 func TestFetchOptionsSubdirCacheKey(t *testing.T) {
-	for _, subdir := range []string{"", ".", "subdir"} {
-		t.Run(subdir, func(t *testing.T) {
-			gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: true, Subdir: subdir}}
-			key := gs.shaToCacheKey("commit", "refs/heads/main")
-			gs.src.FetchDepth = new(0)
-			gs.src.FetchTags = true
-			if subdir == "subdir" {
-				require.Equal(t, key, gs.shaToCacheKey("commit", "refs/heads/main"))
-			} else {
-				require.NotEqual(t, key, gs.shaToCacheKey("commit", "refs/heads/main"))
-			}
-		})
+	for _, keepGitDir := range []bool{false, true} {
+		for _, subdir := range []string{"", ".", "subdir"} {
+			t.Run(fmt.Sprintf("keepgitdir=%t/subdir=%s", keepGitDir, subdir), func(t *testing.T) {
+				gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: keepGitDir, Subdir: subdir}}
+				key := gs.shaToCacheKey("commit", "refs/heads/main")
+				previous := key
+				for _, depth := range []int{0, 1, 2} {
+					gs.src.FetchDepth = new(depth)
+					got := gs.shaToCacheKey("commit", "refs/heads/main")
+					if !keepGitDir || subdir == "subdir" {
+						require.Equal(t, key, got)
+					} else {
+						require.NotEqual(t, key, got)
+						require.NotEqual(t, previous, got)
+					}
+					previous = got
+				}
+			})
+		}
 	}
 }
 
@@ -498,6 +505,67 @@ func TestBundleFetchOptionsCacheKey(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func TestFetchPositiveDepthIsolation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		for _, mode := range []string{"branch", "sha", "fetch-by-commit"} {
+			t.Run(format+"/"+mode, func(t *testing.T) {
+				t.Parallel()
+				ctx := logProgressStreams(t.Context(), t)
+				repo := setupGitRepo(t, format)
+				gitOutput := func(dir string, args ...string) string {
+					cmd := exec.CommandContext(ctx, "git", args...)
+					cmd.Dir = dir
+					out, err := cmd.CombinedOutput()
+					require.NoError(t, err, "%s", out)
+					return strings.TrimSpace(string(out))
+				}
+				sha := gitOutput(repo.mainPath, "rev-parse", "feature")
+				id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true}
+				switch mode {
+				case "sha":
+					id.Ref = sha
+				case "fetch-by-commit":
+					id.Checksum = sha
+					id.FetchByCommit = true
+				}
+				fetch := func(gs *Source) (string, string) {
+					g, err := gs.Resolve(ctx, id, nil, nil)
+					require.NoError(t, err)
+					key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+					require.NoError(t, err)
+					ref, err := g.Snapshot(ctx, nil)
+					require.NoError(t, err)
+					t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+					return mountRef(ctx, t, ref), key
+				}
+				warm := setupGitSource(t, t.TempDir())
+				defaultDir, defaultKey := fetch(setupGitSource(t, t.TempDir()))
+				for _, depth := range []int{1, 3, 2, 3} {
+					id.FetchDepth = new(depth)
+					dir, key := fetch(warm)
+					coldDir, coldKey := fetch(setupGitSource(t, t.TempDir()))
+					require.NotEqual(t, defaultKey, key)
+					require.Equal(t, coldKey, key)
+					require.Equal(t, sha, gitOutput(dir, "rev-parse", "HEAD"))
+					require.Equal(t, fmt.Sprint(depth), gitOutput(dir, "rev-list", "--count", "HEAD"))
+					require.Equal(t, gitOutput(coldDir, "rev-list", "HEAD"), gitOutput(dir, "rev-list", "HEAD"))
+					require.Empty(t, gitOutput(dir, "tag", "--list"))
+				}
+				id.FetchDepth = nil
+				dir, key := fetch(warm)
+				coldDir, coldKey := fetch(setupGitSource(t, t.TempDir()))
+				require.Equal(t, defaultKey, key)
+				require.Equal(t, coldKey, key)
+				require.Equal(t, gitOutput(defaultDir, "rev-list", "HEAD"), gitOutput(dir, "rev-list", "HEAD"))
+				require.Equal(t, gitOutput(coldDir, "tag", "--list"), gitOutput(dir, "tag", "--list"))
+			})
 		}
 	}
 }
@@ -616,6 +684,7 @@ func TestFetchTagsRefs(t *testing.T) {
 				checksum      string
 				fetchByCommit bool
 				branch        string
+				tag           string
 			}{
 				{
 					ref:      "feature",
@@ -630,6 +699,12 @@ func TestFetchTagsRefs(t *testing.T) {
 				{
 					ref:      "v1.2.3",
 					checksum: gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/v1.2.3^{}"),
+					tag:      "v1.2.3",
+				},
+				{
+					ref:      "refs/tags/lightweight-tag",
+					checksum: gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/lightweight-tag"),
+					tag:      "lightweight-tag",
 				},
 				{
 					ref:           "local-branch",
@@ -642,25 +717,33 @@ func TestFetchTagsRefs(t *testing.T) {
 					fetchByCommit: true,
 				},
 			} {
-				t.Run(tc.ref, func(t *testing.T) {
-					gs := setupGitSource(t, t.TempDir())
-					id := &GitIdentifier{Remote: repo.mainURL, Ref: tc.ref, Checksum: tc.checksum, FetchByCommit: tc.fetchByCommit, KeepGitDir: true, SkipSubmodules: true, FetchTags: true, FetchDepth: new(2)}
-					g, err := gs.Resolve(ctx, id, nil, nil)
-					require.NoError(t, err)
-					ref, err := g.Snapshot(ctx, nil)
-					require.NoError(t, err)
-					t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
-					dir := mountRef(ctx, t, ref)
-					expected := tc.checksum
-					if expected == "" {
-						expected = sha
-					}
-					require.Equal(t, expected, gitOutput(t, dir, "rev-parse", "HEAD"))
-					if tc.branch != "" {
-						require.Equal(t, expected, gitOutput(t, dir, "rev-parse", tc.branch))
-					}
-					require.Empty(t, gitOutput(t, dir, "for-each-ref", "refs/buildkit/"))
-				})
+				for _, fetchTags := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%s/tags=%t", tc.ref, fetchTags), func(t *testing.T) {
+						gs := setupGitSource(t, t.TempDir())
+						id := &GitIdentifier{Remote: repo.mainURL, Ref: tc.ref, Checksum: tc.checksum, FetchByCommit: tc.fetchByCommit, KeepGitDir: true, SkipSubmodules: true, FetchTags: fetchTags, FetchDepth: new(2)}
+						g, err := gs.Resolve(ctx, id, nil, nil)
+						require.NoError(t, err)
+						ref, err := g.Snapshot(ctx, nil)
+						require.NoError(t, err)
+						t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+						dir := mountRef(ctx, t, ref)
+						expected := tc.checksum
+						if expected == "" {
+							expected = sha
+						}
+						require.Equal(t, expected, gitOutput(t, dir, "rev-parse", "HEAD"))
+						if tc.branch != "" {
+							require.Equal(t, expected, gitOutput(t, dir, "rev-parse", tc.branch))
+						}
+						if tc.tag != "" {
+							require.Equal(t, gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/"+tc.tag), gitOutput(t, dir, "rev-parse", "refs/tags/"+tc.tag))
+							if !fetchTags {
+								require.Equal(t, tc.tag, gitOutput(t, dir, "tag", "--list"))
+							}
+						}
+						require.Empty(t, gitOutput(t, dir, "for-each-ref", "refs/buildkit/"))
+					})
+				}
 			}
 		})
 	}

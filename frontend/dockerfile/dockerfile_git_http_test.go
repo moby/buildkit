@@ -199,6 +199,56 @@ func testDockerfileGitTagsCache(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+func testDockerfileGitFetchDepth(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows", "Git source not supported on Windows")
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM scratch\nCOPY . /\n"), 0600))
+	require.NoError(t, runShell(dir,
+		"git init -b main",
+		"git config user.email test@example.com",
+		"git config user.name test",
+		"git add Dockerfile",
+		"git commit -m initial",
+		"git commit --allow-empty -m second",
+		"git commit --allow-empty -m third",
+		"git update-server-info",
+	))
+	// Dumb HTTP cannot serve shallow fetches. The remote fallback must fetch
+	// full history, while the final retained checkout still honors depth two.
+	server := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer server.Close()
+	url := server.URL + "/.git?fetch-depth=2"
+	for _, mode := range []string{"context", "add"} {
+		t.Run(mode, func(t *testing.T) {
+			opt := client.SolveOpt{FrontendAttrs: map[string]string{
+				"context": url,
+				"build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR": "1",
+			}}
+			if mode == "add" {
+				dockerfileDir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dockerfileDir, "Dockerfile"), fmt.Appendf(nil, "FROM scratch\nADD --keep-git-dir %s /\n", url), 0600))
+				fs, err := fsutil.NewFS(dockerfileDir)
+				require.NoError(t, err)
+				opt.FrontendAttrs = nil
+				opt.LocalMounts = map[string]fsutil.FS{"dockerfile": fs, "context": fs}
+			}
+			outDir := t.TempDir()
+			opt.Exports = []client.ExportEntry{{Type: client.ExporterLocal, OutputDir: outDir}}
+			_, err := f.Solve(sb.Context(), c, opt, nil)
+			require.NoError(t, err)
+			cmd := exec.CommandContext(t.Context(), "git", "-C", outDir, "rev-list", "--count", "HEAD")
+			out, err := cmd.CombinedOutput()
+			require.NoError(t, err, "%s", out)
+			require.Equal(t, "2", strings.TrimSpace(string(out)))
+		})
+	}
+}
+
 func testDockerfileFromHTTP(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 

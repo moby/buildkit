@@ -320,7 +320,7 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 			if gs.src.Bundle != "" && (gs.src.FetchDepth != nil || gs.src.FetchTags) {
 				key += "(bundle=" + digest.FromString(gs.src.Bundle).String() + ")"
 			}
-			if gs.src.FetchDepth != nil && *gs.src.FetchDepth != 1 {
+			if gs.src.FetchDepth != nil {
 				key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
 			}
 			if gs.src.FetchTags && (gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0) {
@@ -1033,7 +1033,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	// Opted-in fetches must not inherit or mutate the shared repository's
 	// refs and shallow boundaries. Bundles are the sole source of their
 	// requested history and tags. Only the finished snapshot is cached.
-	if !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil && (*gs.src.FetchDepth == 0 || gs.src.Bundle != "")) {
+	if !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil) {
 		remote := "origin"
 		if gs.src.Bundle != "" {
 			remote, err = gs.ensureStagedBundle(ctx, jobCtx, g)
@@ -1186,7 +1186,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	if gitutil.IsCommitSHA(fetchRef) {
 		// skip fetch if commit already exists
 		if _, err := git.Run(ctx, "cat-file", "-e", "--", fetchRef+"^{commit}"); err == nil {
-			doFetch = gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0
+			doFetch = false
 		}
 	}
 
@@ -1215,36 +1215,11 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		args := []string{"fetch"}
 		if !gs.src.FetchByCommit && gitutil.IsCommitSHA(fetchRef) {
 			args = append(args, "--tags")
-			switch {
-			case gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0:
-				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-					args = append(args, "--unshallow")
-				}
-			case gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0:
-				args = append(args, "--depth="+strconv.Itoa(*gs.src.FetchDepth))
-			default:
-				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-					args = append(args, "--unshallow")
-				}
+			if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+				args = append(args, "--unshallow")
 			}
 		} else { // TODO: find a branch from ls-remote?
-			if gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
-				args = append(args, "--tags")
-				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-					args = append(args, "--unshallow")
-				}
-			} else {
-				fetchDepth := 1
-				if gs.src.FetchDepth != nil {
-					fetchDepth = *gs.src.FetchDepth
-				}
-				args = append(args, "--depth="+strconv.Itoa(fetchDepth))
-				if gs.src.FetchTags {
-					args = append(args, "--tags")
-				} else {
-					args = append(args, "--no-tags")
-				}
-			}
+			args = append(args, "--depth=1", "--no-tags")
 		}
 		args = append(args, origin)
 		if gitutil.IsCommitSHA(ref) {
@@ -1289,17 +1264,8 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 			} else {
 				// try to fetch the commit directly
 				args := []string{"fetch", "--tags"}
-				switch {
-				case gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0:
-					if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-						args = append(args, "--unshallow")
-					}
-				case gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0:
-					args = append(args, "--depth="+strconv.Itoa(*gs.src.FetchDepth))
-				default:
-					if _, err := gitDirRoot.Lstat("shallow"); err == nil {
-						args = append(args, "--unshallow")
-					}
+				if _, err := gitDirRoot.Lstat("shallow"); err == nil {
+					args = append(args, "--unshallow")
 				}
 				args = append(args, origin, gs.cacheCommit)
 				if _, err := git.Run(ctx, args...); err != nil {
@@ -1414,7 +1380,9 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		pullref := ref
 		if repo.checkoutRef != "" {
 			pullref = repo.checkoutRef
-			if strings.HasPrefix(gs.cacheRef, "refs/") && !strings.HasPrefix(gs.cacheRef, "refs/tags/") {
+			// Tags are copied by --tags, except for depth-only checkouts,
+			// which must explicitly retain the selected tag.
+			if strings.HasPrefix(gs.cacheRef, "refs/") && (!strings.HasPrefix(gs.cacheRef, "refs/tags/") || !gs.src.FetchTags && gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0) {
 				pullref += ":" + gs.cacheRef
 			}
 		} else if isAnnotatedTag {
