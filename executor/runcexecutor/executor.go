@@ -343,6 +343,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	spec.Process.Terminal = meta.Tty
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
+		executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
 		var removedMounts []string
 		removedMounts, err = rootlessspecconv.ToRootless(spec)
 		if err != nil {
