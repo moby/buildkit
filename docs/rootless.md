@@ -7,6 +7,13 @@ Rootless mode allows running BuildKit daemon as a non-root user.
   On kernel >= 4.18, the `fuse-overlayfs` snapshotter is used instead of `overlayfs`.
   On kernel < 4.18, the `native` snapshotter is used.
 * Network mode is always set to `network.host`.
+* Per-step resource limits (`--resource` in Buildx, `resources` in Bake) need a
+  cgroup v2 tree delegated to the rootless user, for example a systemd user service
+  with `Delegate=yes`. The OCI worker uses the cgroup that `buildkitd` starts in when
+  it is writable and has the `cpu` and `memory` controllers. Otherwise, and always
+  with the containerd worker, the limits are ignored with a warning. The worker label
+  `org.mobyproject.buildkit.worker.linux.resources` shows whether limits are applied.
+  `cpuset` limits also need the `cpuset` controller.
 
 ## Running BuildKit in Rootless mode (OCI worker)
 
