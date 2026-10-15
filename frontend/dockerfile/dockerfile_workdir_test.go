@@ -64,7 +64,7 @@ WORKDIR /
 
 // testWorkdirSourceDateEpochReproducible ensures that WORKDIR is reproducible with SOURCE_DATE_EPOCH.
 func testWorkdirSourceDateEpochReproducible(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "Windows WORKDIR layers are not reproducible with SOURCE_DATE_EPOCH")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 

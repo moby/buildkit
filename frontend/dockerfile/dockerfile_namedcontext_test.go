@@ -1310,14 +1310,12 @@ func testSourcePolicyWithNamedContext(t *testing.T, sb integration.Sandbox) {
 // testEagerNamedContextLookup tests that named context are not loaded if
 // they are not used by current build.
 func testEagerNamedContextLookup(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-
 	f := getFrontend(t, sb)
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM broken AS notused
 
 FROM alpine AS base
@@ -1327,9 +1325,28 @@ FROM busybox AS otherstage
 
 FROM scratch
 COPY --from=base /foo /foo
-	`)
+`,
+		`
+FROM broken AS notused
 
-	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
+FROM nanoserver AS base
+COPY foo C:\foo
+
+FROM missing AS otherstage
+
+FROM nanoserver
+COPY --from=base C:\foo C:\foo
+	`,
+	))
+
+	files := integration.UnixOrWindows(
+		[]fstest.Applier{fstest.CreateFile("Dockerfile", dockerfile, 0600)},
+		[]fstest.Applier{
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			fstest.CreateFile("foo", []byte("base"), 0600),
+		},
+	)
+	dir := integration.Tmpdir(t, files...)
 
 	out := t.TempDir()
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
@@ -1338,7 +1355,7 @@ COPY --from=base /foo /foo
 		},
 		FrontendAttrs: map[string]string{
 			"context:notused": "docker-image://docker.io/library/nosuchimage:latest",
-			"context:busybox": "docker-image://docker.io/library/dontexist:latest",
+			"context:" + integration.UnixOrWindows("busybox", "missing"): "docker-image://docker.io/library/dontexist:latest",
 		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
@@ -1349,5 +1366,5 @@ COPY --from=base /foo /foo
 
 	dt, err := os.ReadFile(filepath.Join(out, "foo"))
 	require.NoError(t, err)
-	require.Equal(t, "base\n", string(dt))
+	require.Equal(t, "base", strings.TrimSpace(string(dt)))
 }
