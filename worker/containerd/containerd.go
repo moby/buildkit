@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -100,6 +101,9 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 	}
 	if workerOpts.ApparmorProfile != "" {
 		xlabels[wlabel.ApparmorProfile] = workerOpts.ApparmorProfile
+	}
+	if runtime.GOOS == "linux" {
+		xlabels[wlabel.LinuxResources] = strconv.FormatBool(!workerOpts.Rootless)
 	}
 	xlabels[wlabel.ContainerdNamespace] = workerOpts.Namespace
 	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID

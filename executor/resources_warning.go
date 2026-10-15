@@ -11,7 +11,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-const linuxResourcesIgnoredMsg = "resource limits are ignored by the rootless worker"
+const (
+	linuxResourcesIgnoredMsg = "resource limits are ignored by the rootless worker"
+	cpusetIgnoredMsg         = "cpuset limits are ignored because the cpuset cgroup controller is not delegated to the rootless worker"
+)
 
 // WarnLinuxResourcesIgnored reports that the resource limits requested for a
 // step were not applied. Rootless executors call it because they run steps
@@ -21,14 +24,24 @@ func WarnLinuxResourcesIgnored(ctx context.Context, res *pb.LinuxResources) {
 	if !hasLinuxResources(res) {
 		return
 	}
-	bklog.G(ctx).Warn(linuxResourcesIgnoredMsg)
+	warn(ctx, linuxResourcesIgnoredMsg)
+}
+
+// WarnCpusetIgnored reports that the cpuset limits of a step were not applied
+// while its other limits were.
+func WarnCpusetIgnored(ctx context.Context) {
+	warn(ctx, cpusetIgnoredMsg)
+}
+
+func warn(ctx context.Context, msg string) {
+	bklog.G(ctx).Warn(msg)
 	pw, ok, _ := progress.NewFromContext(ctx)
 	if !ok {
 		return
 	}
 	pw.Write(identity.NewID(), client.VertexWarning{
 		Level: 1,
-		Short: []byte(linuxResourcesIgnoredMsg),
+		Short: []byte(msg),
 	})
 	pw.Close()
 }
