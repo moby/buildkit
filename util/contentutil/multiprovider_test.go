@@ -19,10 +19,10 @@ func TestMultiProvider(t *testing.T) {
 	b0 := NewBuffer()
 	b1 := NewBuffer()
 
-	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foo0")), ocispecs.Descriptor{Size: -1})
+	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foo0")), ocispecs.Descriptor{})
 	require.NoError(t, err)
 
-	err = content.WriteBlob(ctx, b1, "foo", bytes.NewBuffer([]byte("foo1")), ocispecs.Descriptor{Size: -1})
+	err = content.WriteBlob(ctx, b1, "foo", bytes.NewBuffer([]byte("foo1")), ocispecs.Descriptor{})
 	require.NoError(t, err)
 
 	mp := NewMultiProvider(nil)
