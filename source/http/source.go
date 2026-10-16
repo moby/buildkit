@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/cachedigest"
 	"github.com/moby/buildkit/util/pgpsign"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/buildkit/version"
@@ -213,6 +214,24 @@ func (hs *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 
 func (hs *httpSourceHandler) client(g session.Group) *http.Client {
 	return &http.Client{Transport: newTransport(hs.transport, hs.sm, g)}
+}
+
+// doRequest performs req, retrying transient network failures with
+// exponential backoff.
+//
+// A solve can contain thousands of independent HTTP sources, each fetched over
+// its own connection and with no connection reuse between them. Without a
+// retry, one dropped connection anywhere fails the entire solve. Registry
+// fetches already retry this class of error through retryhandler; HTTP sources
+// did not.
+//
+// Only the request is retried. A failure part way through reading the response
+// body is not covered here, and neither is a non-2xx response: those are left
+// to the caller so that status handling is unchanged.
+func doRequest(ctx context.Context, client *http.Client, req *http.Request) (*http.Response, error) {
+	return retryhandler.WithRetry(ctx, nil, func(ctx context.Context) (*http.Response, error) {
+		return client.Do(req.Clone(ctx))
+	})
 }
 
 // urlHash is internal hash the etag is stored by that doesn't leak outside
@@ -408,7 +427,7 @@ func (hs *httpSourceHandler) resolveMetadataRef(ctx context.Context, jobCtx solv
 		// we need to add accept-encoding header manually because stdlib only adds it to GET requests
 		// some servers will return different etags if Accept-Encoding header is different
 		req.Header.Set("Accept-Encoding", "gzip")
-		resp, err := client.Do(req)
+		resp, err := doRequest(ctx, client, req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
 				respETag := etagValue(resp.Header.Get("ETag"))
@@ -454,7 +473,7 @@ func (hs *httpSourceHandler) resolveMetadataRef(ctx context.Context, jobCtx solv
 		req.Header.Del("Accept-Encoding")
 	}
 
-	resp, err := client.Do(req)
+	resp, err := doRequest(ctx, client, req)
 	if err != nil {
 		return nil, err
 	}
@@ -889,7 +908,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobCont
 
 	client := hs.client(g)
 
-	resp, err := client.Do(req)
+	resp, err := doRequest(ctx, client, req)
 	if err != nil {
 		return nil, err
 	}
