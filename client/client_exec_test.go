@@ -144,6 +144,90 @@ func testLinuxResources(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "50000 100000", strings.TrimSpace(string(dt3)))
 }
 
+func testLinuxResourcesIgnoredWarning(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	img := llb.Image("alpine:latest")
+	st := img.Run(llb.Shlex(`sh -c "echo limited > /out"`), llb.MemoryLimit(64*1024*1024)).Root()
+	st = st.Run(llb.Shlex(`sh -c "echo unlimited > /out"`)).Root()
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	wc := newWarningsCapture()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, wc.status)
+	require.NoError(t, err)
+
+	var ignored []*VertexWarning
+	for _, w := range wc.wait() {
+		if strings.Contains(string(w.Short), "resource limits are ignored") {
+			ignored = append(ignored, w)
+		}
+	}
+	if workerAppliesLinuxResources(t, sb, c) {
+		require.Empty(t, ignored)
+	} else {
+		// Only the step that asked for a limit gets the warning.
+		require.Len(t, ignored, 1)
+		require.Equal(t, 1, ignored[0].Level)
+	}
+}
+
+// testLinuxResourcesEnforced checks that a memory limit is enforced by
+// running a step that needs more memory than it is given. Unlike
+// testLinuxResources it does not read /sys/fs/cgroup inside the step, so it
+// also runs on rootless workers, which do not mount /sys into steps.
+func testLinuxResourcesEnforced(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	if !workerAppliesLinuxResources(t, sb, c) {
+		t.Skip("worker does not apply resource limits")
+	}
+
+	// tail keeps its whole input in memory when the input has no newline, so
+	// this needs about 128MiB.
+	const cmd = `sh -c "head -c 134217728 /dev/zero | tail > /dev/null"`
+	const limit = 64 * 1024 * 1024
+
+	solve := func(ro ...llb.RunOption) error {
+		// Resource limits are not part of the cache key, so make both
+		// steps run.
+		st := llb.Image("alpine:latest").Run(append(ro, llb.Shlex(cmd), llb.IgnoreCache)...).Root()
+		def, err := st.Marshal(sb.Context())
+		require.NoError(t, err)
+		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+		return err
+	}
+
+	require.NoError(t, solve())
+
+	err = solve(llb.MemoryLimit(limit), llb.MemorySwapLimit(limit), llb.WithCustomName("limited"))
+	require.Error(t, err)
+	require.Regexp(t, "cannot allocate memory|exit code: 137", err.Error())
+}
+
+// workerAppliesLinuxResources reports whether the sandbox worker applies
+// per-step resource limits, as advertised by its worker label. It skips the
+// test for workers without the label, such as dockerd.
+func workerAppliesLinuxResources(t *testing.T, sb integration.Sandbox, c *Client) bool {
+	workers, err := c.ListWorkers(sb.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, workers)
+	v, ok := workers[0].Labels["org.mobyproject.buildkit.worker.linux.resources"]
+	if !ok {
+		t.Skip("worker does not report whether it applies resource limits")
+	}
+	return v == "true"
+}
+
 func testPassthroughOp(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 

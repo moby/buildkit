@@ -44,3 +44,18 @@ func ToRootless(spec *specs.Spec) ([]string, error) {
 	spec.Linux.CgroupsPath = ""
 	return removed, nil
 }
+
+// ToRootlessWithCgroup is like ToRootless, but it keeps the resource limits
+// and runs the container in cgroupsPath. cgroupsPath must be a cgroup v2 path
+// that the rootless user can create and write to, for example a cgroup that
+// systemd delegated to the user (Delegate=yes).
+func ToRootlessWithCgroup(spec *specs.Spec, cgroupsPath string) ([]string, error) {
+	resources := spec.Linux.Resources
+	removed, err := ToRootless(spec)
+	if err != nil {
+		return nil, err
+	}
+	spec.Linux.Resources = resources
+	spec.Linux.CgroupsPath = cgroupsPath
+	return removed, nil
+}
