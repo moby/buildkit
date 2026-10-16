@@ -16,6 +16,8 @@ ARG SOME_PSW=secret
 ARG some_psw=secret
 ENV OTHER_PSW=secret other_psw=secret
 ARG SOME_USR=user
+ARG DIPSWITCH=value
+ENV DIPSWITCH=value
 ENV SOME_PSWORD=value PUBLIC_PSW=public
 `
 	var warnings []string
