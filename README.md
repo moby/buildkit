@@ -283,7 +283,8 @@ Keys supported by image output:
 * `push=true`: push after creating the image
 * `push-by-digest=true`: push unnamed image
 * `registry.insecure=true`: push to insecure HTTP registry
-* `oci-mediatypes=true`: use OCI mediatypes in configuration JSON instead of Docker's
+* `oci-mediatypes=<true|false>`: use OCI media types for image manifests, indexes and configuration JSON instead of Docker's.
+  See [media type defaults and attestation requirements](docs/build-repro.md#compatibility-version).
 * `oci-artifact=true`: use OCI artifact format for attestations when OCI media types are enabled. Set to `false` to use the legacy attestation image manifest format.
 * `unpack=true`: unpack image after creation (for use with containerd)
 * `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
