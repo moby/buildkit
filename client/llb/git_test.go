@@ -90,6 +90,17 @@ func TestGit(t *testing.T) {
 			},
 		},
 		{
+			name:       "debug commands",
+			st:         Git("github.com/foo/bar.git", "ref", GitDebugCommands()),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.debugcommands":    "true",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
 			name: "bundle",
 			st: Git(
 				"github.com/foo/bar.git", "",
@@ -135,6 +146,28 @@ func TestGit(t *testing.T) {
 				"git.authtokensecret":  "GIT_AUTH_TOKEN",
 				"git.fullurl":          "https://github.com/foo/bar.git",
 				"git.checkoutbundle":   "true",
+			},
+		},
+		{
+			name:       "fetch depth",
+			st:         Git("github.com/foo/bar.git", "ref", GitFetchDepth(0)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fetchdepth":       "0",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
+			name:       "fetch tags",
+			st:         Git("github.com/foo/bar.git", "ref", GitFetchTags()),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fetchtags":        "true",
+				"git.fullurl":          "https://github.com/foo/bar.git",
 			},
 		},
 	}

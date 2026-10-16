@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/moby/buildkit/util/urlutil"
 	"github.com/pkg/errors"
 )
 
@@ -18,10 +20,12 @@ type GitCLI struct {
 	git  string
 	exec func(context.Context, *exec.Cmd) error
 
-	args    []string
-	dir     string
-	streams StreamFunc
-	advice  *bool
+	args          []string
+	dir           string
+	streams       StreamFunc
+	advice        *bool
+	debugCommands bool
+	quiet         bool
 
 	workTree string
 	gitDir   string
@@ -89,6 +93,20 @@ func WithWorkTree(workTree string) Option {
 func WithGitDir(gitDir string) Option {
 	return func(b *GitCLI) {
 		b.gitDir = gitDir
+	}
+}
+
+func WithDebugCommands(debugCommands bool) Option {
+	return func(b *GitCLI) {
+		b.debugCommands = debugCommands
+	}
+}
+
+// WithQuiet suppresses stdout streaming. Captured output, stderr diagnostics,
+// and command tracing are retained.
+func WithQuiet() Option {
+	return func(b *GitCLI) {
+		b.quiet = true
 	}
 }
 
@@ -190,21 +208,33 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 		cmd.Stdin = nil
 		cmd.Stdout = buf
 		cmd.Stderr = errbuf
+		var stdoutStream io.WriteCloser
+		var stderrStream io.WriteCloser
+		flush := func() {}
 		if cli.streams != nil {
-			stdout, stderr, flush := cli.streams(ctx)
-			if stdout != nil {
-				cmd.Stdout = io.MultiWriter(stdout, cmd.Stdout)
+			var flushStream func()
+			stdoutStream, stderrStream, flushStream = cli.streams(ctx)
+			if flushStream != nil {
+				flush = flushStream
 			}
-			if stderr != nil {
-				cmd.Stderr = io.MultiWriter(stderr, cmd.Stderr)
+			if stdoutStream != nil {
+				if !cli.quiet {
+					cmd.Stdout = io.MultiWriter(stdoutStream, cmd.Stdout)
+				}
+				defer stdoutStream.Close()
 			}
-			defer stdout.Close()
-			defer stderr.Close()
+			if stderrStream != nil {
+				cmd.Stderr = io.MultiWriter(stderrStream, cmd.Stderr)
+				defer stderrStream.Close()
+			}
 			defer func() {
 				if err != nil {
 					flush()
 				}
 			}()
+		}
+		if cli.debugCommands && stderrStream != nil {
+			_, _ = io.WriteString(stderrStream, "+ "+formatDebugCommand(cmd.Args)+"\n")
 		}
 
 		cmd.Env = []string{
@@ -297,6 +327,45 @@ func (cli *GitCLI) Run(ctx context.Context, args ...string) (_ []byte, err error
 	}
 }
 
+func formatDebugCommand(args []string) string {
+	formatted := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-c" && i+1 < len(args) {
+			formatted = append(formatted, quoteDebugCommandArg(arg), quoteDebugCommandArg(redactGitConfig(args[i+1])))
+			i++
+			continue
+		}
+		formatted = append(formatted, quoteDebugCommandArg(redactURLCredentials(arg)))
+	}
+	return strings.Join(formatted, " ")
+}
+
+func redactGitConfig(cfg string) string {
+	key, _, ok := strings.Cut(cfg, "=")
+	if ok && strings.HasSuffix(strings.ToLower(key), ".extraheader") {
+		return redactURLCredentials(key) + "=xxxxx"
+	}
+	return redactURLCredentials(cfg)
+}
+
+func redactURLCredentials(arg string) string {
+	if !strings.Contains(arg, "://") {
+		return arg
+	}
+	return urlutil.RedactCredentials(arg)
+}
+
+func quoteDebugCommandArg(arg string) string {
+	if arg == "" {
+		return `""`
+	}
+	if strings.ContainsAny(arg, " \t\n\r\"'`$&|;<>()[]{}*?!#\\") {
+		return strconv.Quote(arg)
+	}
+	return arg
+}
+
 func getGitSSHCommand(knownHosts string) string {
 	gitSSHCommand := "ssh -F " + os.DevNull
 	if knownHosts != "" {
@@ -309,10 +378,23 @@ func getGitSSHCommand(knownHosts string) string {
 
 func argsNoDepth(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a != "--depth=1" {
-			out = append(out, a)
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			out = append(out, args[i:]...)
+			break
 		}
+		if value, ok := strings.CutPrefix(args[i], "--depth="); ok {
+			if depth, err := strconv.Atoi(value); err == nil && depth > 0 {
+				continue
+			}
+		}
+		if args[i] == "--depth" && i+1 < len(args) {
+			if depth, err := strconv.Atoi(args[i+1]); err == nil && depth > 0 {
+				i++
+				continue
+			}
+		}
+		out = append(out, args[i])
 	}
 	return out
 }

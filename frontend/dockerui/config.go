@@ -58,6 +58,7 @@ const (
 	keyDockerfileLintArg    = "build-arg:BUILDKIT_DOCKERFILE_CHECK"
 	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
 	keyGitAdviceArg         = "build-arg:BUILDKIT_GIT_ADVICE"
+	keyGitDebugCommandsArg  = "build-arg:BUILDKIT_GIT_DEBUG_COMMANDS"
 )
 
 type Config struct {

@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIdentifierDebugCommands(t *testing.T) {
+	for _, value := range []string{"", "false", "true"} {
+		t.Run(value, func(t *testing.T) {
+			attrs := map[string]string{}
+			if value != "" {
+				attrs[pb.AttrGitDebugCommands] = value
+			}
+			id, err := (&Source{}).Identifier("git", "example.com/repo.git", attrs, nil)
+			require.NoError(t, err)
+			require.Equal(t, value == "true", id.(*GitIdentifier).DebugCommands)
+		})
+	}
+}
+
 func TestNewGitIdentifier(t *testing.T) {
 	tests := []struct {
 		url      string
@@ -79,6 +93,23 @@ func TestNewGitIdentifier(t *testing.T) {
 				Subdir: "mydir/mysubdir",
 			},
 			str: "git://github.com/user/repo.git#mybranch:mydir/mysubdir",
+		},
+		{
+			url: "https://github.com/user/repo.git?fetch-depth=0#mybranch:mydir/mysubdir/",
+			expected: GitIdentifier{
+				Remote:     "https://github.com/user/repo.git",
+				Ref:        "mybranch",
+				Subdir:     "mydir/mysubdir",
+				FetchDepth: new(0),
+			},
+		},
+		{
+			url: "https://github.com/user/repo.git?fetch-tags#mybranch",
+			expected: GitIdentifier{
+				Remote:    "https://github.com/user/repo.git",
+				Ref:       "mybranch",
+				FetchTags: true,
+			},
 		},
 		{
 			url: "git@github.com:user/repo.git",
@@ -443,6 +474,24 @@ func TestIdentifierBundleValidation(t *testing.T) {
 				require.True(t, id.CheckoutBundle)
 				require.Empty(t, id.Bundle)
 			},
+		},
+		{
+			name: "checkoutbundle with fetch depth",
+			url:  "https://example.com/repo.git",
+			attrs: map[string]string{
+				pb.AttrGitCheckoutBundle: "true",
+				pb.AttrGitFetchDepth:     "0",
+			},
+			wantErr: "git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags",
+		},
+		{
+			name: "checkoutbundle with fetch tags",
+			url:  "https://example.com/repo.git",
+			attrs: map[string]string{
+				pb.AttrGitCheckoutBundle: "true",
+				pb.AttrGitFetchTags:      "true",
+			},
+			wantErr: "git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags",
 		},
 		{
 			name: "git advice",
