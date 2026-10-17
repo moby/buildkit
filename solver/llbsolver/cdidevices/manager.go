@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
@@ -40,9 +41,10 @@ type Device struct {
 }
 
 type Manager struct {
-	cache       *cdi.Cache
-	locker      *locker.Locker
-	autoAllowed map[string]struct{}
+	cache         *cdi.Cache
+	locker        *locker.Locker
+	autoAllowedMu sync.RWMutex
+	autoAllowed   map[string]struct{}
 }
 
 func NewManager(cache *cdi.Cache, autoAllowed []string) *Manager {
@@ -58,6 +60,8 @@ func NewManager(cache *cdi.Cache, autoAllowed []string) *Manager {
 }
 
 func (m *Manager) isAutoAllowed(kind, name string, annotations map[string]string) bool {
+	m.autoAllowedMu.RLock()
+	defer m.autoAllowedMu.RUnlock()
 	if _, ok := m.autoAllowed[name]; ok {
 		return true
 	}
@@ -249,7 +253,9 @@ func (m *Manager) OnDemandInstaller(name string) (func(context.Context) error, b
 		}
 
 		// TODO: this needs to be set as annotation to survive reboot
+		m.autoAllowedMu.Lock()
 		m.autoAllowed[name] = struct{}{}
+		m.autoAllowedMu.Unlock()
 
 		return nil
 	}, true
