@@ -134,6 +134,7 @@ var allTests = integration.TestFuncs(
 	// dockerfile_dockerignore_test.go
 	testDockerignore,
 	testDockerignoreInvalid,
+	testDockerignoreInvalidUnusedContext,
 	testDockerignoreOverride,
 
 	// dockerfile_filesize_test.go
