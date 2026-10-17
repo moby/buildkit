@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/moby/buildkit/cmd/buildkitd/config"
@@ -105,4 +106,65 @@ func runConfigFlag(t *testing.T, args []string) string {
 	}
 	require.NoError(t, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...)))
 	return configPath
+}
+
+func TestLoadConfigFile(t *testing.T) {
+	fp := filepath.Join(t.TempDir(), "buildkitd.toml")
+	explicit := []string{"--config", fp}
+
+	path, warnings, err := runLoadConfigFile(t, fp, nil)
+	require.NoError(t, err)
+	require.Empty(t, path)
+	require.Empty(t, warnings)
+
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
+	require.NoError(t, err)
+	require.Empty(t, path)
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], fp)
+	require.Contains(t, warnings[0], configMissingErrorEnv)
+
+	t.Setenv(configMissingErrorEnv, "0")
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
+	require.NoError(t, err)
+	require.Empty(t, path)
+	require.Len(t, warnings, 1)
+	require.NotContains(t, warnings[0], configMissingErrorEnv)
+
+	t.Setenv(configMissingErrorEnv, "1")
+	_, _, err = runLoadConfigFile(t, fp, explicit)
+	require.ErrorContains(t, err, fp)
+
+	t.Setenv(configMissingErrorEnv, "bogus")
+	_, _, err = runLoadConfigFile(t, fp, explicit)
+	require.ErrorContains(t, err, configMissingErrorEnv)
+
+	require.NoError(t, os.WriteFile(fp, nil, 0644))
+
+	path, warnings, err = runLoadConfigFile(t, fp, explicit)
+	require.NoError(t, err)
+	require.Equal(t, fp, path)
+	require.Empty(t, warnings)
+}
+
+func runLoadConfigFile(t *testing.T, defaultPath string, args []string) (string, []string, error) {
+	t.Helper()
+
+	var path string
+	var warnings []string
+	cmd := &cli.Command{
+		Name: "buildkitd",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "config",
+				Value: defaultPath,
+			},
+		},
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			var err error
+			path, _, err = loadConfigFile(cmd, &warnings)
+			return err
+		},
+	}
+	return path, warnings, cmd.Run(t.Context(), append([]string{"buildkitd"}, args...))
 }
