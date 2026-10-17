@@ -93,14 +93,8 @@ func (c nydusType) NeedsConversion(ctx context.Context, cs content.Store, desc o
 	if !images.IsLayerType(desc.MediaType) {
 		return false, nil
 	}
-
-	if isNydusBlob, err := c.Is(ctx, cs, desc); err != nil {
-		return true, nil
-	} else if isNydusBlob {
-		return false, nil
-	}
-
-	return true, nil
+	_, hasAnno := desc.Annotations[nydusify.LayerAnnotationNydusBlob]
+	return desc.MediaType != nydusify.MediaTypeNydusBlob || !hasAnno, nil
 }
 
 func (c nydusType) NeedsComputeDiffBySelf(comp Config) bool {
@@ -117,21 +111,4 @@ func (c nydusType) MediaType() string {
 
 func (c nydusType) String() string {
 	return "nydus"
-}
-
-// Is returns true when the specified digest of content exists in
-// the content store and it's nydus format.
-func (c nydusType) Is(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (bool, error) {
-	if desc.Annotations == nil {
-		return false, nil
-	}
-	hasMediaType := desc.MediaType == nydusify.MediaTypeNydusBlob
-	_, hasAnno := desc.Annotations[nydusify.LayerAnnotationNydusBlob]
-
-	_, err := cs.Info(ctx, desc.Digest)
-	if err != nil {
-		return false, err
-	}
-
-	return hasMediaType && hasAnno, nil
 }
