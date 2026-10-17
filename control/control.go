@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"io"
 	"runtime/trace"
 	"strconv"
 	"sync"
@@ -33,7 +34,6 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/llbsolver/compat"
@@ -77,7 +77,7 @@ type Opt struct {
 	TraceCollector            sdktrace.SpanExporter
 	MeterProvider             metric.MeterProvider
 	HistoryDB                 db.DB
-	CacheStore                *bboltcachestorage.Store
+	CacheStore                io.Closer
 	LeaseManager              *leaseutil.Manager
 	ContentStore              *containerdsnapshot.Store
 	HistoryConfig             *config.HistoryConfig
@@ -259,7 +259,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				ReleaseUnreferenced(context.Context) error
 			}); ok {
 				if err := c.ReleaseUnreferenced(ctx); err != nil {
-					bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
+					bklog.G(ectx).Errorf("failed to release cache metadata: %+v", err)
 				}
 			}
 		}

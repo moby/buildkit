@@ -20,14 +20,28 @@ func TestCompactionPolicy(t *testing.T) {
 
 func TestBoltCacheStorage(t *testing.T) {
 	testutil.RunCacheStorageTests(t, func() solver.CacheKeyStorage {
-		tmpDir := t.TempDir()
-
-		st, err := NewStore(filepath.Join(tmpDir, "cache.db"))
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			require.NoError(t, st.Close())
-		})
-
-		return st
+		return newStore(t)
 	})
+
+	testutil.RunSolverTests(t, testutil.SolverTestOptions{
+		NewCacheManager: func(t *testing.T) solver.CacheManager {
+			return solver.NewKeyValueCacheManager(
+				t.Context(),
+				"local",
+				newStore(t),
+				solver.NewInMemoryResultStorage(),
+			)
+		},
+	})
+}
+
+func newStore(t *testing.T) *Store {
+	tmpDir := t.TempDir()
+
+	st, err := NewStore(filepath.Join(tmpDir, "cache.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	return st
 }
