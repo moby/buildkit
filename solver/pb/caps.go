@@ -33,6 +33,7 @@ const (
 	CapSourceGitSubdir          apicaps.CapID = "source.git.subdir"
 	CapSourceGitChecksum        apicaps.CapID = "source.git.checksum"
 	CapSourceGitSkipSubmodules  apicaps.CapID = "source.git.skipsubmodules"
+	CapSourceGitDebugCommands   apicaps.CapID = "source.git.debugcommands"
 	CapSourceGitSignatureVerify apicaps.CapID = "source.git.signatureverify"
 	CapSourceGitMTime           apicaps.CapID = "source.git.mtime"
 	CapSourceGitFetchByCommit   apicaps.CapID = "source.git.fetchbycommit"
@@ -252,6 +253,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceGitSkipSubmodules,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceGitDebugCommands,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

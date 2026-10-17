@@ -27,6 +27,7 @@ type GitIdentifier struct {
 	MountSSHSock     string
 	KnownSSHHosts    string
 	SkipSubmodules   bool
+	DebugCommands    bool
 	MTime            string // "checkout" (default) or "commit"
 	Advice           bool
 	FetchByCommit    bool
