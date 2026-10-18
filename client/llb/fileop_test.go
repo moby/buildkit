@@ -831,3 +831,46 @@ func TestParallelMarshal(t *testing.T) {
 	}
 	require.NoError(t, eg.Wait())
 }
+
+func TestFileOwnerLargeUID(t *testing.T) {
+	t.Parallel()
+
+	// UIDs in 2^31..2^32-1 are valid uid_t values and must parse as IDs,
+	// not be misclassified as names (moby/buildkit#7292).
+	for _, tc := range []struct {
+		in   string
+		want uint32
+	}{
+		{"2147483648", 2147483648},
+		{"4294967295", 4294967295},
+		{"1000", 1000},
+		{"0", 0},
+	} {
+		st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser(tc.in)))
+		def, err := st.Marshal(t.Context())
+		require.NoError(t, err)
+
+		_, arr := parseDef(t, def.Def)
+
+		action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+		mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+		byID, ok := mkdir.Owner.User.User.(*pb.UserOpt_ByID)
+		require.True(t, ok, "UID %q should parse as an ID, not a name", tc.in)
+		require.Equal(t, tc.want, byID.ByID)
+	}
+
+	// Non-numeric names still resolve by name.
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("nosuchuser")))
+	def, err := st.Marshal(t.Context())
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	byName, ok := mkdir.Owner.User.User.(*pb.UserOpt_ByName)
+	require.True(t, ok, "non-numeric user should resolve by name")
+	require.Equal(t, "nosuchuser", byName.ByName.Name)
+}

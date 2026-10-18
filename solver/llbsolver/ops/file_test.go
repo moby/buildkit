@@ -2,12 +2,16 @@ package ops
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/sys/user"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
@@ -733,4 +737,57 @@ loop0:
 	for _, m := range b.mounts {
 		require.True(t, m.unmounted, "%s %p still mounted", m.id, m)
 	}
+}
+
+// bindMountable is a snapshot.Mountable backed by a plain directory. A single
+// non-ro bind mount is returned as-is by snapshot.LocalMounter, so no
+// privileges are needed.
+type bindMountable struct{ dir string }
+
+func (m *bindMountable) Mount() ([]mount.Mount, func() error, error) {
+	return []mount.Mount{{Type: "bind", Source: m.dir}}, func() error { return nil }, nil
+}
+
+func (m *bindMountable) IdentityMapping() *user.IdentityMapping { return nil }
+
+func TestReadUserUnknownName(t *testing.T) {
+	t.Parallel()
+	// An unresolvable --chown name must fail instead of silently falling
+	// back to root (moby/buildkit#7292).
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "etc"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "etc", "passwd"),
+		[]byte("testuser:x:1000:1000::/:/bin/sh\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "etc", "group"),
+		[]byte("testgroup:x:1000:\n"), 0644))
+
+	mu := &bindMountable{dir: dir}
+
+	// A known user still resolves.
+	u, err := readUser(&pb.ChownOpt{
+		User: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Name: "testuser"}}},
+	}, mu, mu)
+	require.NoError(t, err)
+	require.Equal(t, 1000, u.UID)
+	require.Equal(t, 1000, u.GID)
+
+	// An unknown user errors instead of silently becoming uid 0.
+	_, err = readUser(&pb.ChownOpt{
+		User: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Name: "nosuchuser"}}},
+	}, mu, mu)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nosuchuser")
+
+	// An unknown group errors instead of silently keeping the user's gid.
+	_, err = readUser(&pb.ChownOpt{
+		Group: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Name: "nosuchgroup"}}},
+	}, mu, mu)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "nosuchgroup")
+
+	// A missing passwd file errors instead of silently becoming uid 0.
+	_, err = readUser(&pb.ChownOpt{
+		User: &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{Name: "testuser"}}},
+	}, &bindMountable{dir: t.TempDir()}, mu)
+	require.Error(t, err)
 }

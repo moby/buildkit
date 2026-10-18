@@ -262,7 +262,9 @@ func parseUID(str string) (int, error) {
 	if str == "root" {
 		return 0, nil
 	}
-	uid, err := strconv.ParseInt(str, 10, 32)
+	// UIDs and GIDs are 32-bit unsigned. Parse as uint32 so that valid
+	// IDs above 2^31-1 are not misclassified as names.
+	uid, err := strconv.ParseUint(str, 10, 32)
 	if err != nil {
 		return 0, err
 	}

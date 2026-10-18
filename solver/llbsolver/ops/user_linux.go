@@ -3,7 +3,6 @@ package ops
 import (
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/snapshot"
@@ -46,12 +45,8 @@ func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
 			}
 
 			ufile, err := openUserFile(dir, passwdPath)
-			if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
-				// Couldn't open the file. Considering this case as not finding the user in the file.
-				break
-			}
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "failed to open passwd file for chown user lookup")
 			}
 			defer ufile.Close()
 
@@ -62,10 +57,11 @@ func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
 				return nil, err
 			}
 
-			if len(users) > 0 {
-				us.UID = users[0].Uid
-				us.GID = users[0].Gid
+			if len(users) == 0 {
+				return nil, errors.Errorf("no such user: %s", u.ByName.Name)
 			}
+			us.UID = users[0].Uid
+			us.GID = users[0].Gid
 		case *pb.UserOpt_ByID:
 			us.UID = int(u.ByID)
 			us.GID = int(u.ByID)
@@ -92,12 +88,8 @@ func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
 			}
 
 			gfile, err := openUserFile(dir, groupPath)
-			if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
-				// Couldn't open the file. Considering this case as not finding the group in the file.
-				break
-			}
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "failed to open group file for chown group lookup")
 			}
 			defer gfile.Close()
 
@@ -108,9 +100,10 @@ func readUser(chopt *pb.ChownOpt, mu, mg snapshot.Mountable) (*copy.User, error)
 				return nil, err
 			}
 
-			if len(groups) > 0 {
-				us.GID = groups[0].Gid
+			if len(groups) == 0 {
+				return nil, errors.Errorf("no such group: %s", u.ByName.Name)
 			}
+			us.GID = groups[0].Gid
 		case *pb.UserOpt_ByID:
 			us.GID = int(u.ByID)
 		}
