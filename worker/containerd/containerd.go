@@ -103,7 +103,7 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		xlabels[wlabel.ApparmorProfile] = workerOpts.ApparmorProfile
 	}
 	if runtime.GOOS == "linux" {
-		xlabels[wlabel.LinuxResources] = strconv.FormatBool(!workerOpts.Rootless)
+		xlabels[wlabel.LinuxResources] = strconv.FormatBool(!workerOpts.Rootless || oci.IsSystemdCgroupParent(workerOpts.CgroupParent))
 	}
 	xlabels[wlabel.ContainerdNamespace] = workerOpts.Namespace
 	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID

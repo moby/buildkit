@@ -159,8 +159,18 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, resolvConf, 
 	releasers = append(releasers, cleanup)
 	spec.Process.Terminal = meta.Tty
 	if w.rootless {
-		executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
-		removedMounts, err := rootlessspecconv.ToRootless(spec)
+		var removedMounts []string
+		if oci.IsSystemdCgroupParent(cgroupParent(w.cgroupParent, meta.CgroupParent)) {
+			// A systemd slice is configured as cgroup parent, for example
+			// "buildkit.slice:buildkit:" together with the SystemdCgroup
+			// runtime option. runc then asks the user's systemd for the
+			// cgroup, so the limits can be applied. Any other cgroup path is
+			// not writable for a rootless runtime.
+			removedMounts, err = rootlessspecconv.ToRootlessWithCgroup(spec, spec.Linux.CgroupsPath)
+		} else {
+			executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
+			removedMounts, err = rootlessspecconv.ToRootless(spec)
+		}
 		if err != nil {
 			releaseAll()
 			return nil, nil, err
@@ -191,4 +201,13 @@ func (d *containerState) getTaskOpts() ([]ctd.NewTaskOpts, error) {
 
 func setArgs(spec *specs.Process, args []string) {
 	spec.Args = args
+}
+
+// cgroupParent returns the cgroup parent of a step, which is the one set for
+// the step if any and the worker default otherwise.
+func cgroupParent(workerDefault, step string) string {
+	if step != "" {
+		return step
+	}
+	return workerDefault
 }
