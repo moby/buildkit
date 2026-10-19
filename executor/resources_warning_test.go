@@ -20,6 +20,9 @@ func TestWarnLinuxResourcesIgnored(t *testing.T) {
 		{name: "memory", res: &pb.LinuxResources{Memory: 64 << 20}, warn: true},
 		{name: "cpu quota", res: &pb.LinuxResources{CpuQuota: 50000, CpuPeriod: 100000}, warn: true},
 		{name: "cpuset", res: &pb.LinuxResources{CpusetCpus: "0"}, warn: true},
+		{name: "memory swap", res: &pb.LinuxResources{MemorySwap: -1}, warn: true},
+		{name: "cpu shares", res: &pb.LinuxResources{CpuShares: 512}, warn: true},
+		{name: "cpuset mems", res: &pb.LinuxResources{CpusetMems: "0"}, warn: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pr, ctx, cancel := progress.NewContext(t.Context())
