@@ -246,7 +246,8 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}()
 
 	fixProcessOutput(&process)
-	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
+	stdin, stdinDone := wrapStdin(process.Stdin)
+	cioOpts := []cio.Opt{cio.WithStreams(stdin, process.Stdout, process.Stderr)}
 	if meta.Tty {
 		cioOpts = append(cioOpts, cio.WithTerminal)
 	}
@@ -276,7 +277,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 
 	trace.SpanFromContext(ctx).AddEvent("Container created")
-	err = w.runProcess(ctx, task, process.Resize, process.Signal, process.Meta.ValidExitCodes, func() {
+	err = w.runProcess(ctx, task, stdinDone, process.Resize, process.Signal, process.Meta.ValidExitCodes, func() {
 		startedOnce.Do(func() {
 			trace.SpanFromContext(ctx).AddEvent("Container started")
 			if started != nil {
@@ -361,7 +362,8 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	}
 
 	fixProcessOutput(&process)
-	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
+	stdin, stdinDone := wrapStdin(process.Stdin)
+	cioOpts := []cio.Opt{cio.WithStreams(stdin, process.Stdout, process.Stderr)}
 	if meta.Tty {
 		cioOpts = append(cioOpts, cio.WithTerminal)
 	}
@@ -371,7 +373,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		return errors.WithStack(err)
 	}
 
-	err = w.runProcess(ctx, taskProcess, process.Resize, process.Signal, process.Meta.ValidExitCodes, nil)
+	err = w.runProcess(ctx, taskProcess, stdinDone, process.Resize, process.Signal, process.Meta.ValidExitCodes, nil)
 	return err
 }
 
@@ -388,7 +390,28 @@ func fixProcessOutput(process *executor.ProcessInfo) {
 	}
 }
 
-func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resize <-chan executor.WinSize, signal <-chan syscall.Signal, validExitCodes []int, started func()) error {
+func wrapStdin(r io.Reader) (io.Reader, <-chan struct{}) {
+	if r == nil {
+		return nil, nil
+	}
+	s := &stdinReader{Reader: r, done: make(chan struct{})}
+	return s, s.done
+}
+
+type stdinReader struct {
+	io.Reader
+	done chan struct{}
+}
+
+func (s *stdinReader) WriteTo(w io.Writer) (int64, error) {
+	defer close(s.done)
+	// cio's io.CopyBuffer dispatches here through io.WriterTo.
+	// Notify after copying, rather than on Read's EOF: a reader can return
+	// data and EOF together, and those bytes must reach the FIFO first.
+	return io.Copy(w, s.Reader)
+}
+
+func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, stdinDone <-chan struct{}, resize <-chan executor.WinSize, signal <-chan syscall.Signal, validExitCodes []int, started func()) error {
 	// Not using `ctx` here because the context passed only affects the statusCh which we
 	// don't want cancelled when ctx.Done is sent.  We want to process statusCh on cancel.
 	statusCh, err := p.Wait(context.Background())
@@ -411,12 +434,24 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p ctd.Process, resi
 		started()
 	}
 
-	p.CloseIO(ctx, ctd.WithStdinCloser)
-
 	// handle signals (and resize) in separate go loop so it does not
 	// potentially block the container cancel/exit status loop below.
 	eventCtx, eventCancel := context.WithCancelCause(ctx)
 	defer eventCancel(errors.WithStack(context.Canceled))
+	if stdinDone != nil {
+		go func() {
+			select {
+			case <-eventCtx.Done():
+				return
+			case <-stdinDone:
+			}
+			// Keep the shim's stdin FIFO handle open until input forwarding
+			// finishes. Closing it at startup races with the FIFO opens.
+			if err := p.CloseIO(eventCtx, ctd.WithStdinCloser); err != nil && context.Cause(eventCtx) == nil {
+				bklog.G(eventCtx).Warnf("Failed to close stdin for %s: %s", p.ID(), err)
+			}
+		}()
+	}
 	go func() {
 		for {
 			select {
