@@ -17,3 +17,9 @@ import (
 func ToRootless(spec *specs.Spec) ([]string, error) {
 	return nil, errors.Errorf("not implemented on %s", runtime.GOOS)
 }
+
+// ToRootlessWithCgroup is like ToRootless, but it keeps the resource limits
+// and runs the container in cgroupsPath.
+func ToRootlessWithCgroup(spec *specs.Spec, cgroupsPath string) ([]string, error) {
+	return nil, errors.Errorf("not implemented on %s", runtime.GOOS)
+}

@@ -8,14 +8,20 @@ Rootless mode allows running BuildKit daemon as a non-root user.
   On kernel < 4.18, the `native` snapshotter is used.
 * Network mode is always set to `network.host`.
 * Per-step resource limits (`--resource` in Buildx, `resources` in Bake) need a
-  cgroup v2 tree delegated to the rootless user, for example a systemd user service
-  with `Delegate=yes`. The OCI worker uses the cgroup that `buildkitd` starts in when
-  it is writable and has the `cpu` and `memory` controllers. The containerd worker
-  applies them when `defaultCgroupParent` in `[worker.containerd]` is a systemd slice,
-  for example `buildkit.slice:buildkit:`, so that runc gets the cgroup from the user's
-  systemd. Otherwise the limits are ignored with a warning. The worker label
-  `org.mobyproject.buildkit.worker.linux.resources` shows whether limits are applied.
-  `cpuset` limits also need the `cpuset` controller.
+  cgroup v2 tree delegated to the rootless user.
+  The OCI worker uses the cgroup that `buildkitd` starts in when systemd marked it as
+  delegated (`user.delegate` extended attribute), or when
+  `rootless-delegated-cgroup = true` is set in `[worker.oci]`
+  (`--oci-worker-rootless-delegated-cgroup`).
+  Set it when `buildkitd` runs as a systemd user service with `Delegate=yes`, since
+  the per-user systemd does not mark its units.
+  The cgroup also needs the `cpu` and `memory` controllers.
+  The containerd worker applies limits when `defaultCgroupParent` in
+  `[worker.containerd]` is a systemd slice, for example `buildkit.slice:buildkit:`,
+  so that runc gets the cgroup from the user's systemd.
+  In all other cases the limits are ignored with a warning.
+  The worker label `org.mobyproject.buildkit.worker.linux.resources` shows whether
+  limits are applied. `cpuset` limits also need the `cpuset` controller.
 
 ## Running BuildKit in Rootless mode (OCI worker)
 

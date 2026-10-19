@@ -28,21 +28,28 @@ type RootlessCgroup struct {
 	Controllers []string
 }
 
-// PrepareRootlessCgroup checks whether the cgroup buildkitd runs in has been
-// delegated to it, which is how a rootless process gets a cgroup v2 tree that
-// it can manage. If so, it moves the buildkitd processes into a leaf cgroup
-// named "init" and enables the controllers for the other children, so that
-// build steps can get their own cgroups with resource limits.
+// PrepareRootlessCgroup sets up the cgroup that buildkitd runs in so that
+// build steps can get their own child cgroups with resource limits. It moves
+// the buildkitd processes into a leaf child named "init" and enables the
+// controllers for the other children.
 //
-// If buildkitd already runs in an "init" cgroup whose parent has the required
-// controllers enabled, for example after `rootlesskit --evacuate-cgroup2=init`,
-// the parent is used as it is.
+// It only takes over a cgroup that was delegated to buildkitd. The cgroup
+// counts as delegated when systemd marked it with the user.delegate or
+// trusted.delegate extended attribute, or when assumeDelegated is set because
+// the user configured it. systemd marks the cgroups that the system manager
+// delegates, for example a system service with Delegate=yes. A unit of the
+// per-user systemd instance has no such mark even with Delegate=yes, and it
+// looks the same as the cgroup of a terminal, so for those the user has to set
+// assumeDelegated.
 //
-// It returns an error, and changes nothing, when cgroup v2 is not mounted at
-// /sys/fs/cgroup, the cpu or memory controller is missing, or the cgroup is not
-// writable. That is the case for a cgroup that was not delegated and for a
-// read-only /sys/fs/cgroup, as in an unprivileged Kubernetes pod.
-func PrepareRootlessCgroup() (*RootlessCgroup, error) {
+// If buildkitd already runs in an "init" cgroup whose parent is set up this
+// way, for example after `rootlesskit --evacuate-cgroup2=init`, the parent is
+// used as it is.
+//
+// On error the cgroup is left as it was. Errors are expected for cgroup v1, a
+// read-only /sys/fs/cgroup as in an unprivileged Kubernetes pod, and a cgroup
+// that is not delegated.
+func PrepareRootlessCgroup(assumeDelegated bool) (*RootlessCgroup, error) {
 	if !isCgroup2() {
 		return nil, errors.Errorf("cgroup v2 is not mounted at %s", defaultMountpoint)
 	}
@@ -50,20 +57,24 @@ func PrepareRootlessCgroup() (*RootlessCgroup, error) {
 	if err != nil {
 		return nil, err
 	}
-	return prepareRootlessCgroup(defaultMountpoint, own)
+	return prepareRootlessCgroup(defaultMountpoint, own, assumeDelegated)
 }
 
-func prepareRootlessCgroup(mountpoint, own string) (*RootlessCgroup, error) {
+func prepareRootlessCgroup(mountpoint, own string, assumeDelegated bool) (*RootlessCgroup, error) {
 	if path.Base(own) == initGroup {
 		parent := path.Dir(own)
 		parentDir := filepath.Join(mountpoint, parent)
 		if enabled, err := readControllers(filepath.Join(parentDir, cgroupSubtreeFile)); err == nil &&
-			hasControllers(enabled, rootlessRequiredControllers) && isWritable(parentDir) == nil {
+			hasControllers(enabled, rootlessRequiredControllers) && isWritable(parentDir) == nil &&
+			(assumeDelegated || isDelegated(parentDir)) {
 			return &RootlessCgroup{Path: parent, Controllers: enabled}, nil
 		}
 	}
 
 	dir := filepath.Join(mountpoint, own)
+	if !assumeDelegated && !isDelegated(dir) {
+		return nil, errors.Errorf("cgroup %s is not marked as delegated by systemd; set rootless-delegated-cgroup if it is", own)
+	}
 	available, err := readControllers(filepath.Join(dir, cgroupControllersFile))
 	if err != nil {
 		return nil, err
@@ -75,13 +86,28 @@ func prepareRootlessCgroup(mountpoint, own string) (*RootlessCgroup, error) {
 		return nil, err
 	}
 
-	if err := moveProcs(dir, filepath.Join(dir, initGroup)); err != nil {
+	leaf := filepath.Join(dir, initGroup)
+	createdLeaf, err := mkdirIfMissing(leaf)
+	if err != nil {
+		return nil, err
+	}
+	undo := func() {
+		// Best effort, so that a failed setup leaves the cgroup as it was.
+		moveProcs(leaf, dir)
+		if createdLeaf {
+			os.Remove(leaf)
+		}
+	}
+	if err := moveProcs(dir, leaf); err != nil {
+		undo()
 		return nil, err
 	}
 	var enabled []string
 	for _, c := range available {
 		if err := os.WriteFile(filepath.Join(dir, cgroupSubtreeFile), []byte("+"+c), 0); err != nil {
 			if slices.Contains(rootlessRequiredControllers, c) {
+				disableControllers(dir, enabled)
+				undo()
 				return nil, errors.Wrapf(err, "failed to enable cgroup controller %q in %s", c, own)
 			}
 			continue
@@ -89,6 +115,61 @@ func prepareRootlessCgroup(mountpoint, own string) (*RootlessCgroup, error) {
 		enabled = append(enabled, c)
 	}
 	return &RootlessCgroup{Path: own, Controllers: enabled}, nil
+}
+
+// isDelegated reports whether systemd marked the cgroup dir as delegated.
+// systemd sets user.delegate (readable by the owner) and trusted.delegate
+// (readable by root) to "1" on cgroups it delegates.
+func isDelegated(dir string) bool {
+	for _, attr := range []string{"user.delegate", "trusted.delegate"} {
+		buf := make([]byte, 8)
+		n, err := unix.Getxattr(dir, attr, buf)
+		if err == nil && string(buf[:n]) == "1" {
+			return true
+		}
+	}
+	return false
+}
+
+// mkdirIfMissing creates dir and reports whether it had to.
+func mkdirIfMissing(dir string) (bool, error) {
+	err := os.Mkdir(dir, 0o755)
+	if errors.Is(err, os.ErrExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	return true, nil
+}
+
+func disableControllers(dir string, controllers []string) {
+	for _, c := range slices.Backward(controllers) {
+		os.WriteFile(filepath.Join(dir, cgroupSubtreeFile), []byte("-"+c), 0)
+	}
+}
+
+// OwnCgroupControllers returns the cgroup v2 controllers available to the
+// cgroup that buildkitd runs in. Under a user's systemd, the other units of
+// that user get the same controllers, so this tells which limits rootless
+// runc can apply in a systemd slice of the same user. It returns an error when
+// the cpu or memory controller is missing.
+func OwnCgroupControllers() ([]string, error) {
+	if !isCgroup2() {
+		return nil, errors.Errorf("cgroup v2 is not mounted at %s", defaultMountpoint)
+	}
+	own, err := ownCgroup("/proc/self/cgroup")
+	if err != nil {
+		return nil, err
+	}
+	available, err := readControllers(filepath.Join(defaultMountpoint, own, cgroupControllersFile))
+	if err != nil {
+		return nil, err
+	}
+	if !hasControllers(available, rootlessRequiredControllers) {
+		return nil, errors.Errorf("cgroup %s has controllers %q, needs %q", own, available, rootlessRequiredControllers)
+	}
+	return available, nil
 }
 
 // ownCgroup returns the cgroup v2 path of the current process, as found in
@@ -142,13 +223,10 @@ func hasControllers(have, want []string) bool {
 	return true
 }
 
-// moveProcs moves every process in the cgroup dir into the cgroup to, which is
-// created if needed. A cgroup v2 can only enable controllers for its children
-// while it has no processes of its own.
+// moveProcs moves every process in the cgroup dir into the cgroup to. A
+// cgroup v2 can only enable controllers for its children while it has no
+// processes of its own.
 func moveProcs(dir, to string) error {
-	if err := os.MkdirAll(to, 0o755); err != nil {
-		return errors.WithStack(err)
-	}
 	// New processes can show up while moving, so read the list again until it
 	// is empty.
 	for range 10 {
@@ -160,9 +238,20 @@ func moveProcs(dir, to string) error {
 		if len(pids) == 0 {
 			return nil
 		}
+		// cgroup.procs lists processes outside our PID namespace as 0, for
+		// example the rootlesskit parent when rootlesskit runs with --pidns.
+		// They can't be moved from here, and writing 0 would move this
+		// process instead.
+		if slices.Contains(pids, "0") {
+			return errors.Errorf("%s has processes outside the PID namespace of buildkitd", dir)
+		}
 		for _, pid := range pids {
 			//nolint:gosec // to is under the cgroup of this process, see ownCgroup
-			if err := os.WriteFile(filepath.Join(to, cgroupProcsFile), []byte(pid), 0); err != nil {
+			err := os.WriteFile(filepath.Join(to, cgroupProcsFile), []byte(pid), 0)
+			if errors.Is(err, unix.ESRCH) {
+				continue // the process exited in the meantime
+			}
+			if err != nil {
 				return errors.Wrapf(err, "failed to move process %s to %s", pid, to)
 			}
 		}

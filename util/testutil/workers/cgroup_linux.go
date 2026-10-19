@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/pkg/errors"
@@ -49,6 +50,12 @@ func delegateCgroup(uid, gid int) (dir string, cleanup func() error, err error) 
 			return "", nil, errors.WithStack(err)
 		}
 	}
+	// systemd marks delegated cgroups like this, and buildkitd only takes
+	// over a cgroup with this mark unless configured otherwise.
+	if err := unix.Setxattr(dir, "user.delegate", []byte("1"), 0); err != nil {
+		cleanup()
+		return "", nil, errors.WithStack(err)
+	}
 	return dir, cleanup, nil
 }
 
@@ -70,9 +77,24 @@ func removeCgroup(dir string) error {
 		return errors.WithStack(err)
 	}
 	for _, d := range slices.Backward(dirs) {
-		if err := os.Remove(d); err != nil {
-			return errors.WithStack(err)
+		if err := removeEmptyCgroup(d); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// removeEmptyCgroup removes the cgroup dir. Right after the daemon stopped,
+// the kernel can still count exiting processes in it and return EBUSY, so it
+// tries again for a few seconds.
+func removeEmptyCgroup(dir string) error {
+	var err error
+	for range 50 {
+		err = os.Remove(dir)
+		if !errors.Is(err, unix.EBUSY) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return errors.WithStack(err)
 }
