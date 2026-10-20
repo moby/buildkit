@@ -1044,6 +1044,14 @@ type cacheWithCacheOpts struct {
 	st *state
 }
 
+func (c cacheWithCacheOpts) QueryContext(ctx context.Context, inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
+	return QueryCacheManager(ctx, c.CacheManager, inp, inputIndex, dgst, outputIndex)
+}
+
+func (c cacheWithCacheOpts) QueryReady() bool {
+	return CacheManagerQueryReady(c.CacheManager)
+}
+
 func (c cacheWithCacheOpts) Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error) {
 	// Allow Records accessing to cache opts through ctx. This enable to use remote provider
 	// during checking the cache existence.

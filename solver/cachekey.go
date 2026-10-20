@@ -106,3 +106,47 @@ func (ck *CacheKey) clone() *CacheKey {
 	ck.mu.RUnlock()
 	return nk
 }
+
+// cloneCacheKeysForQuery snapshots mutable key metadata before a query runs
+// outside the scheduler lock.
+func cloneCacheKeysForQuery(keys []CacheKeyWithSelector) []CacheKeyWithSelector {
+	cloned := make(map[*CacheKey]*CacheKey)
+	var cloneKey func(*CacheKey) *CacheKey
+	cloneKey = func(ck *CacheKey) *CacheKey {
+		if ck == nil {
+			return nil
+		}
+		if nk, ok := cloned[ck]; ok {
+			return nk
+		}
+
+		ck.mu.RLock()
+		nk := &CacheKey{
+			ID:       ck.ID,
+			digest:   ck.digest,
+			vtx:      ck.vtx,
+			output:   ck.output,
+			ids:      make(map[*cacheManager]string, len(ck.ids)),
+			indexIDs: slices.Clone(ck.indexIDs),
+		}
+		maps.Copy(nk.ids, ck.ids)
+		cloned[ck] = nk
+		nk.deps = make([][]CacheKeyWithSelector, len(ck.deps))
+		for i, deps := range ck.deps {
+			nk.deps[i] = make([]CacheKeyWithSelector, len(deps))
+			for j, dep := range deps {
+				nk.deps[i][j] = dep
+				nk.deps[i][j].CacheKey.CacheKey = cloneKey(dep.CacheKey.CacheKey)
+			}
+		}
+		ck.mu.RUnlock()
+		return nk
+	}
+
+	out := make([]CacheKeyWithSelector, len(keys))
+	for i, key := range keys {
+		out[i] = key
+		out[i].CacheKey.CacheKey = cloneKey(key.CacheKey.CacheKey)
+	}
+	return out
+}

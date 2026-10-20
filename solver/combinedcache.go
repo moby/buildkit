@@ -46,13 +46,36 @@ func (cm *combinedCacheManager) ReleaseUnreferenced(ctx context.Context) error {
 }
 
 func (cm *combinedCacheManager) Query(inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
-	eg, _ := errgroup.WithContext(context.TODO())
+	return cm.query(context.TODO(), false, inp, inputIndex, dgst, outputIndex)
+}
+
+func (cm *combinedCacheManager) QueryContext(ctx context.Context, inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
+	return cm.query(ctx, true, inp, inputIndex, dgst, outputIndex)
+}
+
+func (cm *combinedCacheManager) QueryReady() bool {
+	for _, c := range cm.cms {
+		if !CacheManagerQueryReady(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func (cm *combinedCacheManager) query(ctx context.Context, contextAware bool, inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
+	eg, queryCtx := errgroup.WithContext(ctx)
 	keys := make(map[string]*CacheKey, len(cm.cms))
 	var mu sync.Mutex
 	for _, c := range cm.cms {
 		func(c CacheManager) {
 			eg.Go(func() error {
-				recs, err := c.Query(inp, inputIndex, dgst, outputIndex)
+				var recs []*CacheKey
+				var err error
+				if contextAware {
+					recs, err = QueryCacheManager(queryCtx, c, inp, inputIndex, dgst, outputIndex)
+				} else {
+					recs, err = c.Query(inp, inputIndex, dgst, outputIndex)
+				}
 				if err != nil {
 					return err
 				}

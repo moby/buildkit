@@ -326,16 +326,33 @@ func (lcm *lazyCacheManager) ID() string {
 	return lcm.id
 }
 
+func (lcm *lazyCacheManager) QueryReady() bool {
+	select {
+	case <-lcm.waitCh:
+		return true
+	default:
+		return false
+	}
+}
+
 func (lcm *lazyCacheManager) Query(inp []solver.CacheKeyWithSelector, inputIndex solver.Index, dgst digest.Digest, outputIndex solver.Index) ([]*solver.CacheKey, error) {
-	lcm.wait()
+	return lcm.QueryContext(context.Background(), inp, inputIndex, dgst, outputIndex)
+}
+
+func (lcm *lazyCacheManager) QueryContext(ctx context.Context, inp []solver.CacheKeyWithSelector, inputIndex solver.Index, dgst digest.Digest, outputIndex solver.Index) ([]*solver.CacheKey, error) {
+	if err := lcm.waitContext(ctx); err != nil {
+		return nil, err
+	}
 	if lcm.main == nil {
 		return nil, nil
 	}
-	return lcm.main.Query(inp, inputIndex, dgst, outputIndex)
+	return solver.QueryCacheManager(ctx, lcm.main, inp, inputIndex, dgst, outputIndex)
 }
 
 func (lcm *lazyCacheManager) Records(ctx context.Context, ck *solver.CacheKey) ([]*solver.CacheRecord, error) {
-	lcm.wait()
+	if err := lcm.waitContext(ctx); err != nil {
+		return nil, err
+	}
 	if lcm.main == nil {
 		return nil, nil
 	}
@@ -343,7 +360,7 @@ func (lcm *lazyCacheManager) Records(ctx context.Context, ck *solver.CacheKey) (
 }
 
 func (lcm *lazyCacheManager) Load(ctx context.Context, rec *solver.CacheRecord) (solver.Result, error) {
-	if err := lcm.wait(); err != nil {
+	if err := lcm.waitContext(ctx); err != nil {
 		return nil, err
 	}
 	return lcm.main.Load(ctx, rec)
@@ -357,7 +374,7 @@ func (lcm *lazyCacheManager) Save(key *solver.CacheKey, s solver.Result, created
 }
 
 func (lcm *lazyCacheManager) ReleaseUnreferenced(ctx context.Context) error {
-	if err := lcm.wait(); err != nil {
+	if err := lcm.waitContext(ctx); err != nil {
 		return err
 	}
 	return lcm.main.ReleaseUnreferenced(ctx)
@@ -366,6 +383,15 @@ func (lcm *lazyCacheManager) ReleaseUnreferenced(ctx context.Context) error {
 func (lcm *lazyCacheManager) wait() error {
 	<-lcm.waitCh
 	return lcm.err
+}
+
+func (lcm *lazyCacheManager) waitContext(ctx context.Context) error {
+	select {
+	case <-lcm.waitCh:
+		return lcm.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func newLazyCacheManager(id string, fn func() (solver.CacheManager, error)) solver.CacheManager {

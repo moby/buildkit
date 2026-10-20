@@ -341,6 +341,7 @@ type pipeFactory struct {
 }
 
 func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipeReceiver {
+	req.from = pf.e
 	target := pf.s.ef.getEdge(ee)
 	if target == nil {
 		debugSchedulerInconsistentGraphState(ee)

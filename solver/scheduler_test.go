@@ -4316,3 +4316,106 @@ type testExporterRecord struct {
 	results int
 	links   int
 }
+
+func TestSchedulerDispatchDoesNotBlockOnCacheQuery(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		withDependency bool
+	}{
+		{name: "root"},
+		{name: "dependency", withDependency: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testSchedulerDispatchDoesNotBlockOnCacheQuery(t, tc.withDependency)
+		})
+	}
+}
+
+func testSchedulerDispatchDoesNotBlockOnCacheQuery(t *testing.T, withDependency bool) {
+	ctx := t.Context()
+	s := NewSolver(SolverOpt{ResolveOpFunc: testOpResolver})
+	cacheJob, err := s.NewJob("cache-query")
+	require.NoError(t, err)
+	otherJob, err := s.NewJob("independent-build")
+	require.NoError(t, err)
+
+	queryStarted := make(chan struct{})
+	queryRelease := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(queryRelease) }) }
+	cache := &blockingQueryCacheManager{
+		CacheManager: NewInMemoryCacheManager(),
+		started:      queryStarted,
+		release:      queryRelease,
+	}
+	defer func() {
+		release()
+		_ = cacheJob.Discard()
+		_ = otherJob.Discard()
+		s.Close()
+	}()
+
+	cacheVertex := vtxOpt{
+		name:        "blocked-cache-query",
+		value:       "cache result",
+		cacheSource: cache,
+	}
+	if withDependency {
+		cacheVertex.inputs = []Edge{{Vertex: vtx(vtxOpt{name: "cache-query-dependency", value: "dependency"})}}
+	}
+
+	cacheBuildDone := make(chan error, 1)
+	go func() {
+		_, err := cacheJob.Build(ctx, Edge{Vertex: vtx(cacheVertex)})
+		cacheBuildDone <- err
+	}()
+
+	select {
+	case <-queryStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cache query did not start")
+	}
+
+	otherBuildDone := make(chan error, 1)
+	go func() {
+		_, err := otherJob.Build(ctx, Edge{Vertex: vtx(vtxOpt{
+			name:  "independent-build",
+			value: "independent result",
+		})})
+		otherBuildDone <- err
+	}()
+
+	select {
+	case err := <-otherBuildDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("an unrelated build was blocked by a cache query")
+	}
+
+	release()
+	select {
+	case err := <-cacheBuildDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("build did not resume after cache query completed")
+	}
+}
+
+type blockingQueryCacheManager struct {
+	CacheManager
+	started chan struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (cm *blockingQueryCacheManager) QueryReady() bool {
+	return false
+}
+
+func (cm *blockingQueryCacheManager) Query(inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
+	cm.once.Do(func() {
+		close(cm.started)
+		<-cm.release
+	})
+	return cm.CacheManager.Query(inp, inputIndex, dgst, outputIndex)
+}

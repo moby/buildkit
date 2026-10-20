@@ -300,3 +300,33 @@ type CacheManager interface {
 
 	ReleaseUnreferenced(context.Context) error
 }
+
+// CacheManagerQueryer allows a cache manager to support cancellable queries
+// without changing the CacheManager interface.
+type CacheManagerQueryer interface {
+	QueryContext(context.Context, []CacheKeyWithSelector, Index, digest.Digest, Index) ([]*CacheKey, error)
+}
+
+// QueryCacheManager calls QueryContext when the cache manager supports it,
+// falling back to Query for existing cache manager implementations.
+func QueryCacheManager(ctx context.Context, cm CacheManager, inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error) {
+	if qcm, ok := cm.(CacheManagerQueryer); ok {
+		return qcm.QueryContext(ctx, inp, inputIndex, dgst, outputIndex)
+	}
+	return cm.Query(inp, inputIndex, dgst, outputIndex)
+}
+
+// CacheManagerQueryReadiness reports whether Query can run without waiting for
+// a deferred cache import.
+type CacheManagerQueryReadiness interface {
+	QueryReady() bool
+}
+
+// CacheManagerQueryReady reports whether a cache manager is ready to answer a
+// query synchronously. Managers without readiness information are assumed ready.
+func CacheManagerQueryReady(cm CacheManager) bool {
+	if qcm, ok := cm.(CacheManagerQueryReadiness); ok {
+		return qcm.QueryReady()
+	}
+	return true
+}
