@@ -9,12 +9,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/cache/remotecache/gha/ghatypes"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
+	policy "github.com/moby/policy-helpers"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 )
+
+func TestVerifySignatureNegativeTlogThreshold(t *testing.T) {
+	config := &Config{
+		CacheConfig: &ghatypes.CacheConfig{
+			Verify: ghatypes.VerifyConfig{
+				Policy: ghatypes.VerifyPolicy{
+					TlogThreshold: new(-1),
+				},
+			},
+		},
+		verifier: func() (*policy.Verifier, error) {
+			return &policy.Verifier{}, nil
+		},
+	}
+	err := verifySignature(t.Context(), digest.FromString("cache index"), nil, config)
+	require.EqualError(t, err, "transparency log threshold must not be negative")
+}
 
 func init() {
 	if workers.IsTestDockerd() {
