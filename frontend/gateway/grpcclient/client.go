@@ -97,7 +97,8 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	if !ok {
 		return nil, errors.Errorf("invalid return reference type %T", ref)
 	}
-	return &pb.Ref{Id: r.id, Def: r.def}, nil
+	// Return only needs the ID of the reference held by the server.
+	return &pb.Ref{Id: r.id}, nil
 }
 
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
