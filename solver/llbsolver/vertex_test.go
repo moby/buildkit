@@ -1,15 +1,22 @@
 package llbsolver
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"tags.cncf.io/container-device-interface/pkg/cdi"
 )
 
 func TestRecomputeDigests(t *testing.T) {
@@ -423,4 +430,198 @@ func requireVertexOp(t *testing.T, v interface{ Sys() any }) *pb.Op {
 	op, ok := v.Sys().(*pb.Op)
 	require.True(t, ok)
 	return op
+}
+
+func TestValidateEntitlementsOnDemandDevices(t *testing.T) {
+	const kind = "on-demand.test/gpu"
+	setup := &entitlementTestSetup{available: true}
+	cdidevices.Register(kind, setup)
+	t.Cleanup(func() { setup.available = false })
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "device.json"), []byte(`{
+ "cdiVersion": "0.6.0",
+ "kind": "registered.test/device",
+ "devices": [{"name": "foo", "containerEdits": {"env": ["TEST_DEVICE=1"]}}]
+ }`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "classed.json"), []byte(`{
+ "cdiVersion": "0.6.0",
+ "kind": "classed.test/device",
+ "devices": [{"name": "bar", "annotations": {"org.mobyproject.buildkit.device.class": "on-demand.test/gpu=classed"}, "containerEdits": {"env": ["TEST_DEVICE=2"]}}]
+ }`), 0600))
+	installedDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(installedDir, "gpu.json"), []byte(`{
+ "cdiVersion": "0.6.0",
+ "kind": "on-demand.test/gpu",
+ "devices": [{"name": "all", "containerEdits": {"env": ["TEST_GPU=1"]}}]
+ }`), 0600))
+
+	for _, tc := range []struct {
+		name      string
+		devices   []*pb.CDIDevice
+		cfg       *entitlements.DevicesConfig
+		available bool
+		installed bool
+		want      []*pb.CDIDevice
+		wantErr   string
+	}{
+		{
+			name:      "required kind",
+			devices:   []*pb.CDIDevice{{Name: kind}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind}},
+		},
+		{
+			name:      "required named device",
+			devices:   []*pb.CDIDevice{{Name: kind + "=all"}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=all"}},
+		},
+		{
+			name:      "optional named device",
+			devices:   []*pb.CDIDevice{{Name: kind + "=1", Optional: true}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=1", Optional: true}},
+		},
+		{
+			name:      "wildcard",
+			devices:   []*pb.CDIDevice{{Name: kind + "=*", Optional: true}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=*", Optional: true}},
+		},
+		{
+			name:      "unrelated registered device",
+			devices:   []*pb.CDIDevice{{Name: "registered.test/device=foo"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{"registered.test/device": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: "registered.test/device=foo"}},
+		},
+		{
+			name:      "unrelated missing optional device",
+			devices:   []*pb.CDIDevice{{Name: "missing.test/device", Optional: true}},
+			available: true,
+		},
+		{
+			name:      "unrelated missing required device",
+			devices:   []*pb.CDIDevice{{Name: "missing.test/device"}},
+			available: true,
+			wantErr:   `required device "missing.test/device" is not registered`,
+		},
+		{
+			name:    "unavailable optional installer",
+			devices: []*pb.CDIDevice{{Name: kind, Optional: true}},
+		},
+		{
+			name:    "unavailable required installer",
+			devices: []*pb.CDIDevice{{Name: kind}},
+			wantErr: `required device "on-demand.test/gpu" is not registered`,
+		},
+		{
+			name:      "alias",
+			devices:   []*pb.CDIDevice{{Name: "gpu", Optional: true}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{"gpu": kind + "=all"}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=all", Optional: true}},
+		},
+		{
+			name:      "allow all preserves selection",
+			devices:   []*pb.CDIDevice{{Name: kind + "=all", Optional: true}},
+			cfg:       &entitlements.DevicesConfig{All: true},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=all", Optional: true}},
+		},
+		{
+			name:      "mixed on-demand and registered grants",
+			devices:   []*pb.CDIDevice{{Name: kind + "=all"}, {Name: "registered.test/device=foo"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{kind: "", "registered.test/device": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=all"}, {Name: "registered.test/device=foo"}},
+		},
+		{
+			name:      "class annotation on on-demand name still requires permission",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			available: true,
+			wantErr:   `device classed.test/device=bar is requested by the build but not allowed`,
+		},
+		{
+			name:      "class annotation on on-demand name with explicit grant",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{"classed.test/device=bar": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: "classed.test/device=bar"}},
+		},
+		{
+			name:      "class annotation on on-demand name with grant by class",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{kind + "=classed": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: "classed.test/device=bar"}},
+		},
+		{
+			name:      "nil device is ignored",
+			devices:   []*pb.CDIDevice{nil, {Name: kind}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind}},
+		},
+		{
+			name:      "registered device still requires permission",
+			devices:   []*pb.CDIDevice{{Name: kind}, {Name: "registered.test/device=foo"}},
+			available: true,
+			wantErr:   `device registered.test/device=foo is requested by the build but not allowed`,
+		},
+		{
+			name:      "installed kind is not implicitly allowed",
+			devices:   []*pb.CDIDevice{{Name: kind + "=all"}},
+			available: true,
+			installed: true,
+			wantErr:   `device on-demand.test/gpu=all is requested by the build but not allowed`,
+		},
+		{
+			name:      "installed kind with explicit grant",
+			devices:   []*pb.CDIDevice{{Name: kind + "=all"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{kind: ""}},
+			available: true,
+			installed: true,
+			want:      []*pb.CDIDevice{{Name: kind + "=all"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setup.available = tc.available
+			dirs := []string{dir}
+			if tc.installed {
+				dirs = append(dirs, installedDir)
+			}
+			cache, err := cdi.NewCache(cdi.WithSpecDirs(dirs...), cdi.WithAutoRefresh(false))
+			require.NoError(t, err)
+			manager := cdidevices.NewManager(cache, nil)
+			ent := entitlements.Set{}
+			if tc.cfg != nil {
+				ent[entitlements.EntitlementDevice] = tc.cfg
+			}
+			exec := &pb.ExecOp{CdiDevices: tc.devices}
+			op := &pb.Op{Op: &pb.Op_Exec{Exec: exec}}
+			err = ValidateEntitlements(ent, manager)(op, nil, &solver.VertexOptions{})
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, exec.CdiDevices)
+		})
+	}
+}
+
+type entitlementTestSetup struct {
+	available bool
+}
+
+func (s *entitlementTestSetup) Validate() error {
+	if !s.available {
+		return errors.New("device unavailable")
+	}
+	return nil
+}
+
+func (*entitlementTestSetup) Run(context.Context) error {
+	panic("entitlement validation must not run the installer")
 }
