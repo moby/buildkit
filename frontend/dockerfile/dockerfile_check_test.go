@@ -301,6 +301,13 @@ ARG password
 ENV alternate_password=bar
 # check=skip=all // is local to only this instruction
 ARG alternate_password
+ARG SOME_PSW=secret
+ARG some_psw=secret
+ENV OTHER_PSW=secret other_psw=secret
+ARG SOME_USR=user
+ARG DIPSWITCH=value
+ENV DIPSWITCH=value
+ENV SOME_PSWORD=value PUBLIC_PSW=public
 `)
 	checkLinterWarnings(t, sb, &lintTestParams{
 		Dockerfile: dockerfile,
@@ -368,6 +375,38 @@ ARG alternate_password
 				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
 				Level:       1,
 				Line:        9,
+			},
+			{
+				RuleName:    "SecretsUsedInArgOrEnv",
+				Description: "Sensitive data should not be used in the ARG or ENV commands",
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "SOME_PSW")`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
+				Level:       1,
+				Line:        23,
+			},
+			{
+				RuleName:    "SecretsUsedInArgOrEnv",
+				Description: "Sensitive data should not be used in the ARG or ENV commands",
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ARG "some_psw")`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
+				Level:       1,
+				Line:        24,
+			},
+			{
+				RuleName:    "SecretsUsedInArgOrEnv",
+				Description: "Sensitive data should not be used in the ARG or ENV commands",
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ENV "OTHER_PSW")`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
+				Level:       1,
+				Line:        25,
+			},
+			{
+				RuleName:    "SecretsUsedInArgOrEnv",
+				Description: "Sensitive data should not be used in the ARG or ENV commands",
+				Detail:      `Do not use ARG or ENV instructions for sensitive data (ENV "other_psw")`,
+				URL:         "https://docs.docker.com/go/dockerfile/rule/secrets-used-in-arg-or-env/",
+				Level:       1,
+				Line:        25,
 			},
 		},
 	})
