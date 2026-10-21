@@ -24,6 +24,7 @@ import (
 	ctdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/gofrs/flock"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -907,6 +908,55 @@ func testCacheExportIgnoreError(t *testing.T, sb integration.Sandbox) {
 				}
 			})
 		}
+	}
+}
+
+func testLocalCacheExportIgnoreIndexLockError(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	imgName := integration.UnixOrWindows("busybox:latest", "nanoserver:latest")
+	busybox := llb.Image(imgName)
+	cmd := integration.UnixOrWindows(
+		`sh -e -c "echo -n index-lock > data"`,
+		"cmd /C echo index-lock> data",
+	)
+	st := integration.UnixOrWindows(llb.Scratch(), llb.Image(imgName))
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	for _, ignoreError := range []bool{true, false} {
+		t.Run(strconv.FormatBool(ignoreError), func(t *testing.T) {
+			cacheDir := t.TempDir()
+			lock := flock.New(filepath.Join(cacheDir, "index.json.lock"))
+			locked, err := lock.TryLock()
+			require.NoError(t, err)
+			require.True(t, locked)
+			defer lock.Unlock()
+
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{{
+					Type:      ExporterLocal,
+					OutputDir: t.TempDir(),
+				}},
+				CacheExports: []CacheOptionsEntry{{
+					Type: "local",
+					Attrs: map[string]string{
+						"dest":         cacheDir,
+						"ignore-error": strconv.FormatBool(ignoreError),
+					},
+				}},
+			}, nil)
+			if ignoreError {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "could not lock")
+		})
 	}
 }
 
