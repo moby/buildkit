@@ -175,6 +175,9 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 					}
 				}
 				for _, d := range op.Exec.CdiDevices {
+					if d == nil {
+						continue
+					}
 					if cfg != nil {
 						if newName, ok := cfg.Devices[d.Name]; ok && newName != "" {
 							d.Name = newName
@@ -183,7 +186,10 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 						}
 					}
 					kind, _, _ := strings.Cut(d.Name, "=")
-					if _, ok := onDemand[kind]; ok {
+					// A kind with an on-demand installer has no registered devices
+					// yet, so a match here can only come from a class annotation
+					// on another device. That must go through the permission check.
+					if _, ok := onDemand[kind]; ok && len(cdiManager.MatchDevices(d)) == 0 {
 						// Resolve the requested name after the installer has registered its devices.
 						allowedDevices = append(allowedDevices, d)
 					} else {
@@ -204,7 +210,7 @@ func ValidateEntitlements(ent entitlements.Set, cdiManager *cdidevices.Manager) 
 				if cfg != nil {
 					for d := range cfg.Devices {
 						kind, _, _ := strings.Cut(d, "=")
-						if _, ok := onDemand[kind]; ok {
+						if _, ok := onDemand[kind]; ok && len(cdiManager.MatchDevices(&pb.CDIDevice{Name: d})) == 0 {
 							continue
 						}
 						resolved, err := cdiManager.FindDevices(&pb.CDIDevice{Name: d})

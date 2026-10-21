@@ -444,6 +444,11 @@ func TestValidateEntitlementsOnDemandDevices(t *testing.T) {
  "kind": "registered.test/device",
  "devices": [{"name": "foo", "containerEdits": {"env": ["TEST_DEVICE=1"]}}]
  }`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "classed.json"), []byte(`{
+ "cdiVersion": "0.6.0",
+ "kind": "classed.test/device",
+ "devices": [{"name": "bar", "annotations": {"org.mobyproject.buildkit.device.class": "on-demand.test/gpu=classed"}, "containerEdits": {"env": ["TEST_DEVICE=2"]}}]
+ }`), 0600))
 	installedDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(installedDir, "gpu.json"), []byte(`{
  "cdiVersion": "0.6.0",
@@ -531,6 +536,32 @@ func TestValidateEntitlementsOnDemandDevices(t *testing.T) {
 			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{kind: "", "registered.test/device": ""}},
 			available: true,
 			want:      []*pb.CDIDevice{{Name: kind + "=all"}, {Name: "registered.test/device=foo"}},
+		},
+		{
+			name:      "class annotation on on-demand name still requires permission",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			available: true,
+			wantErr:   `device classed.test/device=bar is requested by the build but not allowed`,
+		},
+		{
+			name:      "class annotation on on-demand name with explicit grant",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{"classed.test/device=bar": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: "classed.test/device=bar"}},
+		},
+		{
+			name:      "class annotation on on-demand name with grant by class",
+			devices:   []*pb.CDIDevice{{Name: kind + "=classed"}},
+			cfg:       &entitlements.DevicesConfig{Devices: map[string]string{kind + "=classed": ""}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: "classed.test/device=bar"}},
+		},
+		{
+			name:      "nil device is ignored",
+			devices:   []*pb.CDIDevice{nil, {Name: kind}},
+			available: true,
+			want:      []*pb.CDIDevice{{Name: kind}},
 		},
 		{
 			name:      "registered device still requires permission",
