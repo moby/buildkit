@@ -154,6 +154,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_git_source_test.go
 	testGitBundleRoundTrip,
+	testGitBundleFetchOptions,
 	testGitBundleRoundTripRegistry,
 	testGitResolveMutatedSource,
 	testGitResolveSourceMetadata,

@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,6 +67,38 @@ func TestFetchAfterSubmoduleRemovalSHA1(t *testing.T) {
 
 func TestFetchAfterSubmoduleRemovalSHA256(t *testing.T) {
 	testFetchAfterSubmoduleRemoval(t, "sha256")
+}
+
+func TestDebugCommandsSHA1(t *testing.T) {
+	testDebugCommands(t, "sha1")
+}
+
+func TestDebugCommandsSHA256(t *testing.T) {
+	testDebugCommands(t, "sha256")
+}
+
+func TestFetchDepthKeepGitDirSHA1(t *testing.T) {
+	testFetchDepthKeepGitDir(t, "sha1")
+}
+
+func TestFetchDepthKeepGitDirSHA256(t *testing.T) {
+	testFetchDepthKeepGitDir(t, "sha256")
+}
+
+func TestFetchTagsKeepGitDirSHA1(t *testing.T) {
+	testFetchTagsKeepGitDir(t, "sha1")
+}
+
+func TestFetchTagsKeepGitDirSHA256(t *testing.T) {
+	testFetchTagsKeepGitDir(t, "sha256")
+}
+
+func TestFetchDepthPullRefKeepGitDirSHA1(t *testing.T) {
+	testFetchDepthPullRefKeepGitDir(t, "sha1")
+}
+
+func TestFetchDepthPullRefKeepGitDirSHA256(t *testing.T) {
+	testFetchDepthPullRefKeepGitDir(t, "sha256")
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool, format string) {
@@ -244,6 +277,572 @@ func testFetchAfterSubmoduleRemoval(t *testing.T, format string) {
 
 	_, err = os.Lstat(filepath.Join(dir, "sub"))
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func testDebugCommands(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx, logs := captureProgressLogs(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, DebugCommands: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	ref, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref.Release(t.Context())
+
+	_ = mountRef(ctx, t, ref)
+
+	require.Eventually(t, func() bool {
+		out := logs.String()
+		return strings.Contains(out, "+ git ") && strings.Contains(out, " fetch ") && strings.Contains(out, " checkout ")
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func testFetchDepthKeepGitDir(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(t.Context())
+
+	dir1 := mountRef(ctx, t, ref1)
+	requireGitDescribeFails(t, dir1, "--match", "lightweight-tag*")
+	_, err = os.Lstat(filepath.Join(dir1, ".git", "shallow"))
+	require.NoError(t, err)
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, FetchDepth: new(0)}
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key2, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NotEqual(t, key1, key2)
+
+	ref2, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(t.Context())
+	require.NotEqual(t, ref1.ID(), ref2.ID())
+
+	dir2 := mountRef(ctx, t, ref2)
+	requireGitDescribe(t, dir2, "lightweight-tag-2-g", "--match", "lightweight-tag*")
+	_, err = os.Lstat(filepath.Join(dir2, ".git", "shallow"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func testFetchTagsKeepGitDir(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(t.Context())
+
+	dir1 := mountRef(ctx, t, ref1)
+	requireGitRevParseFails(t, dir1, "refs/tags/lightweight-tag")
+	_, err = os.Lstat(filepath.Join(dir1, ".git", "shallow"))
+	require.NoError(t, err)
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, FetchTags: true}
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key2, _, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+	require.NotEqual(t, key1, key2)
+
+	ref2, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(t.Context())
+	require.NotEqual(t, ref1.ID(), ref2.ID())
+
+	dir2 := mountRef(ctx, t, ref2)
+	requireGitRevParse(t, dir2, "refs/tags/lightweight-tag")
+	requireGitDescribeFails(t, dir2, "--match", "lightweight-tag*")
+	_, err = os.Lstat(filepath.Join(dir2, ".git", "shallow"))
+	require.NoError(t, err)
+}
+
+func testFetchDepthPullRefKeepGitDir(t *testing.T, format string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := logProgressStreams(t.Context(), t)
+
+	gs := setupGitSource(t, t.TempDir())
+	repo := setupGitRepo(t, format)
+
+	runShell(t, repo.mainPath, "git update-ref refs/pull/1544/merge $(git rev-parse feature)")
+
+	id := &GitIdentifier{Remote: repo.mainURL, Ref: "refs/pull/1544/merge", KeepGitDir: true}
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(t.Context())
+
+	dir1 := mountRef(ctx, t, ref1)
+	requireGitDescribeFails(t, dir1, "--match", "lightweight-tag*")
+
+	id = &GitIdentifier{Remote: repo.mainURL, Ref: "refs/pull/1544/merge", KeepGitDir: true, FetchDepth: new(0)}
+	g, err = gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	ref2, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref2.Release(t.Context())
+
+	dir2 := mountRef(ctx, t, ref2)
+	requireGitDescribe(t, dir2, "lightweight-tag-2-g", "--match", "lightweight-tag*")
+}
+
+func TestFetchOptionsSubdirCacheKey(t *testing.T) {
+	for _, keepGitDir := range []bool{false, true} {
+		for _, subdir := range []string{"", ".", "subdir"} {
+			t.Run(fmt.Sprintf("keepgitdir=%t/subdir=%s", keepGitDir, subdir), func(t *testing.T) {
+				gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: keepGitDir, Subdir: subdir}}
+				key := gs.shaToCacheKey("commit", "refs/heads/main")
+				previous := key
+				for _, depth := range []int{0, 1, 2} {
+					gs.src.FetchDepth = new(depth)
+					got := gs.shaToCacheKey("commit", "refs/heads/main")
+					if !keepGitDir || subdir == "subdir" {
+						require.Equal(t, key, got)
+					} else {
+						require.NotEqual(t, key, got)
+						require.NotEqual(t, previous, got)
+					}
+					previous = got
+				}
+			})
+		}
+	}
+}
+
+func TestBundleFetchOptionsCacheKey(t *testing.T) {
+	for _, opt := range []struct {
+		name  string
+		depth *int
+		tags  bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name: "tags",
+			tags: true,
+		},
+		{
+			name:  "full",
+			depth: new(0),
+		},
+		{
+			name:  "depth-one",
+			depth: new(1),
+		},
+		{
+			name:  "depth-two",
+			depth: new(2),
+		},
+	} {
+		for _, subdir := range []string{"", "subdir"} {
+			for _, keepGitDir := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/subdir=%s/keepgitdir=%t", opt.name, subdir, keepGitDir), func(t *testing.T) {
+					gs := &gitSourceHandler{src: GitIdentifier{KeepGitDir: keepGitDir, Subdir: subdir, FetchDepth: opt.depth, FetchTags: opt.tags}}
+					originKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					gs.src.Bundle = "oci-layout+blob://store@sha256:" + strings.Repeat("a", 64)
+					bundleKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					gs.src.Bundle = "oci-layout+blob://store@sha256:" + strings.Repeat("b", 64)
+					otherBundleKey := gs.shaToCacheKey("commit", "refs/heads/main")
+					if keepGitDir && subdir == "" && (opt.depth != nil || opt.tags) {
+						require.NotEqual(t, originKey, bundleKey)
+						require.NotEqual(t, bundleKey, otherBundleKey)
+					} else {
+						require.Equal(t, originKey, bundleKey)
+						require.Equal(t, bundleKey, otherBundleKey)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestFetchPositiveDepthIsolation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		for _, mode := range []string{"branch", "sha", "fetch-by-commit"} {
+			t.Run(format+"/"+mode, func(t *testing.T) {
+				t.Parallel()
+				ctx := logProgressStreams(t.Context(), t)
+				repo := setupGitRepo(t, format)
+				gitOutput := func(dir string, args ...string) string {
+					cmd := exec.CommandContext(ctx, "git", args...)
+					cmd.Dir = dir
+					out, err := cmd.CombinedOutput()
+					require.NoError(t, err, "%s", out)
+					return strings.TrimSpace(string(out))
+				}
+				sha := gitOutput(repo.mainPath, "rev-parse", "feature")
+				id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true}
+				switch mode {
+				case "sha":
+					id.Ref = sha
+				case "fetch-by-commit":
+					id.Checksum = sha
+					id.FetchByCommit = true
+				}
+				fetch := func(gs *Source) (string, string) {
+					g, err := gs.Resolve(ctx, id, nil, nil)
+					require.NoError(t, err)
+					key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+					require.NoError(t, err)
+					ref, err := g.Snapshot(ctx, nil)
+					require.NoError(t, err)
+					t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+					return mountRef(ctx, t, ref), key
+				}
+				warm := setupGitSource(t, t.TempDir())
+				defaultDir, defaultKey := fetch(setupGitSource(t, t.TempDir()))
+				for _, depth := range []int{1, 3, 2, 3} {
+					id.FetchDepth = new(depth)
+					dir, key := fetch(warm)
+					coldDir, coldKey := fetch(setupGitSource(t, t.TempDir()))
+					require.NotEqual(t, defaultKey, key)
+					require.Equal(t, coldKey, key)
+					require.Equal(t, sha, gitOutput(dir, "rev-parse", "HEAD"))
+					require.Equal(t, fmt.Sprint(depth), gitOutput(dir, "rev-list", "--count", "HEAD"))
+					require.Equal(t, gitOutput(coldDir, "rev-list", "HEAD"), gitOutput(dir, "rev-list", "HEAD"))
+					require.Empty(t, gitOutput(dir, "tag", "--list"))
+				}
+				id.FetchDepth = nil
+				dir, key := fetch(warm)
+				coldDir, coldKey := fetch(setupGitSource(t, t.TempDir()))
+				require.Equal(t, defaultKey, key)
+				require.Equal(t, coldKey, key)
+				require.Equal(t, gitOutput(defaultDir, "rev-list", "HEAD"), gitOutput(dir, "rev-list", "HEAD"))
+				require.Equal(t, gitOutput(coldDir, "tag", "--list"), gitOutput(dir, "tag", "--list"))
+			})
+		}
+	}
+}
+
+func TestFetchTagSnapshot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		for _, full := range []bool{false, true} {
+			for _, pinned := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/full=%t/pinned=%t", format, full, pinned), func(t *testing.T) {
+					t.Parallel()
+					ctx := logProgressStreams(t.Context(), t)
+					gs := setupGitSource(t, t.TempDir())
+					repo := setupGitRepo(t, format)
+					gitOutput := func(dir string, args ...string) string {
+						cmd := exec.CommandContext(ctx, "git", args...)
+						cmd.Dir = dir
+						out, err := cmd.CombinedOutput()
+						require.NoError(t, err, "%s", out)
+						return strings.TrimSpace(string(out))
+					}
+					id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true, FetchTags: true}
+					if full {
+						id.FetchDepth = new(0)
+					}
+					if pinned {
+						id.Ref = gitOutput(repo.mainPath, "rev-parse", "feature")
+					}
+					fetch := func() (string, string, string) {
+						g, err := gs.Resolve(ctx, id, nil, nil)
+						require.NoError(t, err)
+						key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+						require.NoError(t, err)
+						ref, err := g.Snapshot(ctx, nil)
+						require.NoError(t, err)
+						t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+						return mountRef(ctx, t, ref), key, ref.ID()
+					}
+					dir, key, snapshotID := fetch()
+					if full {
+						requireGitDescribe(t, dir, "lightweight-tag-2-g")
+					}
+					_, sameKey, sameID := fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+					for _, command := range []string{
+						"git tag release feature",
+						"git tag -f release feature~1",
+						"git tag -af -m annotated release feature~1",
+						"git tag -af -m changed-annotation release feature~1",
+						"git tag -d release lightweight-tag",
+						"git tag -l | xargs -r git tag -d",
+					} {
+						runShell(t, repo.mainPath, command)
+						dir, nextKey, nextID := fetch()
+						require.NotEqual(t, key, nextKey, command)
+						require.NotEqual(t, snapshotID, nextID, command)
+						require.Equal(t,
+							gitOutput(repo.mainPath, "for-each-ref", "--format=%(objectname) %(refname)", "refs/tags/"),
+							gitOutput(dir, "for-each-ref", "--format=%(objectname) %(refname)", "refs/tags/"), command)
+						key, snapshotID = nextKey, nextID
+					}
+					// Branch-only changes do not affect the requested tag set or selected commit.
+					runShell(t, repo.mainPath, "git branch unrelated feature~1")
+					_, sameKey, sameID = fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+
+					// A tag change between resolution and fetch must not poison the resolved key.
+					runShell(t, repo.mainPath, "git tag race feature")
+					g, err := gs.Resolve(ctx, id, nil, nil)
+					require.NoError(t, err)
+					_, _, _, _, err = g.CacheKey(ctx, nil, 0)
+					require.NoError(t, err)
+					runShell(t, repo.mainPath, "git tag -f race feature~1")
+					_, err = g.Snapshot(ctx, nil)
+					require.ErrorContains(t, err, "tags changed")
+					fetch()
+
+					// Without .git, the same tree keeps its key and snapshot after tag changes.
+					id.KeepGitDir = false
+					_, key, snapshotID = fetch()
+					runShell(t, repo.mainPath, "git tag tree-only feature")
+					_, sameKey, sameID = fetch()
+					require.Equal(t, key, sameKey)
+					require.Equal(t, snapshotID, sameID)
+				})
+			}
+		}
+	}
+}
+
+func TestFetchTagsRefs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			ctx := logProgressStreams(t.Context(), t)
+			repo := setupGitRepo(t, format)
+			runShell(t, repo.mainPath, "git tag feature master")
+			gitOutput := func(t *testing.T, dir string, args ...string) string {
+				t.Helper()
+				cmd := exec.CommandContext(ctx, "git", args...)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "%s", out)
+				return strings.TrimSpace(string(out))
+			}
+			sha := gitOutput(t, repo.mainPath, "rev-parse", "refs/heads/feature")
+			for _, tc := range []struct {
+				ref           string
+				checksum      string
+				fetchByCommit bool
+				branch        string
+				tag           string
+			}{
+				{
+					ref:      "feature",
+					checksum: sha,
+					branch:   "refs/heads/feature",
+				},
+				{
+					ref:      "refs/heads/feature",
+					checksum: sha,
+					branch:   "refs/heads/feature",
+				},
+				{
+					ref:      "v1.2.3",
+					checksum: gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/v1.2.3^{}"),
+					tag:      "v1.2.3",
+				},
+				{
+					ref:      "refs/tags/lightweight-tag",
+					checksum: gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/lightweight-tag"),
+					tag:      "lightweight-tag",
+				},
+				{
+					ref:           "local-branch",
+					checksum:      sha,
+					fetchByCommit: true,
+					branch:        "refs/heads/local-branch",
+				},
+				{
+					ref:           sha,
+					fetchByCommit: true,
+				},
+			} {
+				for _, fetchTags := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%s/tags=%t", tc.ref, fetchTags), func(t *testing.T) {
+						gs := setupGitSource(t, t.TempDir())
+						id := &GitIdentifier{Remote: repo.mainURL, Ref: tc.ref, Checksum: tc.checksum, FetchByCommit: tc.fetchByCommit, KeepGitDir: true, SkipSubmodules: true, FetchTags: fetchTags, FetchDepth: new(2)}
+						g, err := gs.Resolve(ctx, id, nil, nil)
+						require.NoError(t, err)
+						ref, err := g.Snapshot(ctx, nil)
+						require.NoError(t, err)
+						t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+						dir := mountRef(ctx, t, ref)
+						expected := tc.checksum
+						if expected == "" {
+							expected = sha
+						}
+						require.Equal(t, expected, gitOutput(t, dir, "rev-parse", "HEAD"))
+						if tc.branch != "" {
+							require.Equal(t, expected, gitOutput(t, dir, "rev-parse", tc.branch))
+						}
+						if tc.tag != "" {
+							require.Equal(t, gitOutput(t, repo.mainPath, "rev-parse", "refs/tags/"+tc.tag), gitOutput(t, dir, "rev-parse", "refs/tags/"+tc.tag))
+							if !fetchTags {
+								require.Equal(t, tc.tag, gitOutput(t, dir, "tag", "--list"))
+							}
+						}
+						require.Empty(t, gitOutput(t, dir, "for-each-ref", "refs/buildkit/"))
+					})
+				}
+			}
+		})
+	}
+}
+
+func TestFetchTagsDefaultIsolation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			ctx := logProgressStreams(t.Context(), t)
+			repo := setupGitRepo(t, format)
+			runShell(t, repo.mainPath, "git tag release-tip feature")
+			gs := setupGitSource(t, t.TempDir())
+			fetch := func(id *GitIdentifier) (string, string) {
+				g, err := gs.Resolve(ctx, id, nil, nil)
+				require.NoError(t, err)
+				key, _, _, _, err := g.CacheKey(ctx, nil, 0)
+				require.NoError(t, err)
+				ref, err := g.Snapshot(ctx, nil)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, ref.Release(context.WithoutCancel(ctx))) })
+				cmd := exec.CommandContext(ctx, "git", "tag", "--list")
+				cmd.Dir = mountRef(ctx, t, ref)
+				out, err := cmd.Output()
+				require.NoError(t, err)
+				return string(out), key
+			}
+			id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: true, SkipSubmodules: true, FetchDepth: new(0)}
+			fetch(id)
+			id.FetchDepth = nil
+			warmTags, warmKey := fetch(id)
+			gs = setupGitSource(t, t.TempDir())
+			coldTags, coldKey := fetch(id)
+			require.Equal(t, coldKey, warmKey)
+			require.Equal(t, coldTags, warmTags)
+		})
+	}
+}
+
+func mountRef(ctx context.Context, t *testing.T, ref cache.ImmutableRef) string {
+	t.Helper()
+
+	mount, err := ref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, lm.Unmount())
+	})
+	return dir
+}
+
+func requireGitDescribe(t *testing.T, dir, prefix string, extraArgs ...string) {
+	t.Helper()
+
+	args := append([]string{"describe", "--tags", "--long"}, extraArgs...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd.Dir = dir
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(out)), prefix)
+}
+
+func requireGitDescribeFails(t *testing.T, dir string, extraArgs ...string) {
+	t.Helper()
+
+	args := append([]string{"describe", "--tags", "--long"}, extraArgs...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, string(out))
+}
+
+func requireGitRevParse(t *testing.T, dir, ref string) {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", ref)
+	cmd.Dir = dir
+
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	require.NotEmpty(t, strings.TrimSpace(string(out)))
+}
+
+func requireGitRevParseFails(t *testing.T, dir, ref string) {
+	t.Helper()
+
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", ref)
+	cmd.Dir = dir
+
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, string(out))
 }
 
 func TestFetchBySHA1(t *testing.T) {
@@ -2745,10 +3344,7 @@ func TestResetSnapshotMtimes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, target, fi.ModTime().UTC())
 
-	// Symlink itself should have mtime set via lutimes
-	fi, err = os.Lstat(filepath.Join(dir, "link"))
-	require.NoError(t, err)
-	require.Equal(t, target, fi.ModTime().UTC())
+	assertSymlinkMtime(t, filepath.Join(dir, "link"), target)
 
 	// Verify symlink itself still exists and points correctly
 	linkTarget, err := os.Readlink(filepath.Join(dir, "link"))
@@ -2928,9 +3524,13 @@ func TestDetectBundleSHA256(t *testing.T) {
 			bundlePath := filepath.Join(t.TempDir(), "bundle.pack")
 			runShell(t, repo.mainPath, "git bundle create "+bundlePath+" refs/heads/master")
 
-			sha256, err := detectBundleSHA256(ctx, bundlePath, false)
+			traceCtx, logs := captureProgressLogs(ctx, t)
+			sha256, err := detectBundleSHA256(traceCtx, bundlePath, false, true)
 			require.NoError(t, err)
 			require.Equal(t, format == "sha256", sha256)
+			require.Eventually(t, func() bool {
+				return strings.Contains(logs.String(), " ls-remote -- ")
+			}, 5*time.Second, 50*time.Millisecond)
 
 			stagedRepoDir := filepath.Join(t.TempDir(), "repo.git")
 			require.NoError(t, os.MkdirAll(stagedRepoDir, 0700))
@@ -3061,4 +3661,46 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool, subdir s
 		require.NoError(t, err)
 		require.Equal(t, expectedTime.Unix(), fi.ModTime().Unix(), ".git dir mtime should match commit time")
 	}
+}
+
+type progressLogBuffer struct {
+	mu sync.Mutex
+	sb strings.Builder
+}
+
+func (b *progressLogBuffer) Write(dt []byte) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sb.Write(dt)
+}
+
+func (b *progressLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.sb.String()
+}
+
+func captureProgressLogs(ctx context.Context, t *testing.T) (context.Context, *progressLogBuffer) {
+	pr, ctx, cancel := progress.NewContext(ctx)
+	buf := &progressLogBuffer{}
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel(errors.WithStack(context.Canceled))
+		<-done
+	})
+	go func() {
+		defer close(done)
+		for {
+			prog, err := pr.Read(ctx)
+			if err != nil {
+				return
+			}
+			for _, log := range prog {
+				if lsys, ok := log.Sys.(client.VertexLog); ok {
+					buf.Write(lsys.Data)
+				}
+			}
+		}
+	}()
+	return ctx, buf
 }

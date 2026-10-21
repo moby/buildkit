@@ -472,10 +472,22 @@ func Git(url, fragment string, opts ...GitOption) State {
 		attrs[pb.AttrGitChecksum] = checksum
 		addCap(&gi.Constraints, pb.CapSourceGitChecksum)
 	}
+	if gi.FetchDepth != nil {
+		attrs[pb.AttrGitFetchDepth] = strconv.Itoa(*gi.FetchDepth)
+		addCap(&gi.Constraints, pb.CapSourceGitFetchDepth)
+	}
+	if gi.FetchTags {
+		attrs[pb.AttrGitFetchTags] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitFetchTags)
+	}
 
 	if gi.SkipSubmodules {
 		attrs[pb.AttrGitSkipSubmodules] = "true"
 		addCap(&gi.Constraints, pb.CapSourceGitSkipSubmodules)
+	}
+	if gi.DebugCommands {
+		attrs[pb.AttrGitDebugCommands] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitDebugCommands)
 	}
 
 	if gi.MTime != "" {
@@ -530,10 +542,13 @@ type GitInfo struct {
 	addAuthCap         bool
 	KnownSSHHosts      string
 	MountSSHSock       string
+	FetchTags          bool
+	FetchDepth         *int
 	Checksum           string
 	Ref                string
 	SubDir             string
 	SkipSubmodules     bool
+	DebugCommands      bool
 	MTime              string
 	Advice             bool
 	Bundle             string
@@ -552,6 +567,21 @@ func GitRef(v string) GitOption {
 func GitSubDir(v string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.SubDir = v
+	})
+}
+
+func GitFetchDepth(v int) GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		if v < 0 {
+			return
+		}
+		gi.FetchDepth = &v
+	})
+}
+
+func GitFetchTags() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.FetchTags = true
 	})
 }
 
@@ -586,6 +616,12 @@ func GitAdvice(enabled bool) GitOption {
 func KeepGitDir() GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.KeepGitDir = true
+	})
+}
+
+func GitDebugCommands() GitOption {
+	return gitOptionFunc(func(gi *GitInfo) {
+		gi.DebugCommands = true
 	})
 }
 
@@ -665,8 +701,9 @@ func (fn gitBundleOptionFunc) SetGitBundleOption(bi *GitBundleInfo) {
 // identifies must be reachable from a ref inside the bundle (i.e. the bundle
 // must contain that commit; BuildKit validates this after import). Auth and
 // SSH options are ignored in bundle mode. Submodules, if present, still fetch
-// from their own remotes. See [GitCheckoutBundle] for the checkout side; it
-// is mutually exclusive with [KeepGitDir] and [GitSubDir].
+// from their own remotes. [GitFetchDepth] and [GitFetchTags] use only the
+// history and tags in the bundle, never the upstream Git remote.
+// See [GitCheckoutBundle] for the checkout side and its option restrictions.
 //
 // Scheme-specific behavior can be tuned via [GitBundleOption] values, e.g.
 // [GitBundleOCIStore] for the "oci-layout+blob://" scheme.
@@ -699,9 +736,9 @@ func GitBundleOCIStore(sessionID, storeID string) GitBundleOption {
 
 // GitCheckoutBundle produces a single-file git bundle at the checkout mount
 // root (filename "bundle") containing the resolved commit, instead of a
-// worktree. Mutually exclusive with [KeepGitDir] and [GitSubDir]. Submodules
-// are not included in the bundle. Pair with [GitBundleURL] to re-import the
-// bundle back into a later build.
+// worktree. Mutually exclusive with [KeepGitDir], [GitSubDir], [GitFetchDepth],
+// and [GitFetchTags]. Submodules are not included in the bundle. Pair with
+// [GitBundleURL] to re-import the bundle back into a later build.
 func GitCheckoutBundle() GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
 		gi.CheckoutBundle = true

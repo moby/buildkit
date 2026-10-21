@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -122,9 +123,23 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 			id.MountSSHSock = v
 		case pb.AttrGitChecksum:
 			id.Checksum = v
+		case pb.AttrGitFetchDepth:
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				return nil, errors.Errorf("invalid fetch-depth value: %q", v)
+			}
+			id.FetchDepth = &n
+		case pb.AttrGitFetchTags:
+			if v == "true" {
+				id.FetchTags = true
+			}
 		case pb.AttrGitSkipSubmodules:
 			if v == "true" {
 				id.SkipSubmodules = true
+			}
+		case pb.AttrGitDebugCommands:
+			if v == "true" {
+				id.DebugCommands = true
 			}
 		case pb.AttrGitSignatureVerifyPubKey:
 			if id.VerifySignature == nil {
@@ -173,7 +188,7 @@ func (gs *Source) Identifier(scheme, ref string, attrs map[string]string, platfo
 }
 
 // needs to be called with repo lock
-func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, gitAdvice bool, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
+func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []string, gitAdvice bool, debugCommands bool, sha256 bool, reset bool, g session.Group) (target string, release func() error, retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
@@ -239,6 +254,7 @@ func (gs *Source) mountRemote(ctx context.Context, remote string, authArgs []str
 		gitutil.WithGitAdvice(gitAdvice),
 		gitutil.WithGitDir(dir),
 		gitutil.WithArgs(authArgs...),
+		gitutil.WithDebugCommands(debugCommands),
 	)
 
 	if initializeRepo {
@@ -278,6 +294,8 @@ type gitSourceHandler struct {
 	src         GitIdentifier
 	cacheKey    string
 	cacheCommit string
+	cacheRef    string
+	tags        []string
 	sha256      bool
 	sm          *session.Manager
 	authArgs    []string
@@ -295,6 +313,22 @@ func (gs *gitSourceHandler) shaToCacheKey(sha, ref string) string {
 		key += ".git"
 		if ref != "" {
 			key += "#" + ref
+		}
+		if path.Join("/", gs.src.Subdir) == "/" {
+			// Bundle metadata must not reuse a checkout populated from origin
+			// or another bundle, even when the pinned commit is identical.
+			if gs.src.Bundle != "" && (gs.src.FetchDepth != nil || gs.src.FetchTags) {
+				key += "(bundle=" + digest.FromString(gs.src.Bundle).String() + ")"
+			}
+			if gs.src.FetchDepth != nil {
+				key += fmt.Sprintf("(fetch-depth=%d)", *gs.src.FetchDepth)
+			}
+			if gs.src.FetchTags && (gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0) {
+				key += "(fetch-tags=true)"
+			}
+			if gs.tags != nil {
+				key += "(tags=" + digest.FromString(strings.Join(gs.tags, "\n")).String() + ")"
+			}
 		}
 	}
 	if gs.src.Subdir != "" {
@@ -334,6 +368,7 @@ func (gs *Source) ResolveMetadata(ctx context.Context, id *GitIdentifier, sm *se
 	}
 
 	gsh.cacheCommit = md.Checksum
+	gsh.cacheRef = md.Ref
 	gsh.sha256 = len(md.Checksum) == 64
 
 	if !opt.ReturnObject && id.VerifySignature == nil {
@@ -766,6 +801,33 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, jobCtx solver.JobConte
 	}
 
 	gs.sha256 = len(md.Checksum) == 64
+	gs.cacheRef = md.Ref
+	if !gs.src.CheckoutBundle && gs.src.KeepGitDir && path.Join("/", gs.src.Subdir) == "/" && (gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0) {
+		var g session.Group
+		if jobCtx != nil {
+			g = jobCtx.Session()
+		}
+		remote := gs.src.Remote
+		if gs.src.Bundle != "" {
+			remote, err = gs.ensureStagedBundle(ctx, jobCtx, g)
+			if err != nil {
+				return "", "", nil, false, err
+			}
+		} else {
+			gs.getAuthToken(ctx, g)
+		}
+		git, cleanup, err := gs.emptyGitCli(ctx, g)
+		if err != nil {
+			return "", "", nil, false, err
+		}
+		defer cleanup()
+		out, err := git.Run(ctx, "ls-remote", "--refs", "--tags", "--", remote)
+		if err != nil {
+			return "", "", nil, false, errors.Wrap(err, "failed to resolve git tags")
+		}
+		gs.tags = strings.Split(strings.TrimSpace(string(out)), "\n")
+		slices.Sort(gs.tags)
+	}
 
 	if gs.src.VerifySignature != nil {
 		gs.cacheCommit = md.Checksum
@@ -838,6 +900,9 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	// bare repo, so resolve the checksum directly.
 	if gs.src.FetchByCommit && gs.src.Checksum != "" {
 		ref = gs.src.Checksum
+	}
+	if repo.checkoutRef != "" {
+		ref = repo.checkoutRef
 	}
 	git := repo.GitCLI
 	if gs.src.Checksum != "" {
@@ -926,8 +991,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 
 type gitRepo struct {
 	*gitutil.GitCLI
-	dir       string
-	releasers []func() error
+	dir         string
+	checkoutRef string
+	releasers   []func() error
 }
 
 func (g *gitRepo) Release() error {
@@ -964,6 +1030,89 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 	}
 	repo.releasers = append(repo.releasers, cleanup)
 
+	// Opted-in fetches must not inherit or mutate the shared repository's
+	// refs and shallow boundaries. Bundles are the sole source of their
+	// requested history and tags. Only the finished snapshot is cached.
+	if !gs.src.CheckoutBundle && (gs.src.FetchTags || gs.src.FetchDepth != nil) {
+		remote := "origin"
+		if gs.src.Bundle != "" {
+			remote, err = gs.ensureStagedBundle(ctx, jobCtx, g)
+			if err != nil {
+				return nil, err
+			}
+		}
+		dir, err := os.MkdirTemp("", "buildkit-git-tags-")
+		if err != nil {
+			return nil, err
+		}
+		repo.releasers = append(repo.releasers, func() error { return os.RemoveAll(dir) })
+		repo.dir = dir
+		repo.GitCLI = git.New(gitutil.WithGitDir(dir))
+		repo.checkoutRef = "refs/buildkit/checkout"
+		args := []string{"init", "--bare"}
+		if gs.sha256 {
+			args = append(args, "--object-format=sha256")
+		}
+		if _, err := repo.Run(ctx, args...); err != nil {
+			return nil, err
+		}
+		if _, err := repo.Run(ctx, "remote", "add", "origin", gs.src.Remote); err != nil {
+			return nil, err
+		}
+		fetchRef := gs.cacheRef
+		if gs.src.FetchByCommit && gs.src.Checksum != "" {
+			fetchRef = gs.src.Checksum
+		}
+		args = []string{"fetch"}
+		if gs.src.FetchTags || gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
+			args = append(args, "--tags")
+		} else {
+			args = append(args, "--no-tags")
+		}
+		if gs.src.FetchDepth == nil || *gs.src.FetchDepth != 0 {
+			depth := 1
+			if gs.src.FetchDepth != nil {
+				depth = *gs.src.FetchDepth
+			}
+			args = append(args, "--depth="+strconv.Itoa(depth))
+		}
+		args = append(args, "--", remote)
+		if gitutil.IsCommitSHA(fetchRef) {
+			// Keep the SHA bare so GitCLI can retry without it when the server
+			// disallows fetching unadvertised objects directly.
+			args = append(args, fetchRef)
+		} else {
+			args = append(args, fetchRef+":"+repo.checkoutRef)
+		}
+		if _, err := repo.Run(ctx, args...); err != nil {
+			return nil, errors.Wrap(err, "failed to fetch git history and tags")
+		}
+		if gitutil.IsCommitSHA(fetchRef) {
+			if _, err := repo.Run(ctx, "update-ref", repo.checkoutRef, gs.cacheCommit); err != nil {
+				return nil, err
+			}
+		}
+		out, err := repo.Run(ctx, "rev-parse", repo.checkoutRef)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(string(out)) != gs.cacheCommit {
+			return nil, errors.New("git ref changed between resolution and fetch")
+		}
+		if gs.tags != nil {
+			out, err := repo.Run(ctx, "for-each-ref", "--format=%(objectname)%09%(refname)", "refs/tags/")
+			if err != nil {
+				return nil, err
+			}
+			tags := strings.Split(strings.TrimSpace(string(out)), "\n")
+			slices.Sort(tags)
+			if !slices.Equal(gs.tags, tags) {
+				return nil, errors.New("git tags changed between resolution and fetch")
+			}
+		}
+		return repo, nil
+	}
+
 	// Bundle mode may need to create the shared bare repo before the main
 	// fetch. Stage the bundle first so stageBundle can probe the bundle's
 	// object format via ls-remote and set gs.sha256 for mountRemote.
@@ -975,7 +1124,7 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 		}
 	}
 
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, authArgs, gs.src.Advice, gs.sha256, reset, g)
+	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, authArgs, gs.src.Advice, gs.src.DebugCommands, gs.sha256, reset, g)
 	if err != nil {
 		return nil, err
 	}
@@ -1064,17 +1213,13 @@ func (gs *gitSourceHandler) tryRemoteFetch(ctx context.Context, jobCtx solver.Jo
 			origin = fetchSource
 		}
 		args := []string{"fetch"}
-		// For fetch-by-commit, assume the server supports
-		// uploadpack.allowReachableSHA1InWant / allowAnySHA1InWant and
-		// fetch only the requested commit, without the tag/unshallow
-		// fallback used by the generic SHA-ref path.
-		if gs.src.FetchByCommit || !gitutil.IsCommitSHA(fetchRef) { // TODO: find a branch from ls-remote?
-			args = append(args, "--depth=1", "--no-tags")
-		} else {
+		if !gs.src.FetchByCommit && gitutil.IsCommitSHA(fetchRef) {
 			args = append(args, "--tags")
 			if _, err := gitDirRoot.Lstat("shallow"); err == nil {
 				args = append(args, "--unshallow")
 			}
+		} else { // TODO: find a branch from ls-remote?
+			args = append(args, "--depth=1", "--no-tags")
 		}
 		args = append(args, origin)
 		if gitutil.IsCommitSHA(ref) {
@@ -1152,6 +1297,9 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 	// fetch-by-commit, the user-provided ref is not written into the bare
 	// repo, so fall back to the commit checksum which is always present.
 	refOrCommit := ref
+	if repo.checkoutRef != "" {
+		refOrCommit = repo.checkoutRef
+	}
 	if gs.src.FetchByCommit && gs.src.Checksum != "" {
 		refOrCommit = gs.src.Checksum
 	}
@@ -1230,7 +1378,14 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		isAnnotatedTag := strings.TrimSpace(string(gitCatFileBuf)) == "tag"
 
 		pullref := ref
-		if isAnnotatedTag {
+		if repo.checkoutRef != "" {
+			pullref = repo.checkoutRef
+			// Tags are copied by --tags, except for depth-only checkouts,
+			// which must explicitly retain the selected tag.
+			if strings.HasPrefix(gs.cacheRef, "refs/") && (!strings.HasPrefix(gs.cacheRef, "refs/tags/") || !gs.src.FetchTags && gs.src.FetchDepth != nil && *gs.src.FetchDepth > 0) {
+				pullref += ":" + gs.cacheRef
+			}
+		} else if isAnnotatedTag {
 			targetRef := pullref
 			if !strings.HasPrefix(pullref, "refs/tags/") {
 				targetRef = "refs/tags/" + pullref
@@ -1250,7 +1405,21 @@ func (gs *gitSourceHandler) checkout(ctx context.Context, repo *gitRepo, g sessi
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = checkoutGit.Run(ctx, "fetch", "-u", "--depth=1", "--", "origin", pullref)
+		fetchArgs := []string{"fetch", "-u"}
+		if gs.src.FetchDepth != nil && *gs.src.FetchDepth == 0 {
+			fetchArgs = append(fetchArgs, "--tags")
+		} else {
+			fetchDepth := 1
+			if gs.src.FetchDepth != nil {
+				fetchDepth = *gs.src.FetchDepth
+			}
+			fetchArgs = append(fetchArgs, "--depth="+strconv.Itoa(fetchDepth))
+			if gs.src.FetchTags {
+				fetchArgs = append(fetchArgs, "--tags")
+			}
+		}
+		fetchArgs = append(fetchArgs, "--", "origin", pullref)
+		_, err = checkoutGit.Run(ctx, fetchArgs...)
 		if err != nil {
 			return nil, err
 		}
@@ -1534,6 +1703,7 @@ func (gs *gitSourceHandler) emptyGitCli(ctx context.Context, g session.Group, op
 	opts = append([]gitutil.Option{
 		gitutil.WithGitAdvice(gs.src.Advice),
 		gitutil.WithArgs(gs.authArgs...),
+		gitutil.WithDebugCommands(gs.src.DebugCommands),
 		gitutil.WithSSHAuthSock(sock),
 		gitutil.WithSSHKnownHosts(knownHosts),
 	}, opts...)
@@ -1614,6 +1784,7 @@ func (md cacheRefMetadata) clearGitRemote() error {
 
 func gitCLI(opts ...gitutil.Option) *gitutil.GitCLI {
 	opts = append([]gitutil.Option{
+		gitutil.WithQuiet(),
 		gitutil.WithExec(runWithStandardUmask),
 		gitutil.WithStreams(func(ctx context.Context) (stdout, stderr io.WriteCloser, flush func()) {
 			return logs.NewLogStreams(ctx, false)

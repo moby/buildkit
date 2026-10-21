@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -285,6 +286,106 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 		require.True(t, foundBundle, "expected bundle blob material (pkg:oci/...?ref_type=bundle) with sha256=%s in %+v", bundleDgst.Hex(), stmt.Predicate.BuildDefinition.ResolvedDependencies)
 	})
 
+	checkAllReleasable(t, c, sb, false)
+}
+
+func testGitBundleFetchOptions(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCILayout)
+	integration.SkipOnPlatform(t, "windows", "Git source not supported on Windows")
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, format := range []string{"sha1", "sha256"} {
+		t.Run(format, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, runInDir(dir,
+				"git init -b main --object-format="+format,
+				"git config user.email test@example.com",
+				"git config user.name test",
+				"echo hello > file.txt",
+				"git add file.txt",
+				"git commit -m initial",
+				"git tag v1.0.0",
+				"git commit --allow-empty -m second",
+				"git tag near",
+				"git commit --allow-empty -m third",
+			))
+			gitOutput := func(dir string, args ...string) string {
+				cmd := exec.CommandContext(t.Context(), "git", args...)
+				cmd.Dir = dir
+				out, err := cmd.CombinedOutput()
+				require.NoError(t, err, "%s", out)
+				return strings.TrimSpace(string(out))
+			}
+			sha := gitOutput(dir, "rev-parse", "HEAD")
+			store, err := local.NewStore(t.TempDir())
+			require.NoError(t, err)
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				http.Error(w, "origin must not be contacted", http.StatusServiceUnavailable)
+			}))
+			defer server.Close()
+			for _, tag := range []string{"v1.0.0", "v2.0.0"} {
+				if tag == "v2.0.0" {
+					require.NoError(t, runInDir(dir, "git tag -d v1.0.0", "git tag v2.0.0 HEAD~2"))
+				}
+				gitOutput(dir, "bundle", "create", "bundle", "--all")
+				data, err := os.ReadFile(filepath.Join(dir, "bundle"))
+				require.NoError(t, err)
+				dgst := digest.FromBytes(data)
+				require.NoError(t, content.WriteBlob(ctx, store, "bundle-"+dgst.String(), bytes.NewReader(data), ocispecs.Descriptor{Digest: dgst, Size: int64(len(data))}))
+				for _, ref := range []string{sha, "main"} {
+					for _, mode := range []string{"seed", "full", "tags", "depth"} {
+						opts := []llb.GitOption{
+							llb.GitChecksum(sha),
+							llb.GitBundleURL(fmt.Sprintf("oci-layout+blob://not/real@%s", dgst), llb.GitBundleOCIStore("", "bundle-options")),
+						}
+						switch mode {
+						case "full":
+							opts = append(opts, llb.KeepGitDir(), llb.GitFetchDepth(0))
+						case "tags":
+							opts = append(opts, llb.KeepGitDir(), llb.GitFetchTags())
+						case "depth":
+							opts = append(opts, llb.KeepGitDir(), llb.GitFetchDepth(2))
+						}
+						def, err := llb.Git(server.URL+"/.git", ref, opts...).Marshal(ctx)
+						require.NoError(t, err)
+						// Repeat each solve to cover snapshot cache hits as well as warm fetches.
+						for range 2 {
+							outDir := t.TempDir()
+							_, err := c.Solve(ctx, def, SolveOpt{
+								Exports:   []ExportEntry{{Type: ExporterLocal, OutputDir: outDir}},
+								OCIStores: map[string]content.Store{"bundle-options": store},
+							}, nil)
+							require.NoError(t, err, "%s/%s/%s", format, ref, mode)
+							require.Zero(t, requests.Load())
+							dt, err := os.ReadFile(filepath.Join(outDir, "file.txt"))
+							require.NoError(t, err)
+							require.Equal(t, "hello\n", string(dt))
+							if mode == "seed" {
+								continue
+							}
+							require.Equal(t, sha, gitOutput(outDir, "rev-parse", "HEAD"))
+							switch mode {
+							case "full":
+								require.Equal(t, "3", gitOutput(outDir, "rev-list", "--count", "HEAD"))
+								require.True(t, strings.HasPrefix(gitOutput(outDir, "describe", "--tags", "--long"), "near-1-g"))
+								fallthrough
+							case "tags":
+								require.Equal(t, "near\n"+tag, gitOutput(outDir, "tag", "--list"))
+							case "depth":
+								require.Equal(t, "2", gitOutput(outDir, "rev-list", "--count", "HEAD"))
+								require.Empty(t, gitOutput(outDir, "tag", "--list"))
+							}
+						}
+					}
+				}
+			}
+		})
+	}
 	checkAllReleasable(t, c, sb, false)
 }
 

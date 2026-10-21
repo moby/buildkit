@@ -3,6 +3,7 @@ package git
 import (
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/v2/pkg/reference"
@@ -20,6 +21,8 @@ type GitIdentifier struct {
 	Remote           string
 	Ref              string
 	Checksum         string
+	FetchDepth       *int
+	FetchTags        bool
 	Subdir           string
 	KeepGitDir       bool
 	AuthTokenSecret  string
@@ -27,6 +30,7 @@ type GitIdentifier struct {
 	MountSSHSock     string
 	KnownSSHHosts    string
 	SkipSubmodules   bool
+	DebugCommands    bool
 	MTime            string // "checkout" (default) or "commit"
 	Advice           bool
 	FetchByCommit    bool
@@ -71,6 +75,23 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	if u.Opts != nil {
 		repo.Ref = u.Opts.Ref
 		repo.Subdir = u.Opts.Subdir
+	}
+	if v := u.Query.Get("fetch-depth"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, errors.Errorf("invalid fetch-depth value: %q", v)
+		}
+		repo.FetchDepth = &n
+	}
+	if vals, ok := u.Query["fetch-tags"]; ok {
+		repo.FetchTags = true
+		if len(vals) > 0 && vals[0] != "" {
+			v, err := strconv.ParseBool(vals[0])
+			if err != nil {
+				return nil, errors.Errorf("invalid fetch-tags value: %q", vals[0])
+			}
+			repo.FetchTags = v
+		}
 	}
 	return &repo, nil
 }
@@ -199,6 +220,9 @@ func validateBundleAttrs(id *GitIdentifier) error {
 		}
 	}
 	if id.CheckoutBundle {
+		if id.FetchDepth != nil || id.FetchTags {
+			return errors.New("git.checkoutbundle is incompatible with git.fetchdepth and git.fetchtags")
+		}
 		if id.KeepGitDir {
 			return errors.New("git.checkoutbundle is incompatible with git.keepgitdir")
 		}

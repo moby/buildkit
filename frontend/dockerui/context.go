@@ -92,6 +92,9 @@ func (bc *Client) initContext(ctx context.Context) (*buildContext, error) {
 		extraGitOpts = append(extraGitOpts, llb.GitMTimeCommit())
 	}
 	extraGitOpts = append(extraGitOpts, gitAdviceOpts(bc.GitAdvice)...)
+	if v, err := strconv.ParseBool(opts[keyGitDebugCommandsArg]); err == nil && v {
+		extraGitOpts = append(extraGitOpts, llb.GitDebugCommands())
+	}
 	if st, ok, err := DetectGitContext(opts[localNameContext], keepGit, extraGitOpts...); ok {
 		if err != nil {
 			return nil, err
@@ -307,6 +310,12 @@ func DetectGitContext(ref string, keepGit *bool, opts ...llb.GitOption) (*llb.St
 	}
 	if g.SubDir != "" {
 		gitOpts = append(gitOpts, llb.GitSubDir(g.SubDir))
+	}
+	if g.FetchDepth != nil {
+		gitOpts = append(gitOpts, llb.GitFetchDepth(*g.FetchDepth))
+	}
+	if g.FetchTags != nil && *g.FetchTags {
+		gitOpts = append(gitOpts, llb.GitFetchTags())
 	}
 	if g.Checksum != "" {
 		gitOpts = append(gitOpts, llb.GitChecksum(g.Checksum))
