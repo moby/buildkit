@@ -90,6 +90,37 @@ func TestGit(t *testing.T) {
 			},
 		},
 		{
+			name:       "debug commands",
+			st:         Git("github.com/foo/bar.git", "ref", GitDebugCommands(true)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.debugcommands":    "true",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
+			name:       "debug commands disabled",
+			st:         Git("github.com/foo/bar.git", "ref", GitDebugCommands(false)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
+			name:       "debug commands overridden",
+			st:         Git("github.com/foo/bar.git", "ref", GitDebugCommands(true), GitDebugCommands(false)),
+			identifier: "git://github.com/foo/bar.git#ref",
+			attrs: map[string]string{
+				"git.authheadersecret": "GIT_AUTH_HEADER",
+				"git.authtokensecret":  "GIT_AUTH_TOKEN",
+				"git.fullurl":          "https://github.com/foo/bar.git",
+			},
+		},
+		{
 			name: "bundle",
 			st: Git(
 				"github.com/foo/bar.git", "",
