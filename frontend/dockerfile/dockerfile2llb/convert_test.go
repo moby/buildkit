@@ -395,7 +395,7 @@ ADD $URL /
 	require.NoError(t, err)
 	require.Len(t, stages, 1)
 
-	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false)
+	state, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false, false)
 	require.NoError(t, err)
 	require.NotNil(t, state)
 	sourceOp, err := sourceOpFromState(t.Context(), state)
@@ -404,7 +404,7 @@ ADD $URL /
 	assert.Equal(t, "src.tar", sourceOp.Attrs["http.filename"])
 }
 
-func TestDockerfileGitAdviceBuildArgADD(t *testing.T) {
+func TestDockerfileGitOptionsADD(t *testing.T) {
 	t.Parallel()
 
 	df := []byte(`
@@ -413,17 +413,25 @@ ADD https://github.com/moby/buildkit.git#master /
 `)
 
 	for _, tc := range []struct {
-		name      string
-		gitAdvice bool
-		wantAttr  bool
+		name             string
+		gitAdvice        bool
+		gitDebugCommands bool
 	}{
 		{
 			name: "default",
 		},
 		{
-			name:      "enabled",
+			name:      "advice",
 			gitAdvice: true,
-			wantAttr:  true,
+		},
+		{
+			name:             "debug commands",
+			gitDebugCommands: true,
+		},
+		{
+			name:             "advice and debug commands",
+			gitAdvice:        true,
+			gitDebugCommands: true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -431,7 +439,8 @@ ADD https://github.com/moby/buildkit.git#master /
 
 			res, err := Dockerfile2LLB(appcontext.Context(), df, ConvertOpt{
 				Config: dockerui.Config{
-					GitAdvice: tc.gitAdvice,
+					GitAdvice:        tc.gitAdvice,
+					GitDebugCommands: tc.gitDebugCommands,
 				},
 			})
 			require.NoError(t, err)
@@ -440,10 +449,26 @@ ADD https://github.com/moby/buildkit.git#master /
 			require.NoError(t, err)
 			require.NotNil(t, sourceOp)
 
-			if tc.wantAttr {
-				require.Equal(t, "true", sourceOp.Attrs[pb.AttrGitAdvice])
-			} else {
-				require.NotContains(t, sourceOp.Attrs, pb.AttrGitAdvice)
+			parsed, err := parser.Parse(bytes.NewReader(df))
+			require.NoError(t, err)
+			stages, _, err := instructions.Parse(parsed.AST, nil)
+			require.NoError(t, err)
+			epochState, err := sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), tc.gitAdvice, tc.gitDebugCommands)
+			require.NoError(t, err)
+			epochOp, err := sourceOpFromState(t.Context(), epochState)
+			require.NoError(t, err)
+			require.NotNil(t, epochOp)
+			for _, op := range []*pb.SourceOp{sourceOp, epochOp} {
+				for attr, enabled := range map[string]bool{
+					pb.AttrGitAdvice:        tc.gitAdvice,
+					pb.AttrGitDebugCommands: tc.gitDebugCommands,
+				} {
+					if enabled {
+						require.Equal(t, "true", op.Attrs[attr])
+					} else {
+						require.NotContains(t, op.Attrs, attr)
+					}
+				}
 			}
 		})
 	}
@@ -464,7 +489,7 @@ ADD https://example.com/src.tar /
 	require.NoError(t, err)
 	require.Len(t, stages, 1)
 
-	_, err = sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false)
+	_, err = sourceDateEpochStageSource(stages[0], nil, &llb.EnvList{}, shell.NewLex('\\'), false, false)
 	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH stage must use FROM scratch")
 }
 
