@@ -409,6 +409,7 @@ func (c *cacheManager) ensurePersistentKey(k *CacheKey) error {
 
 func (c *cacheManager) getIDFromDeps(k *CacheKey) string {
 	matches := map[string]struct{}{}
+loop0:
 	for i, deps := range k.deps {
 		if i > 0 && len(matches) == 0 {
 			break
@@ -425,7 +426,8 @@ func (c *cacheManager) getIDFromDeps(k *CacheKey) string {
 				candidates[id] = struct{}{}
 				return nil
 			}); err != nil {
-				return identity.NewID()
+				matches = nil
+				break loop0
 			}
 		}
 		if i == 0 {

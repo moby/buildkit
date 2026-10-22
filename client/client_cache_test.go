@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/testutil"
@@ -339,6 +341,92 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+// testAlternativeInputKeysCacheImport checks that an independently built COPY
+// can match an imported cache entry through its content key even when its source
+// key is absent from that cache. Changing an unselected file gives the source a
+// different key while preserving the copied content. A downstream RUN must still
+// reuse its imported result: the COPY's source and content keys are alternatives
+// for the same input, so matching both is not required.
+func testAlternativeInputKeysCacheImport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	parent := llb.Image("busybox:latest")
+	copyValue := func(ctxVal string) llb.State {
+		src := llb.Scratch().File(llb.Mkfile("/value", 0644, []byte("same content"))).
+			File(llb.Mkfile("/unselected", 0644, []byte(ctxVal)))
+		// Keep the source at input 1, where structural and content keys are
+		// alternatives. The parent makes this a copy with two inputs.
+		return parent.File(llb.Copy(src, "/value", "/value"))
+	}
+	marker := func(input llb.State) llb.State {
+		return input.Run(
+			llb.Shlex("sh -c 'test \"$(cat /value)\" = \"same content\" && head -c 100 /dev/urandom > /out/unique'"),
+		).AddMount("/out", llb.Scratch())
+	}
+
+	cacheRef := registry + "/buildkit/alternative-input-keys:latest"
+	def, err := marker(copyValue("original context")).Marshal(sb.Context())
+	require.NoError(t, err)
+	first := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{Type: ExporterLocal, OutputDir: first}},
+		CacheExports: []CacheOptionsEntry{{Type: "registry", Attrs: map[string]string{
+			"ref": cacheRef, "mode": "max",
+		}}},
+	}, nil)
+	require.NoError(t, err)
+	want, err := os.ReadFile(filepath.Join(first, "unique"))
+	require.NoError(t, err)
+	require.Len(t, want, 100)
+	ensurePruneAll(t, c, sb)
+
+	// Build the equivalent copy independently, before making the imported
+	// cache available. Its source key differs, but its selected content agrees.
+	// Importing during this solve would let Query link the new source key to
+	// the old copy and hide the getIDFromDeps regression.
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", func(ctx context.Context, gw gateway.Client) (*gateway.Result, error) {
+		copied := copyValue("changed context")
+		def, err := copied.Marshal(ctx)
+		require.NoError(t, err)
+		_, err = gw.Solve(ctx, gateway.SolveRequest{Definition: def.ToPB(), Evaluate: true})
+		require.NoError(t, err)
+
+		// Keep the first solve active so this result retains both its source
+		// key and content checksum when it is reused by the downstream solve.
+		// Mapping it into the imported cache must use the content alternative.
+		def, err = marker(copied).Marshal(ctx)
+		require.NoError(t, err)
+		res, err := gw.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+			Evaluate:   true,
+			CacheImports: []gateway.CacheOptionsEntry{{Type: "registry", Attrs: map[string]string{
+				"ref": cacheRef,
+			}}},
+		})
+		require.NoError(t, err)
+		ref, err := res.SingleRef()
+		require.NoError(t, err)
+		got, err := ref.ReadFile(ctx, gateway.ReadRequest{Filename: "/unique"})
+		require.NoError(t, err)
+		require.Equal(t, want, got, "downstream operation was reexecuted instead of using imported cache")
+		return res, nil
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
