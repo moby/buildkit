@@ -575,7 +575,7 @@ func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id strin
 		if err != nil {
 			return nil, err
 		}
-		cms = append(cms, solver.NewCacheManager(ctx, id, keysStorage, resultStorage))
+		cms = append(cms, solver.NewKeyValueCacheManager(ctx, id, keysStorage, resultStorage))
 	}
 
 	return solver.NewCombinedCacheManager(cms, nil), nil

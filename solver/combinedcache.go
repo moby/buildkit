@@ -115,13 +115,13 @@ func (cm *combinedCacheManager) Save(key *CacheKey, s Result, createdAt time.Tim
 
 func (cm *combinedCacheManager) Records(ctx context.Context, ck *CacheKey) ([]*CacheRecord, error) {
 	ck.mu.RLock()
-	if len(ck.ids) == 0 {
+	if len(ck.equiv) == 0 {
 		ck.mu.RUnlock()
 		return nil, errors.New("no results")
 	}
 
-	cms := make([]*cacheManager, 0, len(ck.ids))
-	for cm := range ck.ids {
+	cms := make([]*cacheManager, 0, len(ck.equiv))
+	for cm := range ck.equiv {
 		cms = append(cms, cm)
 	}
 	ck.mu.RUnlock()

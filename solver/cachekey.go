@@ -15,7 +15,7 @@ func NewCacheKey(dgst, vtx digest.Digest, output Index) *CacheKey {
 		digest: dgst,
 		vtx:    vtx,
 		output: output,
-		ids:    map[*cacheManager]string{},
+		equiv:  map[*cacheManager]*CacheKey{},
 	}
 }
 
@@ -42,7 +42,12 @@ type CacheKey struct {
 	// vtx is the LLB digest that this op was created for
 	vtx    digest.Digest
 	output Index
-	ids    map[*cacheManager]string
+
+	// equiv holds a mapping of equivalent cache keys
+	// in other cache managers. The keys contained within
+	// are equivalent to the current cache key but have different
+	// internal ids.
+	equiv map[*cacheManager]*CacheKey
 
 	indexIDs []string
 }
@@ -51,8 +56,8 @@ func (ck *CacheKey) TraceFields() map[string]any {
 	ck.mu.RLock()
 	defer ck.mu.RUnlock()
 	idsMap := map[string]string{}
-	for cm, id := range ck.ids {
-		idsMap[cm.ID()] = id
+	for cm, key := range ck.equiv {
+		idsMap[cm.ID()] = key.ID
 	}
 
 	// don't recurse more than one level in showing deps
@@ -100,9 +105,9 @@ func (ck *CacheKey) clone() *CacheKey {
 		digest: ck.digest,
 		vtx:    ck.vtx,
 		output: ck.output,
-		ids:    make(map[*cacheManager]string, len(ck.ids)),
+		equiv:  make(map[*cacheManager]*CacheKey, len(ck.equiv)),
 	}
-	maps.Copy(nk.ids, ck.ids)
+	maps.Copy(nk.equiv, ck.equiv)
 	ck.mu.RUnlock()
 	return nk
 }
