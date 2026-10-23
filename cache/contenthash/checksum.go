@@ -175,10 +175,11 @@ func (cm *cacheManager) clearCacheContext(id string) {
 }
 
 type cacheContext struct {
-	mu    sync.RWMutex
-	md    cacheMetadata
-	tree  *iradix.Tree[*CacheRecord]
-	dirty bool // needs to be persisted to disk
+	mu          sync.RWMutex
+	md          cacheMetadata
+	tree        *iradix.Tree[*CacheRecord]
+	dirty       bool // needs to be persisted to disk
+	savePending bool // protected by mu
 
 	// used in HandleChange
 	txn      *iradix.Txn[*CacheRecord]
@@ -274,7 +275,29 @@ func (cc *cacheContext) load() error {
 func (cc *cacheContext) save() error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
+	return cc.saveLocked()
+}
 
+// saveAsyncLocked coalesces full-tree writes while a saver waits for mu.
+// The caller must hold mu.
+func (cc *cacheContext) saveAsyncLocked() {
+	if !cc.dirty {
+		return
+	}
+	cc.dirty = false
+	if cc.savePending {
+		return
+	}
+	cc.savePending = true
+	go func() {
+		cc.mu.Lock()
+		defer cc.mu.Unlock()
+		cc.savePending = false
+		_ = cc.saveLocked()
+	}()
+}
+
+func (cc *cacheContext) saveLocked() error {
 	if cc.txn != nil {
 		cc.commitActiveTransaction()
 	}
@@ -485,12 +508,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		}
 	}
 
-	defer func() {
-		if cc.dirty {
-			go cc.save()
-			cc.dirty = false
-		}
-	}()
+	defer cc.saveAsyncLocked()
 
 	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
@@ -832,12 +850,7 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string, fo
 		cc.commitActiveTransaction()
 	}
 
-	defer func() {
-		if cc.dirty {
-			go cc.save()
-			cc.dirty = false
-		}
-	}()
+	defer cc.saveAsyncLocked()
 
 	cr, err := cc.scanChecksum(ctx, m, p, followTrailing)
 	if err != nil {
