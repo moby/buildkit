@@ -22,8 +22,9 @@ import (
 // A registry cache import that has response headers but no body must not hold
 // the scheduler. Another build on the same daemon has to finish first.
 func testRegistryCacheImportSchedulerIsolation(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheImport, workers.FeatureCacheBackendRegistry)
-	ctx, cancel := context.WithTimeout(sb.Context(), 2*time.Minute)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), 2*time.Minute, errors.WithStack(context.DeadlineExceeded))
 	defer cancel()
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -92,10 +93,10 @@ func testRegistryCacheImportSchedulerIsolation(t *testing.T, sb integration.Sand
 	case err := <-done:
 		t.Fatalf("import ended before stalled response: %v", err)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		t.Fatal(context.Cause(ctx))
 	}
 
-	independentCtx, cancelIndependent := context.WithTimeout(ctx, 15*time.Second)
+	independentCtx, cancelIndependent := context.WithTimeoutCause(ctx, 15*time.Second, errors.WithStack(context.DeadlineExceeded))
 	defer cancelIndependent()
 	independent, err := llb.Scratch().File(llb.Mkfile("/out-"+identity.NewID(), 0o644, []byte("independent"))).Marshal(independentCtx)
 	require.NoError(t, err)
@@ -107,6 +108,6 @@ func testRegistryCacheImportSchedulerIsolation(t *testing.T, sb integration.Sand
 	case err := <-done:
 		require.NoError(t, err)
 	case <-ctx.Done():
-		t.Fatal(ctx.Err())
+		t.Fatal(context.Cause(ctx))
 	}
 }

@@ -380,14 +380,14 @@ func (lcm *lazyCacheManager) wait() error {
 // waitReady keeps pending imports out of the scheduler. Import failures remain
 // best effort; only cancellation of this caller interrupts the readiness wait.
 func (lcm *lazyCacheManager) waitReady(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
+	if err := context.Cause(ctx); err != nil {
 		return err
 	}
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	case <-lcm.waitCh:
-		return ctx.Err()
+		return context.Cause(ctx)
 	}
 }
 
