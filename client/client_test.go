@@ -26,6 +26,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testCacheExportCacheDeletedContent,
 	testCacheExportCacheKeyLoop,
 	testCacheExportIgnoreError,
+	testLocalCacheExportIgnoreIndexLockError,
 	testImageManifestRegistryCacheImportExport,
 	testLocalCacheExportReset,
 	testMultipleCacheExports,
