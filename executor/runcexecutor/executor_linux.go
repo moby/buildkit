@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/console"
 	runc "github.com/containerd/go-runc"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/executor/oci"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/sys/signal"
@@ -34,10 +35,14 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 			extraArgs = append(extraArgs, "--keep")
 		}
 		_, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-			NoPivot:   w.noPivot,
-			Started:   started,
-			IO:        io,
-			ExtraArgs: extraArgs,
+			NoPivot: w.noPivot,
+			// Without a PID namespace, processes left behind by a step outlive the
+			// container and keep its session keyring, until the per-user key quota
+			// is exhausted and every new container fails to start.
+			NoNewKeyring: w.processMode == oci.NoProcessSandbox,
+			Started:      started,
+			IO:           io,
+			ExtraArgs:    extraArgs,
 		})
 		return err
 	})

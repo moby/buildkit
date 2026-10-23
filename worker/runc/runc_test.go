@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/iohelper"
@@ -209,6 +210,34 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	_, err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stdout: &iohelper.NopWriteCloser{Writer: stdout}, Stderr: &iohelper.NopWriteCloser{Writer: stderr}}, nil)
 	require.NoError(t, err, "stdout=%q, stderr=%q", stdout.String(), stderr.String())
 	require.Equal(t, string(selfCmdline), stdout.String())
+}
+
+func TestRuncWorkerNoProcessSandboxSessionKeyring(t *testing.T) {
+	t.Parallel()
+	checkRequirement(t)
+
+	workerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
+	w, err := base.NewWorker(t.Context(), workerOpt)
+	require.NoError(t, err)
+
+	ctx := tests.NewCtx("buildkit-test")
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
+	root, err := w.CacheMgr.New(ctx, snap, nil)
+	require.NoError(t, err)
+
+	id := identity.NewID()
+	meta := executor.Meta{
+		Args: []string{"/bin/cat", "/proc/keys"},
+		Cwd:  "/",
+	}
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	_, err = w.WorkerOpt.Executor.Run(ctx, id, execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stdout: &iohelper.NopWriteCloser{Writer: stdout}, Stderr: &iohelper.NopWriteCloser{Writer: stderr}}, nil)
+	require.NoError(t, err, "stdout=%q, stderr=%q", stdout.String(), stderr.String())
+	// runc names the session keyring it creates for a container "_ses.<id>".
+	require.NotContains(t, stdout.String(), "_ses."+id)
 }
 
 func TestRuncWorkerExec(t *testing.T) {
