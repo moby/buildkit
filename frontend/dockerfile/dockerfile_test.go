@@ -315,15 +315,15 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, outlineTests, opts...)
 	integration.Run(t, targetsTests, opts...)
 
-	// the rest of the tests are meant for non-Windows, skipping on Windows.
-	integration.SkipOnPlatform(t, "windows")
-
 	integration.Run(t, reproTests, append(opts,
 		// Only use the amd64 digest,  regardless to the host platform
 		integration.WithMirroredImages(map[string]string{
 			"amd64/debian:bullseye-20230109-slim": "docker.io/amd64/debian:bullseye-20230109-slim@sha256:1acb06a0c31fb467eb8327ad361f1091ab265e0bf26d452dea45dcb0c0ea5e75",
 		}),
 	)...)
+
+	// the rest of the tests are meant for non-Windows, skipping on Windows.
+	integration.SkipOnPlatform(t, "windows")
 
 	integration.Run(t, securityTests, append(append(opts, securityOpts...),
 		integration.WithMatrix("security.insecure", map[string]any{
