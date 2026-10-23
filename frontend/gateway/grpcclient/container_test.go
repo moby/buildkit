@@ -11,6 +11,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -22,6 +23,7 @@ type execStreamServer struct {
 	init    chan string
 	failure chan error
 	start   bool
+	exit    bool
 	finish  bool
 }
 
@@ -44,12 +46,15 @@ func (s *execStreamServer) ExecProcess(stream pb.LLBBridge_ExecProcessServer) er
 	for {
 		select {
 		case err := <-s.failure:
-			if s.finish {
+			if s.exit {
 				for _, pid := range pids {
-					for _, msg := range []*pb.ExecMessage{
+					messages := []*pb.ExecMessage{
 						{ProcessID: pid, Input: &pb.ExecMessage_Exit{Exit: &pb.ExitMessage{}}},
-						{ProcessID: pid, Input: &pb.ExecMessage_Done{Done: &pb.DoneMessage{}}},
-					} {
+					}
+					if s.finish {
+						messages = append(messages, &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Done{Done: &pb.DoneMessage{}}})
+					}
+					for _, msg := range messages {
 						if err := stream.Send(msg); err != nil {
 							return err
 						}
@@ -86,7 +91,7 @@ func TestExecStreamFailureReleasesProcesses(t *testing.T) {
 		{name: "canceled", err: status.Error(codes.Canceled, "remote session ended")},
 		{name: "deadline", err: status.Error(codes.DeadlineExceeded, "remote exec deadline exceeded")},
 	} {
-		for _, phase := range []string{"starting", "waiting", "completed"} {
+		for _, phase := range []string{"starting", "waiting", "exited", "completed"} {
 			t.Run(transport.name+"/"+phase, func(t *testing.T) {
 				ctx, cancel := context.WithTimeoutCause(t.Context(), 10*time.Second, errors.New("exec stream failure test timed out"))
 				defer cancel()
@@ -94,6 +99,7 @@ func TestExecStreamFailureReleasesProcesses(t *testing.T) {
 					init:    make(chan string, 2),
 					failure: make(chan error, 1),
 					start:   phase != "starting",
+					exit:    phase == "exited" || phase == "completed",
 					finish:  phase == "completed",
 				}
 				var lc net.ListenConfig
@@ -124,15 +130,12 @@ func TestExecStreamFailureReleasesProcesses(t *testing.T) {
 				done := make(chan error, 2)
 				ready := make(chan struct{}, 2)
 				for range 2 {
-					req := client.StartRequest{}
-					if !server.finish {
-						input, writer := io.Pipe()
-						t.Cleanup(func() {
-							input.Close()
-							writer.Close()
-						})
-						req.Stdin = input
-					}
+					input, writer := io.Pipe()
+					t.Cleanup(func() {
+						input.Close()
+						writer.Close()
+					})
+					req := client.StartRequest{Stdin: input}
 					go func() {
 						process, err := ctr.Start(ctx, req)
 						if err == nil {
@@ -185,6 +188,8 @@ type outputErrorClient struct {
 	pb.LLBBridge_ExecProcessClient
 	ctx      context.Context
 	messages chan *pb.ExecMessage
+	stdinEOF chan struct{}
+	stdinErr error
 }
 
 func (c *outputErrorClient) ExecProcess(ctx context.Context, _ ...grpc.CallOption) (pb.LLBBridge_ExecProcessClient, error) {
@@ -193,6 +198,12 @@ func (c *outputErrorClient) ExecProcess(ctx context.Context, _ ...grpc.CallOptio
 }
 
 func (c *outputErrorClient) Send(msg *pb.ExecMessage) error {
+	if file := msg.GetFile(); file != nil && file.Fd == 0 && file.EOF {
+		if c.stdinEOF != nil {
+			close(c.stdinEOF)
+		}
+		return c.stdinErr
+	}
 	if msg.GetInit() != nil {
 		c.messages <- &pb.ExecMessage{
 			ProcessID: msg.ProcessID,
@@ -211,6 +222,90 @@ func (c *outputErrorClient) Recv() (*pb.ExecMessage, error) {
 	}
 }
 
+func TestProcessStdinEOF(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		closeInput bool
+		stdinErr   error
+		exitCode   uint32
+	}{
+		{
+			name:       "input EOF",
+			closeInput: true,
+		},
+		{
+			name:       "input EOF send error",
+			closeInput: true,
+			stdinErr:   io.EOF,
+		},
+		{
+			name:     "successful process with open stdin",
+			stdinErr: io.EOF,
+		},
+		{
+			name:     "failed process with open stdin",
+			stdinErr: io.EOF,
+			exitCode: 42,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("stdin EOF test timed out"))
+			defer cancel()
+			bridge := &outputErrorClient{
+				messages: make(chan *pb.ExecMessage, 2),
+				stdinEOF: make(chan struct{}),
+				stdinErr: tc.stdinErr,
+			}
+			forwarder := newMessageForwarder(ctx, bridge)
+			require.NoError(t, forwarder.Start())
+			t.Cleanup(func() { require.NoError(t, forwarder.Release()) })
+			ctr := &container{id: "stdin-eof", execMsgs: forwarder}
+			input, writer := io.Pipe()
+			t.Cleanup(func() {
+				input.Close()
+				writer.Close()
+			})
+			process, err := ctr.Start(ctx, client.StartRequest{Stdin: input})
+			require.NoError(t, err)
+			if tc.closeInput {
+				require.NoError(t, writer.Close())
+				select {
+				case <-bridge.stdinEOF:
+				case <-ctx.Done():
+					t.Fatal(context.Cause(ctx))
+				}
+			}
+			if !tc.closeInput || tc.stdinErr == nil {
+				exit := &pb.ExitMessage{Code: tc.exitCode}
+				if tc.exitCode != 0 {
+					exit.Error = &spb.Status{Code: int32(codes.Unknown), Message: "process failed"}
+				}
+				pid := process.(*containerProcess).id
+				bridge.messages <- &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Exit{Exit: exit}}
+				// The gateway server waits for stdin EOF before sending Done.
+				select {
+				case <-bridge.stdinEOF:
+				case <-ctx.Done():
+					t.Fatal(context.Cause(ctx))
+				}
+				bridge.messages <- &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Done{Done: &pb.DoneMessage{}}}
+			}
+			err = process.Wait()
+			require.NoError(t, context.Cause(ctx))
+			switch {
+			case tc.closeInput && tc.stdinErr != nil:
+				require.ErrorIs(t, err, tc.stdinErr)
+			case tc.exitCode != 0:
+				var exitError *pb.ExitError
+				require.ErrorAs(t, err, &exitError)
+				require.Equal(t, tc.exitCode, exitError.ExitCode)
+			default:
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestProcessWaitReturnsOutputError(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -225,7 +320,11 @@ func TestProcessWaitReturnsOutputError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("process output-error test timed out"))
 			defer cancel()
-			bridge := &outputErrorClient{messages: make(chan *pb.ExecMessage, 1)}
+			bridge := &outputErrorClient{
+				messages: make(chan *pb.ExecMessage, 1),
+				stdinEOF: make(chan struct{}),
+				stdinErr: io.EOF,
+			}
 			forwarder := newMessageForwarder(ctx, bridge)
 			require.NoError(t, forwarder.Start())
 			t.Cleanup(func() { require.NoError(t, forwarder.Release()) })
@@ -259,6 +358,13 @@ func TestProcessWaitReturnsOutputError(t *testing.T) {
 			select {
 			case err := <-wait:
 				require.ErrorIs(t, err, io.ErrClosedPipe)
+				if tc.stdin {
+					select {
+					case <-bridge.stdinEOF:
+					default:
+						t.Fatal("output-error cleanup did not send stdin EOF")
+					}
+				}
 			case <-ctx.Done():
 				t.Fatal(context.Cause(ctx))
 			}

@@ -1178,13 +1178,11 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				processID: pid,
 				fd:        0,
 			}
-			_, err := io.Copy(m, stdinReader)
-			// ignore ErrClosedPipe, it is EOF for our usage.
-			if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-				return err
+			_, copyErr := io.Copy(m, stdinReader)
+			if copyErr != nil && !errors.Is(copyErr, io.ErrClosedPipe) {
+				return copyErr
 			}
-			// not an error so must be eof
-			return ctr.execMsgs.Send(&pb.ExecMessage{
+			err := ctr.execMsgs.Send(&pb.ExecMessage{
 				ProcessID: pid,
 				Input: &pb.ExecMessage_File{
 					File: &pb.FdMessage{
@@ -1193,6 +1191,12 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 					},
 				},
 			})
+			// Cleanup still sends EOF to unblock remote stdin, but a failed send
+			// must not replace the process result that triggered cleanup.
+			if errors.Is(copyErr, io.ErrClosedPipe) {
+				return nil
+			}
+			return err
 		})
 	}
 
