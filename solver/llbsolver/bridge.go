@@ -140,6 +140,15 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 		cms = append(cms, cm)
 		b.cmsMu.Unlock()
 	}
+	// Start all imports before waiting, outside the bridge and scheduler locks.
+	// This also waits for imports reused by another load of the same bridge.
+	for _, cm := range cms {
+		if lcm, ok := cm.(*lazyCacheManager); ok {
+			if err := lcm.waitReady(ctx); err != nil {
+				return nil, err
+			}
+		}
+	}
 	dpc := &detectPrunedCacheID{}
 
 	edge, err := loadWithProxyNetwork(ctx, def, b.policy(polEngine), b.proxyNetwork, dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps(), WithLinuxResourcesMetadata())
@@ -366,6 +375,20 @@ func (lcm *lazyCacheManager) ReleaseUnreferenced(ctx context.Context) error {
 func (lcm *lazyCacheManager) wait() error {
 	<-lcm.waitCh
 	return lcm.err
+}
+
+// waitReady keeps pending imports out of the scheduler. Import failures remain
+// best effort; only cancellation of this caller interrupts the readiness wait.
+func (lcm *lazyCacheManager) waitReady(ctx context.Context) error {
+	if err := context.Cause(ctx); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-lcm.waitCh:
+		return context.Cause(ctx)
+	}
 }
 
 func newLazyCacheManager(id string, fn func() (solver.CacheManager, error)) solver.CacheManager {
