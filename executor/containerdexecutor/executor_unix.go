@@ -159,7 +159,19 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, resolvConf, 
 	releasers = append(releasers, cleanup)
 	spec.Process.Terminal = meta.Tty
 	if w.rootless {
-		removedMounts, err := rootlessspecconv.ToRootless(spec)
+		var removedMounts []string
+		if w.rootlessCgroupControllers != nil && meta.CgroupParent == "" {
+			// The worker's cgroup parent is a systemd slice, for example
+			// "buildkit.slice:buildkit:", so runc creates the cgroup of the
+			// step through the user's systemd and can apply its limits. A
+			// cgroup parent set for the step itself is not used here, since
+			// other cgroup paths are not writable for a rootless runtime.
+			executor.DropUnsupportedCpuset(ctx, spec, w.rootlessCgroupControllers)
+			removedMounts, err = rootlessspecconv.ToRootlessWithCgroup(spec, spec.Linux.CgroupsPath)
+		} else {
+			executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
+			removedMounts, err = rootlessspecconv.ToRootless(spec)
+		}
 		if err != nil {
 			releaseAll()
 			return nil, nil, err

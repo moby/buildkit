@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -46,6 +47,10 @@ type Opt struct {
 	CommandCandidates []string
 	// without root privileges (has nothing to do with Opt.Root directory)
 	Rootless bool
+	// RootlessCgroup is the delegated cgroup v2 tree that rootless steps run
+	// in. When it is nil, rootless steps run without a cgroup and their
+	// resource limits are ignored.
+	RootlessCgroup *resources.RootlessCgroup
 	// DefaultCgroupParent is the cgroup-parent name for executor
 	DefaultCgroupParent string
 	// ProcessMode
@@ -70,6 +75,7 @@ type runcExecutor struct {
 	root             string
 	cgroupParent     string
 	rootless         bool
+	rootlessCgroup   *resources.RootlessCgroup
 	networkProviders map[pb.NetMode]network.Provider
 	proxyProvider    network.ProxyProvider
 	processMode      oci.ProcessMode
@@ -139,6 +145,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		root:             root,
 		cgroupParent:     opt.DefaultCgroupParent,
 		rootless:         opt.Rootless,
+		rootlessCgroup:   opt.RootlessCgroup,
 		networkProviders: networkProviders,
 		proxyProvider:    opt.ProxyProvider,
 		processMode:      opt.ProcessMode,
@@ -344,7 +351,13 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		var removedMounts []string
-		removedMounts, err = rootlessspecconv.ToRootless(spec)
+		if w.rootlessCgroup != nil {
+			executor.DropUnsupportedCpuset(ctx, spec, w.rootlessCgroup.Controllers)
+			removedMounts, err = rootlessspecconv.ToRootlessWithCgroup(spec, path.Join(w.rootlessCgroup.Path, "buildkit", id))
+		} else {
+			executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
+			removedMounts, err = rootlessspecconv.ToRootless(spec)
+		}
 		if err != nil {
 			return nil, err
 		}

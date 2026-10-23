@@ -182,6 +182,10 @@ type OCIConfig struct {
 	Snapshotter      string            `toml:"snapshotter"`
 	Rootless         bool              `toml:"rootless"`
 	NoProcessSandbox bool              `toml:"noProcessSandbox"`
+	// RootlessDelegatedCgroup tells a rootless worker that the cgroup it runs
+	// in was delegated to it, for example by a systemd user service with
+	// Delegate=yes, so that it applies per-step resource limits there.
+	RootlessDelegatedCgroup bool `toml:"rootless-delegated-cgroup"`
 	GCConfig
 	NetworkConfig
 	// UserRemapUnsupported is unsupported key for testing. The feature is

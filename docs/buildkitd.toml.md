@@ -104,6 +104,10 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # Whether run subprocesses in main pid namespace or not, this is useful for
   # running rootless buildkit inside a container.
   noProcessSandbox = false
+  # rootless-delegated-cgroup tells a rootless worker that the cgroup buildkitd
+  # runs in was delegated to it (systemd Delegate=yes), so that per-step resource
+  # limits are applied there. See docs/rootless.md.
+  rootless-delegated-cgroup = false
   # gc enables/disables garbage collection
   gc = true
   # reservedSpace is the minimum amount of disk space guaranteed to be
