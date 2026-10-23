@@ -111,6 +111,7 @@ var allTests = integration.TestFuncs(
 	testCopyOverrideFiles,
 	testCopyVarSubstitution,
 	testCopyWildcards,
+	testCopyWildcardsInvalidDestination,
 	testCopyRelative,
 	testCopyUnicodePath,
 	testLocalUnicodeSharedKey,
