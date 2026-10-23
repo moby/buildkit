@@ -1010,6 +1010,14 @@ with support for passphrases.
 | `uid`                          | User ID for socket. Default `0`.                                                               |
 | `gid`                          | Group ID for socket. Default `0`.                                                              |
 
+> [!NOTE]
+> On Windows containers, the forwarded SSH agent is exposed as the well-known
+> Windows OpenSSH named pipe `\\.\pipe\openssh-ssh-agent`, which is also the
+> default `target`. `SSH_AUTH_SOCK` is set to the first SSH mount target unless
+> it is already defined, allowing Windows OpenSSH to select a custom named pipe.
+> The `mode`, `uid`, and `gid` options are not supported on Windows and are
+> ignored; pipe access is governed by a security descriptor instead.
+
 #### Example: access to GitLab
 
 ```dockerfile
