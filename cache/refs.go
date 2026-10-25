@@ -808,6 +808,12 @@ func (sr *immutableRef) linkBlob(ctx context.Context, desc ocispecs.Descriptor) 
 	// let the future call to size() recalcultate the new size
 	sr.mu.Lock()
 	sr.queueSize(sizeUnknown)
+	if desc.Digest == blobDigest && desc.MediaType != "" {
+		if err := sr.queueMediaType(desc.MediaType); err != nil {
+			sr.mu.Unlock()
+			return err
+		}
+	}
 	if err := sr.commitMetadata(); err != nil {
 		sr.mu.Unlock()
 		return err
@@ -851,6 +857,11 @@ func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs
 func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
 	if !f(desc) {
 		return nil
+	}
+	if cDesc, err := getBlobDesc(ctx, cs, desc.Digest); err == nil && cDesc.MediaType != desc.MediaType {
+		if !f(cDesc) {
+			return nil
+		}
 	}
 	if _, err := walkBlobVariantsOnly(ctx, cs, desc.Digest, func(desc ocispecs.Descriptor) bool { return f(desc) }, nil); err != nil {
 		return err
