@@ -967,7 +967,9 @@ func fieldsFromLabels(labels map[string]string) (fields []string) {
 }
 
 func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
-	if sr.equalMutable != nil && !readonly {
+	// Finalize is a no-op if there is no equalMutable. Don't check it here,
+	// equalMutable is protected by sr.mu.
+	if !readonly {
 		if err := sr.Finalize(ctx); err != nil {
 			return nil, err
 		}

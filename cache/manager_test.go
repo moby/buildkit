@@ -1635,6 +1635,55 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+// TestMountDuringFinalize checks that readonly mounts can run concurrently with
+// Finalize of a lazily committed ref. Run with -race to detect unsynchronized
+// access to the equalMutable field.
+func TestMountDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			_, err := snap.Mount(egCtx, true, nil)
+			return err
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
 func TestLoopLeaseContent(t *testing.T) {
 	t.Parallel()
 	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
