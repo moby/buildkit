@@ -1,6 +1,8 @@
 package llb
 
 import (
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -667,6 +669,145 @@ func TestFileOwnerWithUIDAndGID(t *testing.T) {
 
 	require.Equal(t, 1000, int(mkdir.Owner.User.User.(*pb.UserOpt_ByID).ByID))
 	require.Equal(t, 1001, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
+}
+
+func TestParseUID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input   string
+		wantUID int
+		wantErr bool
+	}{
+		{input: "0", wantUID: 0},
+		{input: "root", wantUID: 0},
+		{input: "1000", wantUID: 1000},
+		{input: "2147483647", wantUID: 2147483647},
+		{input: "2147483648", wantUID: 2147483648},
+		{input: "4294967295", wantUID: math.MaxUint32},
+		{input: "4294967296", wantErr: true},
+		{input: "-1", wantErr: true},
+		{input: "foouser", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			uid, err := parseUID(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.wantUID, uid)
+			}
+		})
+	}
+}
+
+func TestFileOwnerUint32(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		userSpec    string
+		wantUID     uint32
+		wantGID     uint32
+		isUIDName   bool
+		isGIDName   bool
+		wantUIDName string
+		wantGIDName string
+		hasGroup    bool
+	}{
+		{
+			name:     "uint32 ids exceeding max int32",
+			userSpec: "2147483648:2147483649",
+			wantUID:  2147483648,
+			wantGID:  2147483649,
+			hasGroup: true,
+		},
+		{
+			name:     "max uint32 uid and gid",
+			userSpec: fmt.Sprintf("%d:%d", uint32(math.MaxUint32), uint32(math.MaxUint32)),
+			wantUID:  math.MaxUint32,
+			wantGID:  math.MaxUint32,
+			hasGroup: true,
+		},
+		{
+			name:     "zero uid and gid",
+			userSpec: "0:0",
+			wantUID:  0,
+			wantGID:  0,
+			hasGroup: true,
+		},
+		{
+			name:     "standard numeric uid and gid",
+			userSpec: "1000:2000",
+			wantUID:  1000,
+			wantGID:  2000,
+			hasGroup: true,
+		},
+		{
+			name:     "single uint32 uid",
+			userSpec: "2147483648",
+			wantUID:  2147483648,
+			hasGroup: false,
+		},
+		{
+			name:        "overflow uint32 treated as name",
+			userSpec:    "4294967296",
+			isUIDName:   true,
+			wantUIDName: "4294967296",
+			hasGroup:    false,
+		},
+		{
+			name:        "string names preserved as names",
+			userSpec:    "customuser:customgroup",
+			isUIDName:   true,
+			wantUIDName: "customuser",
+			isGIDName:   true,
+			wantGIDName: "customgroup",
+			hasGroup:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser(tt.userSpec)))
+			def, err := st.Marshal(t.Context())
+			require.NoError(t, err)
+
+			_, arr := parseDef(t, def.Def)
+			action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+			mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+			if tt.isUIDName {
+				byName, ok := mkdir.Owner.User.User.(*pb.UserOpt_ByName)
+				require.True(t, ok)
+				require.Equal(t, tt.wantUIDName, byName.ByName.Name)
+			} else {
+				byID, ok := mkdir.Owner.User.User.(*pb.UserOpt_ByID)
+				require.True(t, ok)
+				require.Equal(t, tt.wantUID, byID.ByID)
+			}
+
+			if tt.hasGroup {
+				require.NotNil(t, mkdir.Owner.Group)
+				if tt.isGIDName {
+					byName, ok := mkdir.Owner.Group.User.(*pb.UserOpt_ByName)
+					require.True(t, ok)
+					require.Equal(t, tt.wantGIDName, byName.ByName.Name)
+				} else {
+					byID, ok := mkdir.Owner.Group.User.(*pb.UserOpt_ByID)
+					require.True(t, ok)
+					require.Equal(t, tt.wantGID, byID.ByID)
+				}
+			} else {
+				require.Nil(t, mkdir.Owner.Group)
+			}
+		})
+	}
 }
 
 func TestFileCopyOwner(t *testing.T) {

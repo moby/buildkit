@@ -262,7 +262,7 @@ func parseUID(str string) (int, error) {
 	if str == "root" {
 		return 0, nil
 	}
-	uid, err := strconv.ParseInt(str, 10, 32)
+	uid, err := strconv.ParseUint(str, 10, 32)
 	if err != nil {
 		return 0, err
 	}
