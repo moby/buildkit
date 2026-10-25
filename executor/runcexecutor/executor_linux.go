@@ -169,7 +169,9 @@ func (w *runcExecutor) callWithIO(ctx context.Context, process executor.ProcessI
 		})
 	}
 
+	resizeDone := make(chan struct{})
 	eg.Go(func() error {
+		defer close(resizeDone)
 		err := runcProcess.WaitForReady(ctx)
 		if err != nil {
 			return err
@@ -195,6 +197,12 @@ func (w *runcExecutor) callWithIO(ctx context.Context, process executor.ProcessI
 			}
 		}
 	})
+	// Runs before the cleanup defer above: the resize loop uses ptm's fd, so
+	// stop it before ptm is closed.
+	defer func() {
+		runcProcess.Shutdown()
+		<-resizeDone
+	}()
 
 	runcIO := &forwardIO{}
 	if process.Stdin != nil {
