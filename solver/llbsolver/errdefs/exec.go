@@ -3,6 +3,7 @@ package errdefs
 import (
 	"context"
 	"runtime"
+	"sync"
 
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
@@ -14,6 +15,8 @@ type ExecError struct {
 	Inputs        []solver.Result
 	Mounts        []solver.Result
 	OwnerBorrowed bool
+
+	mu sync.Mutex // protects OwnerBorrowed
 }
 
 func (e *ExecError) Unwrap() error {
@@ -49,16 +52,27 @@ func (e *ExecError) EachRef(fn func(solver.Result) error) (err error) {
 	return err
 }
 
-func (e *ExecError) Release() error {
+// Borrow marks the error's refs as owned by a caller, so the finalizer and
+// Release do not release them. The same error can be shared by multiple
+// callers; Borrow returns false if the refs were already borrowed.
+func (e *ExecError) Borrow() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.OwnerBorrowed {
+		return false
+	}
+	e.OwnerBorrowed = true
+	return true
+}
+
+func (e *ExecError) Release() error {
+	if !e.Borrow() {
 		return nil
 	}
-	err := e.EachRef(func(r solver.Result) error {
+	return e.EachRef(func(r solver.Result) error {
 		r.Release(context.TODO())
 		return nil
 	})
-	e.OwnerBorrowed = true
-	return err
 }
 
 func WithExecError(err error, inputs, mounts []solver.Result) error {
@@ -75,7 +89,7 @@ func WithExecErrorWithContext(ctx context.Context, err error, inputs, mounts []s
 		Mounts: mounts,
 	}
 	runtime.SetFinalizer(ee, func(e *ExecError) {
-		if !e.OwnerBorrowed {
+		if e.Borrow() {
 			e.EachRef(func(r solver.Result) error {
 				bklog.G(ctx).Warn("leaked execError detected and released")
 				r.Release(context.TODO())

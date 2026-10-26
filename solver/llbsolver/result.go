@@ -123,7 +123,7 @@ func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithP
 			return nil
 		})
 		// acquire ownership so ExecError finalizer doesn't attempt to release as well
-		ee.OwnerBorrowed = true
+		ee.Borrow()
 	}
 	return res, err
 }
