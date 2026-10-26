@@ -90,3 +90,36 @@ func TestPipeCancel(t *testing.T) {
 	require.Error(t, st.Err)
 	require.ErrorIs(t, st.Err, context.Canceled)
 }
+
+// TestPipeCancelDuringFinalize checks that the receiver can cancel while the
+// function finishes with a cancellation error of its own. Run with -race to
+// detect unsynchronized access to the sender request.
+func TestPipeCancelDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	for range 20 {
+		startCh := make(chan struct{})
+		f := func(ctx context.Context) (string, error) {
+			<-startCh
+			return "", context.Canceled
+		}
+
+		p, start := NewWithFunction[any](f)
+		done := make(chan struct{})
+		p.OnSendCompletion = func() {
+			close(done)
+		}
+		go start()
+		go func() {
+			<-startCh
+			p.Receiver.Cancel()
+		}()
+		close(startCh)
+		<-done
+
+		p.Receiver.Receive()
+		st := p.Receiver.Status()
+		require.True(t, st.Completed)
+		require.ErrorIs(t, st.Err, context.Canceled)
+	}
+}

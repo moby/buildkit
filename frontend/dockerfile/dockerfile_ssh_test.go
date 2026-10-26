@@ -116,6 +116,13 @@ RUN --mount=type=ssh apk update \
 	sshAgentOutputBuf := &bytes.Buffer{}
 	sshAgentCmd.Stderr = sshAgentOutputBuf
 	require.NoError(t, sshAgentCmd.Start())
+	// stopAgent stops ssh-agent and returns its output. The buffer is written by
+	// exec's copy goroutine until Wait returns, so it must not be read before.
+	stopAgent := func() string {
+		_ = sshAgentCmd.Process.Kill()
+		_ = sshAgentCmd.Wait()
+		return sshAgentOutputBuf.String()
+	}
 	var found bool
 	for range 100 {
 		_, err := os.Stat(sockPath)
@@ -126,8 +133,7 @@ RUN --mount=type=ssh apk update \
 		time.Sleep(100 * time.Millisecond)
 	}
 	if !found {
-		sshAgentOutput := sshAgentOutputBuf.String()
-		t.Fatalf("ssh-agent failed to start: %s", sshAgentOutput)
+		t.Fatalf("ssh-agent failed to start: %s", stopAgent())
 	}
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
@@ -144,7 +150,7 @@ RUN --mount=type=ssh apk update \
 	}, nil)
 	require.NoError(t, err)
 
-	sshAgentOutput := sshAgentOutputBuf.String()
+	sshAgentOutput := stopAgent()
 	require.Contains(t, sshAgentOutput, "process_message: socket 1")
 	require.NotContains(t, sshAgentOutput, "process_message: socket 2")
 	require.NotContains(t, sshAgentOutput, "process_message: socket 3")

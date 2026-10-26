@@ -9,6 +9,7 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 const defaultResolvConf = `nameserver 8.8.8.8
@@ -133,5 +134,35 @@ func TestResolvConf(t *testing.T) {
 				require.Equal(t, tt.expected[i], string(b))
 			}
 		})
+	}
+}
+
+// TestResolvConfConcurrentRoots checks that resolv.conf is generated for every
+// root when called for different roots concurrently. Run with -race to detect
+// unsynchronized access to the package-level generation state.
+func TestResolvConfConcurrentRoots(t *testing.T) {
+	const n = 4
+	roots := make([]*os.Root, n)
+	paths := make([]string, n)
+	start := make(chan struct{})
+	eg, ctx := errgroup.WithContext(t.Context())
+	for i := range n {
+		root, err := os.OpenRoot(t.TempDir())
+		require.NoError(t, err)
+		t.Cleanup(func() { root.Close() })
+		roots[i] = root
+		eg.Go(func() error {
+			<-start
+			p, err := GetResolvConf(ctx, root, nil, nil, pb.NetMode_UNSET)
+			paths[i] = p
+			return err
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+
+	for i, root := range roots {
+		_, err := root.Stat(paths[i])
+		require.NoError(t, err)
 	}
 }

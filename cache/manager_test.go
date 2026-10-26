@@ -1635,6 +1635,177 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+// TestMountDuringFinalize checks that readonly mounts can run concurrently with
+// Finalize of a lazily committed ref. Run with -race to detect unsynchronized
+// access to the equalMutable field.
+func TestMountDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			_, err := snap.Mount(egCtx, true, nil)
+			return err
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
+// TestGetDuringFinalize checks that a lazily committed ref can be looked up
+// by ID concurrently with its Finalize. Run with -race to detect
+// unsynchronized access to the record's equalMutable state.
+func TestGetDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			ref, err := cm.Get(egCtx, snap.ID(), nil)
+			if err != nil {
+				return err
+			}
+			return ref.Release(context.WithoutCancel(egCtx))
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
+// TestGetDuringFinalizeAfterRestart is like TestGetDuringFinalize, but the
+// lazily committed ref and its equal mutable are loaded from metadata after
+// a restart and the mutable is looked up by ID while the ref is finalized.
+func TestGetDuringFinalizeAfterRestart(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, cm.Close())
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager
+
+	snap, err = cm.Get(ctx, snap.ID(), nil)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			ref, err := cm.Get(egCtx, active.ID(), nil)
+			if err != nil {
+				// the mutable is gone once finalize has completed
+				if IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+			return ref.Release(context.WithoutCancel(egCtx))
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
 func TestLoopLeaseContent(t *testing.T) {
 	t.Parallel()
 	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"

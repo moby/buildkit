@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
@@ -189,7 +190,7 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, cancel := context.WithTimeoutCause(ctx, 10*time.Second, nil)
@@ -479,7 +480,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
@@ -774,7 +775,7 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
@@ -1056,7 +1057,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				defer inputW.Close()
 				defer inputR.Close()
 
-				pid1Output := bytes.NewBuffer(nil)
+				pid1Output := &lockedBuffer{}
 
 				prompt := newTestPrompt(ctx, t, inputW, pid1Output)
 				pid1, err := ctr.Start(ctx, client.StartRequest{
@@ -1071,7 +1072,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 
 				meta := exec.Meta
 				for _, p := range tt.Paths {
-					output := bytes.NewBuffer(nil)
+					output := &lockedBuffer{}
 					proc, err := ctr.Start(ctx, client.StartRequest{
 						Args:         []string{"cat", p},
 						Env:          meta.Env,
@@ -1348,10 +1349,29 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+// lockedBuffer is a bytes.Buffer that the container output streams can write
+// to while testPrompt reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 type testPrompt struct {
 	ctx    context.Context
 	t      *testing.T
-	output *bytes.Buffer
+	output *lockedBuffer
 	input  io.Writer
 	prompt string
 	pos    int
@@ -1394,7 +1414,7 @@ func (p *testPrompt) wait(msg string) string {
 	}
 }
 
-func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *bytes.Buffer) *testPrompt {
+func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *lockedBuffer) *testPrompt {
 	return &testPrompt{
 		ctx:    ctx,
 		t:      t,

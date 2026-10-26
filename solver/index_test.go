@@ -11,6 +11,33 @@ func checkEmpty(t *testing.T, ei *edgeIndex) {
 	require.Equal(t, 0, len(ei.backRefs))
 }
 
+func TestIndexTraceFieldsDuringLoad(t *testing.T) {
+	t.Parallel()
+
+	for range 100 {
+		idx := newEdgeIndex()
+		dep := NewCacheKey(dgst("parent"), "", 0)
+		key := testCacheKeyWithDeps(dgst("child"), 0, [][]CacheKeyWithSelector{
+			{
+				{
+					CacheKey: expKey(dep),
+				},
+			},
+		})
+		start := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			<-start
+			idx.LoadOrStore(key, &edge{})
+			close(done)
+		}()
+		close(start)
+		dep.TraceFields()
+		<-done
+		require.NotEmpty(t, dep.TraceFields()["indexIDs"])
+	}
+}
+
 func TestIndexSimple(t *testing.T) {
 	idx := newEdgeIndex()
 
