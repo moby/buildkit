@@ -9,8 +9,10 @@ package blobfetch
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/moby/buildkit/session"
@@ -74,7 +76,16 @@ func FetchBlob(ctx context.Context, g session.Group, opt FetchOpt) (io.ReadClose
 		if !ok {
 			return nil, "", errors.Errorf("invalid blob fetcher: %T", f)
 		}
-		rc, _, err := fd.FetchByDigest(ctx, opt.Digest)
+		// FetchByDigest also probes the manifests endpoint. Registries
+		// such as Distribution reject OCI manifests unless their media
+		// type is explicitly accepted; a wildcard alone is insufficient.
+		accept := strings.Join([]string{
+			ocispecs.MediaTypeImageManifest,
+			ocispecs.MediaTypeImageIndex,
+			images.MediaTypeDockerSchema2Manifest,
+			images.MediaTypeDockerSchema2ManifestList,
+		}, ", ")
+		rc, _, err := fd.FetchByDigest(ctx, opt.Digest, remotes.WithMediaType(accept))
 		if err != nil {
 			return nil, "", err
 		}
