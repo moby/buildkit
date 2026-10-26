@@ -99,7 +99,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
   set -ex
-  xx-go build ${GOBUILDFLAGS} -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
+  xx-go build ${GOBUILDFLAGS} -tags 'grpcnotrace' -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
   xx-verify --static /usr/bin/buildctl
   if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/buildctl --version; fi
 EOT
@@ -118,7 +118,7 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
   set -ex
-  xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd
+  xx-go build ${GOBUILDFLAGS} -gcflags="${GOGCFLAGS}" -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp grpcnotrace ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd
   xx-verify ${VERIFYFLAGS} /usr/bin/buildkitd
 
   # buildkitd --version can be flaky when running through emulation related to
