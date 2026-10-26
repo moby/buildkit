@@ -147,3 +147,33 @@ func saveProgress(ctx context.Context, pr Reader, t *trace) error {
 		t.items = append(t.items, p...)
 	}
 }
+
+// TestWriteDuringClose checks that a progress writer can be closed while
+// another goroutine is still writing to it. Run with -race to detect
+// unsynchronized access to the writer's closed state.
+func TestWriteDuringClose(t *testing.T) {
+	t.Parallel()
+
+	_, ctx, closeProgress := NewContext(t.Context())
+	defer closeProgress(nil)
+
+	pw, ok, _ := NewFromContext(ctx)
+	require.True(t, ok)
+
+	start := make(chan struct{})
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		<-start
+		for range 100 {
+			pw.Write("vtx", struct{}{})
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		<-start
+		return pw.Close()
+	})
+	close(start)
+	require.NoError(t, eg.Wait())
+	require.Error(t, pw.Write("vtx", struct{}{}))
+}
