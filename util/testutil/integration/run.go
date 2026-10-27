@@ -241,6 +241,13 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						t.Cleanup(func() {
 							if closer != nil {
 								_ = closer()
+								for _, log := range sb.Logs() {
+									if bytes.Contains(log.Bytes(), []byte("WARNING: DATA RACE")) {
+										t.Error("data race reported in worker logs")
+										sb.PrintLogs(t)
+										break
+									}
+								}
 							}
 						})
 						defer func() {
