@@ -277,6 +277,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerSignal,
 		testClientGatewayExecError,
 		testClientGatewaySharedExecError,
+		testClientGatewayExecErrorReleasedDuringLoad,
 		testClientGatewayExecFileActionError,
 		testClientGatewaySlowCacheExecError,
 
