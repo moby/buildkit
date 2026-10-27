@@ -31,13 +31,13 @@ type LRUCache struct {
 
 	// OnEvicted optionally specifies a callback function to be
 	// executed when an entry is purged from the cache.
-	OnEvicted func(key string, value interface{})
+	OnEvicted func(key string, value any)
 }
 
 // NewLRUCache creates new lru cache.
 func NewLRUCache(maxEntries int) *LRUCache {
 	inner := lru.New(maxEntries)
-	inner.OnEvicted = func(key lru.Key, value interface{}) {
+	inner.OnEvicted = func(key lru.Key, value any) {
 		// Decrease the ref count incremented in Add().
 		// When nobody refers to this value, this value will be finalized via refCounter.
 		value.(*refCounter).finalize()
@@ -50,7 +50,7 @@ func NewLRUCache(maxEntries int) *LRUCache {
 // Get retrieves the specified object from the cache and increments the reference counter of the
 // target content. Client must call `done` callback to decrease the reference count when the value
 // will no longer be used.
-func (c *LRUCache) Get(key string) (value interface{}, done func(), ok bool) {
+func (c *LRUCache) Get(key string) (value any, done func(), ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	o, ok := c.cache.Get(key)
@@ -66,7 +66,7 @@ func (c *LRUCache) Get(key string) (value interface{}, done func(), ok bool) {
 // If the specified content already exists in the cache, this sets `added` to false and returns
 // "already cached" content (i.e. doesn't replace the content with the new one). Client must call
 // `done` callback to decrease the counter when the value will no longer be used.
-func (c *LRUCache) Add(key string, value interface{}) (cachedValue interface{}, done func(), added bool) {
+func (c *LRUCache) Add(key string, value any) (cachedValue any, done func(), added bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if o, ok := c.cache.Get(key); ok {
@@ -103,10 +103,10 @@ func (c *LRUCache) decreaseOnceFunc(rc *refCounter) func() {
 }
 
 type refCounter struct {
-	onEvicted func(key string, value interface{})
+	onEvicted func(key string, value any)
 
 	key       string
-	v         interface{}
+	v         any
 	refCounts int64
 
 	mu sync.Mutex

@@ -311,7 +311,7 @@ func NewReader(r metadata.Reader, cache cache.BlobCache, layerSha digest.Digest)
 		r:     r,
 		cache: cache,
 		bufPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return new(bytes.Buffer)
 			},
 		},
@@ -642,12 +642,9 @@ func (sf *file) prefetchEntireFile(entireCacheID string, chunks []chunkData, tot
 
 	batchCount := (totalSize + bufferSize - 1) / bufferSize
 
-	for batchIdx := int64(0); batchIdx < batchCount; batchIdx++ {
+	for batchIdx := range batchCount {
 		batchStart := batchIdx * bufferSize
-		batchEnd := (batchIdx + 1) * bufferSize
-		if batchEnd > totalSize {
-			batchEnd = totalSize
-		}
+		batchEnd := min((batchIdx+1)*bufferSize, totalSize)
 
 		var batchChunks []chunkData
 		var batchOffset int64
@@ -841,7 +838,7 @@ func (gr *reader) verifyChunk(id uint32, p []byte, chunkDigestStr string) error 
 }
 
 func genID(id uint32, offset, size int64) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%d-%d-%d", id, offset, size)))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%d-%d-%d", id, offset, size))
 	return fmt.Sprintf("%x", sum)
 }
 

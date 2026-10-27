@@ -55,14 +55,11 @@ func (c *Controller) Collect(ch chan<- prometheus.Metric) {
 	c.layerMu.RLock()
 	wg := &sync.WaitGroup{}
 	for mp, l := range c.layer {
-		mp, l := mp, l
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for _, e := range c.metrics {
 				e.collect(mp, l, c.ns, ch)
 			}
-		}()
+		})
 	}
 	c.layerMu.RUnlock()
 	wg.Wait()

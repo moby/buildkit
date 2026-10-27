@@ -30,7 +30,7 @@ require (
 	github.com/containerd/log v0.2.0
 	github.com/containerd/nydus-snapshotter v0.15.15
 	github.com/containerd/platforms v1.0.0-rc.5
-	github.com/containerd/stargz-snapshotter v0.18.2
+	github.com/containerd/stargz-snapshotter v0.19.1
 	github.com/containerd/stargz-snapshotter/estargz v0.19.1
 	github.com/containerd/typeurl/v2 v2.3.0
 	github.com/containernetworking/plugins v1.9.1

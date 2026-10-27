@@ -486,8 +486,8 @@ github.com/containerd/platforms
 # github.com/containerd/plugin v1.1.0
 ## explicit; go 1.22
 github.com/containerd/plugin
-# github.com/containerd/stargz-snapshotter v0.18.2
-## explicit; go 1.25.0
+# github.com/containerd/stargz-snapshotter v0.19.1
+## explicit; go 1.26.6
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/fs
 github.com/containerd/stargz-snapshotter/fs/config
