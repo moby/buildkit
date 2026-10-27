@@ -94,7 +94,7 @@ func newSplicePair() (p *Pair, err error) {
 	}
 	var errNo syscall.Errno
 	p.size, errNo = fcntl(uintptr(p.r), F_GETPIPE_SZ, 0)
-	if err == syscall.EINVAL {
+	if errNo == syscall.EINVAL {
 		p.size = DefaultPipeSize
 		return p, nil
 	}

@@ -2,10 +2,13 @@ package ioctl
 
 // https://github.com/torvalds/linux/blob/master/include/uapi/asm-generic/ioctl.h
 
+// Direction bits, in kernel convention (_IOC_NONE, _IOC_WRITE,
+// _IOC_READ): the direction is seen from userspace, so READ means the
+// driver writes data back to the caller.
 const (
 	NONE  = 0x0
-	READ  = 0x1
-	WRITE = 0x2
+	WRITE = 0x1
+	READ  = 0x2
 )
 
 // The ioctl command. It encodes direction (read/write), argument size
@@ -24,12 +27,14 @@ func New(dir byte, typ byte, nr byte, size uintptr) Command {
 		Command(nr)
 }
 
-// Read returns true if the ioctl reads data
+// Read returns true if the caller reads data, ie. the driver fills
+// the output buffer.
 func (c Command) Read() bool {
 	return (c>>(14+16))&READ != 0
 }
 
-// Write returns true if the ioctl writes data
+// Write returns true if the caller writes data, ie. the driver
+// receives the input buffer.
 func (c Command) Write() bool {
 	return (c>>(14+16))&WRITE != 0
 }

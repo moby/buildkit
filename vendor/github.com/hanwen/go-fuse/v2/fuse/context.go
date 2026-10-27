@@ -51,7 +51,7 @@ func NewContext(ctx context.Context, caller *Caller) context.Context {
 	return context.WithValue(ctx, callerKey, caller)
 }
 
-func (c *Context) Value(key interface{}) interface{} {
+func (c *Context) Value(key any) any {
 	if key == callerKey {
 		return &c.Caller
 	}

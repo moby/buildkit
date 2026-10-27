@@ -153,7 +153,7 @@ func (b *rawBridge) newInodeUnlocked(ops InodeEmbedder, id StableAttr, persisten
 	return ops.embed()
 }
 
-func (b *rawBridge) logf(format string, args ...interface{}) {
+func (b *rawBridge) logf(format string, args ...any) {
 	if b.options.Logger != nil {
 		b.options.Logger.Printf(format, args...)
 	}
@@ -286,24 +286,26 @@ func (b *rawBridge) setAttrTimeout(out *fuse.AttrOut) {
 
 // NewNodeFS creates a node based filesystem based on the
 // InodeEmbedder instance for the root of the tree.
+// If nil is given as opts, default settings are
+// applied, which are 1 second entry and attribute timeout.
 func NewNodeFS(root InodeEmbedder, opts *Options) fuse.RawFileSystem {
+	if opts == nil {
+		oneSec := time.Second
+		opts = &Options{
+			EntryTimeout: &oneSec,
+			AttrTimeout:  &oneSec,
+		}
+	}
 	bridge := &rawBridge{
 		automaticIno: opts.FirstAutomaticIno,
 		server:       opts.ServerCallbacks,
 		nextNodeId:   2, // the root node has nodeid 1
 		stableAttrs:  make(map[StableAttr]*Inode),
+		options:      *opts,
 	}
 
 	if bridge.automaticIno == 0 {
 		bridge.automaticIno = 1 << 63
-	}
-
-	if opts != nil {
-		bridge.options = *opts
-	} else {
-		oneSec := time.Second
-		bridge.options.EntryTimeout = &oneSec
-		bridge.options.AttrTimeout = &oneSec
 	}
 
 	stableAttr := StableAttr{
@@ -924,6 +926,9 @@ func (b *rawBridge) Release(cancel <-chan struct{}, input *fuse.ReleaseIn) {
 
 func (b *rawBridge) ReleaseDir(input *fuse.ReleaseIn) {
 	n, f := b.releaseFileEntry(input.NodeId, input.Fh)
+	if f == nil {
+		return
+	}
 	f.wg.Wait()
 
 	if frd, ok := f.file.(FileReleasedirer); ok {
@@ -941,6 +946,9 @@ func (b *rawBridge) releaseFileEntry(nid uint64, fh uint64) (*Inode, *fileEntry)
 	defer b.mu.Unlock()
 
 	n := b.kernelNodeIds[nid]
+	if n == nil {
+		log.Panicf("releaseFileEntry: unknown node %d", nid)
+	}
 	var entry *fileEntry
 	if fh > 0 {
 		last := len(n.openFiles) - 1
@@ -1267,7 +1275,7 @@ func (b *rawBridge) Ioctl(cancel <-chan struct{}, in *fuse.IoctlIn, inbuf []byte
 	n, f := b.inode(in.NodeId, in.Fh)
 	if nio, ok := n.ops.(NodeIoctler); ok {
 		ctx := &fuse.Context{Caller: in.Caller, Cancel: cancel}
-		result, errno := nio.Ioctl(ctx, f, in.Cmd, in.Arg, inbuf, outbuf)
+		result, errno := nio.Ioctl(ctx, f.file, in.Cmd, in.Arg, inbuf, outbuf)
 		out.Result = result
 		return errnoToStatus(errno)
 	}

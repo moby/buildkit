@@ -189,7 +189,7 @@ require (
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
-	github.com/hanwen/go-fuse/v2 v2.9.0 // indirect
+	github.com/hanwen/go-fuse/v2 v2.11.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/in-toto/attestation v1.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect

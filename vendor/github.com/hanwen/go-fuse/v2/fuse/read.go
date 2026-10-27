@@ -34,6 +34,14 @@ func ReadResultFd(fd uintptr, off int64, sz int) ReadResult {
 	return &readResultFd{fd, off, sz}
 }
 
+type seekableResult interface {
+	Seekable() (fd uintptr, off int64, sz int)
+}
+
+type statefulResult interface {
+	Stateful() (fd uintptr, sz int)
+}
+
 // ReadResultFd is the read return for zero-copy file data.
 type readResultFd struct {
 	// Splice from the following file.
@@ -47,13 +55,14 @@ type readResultFd struct {
 	Sz int
 }
 
+func (r *readResultFd) Seekable() (fd uintptr, off int64, sz int) {
+	return r.Fd, r.Off, r.Sz
+}
+
 // Reads raw bytes from file descriptor if necessary, using the passed
 // buffer as storage.
 func (r *readResultFd) Bytes(buf []byte) ([]byte, Status) {
-	sz := r.Sz
-	if len(buf) < sz {
-		sz = len(buf)
-	}
+	sz := min(len(buf), r.Sz)
 
 	n, err := syscall.Pread(int(r.Fd), buf[:sz], r.Off)
 	if err == io.EOF {
