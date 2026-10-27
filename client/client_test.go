@@ -158,6 +158,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testGitBundleRoundTrip,
 	testGitBundleRoundTripRegistry,
 	testGitResolveMutatedSource,
+	testGitResolveCacheAfterFailure,
 	testGitResolveSourceMetadata,
 
 	// client_http_source_test.go
