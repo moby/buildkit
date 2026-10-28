@@ -132,7 +132,7 @@ EXPOSE 2375 5000 1234/udp
 	require.Equal(t, false, ociimg.History[historyOffset+4].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+4].Created)
 	// On Windows, EXPOSE may be formatted differently in history
-	expectedExpose := integration.UnixOrWindows("EXPOSE [1234/udp 2375/tcp 5000/tcp]", "EXPOSE")
+	expectedExpose := integration.UnixOrWindows("EXPOSE 1234/udp 2375/tcp 5000/tcp", "EXPOSE")
 	require.Contains(t, ociimg.History[historyOffset+5].CreatedBy, expectedExpose)
 	require.Equal(t, true, ociimg.History[historyOffset+5].EmptyLayer)
 	require.NotNil(t, ociimg.History[historyOffset+5].Created)
