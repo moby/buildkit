@@ -2722,6 +2722,97 @@ COPY --from=base /out /
 	require.Equal(t, platforms.FormatAll(platforms.Normalize(platforms.DefaultSpec())), stmt.Predicate.BuildDefinition.InternalParameters.TargetPlatform)
 }
 
+// testProvenanceMultipleExporters verifies that every exporter of a build
+// gets valid provenance when the exporters run in parallel.
+func testProvenanceMultipleExporters(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows", "local export with provenance is not supported on Windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance, workers.FeatureOCIExporter)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox:latest AS base
+COPY <<EOF /out/foo
+ok
+EOF
+
+FROM scratch
+COPY --from=base /out /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	destDir, destDir2, ociDir := t.TempDir(), t.TempDir(), t.TempDir()
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max,capture-usage=true",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir2,
+			},
+			{
+				Type:      client.ExporterOCI,
+				OutputDir: ociDir,
+				Attrs: map[string]string{
+					"tar": "false",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var dts [][]byte
+	for _, d := range []string{destDir, destDir2} {
+		dt, err := os.ReadFile(filepath.Join(d, "provenance.json"))
+		require.NoError(t, err)
+		dts = append(dts, dt)
+	}
+
+	var index ocispecs.Index
+	dt, err := os.ReadFile(filepath.Join(ociDir, ocispecs.ImageIndexFile))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(dt, &index))
+	require.Len(t, index.Manifests, 1)
+
+	store, err := local.NewStore(ociDir)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(ctx, store, index.Manifests[0])
+	require.NoError(t, err)
+	att := imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+	require.Len(t, att.LayersRaw, 1)
+	dts = append(dts, att.LayersRaw[0])
+
+	for _, dt := range dts {
+		var stmt struct {
+			Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+		}
+		require.NoError(t, json.Unmarshal(dt, &stmt))
+		metadata := stmt.Predicate.RunDetails.Metadata
+		require.NotNil(t, metadata)
+		require.NotNil(t, metadata.FinishedOn)
+		require.NotEmpty(t, metadata.BuildKitMetadata.Layers)
+		require.NotEmpty(t, metadata.BuildKitMetadata.SysUsage)
+	}
+}
+
 /*
 testProvenanceExportLocalForceSplit verifies that the local exporter writes build output and a
 valid provenance.json (SLSA v1) into a platform-specific subdirectory (e.g., linux_amd64/)
