@@ -3015,6 +3015,108 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestFinalizeAlreadyCommitted(t *testing.T) {
+	// This test simulates a snapshotter commit that was applied but reported
+	// as failed (e.g. a canceled containerd RPC). Finalize must notice the
+	// committed snapshot instead of failing on the missing active snapshot.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	mutRef := mref.(*mutableRef)
+
+	iref, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	err = cm.Snapshotter.Commit(ctx, immutRef.getSnapshotID(), mutRef.getSnapshotID())
+	require.NoError(t, err)
+
+	require.NoError(t, iref.Finalize(ctx))
+	require.Nil(t, immutRef.equalMutable)
+
+	// the committed snapshot must stay protected by the ref's lease
+	resources, err := co.lm.ListResources(ctx, leases.Lease{ID: immutRef.ID()})
+	require.NoError(t, err)
+	require.Contains(t, resources, leases.Resource{
+		ID:   immutRef.getSnapshotID(),
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	})
+
+	m, err := iref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	mnts, release, err := m.Mount()
+	require.NoError(t, err)
+	require.NotEmpty(t, mnts)
+	require.NoError(t, release())
+
+	require.NoError(t, mref.Release(ctx))
+	require.NoError(t, iref.Release(ctx))
+}
+
+func TestFinalizeCanceledContext(t *testing.T) {
+	// Finalize ignores cancellation, as a remote snapshotter may apply a commit
+	// that the caller observes as canceled.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	iref, err := mref.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	cctx, cancel := context.WithCancelCause(ctx)
+	cancel(errors.WithStack(context.Canceled))
+	require.NoError(t, iref.Finalize(cctx))
+	require.Nil(t, immutRef.equalMutable)
+
+	info, err := cm.Snapshotter.Stat(ctx, immutRef.getSnapshotID())
+	require.NoError(t, err)
+	require.Equal(t, snapshots.KindCommitted, info.Kind)
+
+	require.NoError(t, mref.Release(ctx))
+	require.NoError(t, iref.Release(ctx))
+}
+
 func TestMountReadOnly(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
