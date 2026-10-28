@@ -3015,6 +3015,76 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestStartupRemovesOrphanedExternalMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	iref, err := mref.Commit(ctx)
+	require.NoError(t, err)
+	liveID := iref.ID()
+	require.NoError(t, iref.SetExternal("test", []byte("live")))
+	require.NoError(t, iref.Release(ctx))
+	require.NoError(t, mref.Release(ctx))
+
+	require.NoError(t, cm.MetadataStore.DB().Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte("_external"))
+		if err != nil {
+			return err
+		}
+		b, err = b.CreateBucket([]byte("orphan"))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte("test"), []byte("leaked"))
+	}))
+	orphan, _ := cm.MetadataStore.Get("orphan")
+	dt, err := orphan.GetExternal("test")
+	require.NoError(t, err)
+	require.Equal(t, "leaked", string(dt))
+
+	require.NoError(t, cm.Close())
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager.(*cacheManager)
+
+	orphan, _ = cm.MetadataStore.Get("orphan")
+	_, err = orphan.GetExternal("test")
+	require.Error(t, err)
+
+	live, ok := cm.MetadataStore.Get(liveID)
+	require.True(t, ok)
+	dt, err = live.GetExternal("test")
+	require.NoError(t, err)
+	require.Equal(t, "live", string(dt))
+}
+
 func TestMountReadOnly(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
