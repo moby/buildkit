@@ -20,6 +20,27 @@ import (
 // variable so that code which embeds BuildKit can override the default value.
 var MaxRetryBackoff = 8 * time.Second
 
+// MaxRetryAfter is the longest server-requested delay accepted for a retry.
+// It is independent of the exponential backoff budget. Code which embeds
+// BuildKit can override the default value.
+var MaxRetryAfter = 30 * time.Second
+
+// RetryAfterError marks a failure as retryable after at least Delay.
+// A zero Delay uses the normal backoff. Delays above MaxRetryAfter
+// stop retries rather than retrying before the requested delay has elapsed.
+type RetryAfterError struct {
+	Err   error
+	Delay time.Duration
+}
+
+func (e *RetryAfterError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *RetryAfterError) Unwrap() error {
+	return e.Err
+}
+
 func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		descs, err := WithRetry(ctx, logger, func(ctx context.Context) ([]ocispecs.Descriptor, error) {
@@ -69,6 +90,12 @@ func WithRetryIf[T any](ctx context.Context, logger func([]byte), f func(context
 		}
 		// Keep the retry budget independent of jitter, including the first retry.
 		delay := backoff/2 + rand.N(backoff/2) //nolint:gosec // Jitter spreads load; it does not need cryptographic randomness.
+		if retryAfter, ok := stderrors.AsType[*RetryAfterError](err); ok {
+			if retryAfter.Delay > MaxRetryAfter {
+				return v, err
+			}
+			delay = max(delay, retryAfter.Delay)
+		}
 		if logger != nil {
 			logger(fmt.Appendf(nil, "retrying in %v\n", delay))
 		}
@@ -91,6 +118,10 @@ func contextFailure(ctx context.Context) error {
 }
 
 func retryError(err error) bool {
+	if _, ok := stderrors.AsType[*RetryAfterError](err); ok {
+		return true
+	}
+
 	// Retry on 5xx errors
 	var errUnexpectedStatus remoteserrors.ErrUnexpectedStatus
 	if errors.As(err, &errUnexpectedStatus) &&

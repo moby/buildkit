@@ -2,8 +2,11 @@ package http
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/diff/apply"
@@ -30,6 +33,49 @@ import (
 )
 
 const signFixturesPathEnv = "BUILDKIT_TEST_SIGN_FIXTURES"
+
+func TestHTTPSourceBestEffortHEAD(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	cm, err := newCacheManager(t)
+	require.NoError(t, err)
+	attempts := 0
+	hs, err := NewSource(Opt{
+		CacheAccessor: cm,
+		Transport: retryTestTransport(func(req *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts != 2 {
+				require.Equal(t, http.MethodGet, req.Method)
+				return &http.Response{
+					StatusCode:    http.StatusOK,
+					Header:        http.Header{"Etag": {`"etag"`}},
+					Body:          io.NopCloser(strings.NewReader("content")),
+					ContentLength: int64(len("content")),
+				}, nil
+			}
+			require.Equal(t, http.MethodHead, req.Method)
+			return &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Header:     http.Header{"Retry-After": {"3600"}},
+				Body:       http.NoBody,
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+	id := &HTTPIdentifier{URL: "https://example.com/file"}
+	h, err := hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+
+	// Resolve again to probe the cached ETag with HEAD. The probe is best-effort,
+	// so a rate-limited response falls through to GET without retrying HEAD.
+	h, err = hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, 3, attempts)
+}
 
 func TestHTTPSource(t *testing.T) {
 	t.Parallel()
