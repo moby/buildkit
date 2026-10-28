@@ -49,6 +49,7 @@ Join `#buildkit` channel on [Docker Community Slack](https://dockr.ly/comm-slack
   - [macOS Setup](#macos-setup)
   - [Build from source](#build-from-source)
   - [Exploring LLB](#exploring-llb)
+  - [Frontends](#frontends)
   - [Exploring Dockerfiles](#exploring-dockerfiles)
     - [Building a Dockerfile with `buildctl`](#building-a-dockerfile-with-buildctl)
     - [Building a Dockerfile using external frontend](#building-a-dockerfile-using-external-frontend)
@@ -178,36 +179,47 @@ For a `buildctl` reference, see [this document](./docs/reference/buildctl.md).
 
 ### Exploring LLB
 
-BuildKit builds are based on a binary intermediate format called LLB that is used for defining the dependency graph for processes running part of your build. tl;dr: LLB is to Dockerfile what LLVM IR is to C.
+BuildKit builds are based on a binary intermediate format called LLB that is
+used for defining the dependency graph for processes running part of your build.
+tl;dr: LLB is to Dockerfile what LLVM IR is to C.
 
 -   Marshaled as Protobuf messages
 -   Concurrently executable
 -   Efficiently cacheable
 -   Vendor-neutral (i.e. non-Dockerfile languages can be easily implemented)
 
-See [`solver/pb/ops.proto`](./solver/pb/ops.proto) for the format definition, and see [`./examples/README.md`](./examples/README.md) for example LLB applications.
+See [`solver/pb/ops.proto`](./solver/pb/ops.proto) for the format definition,
+and see [`./examples/README.md`](./examples/README.md) for example LLB
+applications.
 
-Currently, the following high-level languages have been implemented for LLB:
+### Frontends
 
--   Dockerfile (See [Exploring Dockerfiles](#exploring-dockerfiles))
--   [Buildpacks](https://github.com/tonistiigi/buildkit-pack)
--   [Mockerfile](https://matt-rickard.com/building-a-new-dockerfile-frontend/)
--   [Gockerfile](https://github.com/po3rin/gockerfile)
--   [bldr (Pkgfile)](https://github.com/talos-systems/bldr/)
--   [HLB](https://github.com/openllb/hlb)
--   [Earthfile (Earthly)](https://github.com/earthly/earthly)
--   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
--   [Nix](https://github.com/reproducible-containers/buildkit-nix)
--   [mopy (Python)](https://github.com/cmdjulian/mopy)
--   [envd (starlark)](https://github.com/tensorchord/envd/)
--   [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)
--   [Bass](https://github.com/vito/bass)
--   [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend)
--   [r2d4/llb (JSON Gateway)](https://github.com/r2d4/llb)
--   [Massé](https://github.com/marxarelli/masse)
--   [DALEC](https://github.com/project-dalec/dalec)
--   [Dexfile](https://github.com/dexnore/dexfile)
--   (open a PR to add your own language)
+BuildKit supports different build languages through frontends that translate
+build definitions into LLB. The following frontends and tools provide alternatives
+for defining builds:
+
+| Project                                                                                                  | Description                                                                          |
+|----------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| [Dockerfile](#exploring-dockerfiles)                                                                     | Build container images using Dockerfile instructions.                                |
+| [Buildpacks](https://github.com/tonistiigi/buildkit-pack)                                                | Build applications using buildpacks.                                                 |
+| [Mockerfile](https://mattrickard.com/building-a-new-dockerfile-frontend/)                                | Example YAML frontend for Ubuntu packages and external dependencies.                 |
+| [Gockerfile](https://github.com/po3rin/gockerfile)                                                       | Build simple Go servers from YAML definitions.                                       |
+| [bldr (Pkgfile)](https://github.com/siderolabs/bldr)                                                     | Build and package software distributions using YAML definitions.                     |
+| [HLB](https://github.com/openllb/hlb)                                                                    | Define builds as containerized units of work in a high-level build language.         |
+| [Earthfile (Earthly)](https://github.com/earthly/earthly)                                                | Define repeatable builds with Dockerfile-like syntax. No longer actively maintained. |
+| [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)                                               | Build Rust container images from Cargo build plans with per-dependency caching.      |
+| [Nix](https://github.com/reproducible-containers/buildkit-nix)                                           | Build container images from Nix derivations and flakes.                              |
+| [mopy (Python)](https://github.com/cmdjulian/mopy)                                                       | Package Python applications into container images using YAML definitions.            |
+| [envd (Starlark)](https://github.com/tensorchord/envd)                                                   | Define container-based development environments for AI/ML.                           |
+| [Blubber](https://gitlab.wikimedia.org/repos/releng/blubber)                                             | Build application container images from declarative YAML.                            |
+| [Bass](https://github.com/vito/bass)                                                                     | Script builds and project infrastructure with a Lisp dialect.                        |
+| [kraft.yaml (Unikraft)](https://github.com/unikraft/kraftkit/tree/staging/tools/dockerfile-llb-frontend) | Build Unikraft unikernel images from Kraftfiles.                                     |
+| [Massé](https://github.com/marxarelli/masse)                                                             | Define composable container image build graphs in CUE.                               |
+| [DALEC](https://github.com/project-dalec/dalec)                                                          | Build system packages and container images from declarative specifications.          |
+| [Dexfile](https://github.com/dexnore/dexfile)                                                            | Extend Dockerfile syntax with conditions, loops, imports, and functions.             |
+| [Docker Sandbox Kit](https://github.com/docker/sandbox-kit-spec)                                         | Build Docker Sandbox kits from YAML descriptors.                                     |
+
+Open a pull request to add your own frontend or build language.
 
 ### Exploring Dockerfiles
 
