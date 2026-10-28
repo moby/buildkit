@@ -1,6 +1,8 @@
 package client
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -21,10 +23,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	ctd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	ctdcompression "github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	cerrdefs "github.com/containerd/errdefs"
+	"github.com/containerd/platforms"
 	"github.com/gofrs/flock"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/client/llb"
@@ -32,10 +36,13 @@ import (
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/helpers"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/util/testutil/workers"
+	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -428,6 +435,247 @@ func testAlternativeInputKeysCacheImport(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testImageCacheAcrossAttestationChanges(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM busybox:latest\nRUN echo hello world\n"), 0600))
+	fs, err := fsutil.NewFS(dir)
+	require.NoError(t, err)
+	target := registry + "/buildkit/attestation-cache:latest"
+	var previousIndex, previousManifest string
+	var previousOutput []byte
+	for _, tc := range []struct {
+		name     string
+		nested   bool
+		embedded bool
+		changed  bool
+	}{
+		{
+			name: "initial build",
+		},
+		{
+			name: "attestation-only rebuild",
+		},
+		{
+			name:   "nested index",
+			nested: true,
+		},
+		{
+			name:     "nested index with embedded manifests",
+			nested:   true,
+			embedded: true,
+		},
+		{
+			name:    "changed base layers",
+			changed: true,
+		},
+	} {
+		t.Log(tc.name)
+		if tc.changed {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM busybox:latest\nRUN echo changed > /marker\n"), 0600))
+		}
+		resp, err := c.Solve(sb.Context(), nil, SolveOpt{
+			Frontend:      "dockerfile.v0",
+			FrontendAttrs: map[string]string{"attest:provenance": "mode=min"},
+			LocalMounts:   map[string]fsutil.FS{"context": fs, "dockerfile": fs},
+			Exports: []ExportEntry{{
+				Type:  ExporterImage,
+				Attrs: map[string]string{"name": target, "push": "true"},
+			}},
+		}, nil)
+		require.NoError(t, err)
+		indexDigest := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+		desc, provider, err := contentutil.ProviderFromRef(sb.Context(), target+"@"+indexDigest)
+		require.NoError(t, err)
+		require.True(t, images.IsIndexType(desc.MediaType))
+		dt, err := content.ReadBlob(sb.Context(), provider, desc)
+		require.NoError(t, err)
+		var idx ocispecs.Index
+		require.NoError(t, json.Unmarshal(dt, &idx))
+		require.Len(t, idx.Manifests, 2)
+		manifestDigest := idx.Manifests[0].Digest.String()
+		if tc.nested {
+			ingester, err := contentutil.IngesterFromRef(sb.Context(), target)
+			require.NoError(t, err)
+			pushIndex := func(idx ocispecs.Index) ocispecs.Descriptor {
+				dt, err := json.Marshal(idx)
+				require.NoError(t, err)
+				desc := ocispecs.Descriptor{
+					MediaType: ocispecs.MediaTypeImageIndex,
+					Digest:    digest.FromBytes(dt),
+					Size:      int64(len(dt)),
+				}
+				require.NoError(t, content.WriteBlob(sb.Context(), ingester, desc.Digest.String(), bytes.NewReader(dt), desc))
+				if tc.embedded {
+					desc.Data = dt
+				}
+				return desc
+			}
+			if tc.embedded {
+				dt, err := content.ReadBlob(sb.Context(), provider, idx.Manifests[0])
+				require.NoError(t, err)
+				idx.Manifests[0].Data = dt
+				desc = pushIndex(idx)
+			}
+			desc = pushIndex(ocispecs.Index{
+				Versioned: specs.Versioned{SchemaVersion: 2},
+				MediaType: ocispecs.MediaTypeImageIndex,
+				Manifests: []ocispecs.Descriptor{desc},
+			})
+			indexDigest = desc.Digest.String()
+		}
+
+		// Pin each solve to its new index so resolver caching cannot hide the
+		// change. Random output proves the downstream RUN reused its result.
+		st := llb.Image(target+"@"+indexDigest).
+			Run(llb.Shlex("sh -c 'head -c 100 /dev/urandom > /out/unique'")).
+			AddMount("/out", llb.Scratch())
+		def, err := st.Marshal(sb.Context())
+		require.NoError(t, err)
+		out := t.TempDir()
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{{Type: ExporterLocal, OutputDir: out}},
+		}, nil)
+		require.NoError(t, err)
+		output, err := os.ReadFile(filepath.Join(out, "unique"))
+		require.NoError(t, err)
+		require.Len(t, output, 100)
+		if previousIndex != "" {
+			require.NotEqual(t, previousIndex, indexDigest)
+			if !tc.changed {
+				require.Equal(t, previousManifest, manifestDigest)
+				require.Equal(t, previousOutput, output, "changes outside the image manifest must not invalidate the downstream RUN")
+			} else {
+				require.NotEqual(t, previousManifest, manifestDigest)
+				require.NotEqual(t, previousOutput, output, "changed base layers must invalidate the downstream RUN")
+			}
+		}
+		previousIndex, previousManifest, previousOutput = indexDigest, manifestDigest, output
+	}
+}
+
+// A failed pull advertising another image's DiffIDs must not poison that
+// image's source cache (GHSA-f2v9-hprr-32q3).
+func testImageCacheRejectsUnverifiedDiffIDs(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+	ctx := sb.Context()
+	target := registry + "/buildkit/diffid-cache:test"
+	ingester, err := contentutil.IngesterFromRef(ctx, target)
+	require.NoError(t, err)
+	push := func(mediaType string, dt []byte) ocispecs.Descriptor {
+		desc := ocispecs.Descriptor{
+			MediaType: mediaType,
+			Digest:    digest.FromBytes(dt),
+			Size:      int64(len(dt)),
+		}
+		require.NoError(t, content.WriteBlob(ctx, ingester, desc.Digest.String(), bytes.NewReader(dt), desc))
+		return desc
+	}
+	layer := func(value string) ocispecs.Descriptor {
+		var buf bytes.Buffer
+		tw := tar.NewWriter(&buf)
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: "proof", Mode: 0644, Size: int64(len(value))}))
+		_, err := tw.Write([]byte(value))
+		require.NoError(t, err)
+		require.NoError(t, tw.Close())
+		return push(ocispecs.MediaTypeImageLayer, buf.Bytes())
+	}
+	victimLayer := layer("VICTIM")
+	attackerLayer := layer("ATTACKER")
+	platform := platforms.DefaultSpec()
+	dt, err := json.Marshal(ocispecs.Image{
+		Platform: platform,
+		RootFS: ocispecs.RootFS{
+			Type:    "layers",
+			DiffIDs: []digest.Digest{victimLayer.Digest},
+		},
+	})
+	require.NoError(t, err)
+	config := push(ocispecs.MediaTypeImageConfig, dt)
+	image := func(layer, config ocispecs.Descriptor) (string, ocispecs.Descriptor) {
+		dt, err := json.Marshal(ocispecs.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ocispecs.MediaTypeImageManifest,
+			Config:    config,
+			Layers:    []ocispecs.Descriptor{layer},
+		})
+		require.NoError(t, err)
+		manifest := push(ocispecs.MediaTypeImageManifest, dt)
+		manifest.Platform = &platform
+		dt, err = json.Marshal(ocispecs.Index{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ocispecs.MediaTypeImageIndex,
+			Manifests: []ocispecs.Descriptor{manifest},
+		})
+		require.NoError(t, err)
+		index := push(ocispecs.MediaTypeImageIndex, dt)
+		return target + "@" + index.Digest.String(), manifest
+	}
+	victim, victimManifest := image(victimLayer, config)
+	attacker, _ := image(attackerLayer, config)
+	read := func(ref string) ([]byte, error) {
+		st := llb.Scratch().File(llb.Copy(llb.Image(ref), "/proof", "/proof"))
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err)
+		out := t.TempDir()
+		_, err = c.Solve(ctx, def, SolveOpt{
+			Exports: []ExportEntry{{Type: ExporterLocal, OutputDir: out}},
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+		return os.ReadFile(filepath.Join(out, "proof"))
+	}
+	_, err = read(attacker)
+	require.ErrorContains(t, err, "failed to verify layer")
+
+	// Do not prune between builds: the failed attack and victim share a daemon
+	// and its source cache, which is the advisory's trust boundary.
+	got, err := read(victim)
+	require.NoError(t, err)
+	require.Equal(t, "VICTIM", string(got))
+
+	_, provider, err := contentutil.ProviderFromRef(ctx, victim)
+	require.NoError(t, err)
+	manifestData, err := content.ReadBlob(ctx, provider, victimManifest)
+	require.NoError(t, err)
+	// The registry requires layer references to exist in its blob store.
+	push(ocispecs.MediaTypeImageLayer, manifestData)
+
+	// A manifest referenced as a layer must not replace the selected image
+	// manifest and borrow its cached source result. Use a different DiffID so
+	// the cache manager cannot reuse the victim's verified snapshot by ChainID.
+	dt, err = json.Marshal(ocispecs.Image{
+		Platform: platform,
+		RootFS: ocispecs.RootFS{
+			Type:    "layers",
+			DiffIDs: []digest.Digest{attackerLayer.Digest},
+		},
+	})
+	require.NoError(t, err)
+	malformed, _ := image(victimManifest, push(ocispecs.MediaTypeImageConfig, dt))
+	_, err = read(malformed)
+	require.Error(t, err, "a manifest-typed layer must not reuse the victim's cached source")
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
