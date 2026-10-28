@@ -25,23 +25,47 @@ func TestWithRetry(t *testing.T) {
 		err      error
 		attempts int
 	}{
-		{"reset", reset, 4},
-		{"unexpected eof", io.ErrUnexpectedEOF, 4},
-		{"server error", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusServiceUnavailable}, 4},
-		{"forbidden", remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusForbidden}, 1},
+		{
+			name:     "reset",
+			err:      reset,
+			attempts: 4,
+		},
+		{
+			name:     "unexpected eof",
+			err:      io.ErrUnexpectedEOF,
+			attempts: 4,
+		},
+		{
+			name:     "server error",
+			err:      remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusServiceUnavailable},
+			attempts: 4,
+		},
+		{
+			name:     "forbidden",
+			err:      remoteserrors.ErrUnexpectedStatus{StatusCode: http.StatusForbidden},
+			attempts: 1,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				attempts := 0
 				start := time.Now()
+				previous := start
 				_, err := WithRetry(t.Context(), nil, func(context.Context) (int, error) {
+					if attempts > 0 {
+						backoff := time.Second << (attempts - 1)
+						require.GreaterOrEqual(t, time.Since(previous), backoff/2)
+						require.Less(t, time.Since(previous), backoff)
+					}
+					previous = time.Now()
 					attempts++
 					return 0, tc.err
 				})
 				require.Equal(t, tc.err, err)
 				require.Equal(t, tc.attempts, attempts)
 				if tc.attempts > 1 {
-					require.Equal(t, 7*time.Second, time.Since(start))
+					require.GreaterOrEqual(t, time.Since(start), 3500*time.Millisecond)
+					require.Less(t, time.Since(start), 7*time.Second)
 				} else {
 					require.Zero(t, time.Since(start))
 				}
@@ -63,7 +87,8 @@ func TestWithRetryNestedHandler(t *testing.T) {
 		_, err := handler(t.Context(), ocispecs.Descriptor{})
 		require.ErrorIs(t, err, io.EOF)
 		require.Equal(t, 4, attempts)
-		require.Equal(t, 7*time.Second, time.Since(start))
+		require.GreaterOrEqual(t, time.Since(start), 3500*time.Millisecond)
+		require.Less(t, time.Since(start), 7*time.Second)
 	})
 }
 

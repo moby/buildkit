@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net"
 	"syscall"
 	"time"
@@ -33,7 +34,7 @@ func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 
 type retryContextKey struct{}
 
-// WithRetry retries transient failures with exponential backoff. Nested calls
+// WithRetry retries transient failures with jittered exponential backoff. Nested calls
 // using the supplied context leave retries to the outer call, including New.
 // f must be safe to retry and preserve retryable errors when wrapping them.
 func WithRetry[T any](ctx context.Context, logger func([]byte), f func(context.Context) (T, error)) (T, error) {
@@ -66,13 +67,15 @@ func WithRetryIf[T any](ctx context.Context, logger func([]byte), f func(context
 		if backoff >= MaxRetryBackoff {
 			return v, err
 		}
+		// Keep the retry budget independent of jitter, including the first retry.
+		delay := backoff/2 + rand.N(backoff/2) //nolint:gosec // Jitter spreads load; it does not need cryptographic randomness.
 		if logger != nil {
-			logger(fmt.Appendf(nil, "retrying in %v\n", backoff))
+			logger(fmt.Appendf(nil, "retrying in %v\n", delay))
 		}
 		select {
 		case <-ctx.Done():
 			return v, contextFailure(ctx)
-		case <-time.After(backoff):
+		case <-time.After(delay):
 		}
 		backoff *= 2
 	}
