@@ -221,6 +221,7 @@ var allTests = integration.TestFuncs(
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
 	testProvenanceExportLocal,
+	testProvenanceMultipleExporters,
 	testProvenanceExportLocalForceSplit,
 	testProvenanceExportLocalMultiPlatform,
 	testProvenanceExportLocalMultiPlatformNoSplit,

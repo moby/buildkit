@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,5 +104,82 @@ func testClientGatewaySharedExecError(t *testing.T, sb integration.Sandbox) {
 		return err
 	})
 	require.NoError(t, eg.Wait())
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayExecErrorReleasedDuringLoad checks that the refs of a failed
+// exec are released when the gateway discards a lazy result while the exec is
+// still running.
+func testClientGatewayExecErrorReleasedDuringLoad(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("released exec error test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	id := identity.NewID()
+	// The exec fails only after a marker appears in a shared cache mount. The
+	// marker is written by a second build once the first one has returned, so
+	// the result is always discarded while the exec is still running.
+	cache := llb.AsPersistentCacheDir(id, llb.CacheMountShared)
+	def, err := llb.Image("busybox:latest").Run(
+		llb.Shlexf("sh -c 'echo %s; i=0; while [ ! -e /cache/go ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done; exit 1'", id),
+		llb.AddMount("/cache", llb.Scratch(), cache),
+	).Root().Marshal(ctx)
+	require.NoError(t, err)
+	markerDef, err := llb.Image("busybox:latest").Run(
+		llb.Shlexf("sh -c 'echo %s; touch /cache/go'", id),
+		llb.AddMount("/cache", llb.Scratch(), cache),
+	).Root().Marshal(ctx)
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	statusCh := make(chan *SolveStatus)
+	statusDone := make(chan struct{})
+	go func() {
+		defer close(statusDone)
+		var once sync.Once
+		for st := range statusCh {
+			for _, v := range st.Vertexes {
+				if v.Started != nil && strings.Contains(v.Name, id) {
+					once.Do(func() { close(started) })
+				}
+			}
+		}
+	}()
+
+	readErr := make(chan error, 1)
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", func(ctx context.Context, gc gwclient.Client) (*gwclient.Result, error) {
+		res, err := gc.Solve(ctx, gwclient.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		// reading from the lazy ref runs the exec
+		go func() {
+			_, err := ref.ReadFile(ctx, gwclient.ReadRequest{Filename: "/etc/passwd"})
+			readErr <- err
+		}()
+		// return while the exec is running so the gateway discards the ref
+		select {
+		case <-started:
+		case <-ctx.Done():
+			return nil, errors.WithStack(context.Cause(ctx))
+		}
+		return gwclient.NewResult(), nil
+	}, statusCh)
+	require.NoError(t, err)
+	<-statusDone
+
+	// the ref has been discarded, let the exec fail
+	_, err = c.Solve(ctx, markerDef, SolveOpt{}, nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, <-readErr, "evaluating released result")
+
 	checkAllReleasable(t, c, sb, true)
 }

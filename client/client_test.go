@@ -274,9 +274,11 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Tty,
+		testClientGatewayContainerResizeSignal,
 		testClientGatewayContainerSignal,
 		testClientGatewayExecError,
 		testClientGatewaySharedExecError,
+		testClientGatewayExecErrorReleasedDuringLoad,
 		testClientGatewayExecFileActionError,
 		testClientGatewaySlowCacheExecError,
 
