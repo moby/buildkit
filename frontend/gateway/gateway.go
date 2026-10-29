@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -525,9 +526,9 @@ func newPipe() *pipe {
 		Stdin:  pr1,
 		Stdout: pw2,
 		conn: &conn{
-			Reader: pr2,
-			Writer: pw1,
-			Closer: pw2,
+			Reader:  pr2,
+			Writer:  pw1,
+			closers: []io.Closer{pr2, pw1, pr1, pw2},
 		},
 	}
 }
@@ -535,7 +536,17 @@ func newPipe() *pipe {
 type conn struct {
 	io.Reader
 	io.Writer
-	io.Closer
+	closers []io.Closer
+}
+
+func (s *conn) Close() error {
+	var err error
+	for _, closer := range s.closers {
+		if closeErr := closer.Close(); err == nil {
+			err = closeErr
+		}
+	}
+	return errors.WithStack(err)
 }
 
 func (s *conn) LocalAddr() net.Addr {
@@ -1869,13 +1880,28 @@ func (lbf *llbBridgeForwarder) cloneRef(id string) (solver.ResultProxy, error) {
 	return s2, nil
 }
 
+type bufferedConn struct {
+	net.Conn
+	reader *bufio.Reader
+}
+
+func (c *bufferedConn) Read(p []byte) (int, error) {
+	return c.reader.Read(p)
+}
+
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+	defer conn.Close()
+
+	// The frontend container may take a while to start. Start HTTP/2's
+	// client preface timeout only once the frontend begins communicating.
+	reader := bufio.NewReader(conn)
+	if _, err := reader.Peek(1); err != nil {
+		return
+	}
 	bklog.G(ctx).Debugf("serving grpc connection")
-	(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: grpcServer}) //nolint:staticcheck // This existing HTTP/2 connection is already established.
+	(&http2.Server{}).ServeConn(&bufferedConn{Conn: conn, reader: reader}, &http2.ServeConnOpts{Handler: grpcServer}) //nolint:staticcheck // This existing HTTP/2 connection is already established.
 }
 
 type markTypeFrontend struct{}
