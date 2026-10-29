@@ -281,6 +281,10 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	lbf, ctx := serveLLBBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
 	defer lbf.Discard()
 	defer lbf.conn.Close()
+	// The executor may pass these fds directly to the frontend process, so
+	// close them only after Run has returned and no fork can still use them.
+	defer lbf.Stdin.Close()
+	defer lbf.Stdout.Close()
 
 	mdmnt, release, err := metadataMount(frontendDef)
 	if err != nil {
@@ -528,7 +532,7 @@ func newPipe() *pipe {
 		conn: &conn{
 			Reader:  pr2,
 			Writer:  pw1,
-			closers: []io.Closer{pr2, pw1, pr1, pw2},
+			closers: []io.Closer{pr2, pw1},
 		},
 	}
 }

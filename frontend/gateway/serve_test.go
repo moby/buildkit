@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -14,7 +16,11 @@ func TestServeCancelBeforeFrontendStartup(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(errors.WithStack(context.Canceled))
 	p := newPipe()
-	t.Cleanup(func() { p.conn.Close() })
+	t.Cleanup(func() {
+		p.conn.Close()
+		p.Stdin.Close()
+		p.Stdout.Close()
+	})
 	server := grpc.NewServer()
 	t.Cleanup(server.Stop)
 	done := make(chan struct{})
@@ -24,12 +30,23 @@ func TestServeCancelBeforeFrontendStartup(t *testing.T) {
 	}()
 	cancel(errors.WithStack(context.Canceled))
 	receiveGatewayLifecycleTest(t, done, "server cancellation before frontend startup")
+
+	// Cancellation must leave the frontend ends open, as the executor may
+	// still be passing them to the frontend process.
+	_, err := p.Stdout.Write([]byte{0})
+	require.NotErrorIs(t, err, os.ErrClosed)
+	_, err = p.Stdin.Read(make([]byte, 1))
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestServeFrontendClosesBeforeStartup(t *testing.T) {
 	t.Parallel()
 	p := newPipe()
-	t.Cleanup(func() { p.conn.Close() })
+	t.Cleanup(func() {
+		p.conn.Close()
+		p.Stdin.Close()
+		p.Stdout.Close()
+	})
 	server := grpc.NewServer()
 	t.Cleanup(server.Stop)
 	done := make(chan struct{})
