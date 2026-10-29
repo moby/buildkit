@@ -479,7 +479,6 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		refs:               map[string]solver.ResultProxy{},
 		resultByID:         map[string]solver.Result{},
 		doneCh:             make(chan struct{}),
-		pipe:               newPipe(),
 		workers:            workers,
 		inputs:             inputs,
 		sid:                sid,
@@ -494,6 +493,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
+	lbf.pipe = newPipe()
 	serverOpt := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
 		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
