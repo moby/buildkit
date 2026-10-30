@@ -84,8 +84,8 @@ func TestMessageForwarderSendDoesNotBlockReceive(t *testing.T) {
 		ProcessID: "process",
 		Input:     &pb.ExecMessage_File{File: &pb.FdMessage{Fd: 1, Data: []byte("stdout")}},
 	}
-	msg, ok := process.Recv(ctx)
-	require.True(t, ok)
+	msg, err := process.Recv(ctx)
+	require.NoError(t, err)
 	require.NotNil(t, msg, "process output stalled behind a blocked stdin send")
 	require.Equal(t, "stdout", string(msg.GetFile().GetData()))
 }
