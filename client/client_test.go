@@ -22,6 +22,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testBasicInlineCacheImportExport,
 	testBasicLocalCacheImportExport,
 	testAlternativeInputKeysCacheImport,
+	testImageCacheAcrossAttestationChanges,
+	testImageCacheRejectsUnverifiedDiffIDs,
 	testBasicRegistryCacheImportExport,
 	testBasicS3CacheImportExport,
 	testCacheExportCacheDeletedContent,
