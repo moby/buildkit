@@ -4,7 +4,7 @@
 
 package fuse
 
-const outputHeaderSize = 200
+const outputDataSize = 184
 
 const (
 	_FUSE_KERNEL_VERSION   = 7

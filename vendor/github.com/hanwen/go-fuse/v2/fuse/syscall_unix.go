@@ -3,7 +3,6 @@
 package fuse
 
 import (
-	"os"
 	"syscall"
 	"unsafe"
 )
@@ -35,13 +34,10 @@ func writev(fd int, packet [][]byte) (n int, err error) {
 		iovecs = append(iovecs, vec)
 	}
 
-	sysErr := handleEINTR(func() error {
+	err = handleEINTR(func() error {
 		var err error
 		n, err = sys_writev(fd, &iovecs[0], len(iovecs))
 		return err
 	})
-	if sysErr != nil {
-		err = os.NewSyscallError("writev", sysErr)
-	}
 	return n, err
 }

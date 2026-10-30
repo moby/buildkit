@@ -106,6 +106,12 @@ type ExchangeIn struct {
 	Options uint64
 }
 
+type MonitorIn struct {
+	InHeader
+	Flags   uint32
+	Padding uint32
+}
+
 func (s *StatfsOut) FromStatfsT(statfs *syscall.Statfs_t) {
 	s.Blocks = statfs.Blocks
 	s.Bfree = statfs.Bfree

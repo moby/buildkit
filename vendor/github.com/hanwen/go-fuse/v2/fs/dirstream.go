@@ -8,8 +8,10 @@ import (
 	"context"
 	"sync"
 	"syscall"
+	"unsafe"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/hanwen/go-fuse/v2/internal/ioctl"
 	"golang.org/x/sys/unix"
 )
 
@@ -124,10 +126,8 @@ type loopbackDirStream struct {
 // a DirStream
 func NewLoopbackDirStreamFd(fd int) (DirStream, syscall.Errno) {
 	ds := &loopbackDirStream{
-		buf: make([]byte, 4096),
-		fd:  fd,
+		fd: fd,
 	}
-	ds.load()
 	return ds, OK
 }
 
@@ -173,6 +173,7 @@ func (ds *loopbackDirStream) Fsyncdir(ctx context.Context, flags uint32) syscall
 func (ds *loopbackDirStream) HasNext() bool {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+	ds.load()
 	return len(ds.todo) > 0 || ds.todoErrno != 0
 }
 
@@ -190,23 +191,45 @@ func (ds *loopbackDirStream) Next() (fuse.DirEntry, syscall.Errno) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
+	ds.load()
 	if ds.todoErrno != 0 {
 		return fuse.DirEntry{}, ds.todoErrno
 	}
 	var res fuse.DirEntry
 	n := res.Parse(ds.todo)
 	ds.todo = ds.todo[n:]
-	if len(ds.todo) == 0 {
-		ds.load()
-	}
 	return res, 0
 }
 
-func (ds *loopbackDirStream) load() {
-	if len(ds.todo) > 0 {
-		return
+var _ = (FileIoctler)((*loopbackDirStream)(nil))
+
+func (ds *loopbackDirStream) Ioctl(ctx context.Context, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno) {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+
+	argWord := uintptr(arg)
+	ioc := ioctl.Command(cmd)
+	if ioc.Read() && ioc.Write() {
+		// The kernel updates the buffer in place.
+		copy(output, input)
+		argWord = uintptr(unsafe.Pointer(&output[0]))
+	} else if ioc.Write() {
+		argWord = uintptr(unsafe.Pointer(&input[0]))
+	} else if ioc.Read() {
+		argWord = uintptr(unsafe.Pointer(&output[0]))
 	}
 
+	res, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(ds.fd), uintptr(cmd), argWord)
+	return int32(res), errno
+}
+
+func (ds *loopbackDirStream) load() {
+	if len(ds.todo) > 0 || ds.todoErrno != 0 {
+		return
+	}
+	if ds.buf == nil {
+		ds.buf = make([]byte, 4096)
+	}
 	n, err := getdents(ds.fd, ds.buf)
 	if n < 0 {
 		n = 0

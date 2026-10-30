@@ -32,16 +32,13 @@ var _ = (NodeAllocater)((*MemRegularFile)(nil))
 func (f *MemRegularFile) Allocate(ctx context.Context, fh FileHandle, off uint64, size uint64, mode uint32) syscall.Errno {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	oldSz := len(f.Data)
-	if uint64(cap(f.Data)) < off+size {
-		n := make([]byte, off+size)
+	if keepSizeMode(mode) {
+		return 0
+	}
+	if end := off + size; end > uint64(len(f.Data)) {
+		n := make([]byte, end)
 		copy(n, f.Data)
 		f.Data = n
-	}
-	if keepSizeMode(mode) {
-		f.Data = f.Data[:oldSz]
-	} else if len(f.Data) < int(off+size) {
-		f.Data = f.Data[:off+size]
 	}
 	return 0
 }
@@ -79,7 +76,13 @@ func (f *MemRegularFile) Setattr(ctx context.Context, fh FileHandle, in *fuse.Se
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if sz, ok := in.GetSize(); ok {
-		f.Data = f.Data[:sz]
+		if sz <= uint64(len(f.Data)) {
+			f.Data = f.Data[:sz]
+		} else {
+			n := make([]byte, sz)
+			copy(n, f.Data)
+			f.Data = n
+		}
 	}
 	out.Attr = f.Attr
 	out.Size = uint64(len(f.Data))
@@ -93,10 +96,8 @@ func (f *MemRegularFile) Flush(ctx context.Context, fh FileHandle) syscall.Errno
 func (f *MemRegularFile) Read(ctx context.Context, fh FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	end := int(off) + len(dest)
-	if end > len(f.Data) {
-		end = len(f.Data)
-	}
+	off = min(off, int64(len(f.Data)))
+	end := min(int(off)+len(dest), len(f.Data))
 	return fuse.ReadResultData(f.Data[off:end]), OK
 }
 

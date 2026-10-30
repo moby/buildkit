@@ -30,7 +30,7 @@ type TTLCache struct {
 
 	// OnEvicted optionally specifies a callback function to be
 	// executed when an entry is purged from the cache.
-	OnEvicted func(key string, value interface{})
+	OnEvicted func(key string, value any)
 }
 
 // NewTTLCache creates a new ttl-based cache.
@@ -44,7 +44,7 @@ func NewTTLCache(ttl time.Duration) *TTLCache {
 // Get retrieves the specified object from the cache and increments the reference counter of the
 // target content. Client must call `done` callback to decrease the reference count when the value
 // will no longer be used.
-func (c *TTLCache) Get(key string) (value interface{}, done func(bool), ok bool) {
+func (c *TTLCache) Get(key string) (value any, done func(bool), ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	rc, ok := c.m[key]
@@ -59,7 +59,7 @@ func (c *TTLCache) Get(key string) (value interface{}, done func(bool), ok bool)
 // If the specified content already exists in the cache, this sets `added` to false and returns
 // "already cached" content (i.e. doesn't replace the content with the new one). Client must call
 // `done` callback to decrease the counter when the value will no longer be used.
-func (c *TTLCache) Add(key string, value interface{}) (cachedValue interface{}, done func(bool), added bool) {
+func (c *TTLCache) Add(key string, value any) (cachedValue any, done func(bool), added bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if rc, ok := c.m[key]; ok {

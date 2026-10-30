@@ -457,6 +457,8 @@ type FileLock struct {
 	Pid   uint32
 }
 
+const LK_FLOCK = (1 << 0)
+
 type LkIn struct {
 	InHeader
 	Fh      uint64
@@ -541,6 +543,12 @@ type NotifyRetrieveIn struct {
 	Dummy4 uint64
 }
 
+type NotifyPruneOut struct {
+	Count    uint32
+	_padding uint32
+	_spare   uint64
+}
+
 const (
 	//	NOTIFY_POLL         = -1 // notify kernel that a poll waiting for IO on a file handle should wake up
 	NOTIFY_INVAL_INODE    = -2 // notify kernel that an inode should be invalidated
@@ -549,8 +557,7 @@ const (
 	NOTIFY_RETRIEVE_CACHE = -5 // retrieve data from kernel cache of an inode
 	NOTIFY_DELETE         = -6 // notify kernel that a directory entry has been deleted
 	NOTIFY_RESEND         = -7
-
-// NOTIFY_CODE_MAX     = -6
+	NOTIFY_PRUNE          = -9
 )
 
 type FlushIn struct {
@@ -869,4 +876,8 @@ func (o *StatxOut) SetTimeout(dt time.Duration) {
 	ns := int64(dt)
 	o.AttrValidNsec = uint32(ns % 1e9)
 	o.AttrValid = uint64(ns / 1e9)
+}
+
+type CopyFileRangeOut struct {
+	BytesCopied uint64
 }

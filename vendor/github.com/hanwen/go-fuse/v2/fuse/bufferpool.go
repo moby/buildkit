@@ -41,7 +41,7 @@ func (p *bufferPool) getPool(pageCount int, delta int) *sync.Pool {
 	}
 	if p.buffersBySize[pageCount] == nil {
 		p.buffersBySize[pageCount] = &sync.Pool{
-			New: func() interface{} { return make([]byte, pageSize*pageCount) },
+			New: func() any { return make([]byte, pageSize*pageCount) },
 		}
 	}
 	p.countersBySize[pageCount] += delta
@@ -51,10 +51,7 @@ func (p *bufferPool) getPool(pageCount int, delta int) *sync.Pool {
 // AllocBuffer creates a buffer of at least the given size. After use,
 // it should be deallocated with FreeBuffer().
 func (p *bufferPool) AllocBuffer(size uint32) []byte {
-	sz := int(size)
-	if sz < pageSize {
-		sz = pageSize
-	}
+	sz := max(int(size), pageSize)
 
 	if sz%pageSize != 0 {
 		sz += pageSize

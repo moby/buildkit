@@ -131,14 +131,18 @@ func Dir(name string, opts ...DirectoryBuildTarOption) TarEntry {
 		if dOpts.mode != nil {
 			mode = permAndExtraMode2TarMode(*dOpts.mode)
 		}
+		xattrs := make(map[string]string)
+		for k, v := range dOpts.xattrs {
+			xattrs["SCHILY.xattr."+k] = v
+		}
 		return tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeDir,
-			Name:     buildOpts.Prefix + name,
-			Mode:     mode,
-			ModTime:  dOpts.modTime,
-			Xattrs:   dOpts.xattrs,
-			Uid:      dOpts.uid,
-			Gid:      dOpts.gid,
+			Typeflag:   tar.TypeDir,
+			Name:       buildOpts.Prefix + name,
+			Mode:       mode,
+			ModTime:    dOpts.modTime,
+			PAXRecords: xattrs,
+			Uid:        dOpts.uid,
+			Gid:        dOpts.gid,
 		})
 	})
 }
@@ -197,15 +201,19 @@ func File(name, contents string, opts ...FileBuildTarOption) TarEntry {
 		if fOpts.mode != nil {
 			mode = permAndExtraMode2TarMode(*fOpts.mode)
 		}
+		xattrs := make(map[string]string)
+		for k, v := range fOpts.xattrs {
+			xattrs["SCHILY.xattr."+k] = v
+		}
 		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     buildOpts.Prefix + name,
-			Mode:     mode,
-			ModTime:  fOpts.modTime,
-			Xattrs:   fOpts.xattrs,
-			Size:     int64(len(contents)),
-			Uid:      fOpts.uid,
-			Gid:      fOpts.gid,
+			Typeflag:   tar.TypeReg,
+			Name:       buildOpts.Prefix + name,
+			Mode:       mode,
+			ModTime:    fOpts.modTime,
+			PAXRecords: xattrs,
+			Size:       int64(len(contents)),
+			Uid:        fOpts.uid,
+			Gid:        fOpts.gid,
 		}); err != nil {
 			return err
 		}

@@ -636,8 +636,7 @@ type NodeRenamer interface {
 // FileHandle. Files that have such dynamic content should return the
 // FOPEN_DIRECT_IO flag from their `Open` method. See directio_test.go
 // for an example.
-type FileHandle interface {
-}
+type FileHandle any
 
 // FilePassthroughFder is a file backed by a physical
 // file. PassthroughFd should return an open file descriptor (and
