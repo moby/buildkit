@@ -44,20 +44,36 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 	var cm *cacheManager
 	layers := []converter.Layer{}
 	for _, ref := range refs {
-		blobDesc, err := getBlobWithCompressionWithRetry(ctx, ref, comp, s)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get compression blob %q", comp.Type)
+		var desc ocispecs.Descriptor
+		var ra content.ReaderAt
+		if dh := ref.descHandlers[ref.getBlob()]; dh != nil && dh.Provider != nil {
+			var err error
+			desc, err = ref.ociDesc(ctx, ref.descHandlers, true)
+			if err != nil {
+				return nil, err
+			}
+			_, nydus := desc.Annotations[converter.LayerAnnotationNydusBlob]
+			if nydus && desc.MediaType == converter.MediaTypeNydusBlob {
+				ra = &nydusRemoteReaderAt{ctx: ctx, provider: dh.Provider(s), desc: desc}
+			}
 		}
-		ra, err := ref.cm.ContentStore.ReaderAt(ctx, blobDesc)
-		if err != nil {
-			return nil, errors.Wrapf(err, "get reader for compression blob %q", comp.Type)
+		if ra == nil {
+			var err error
+			desc, err = getBlobWithCompressionWithRetry(ctx, ref, comp, s)
+			if err != nil {
+				return nil, errors.Wrapf(err, "get compression blob %q", comp.Type)
+			}
+			ra, err = ref.cm.ContentStore.ReaderAt(ctx, desc)
+			if err != nil {
+				return nil, errors.Wrapf(err, "get reader for compression blob %q", comp.Type)
+			}
 		}
 		defer ra.Close()
 		if cm == nil {
 			cm = ref.cm
 		}
 		layers = append(layers, converter.Layer{
-			Digest:   blobDesc.Digest,
+			Digest:   desc.Digest,
 			ReaderAt: ra,
 		})
 	}
@@ -120,3 +136,21 @@ func MergeNydus(ctx context.Context, ref ImmutableRef, comp compression.Config, 
 
 	return &desc, nil
 }
+
+type nydusRemoteReaderAt struct {
+	ctx      context.Context
+	provider content.Provider
+	desc     ocispecs.Descriptor
+}
+
+func (r *nydusRemoteReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	ra, err := r.provider.ReaderAt(r.ctx, r.desc)
+	if err != nil {
+		return 0, err
+	}
+	defer ra.Close()
+	return ra.ReadAt(p, off)
+}
+
+func (r *nydusRemoteReaderAt) Size() int64  { return r.desc.Size }
+func (r *nydusRemoteReaderAt) Close() error { return nil }
