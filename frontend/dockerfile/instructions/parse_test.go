@@ -269,6 +269,23 @@ func TestErrorCases(t *testing.T) {
 	}
 }
 
+func TestUnsetDisabled(t *testing.T) {
+	if unsetEnabled {
+		t.Skip("--unset is enabled in this build")
+	}
+	for _, dockerfile := range []string{
+		"ENV --unset FOO",
+		"LABEL --unset foo",
+		"ARG --unset FOO",
+		"VOLUME --unset /foo",
+	} {
+		ast, err := parser.Parse(strings.NewReader(dockerfile))
+		require.NoError(t, err)
+		_, err = ParseInstruction(ast.AST.Children[0])
+		require.ErrorContains(t, err, "unknown flag: --unset", dockerfile)
+	}
+}
+
 func TestRunCmdFlagsUsed(t *testing.T) {
 	dockerfile := "RUN --mount=type=tmpfs,target=/foo/ echo hello"
 	r := strings.NewReader(dockerfile)

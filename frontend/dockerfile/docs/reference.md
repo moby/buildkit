@@ -1216,6 +1216,25 @@ $ docker image inspect --format='{{json .Config.Labels}}' myimage
 }
 ```
 
+### LABEL --unset
+
+> [!NOTE]
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
+> version.
+
+```dockerfile
+LABEL --unset <key> [<key>...]
+```
+
+The `--unset` flag removes labels from the image, including labels inherited
+from the base image. Removing a label that isn't set is not an error.
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+FROM alpine
+LABEL --unset org.opencontainers.image.description org.opencontainers.image.url
+```
+
 ## MAINTAINER (deprecated)
 
 ```dockerfile
@@ -1358,6 +1377,35 @@ RUN apt-get update && apt-get install -y ...
 >
 > The alternative syntax is supported for backward compatibility, but discouraged
 > for the reasons outlined above, and may be removed in a future release.
+
+### ENV --unset
+
+> [!NOTE]
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
+> version.
+
+```dockerfile
+ENV --unset <key> [<key>...]
+```
+
+The `--unset` flag removes environment variables, including variables inherited
+from the base image. The variables are removed from the image configuration and
+from the environment of subsequent build steps. A build argument with the same
+name is removed as well. Declare the build argument again with [`ARG`](#arg) to
+make it available to later build steps. Removing a variable that isn't set is
+not an error. Values set by earlier instructions remain in the image history.
+
+When `PATH` is removed, `RUN` instructions on Linux use the default `PATH`, and
+stages based on this stage add the default `PATH` back to their image
+configuration.
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+FROM busybox
+ENV TEMP_TOKEN_PATH=/tmp/token
+RUN ./setup.sh
+ENV --unset TEMP_TOKEN_PATH
+```
 
 ## ADD
 
@@ -2460,6 +2508,28 @@ Keep the following things in mind about volumes in the Dockerfile.
   on all hosts. For this reason, you can't mount a host directory from
   within the Dockerfile. The `VOLUME` instruction does not support specifying a `host-dir`
   parameter. You must specify the mountpoint when you create or run the container.
+
+### VOLUME --unset
+
+> [!NOTE]
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
+> version.
+
+```dockerfile
+VOLUME --unset ["/data"]
+VOLUME --unset /var/log /var/db
+```
+
+The `--unset` flag removes volumes from the image configuration, including
+volumes inherited from the base image. Trailing and duplicate slashes are
+ignored when comparing paths, so `/data/` matches a volume defined as `/data`.
+Removing a volume that isn't defined is not an error.
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+FROM postgres
+VOLUME --unset /var/lib/postgresql/data
+```
 
 ## USER
 

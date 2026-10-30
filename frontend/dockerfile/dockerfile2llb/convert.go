@@ -1331,6 +1331,25 @@ func initOnBuildTriggers(d *dispatchState, triggers []string, allDispatchStates 
 }
 
 func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Linter) error {
+	if c.Unset {
+		keys := make([]string, 0, len(c.Env))
+		for _, e := range c.Env {
+			if e.Key == "" {
+				return errors.New("ENV --unset names can not be blank")
+			}
+			for _, k := range getEnv(d.state).Keys() {
+				if shell.EqualEnvKeys(k, e.Key) {
+					d.state = d.state.DelEnv(k)
+				}
+			}
+			d.image.Config.Env = delEnv(d.image.Config.Env, e.Key)
+			d.buildArgs = slices.DeleteFunc(d.buildArgs, func(arg instructions.KeyValuePairOptional) bool {
+				return shell.EqualEnvKeys(arg.Key, e.Key)
+			})
+			keys = append(keys, e.Key)
+		}
+		return commitToHistory(&d.image, "ENV --unset "+strings.Join(keys, " "), false, nil, d.epoch)
+	}
 	commitMessage := bytes.NewBufferString("ENV")
 	for _, e := range c.Env {
 		if e.NoDelim {
@@ -1575,6 +1594,17 @@ func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) err
 }
 
 func dispatchLabel(d *dispatchState, c *instructions.LabelCommand, lint *linter.Linter) error {
+	if c.Unset {
+		keys := make([]string, 0, len(c.Labels))
+		for _, v := range c.Labels {
+			if v.Key == "" {
+				return errors.New("LABEL --unset names can not be blank")
+			}
+			delete(d.image.Config.Labels, v.Key)
+			keys = append(keys, v.Key)
+		}
+		return commitToHistory(&d.image, "LABEL --unset "+strings.Join(keys, " "), false, nil, d.epoch)
+	}
 	commitMessage := bytes.NewBufferString("LABEL")
 	if d.image.Config.Labels == nil {
 		d.image.Config.Labels = make(map[string]string, len(c.Labels))
@@ -1652,13 +1682,24 @@ func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) er
 }
 
 func dispatchVolume(d *dispatchState, c *instructions.VolumeCommand) error {
+	if slices.Contains(c.Volumes, "") {
+		return errors.New("VOLUME specified can not be an empty string")
+	}
+	if c.Unset {
+		for _, v := range c.Volumes {
+			v = path.Clean(v)
+			for k := range d.image.Config.Volumes {
+				if path.Clean(k) == v {
+					delete(d.image.Config.Volumes, k)
+				}
+			}
+		}
+		return commitToHistory(&d.image, fmt.Sprintf("VOLUME --unset %v", c.Volumes), false, nil, d.epoch)
+	}
 	if d.image.Config.Volumes == nil {
 		d.image.Config.Volumes = map[string]struct{}{}
 	}
 	for _, v := range c.Volumes {
-		if v == "" {
-			return errors.New("VOLUME specified can not be an empty string")
-		}
 		d.image.Config.Volumes[v] = struct{}{}
 	}
 	return commitToHistory(&d.image, fmt.Sprintf("VOLUME %v", c.Volumes), false, nil, d.epoch)
@@ -1768,6 +1809,13 @@ func addEnv(env []string, k, v string) []string {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+func delEnv(env []string, k string) []string {
+	return slices.DeleteFunc(env, func(envVar string) bool {
+		key, _ := parseKeyValue(envVar)
+		return shell.EqualEnvKeys(key, k)
+	})
 }
 
 func parseKeyValue(env string) (string, string) {

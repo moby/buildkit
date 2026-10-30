@@ -36,6 +36,8 @@ var (
 	parseRunPostHooks []func(*RunCommand, parseRequest) error
 )
 
+var unsetEnabled = false
+
 func nodeArgs(node *parser.Node) []string {
 	result := []string{}
 	for ; node.Next != nil; node = node.Next {
@@ -230,9 +232,47 @@ func parseKvps(args []string, cmdName string) (KeyValuePairs, error) {
 	return res, nil
 }
 
+// addUnsetFlag adds the --unset flag if it is enabled in this build.
+func addUnsetFlag(req parseRequest) *Flag {
+	if !unsetEnabled {
+		return nil
+	}
+	return req.flags.AddBool("unset", false)
+}
+
+// parseUnsetKeys returns the keys for the --unset form of a command.
+func parseUnsetKeys(args []string, cmdName string) (KeyValuePairs, error) {
+	if len(args) == 0 {
+		return nil, errAtLeastOneArgument(cmdName + " --unset")
+	}
+	var res KeyValuePairs
+	for _, name := range args {
+		if name == "" {
+			return nil, errBlankCommandNames(cmdName)
+		}
+		if strings.Contains(name, "=") {
+			return nil, errors.Errorf("%s --unset does not accept values: %s", cmdName, name)
+		}
+		res = append(res, KeyValuePair{Key: name})
+	}
+	return res, nil
+}
+
 func parseEnv(req parseRequest) (*EnvCommand, error) {
+	flUnset := addUnsetFlag(req)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
+	}
+	if flUnset != nil && flUnset.Value == "true" {
+		envs, err := parseUnsetKeys(req.args, "ENV")
+		if err != nil {
+			return nil, err
+		}
+		return &EnvCommand{
+			Env:             envs,
+			Unset:           true,
+			withNameAndCode: newWithNameAndCode(req),
+		}, nil
 	}
 	envs, err := parseKvps(req.args, "ENV")
 	if err != nil {
@@ -259,8 +299,20 @@ func parseMaintainer(req parseRequest) (*MaintainerCommand, error) {
 }
 
 func parseLabel(req parseRequest) (*LabelCommand, error) {
+	flUnset := addUnsetFlag(req)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
+	}
+	if flUnset != nil && flUnset.Value == "true" {
+		labels, err := parseUnsetKeys(req.args, "LABEL")
+		if err != nil {
+			return nil, err
+		}
+		return &LabelCommand{
+			Labels:          labels,
+			Unset:           true,
+			withNameAndCode: newWithNameAndCode(req),
+		}, nil
 	}
 
 	labels, err := parseKvps(req.args, "LABEL")
@@ -714,11 +766,13 @@ func parseVolume(req parseRequest) (*VolumeCommand, error) {
 		return nil, errAtLeastOneArgument("VOLUME")
 	}
 
+	flUnset := addUnsetFlag(req)
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
 
 	cmd := &VolumeCommand{
+		Unset:           flUnset != nil && flUnset.Value == "true",
 		withNameAndCode: newWithNameAndCode(req),
 	}
 
