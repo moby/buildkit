@@ -48,6 +48,7 @@ const (
 
 	sbomScanContext = "BUILDKIT_SBOM_SCAN_CONTEXT"
 	sbomScanStage   = "BUILDKIT_SBOM_SCAN_STAGE"
+	disableOnbuild  = "BUILDKIT_DISABLE_ONBUILD"
 )
 
 var nonEnvArgs = map[string]struct{}{
@@ -217,6 +218,7 @@ type dispatchContext struct {
 	allDispatchStates *dispatchStates
 	proxyEnv          *llb.ProxyEnv
 	namedContext      func(string, dockerui.ContextOpt) (*dockerui.NamedContext, error)
+	disableOnbuild    bool
 }
 
 func namedContextFunc(opt ConvertOpt) func(string, dockerui.ContextOpt) (*dockerui.NamedContext, error) {
@@ -311,6 +313,14 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		globalArgs = setBuildArgValue(opt.BuildArgs, globalArgs, "SOURCE_DATE_EPOCH", formatSourceDateEpochValue(resolvedEpoch))
 	}
 
+	var skipOnbuild bool
+	if v, ok := getBuildArgValue(opt.BuildArgs, globalArgs, disableOnbuild); ok && v != "" {
+		skipOnbuild, err = strconv.ParseBool(v)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid %s value %q", disableOnbuild, v)
+		}
+	}
+
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
 		metaResolver = imagemetaresolver.Default()
@@ -328,6 +338,7 @@ func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchS
 		allDispatchStates: newDispatchStates(),
 		proxyEnv:          proxyEnvFromBuildArgs(opt.BuildArgs),
 		namedContext:      namedContextFunc(opt),
+		disableOnbuild:    skipOnbuild,
 	}
 
 	if err := dctx.buildDispatchStates(stages); err != nil {
@@ -569,7 +580,7 @@ func (dctx *dispatchContext) resolveStages(ctx context.Context, target *dispatch
 				}
 				d.onBuildInit = true
 			}
-			if slices.Contains(d.stage.Reset, dfcommand.Onbuild) {
+			if dctx.disableOnbuild || slices.Contains(d.stage.Reset, dfcommand.Onbuild) {
 				onbuilds = nil
 				d.image.Config.OnBuild = nil
 			}
