@@ -236,7 +236,7 @@ target "integration-tests" {
     "binaries" = "target:integration-tests-binaries"
   } : null
   args = {
-    GOBUILDFLAGS = TEST_COVERAGE == "1" ? "-cover" : null
+    GOBUILDFLAGS = join(" ", compact([GOBUILDFLAGS, TEST_COVERAGE == "1" ? "-cover" : null]))
     BUILDKIT_SYNTAX = BUILDKIT_SYNTAX
   }
   output = [

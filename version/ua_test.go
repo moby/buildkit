@@ -35,6 +35,11 @@ func TestUserAgent(t *testing.T) {
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
+			originalVersion, originalCallbacks := Version, uapCbs
+			t.Cleanup(func() {
+				Version, uapCbs = originalVersion, originalCallbacks
+			})
+			uapCbs = nil
 			Version = tt.version
 			for pname, pver := range tt.products {
 				SetUserAgentProduct(pname, func() string {
