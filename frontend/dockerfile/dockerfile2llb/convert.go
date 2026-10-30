@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
+	dfcommand "github.com/moby/buildkit/frontend/dockerfile/command"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
@@ -568,6 +569,10 @@ func (dctx *dispatchContext) resolveStages(ctx context.Context, target *dispatch
 				}
 				d.onBuildInit = true
 			}
+			if slices.Contains(d.stage.Reset, dfcommand.Onbuild) {
+				onbuilds = nil
+				d.image.Config.OnBuild = nil
+			}
 
 			if len(onbuilds) > 0 {
 				if b, err := initOnBuildTriggers(d, onbuilds, dctx.allDispatchStates, dctx.shlex); err != nil {
@@ -788,6 +793,8 @@ func (dctx *dispatchContext) dispatchStages(ctx context.Context, allReachable ma
 		if d.platform == nil {
 			d.platform = &d.opt.targetPlatform
 		}
+
+		resetBaseConfig(d)
 
 		// make sure that PATH is always set
 		if _, ok := shell.EnvsFromSlice(d.image.Config.Env).Get("PATH"); !ok {
@@ -1337,15 +1344,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Lint
 			if e.Key == "" {
 				return errors.New("ENV --unset names can not be blank")
 			}
-			for _, k := range getEnv(d.state).Keys() {
-				if shell.EqualEnvKeys(k, e.Key) {
-					d.state = d.state.DelEnv(k)
-				}
-			}
-			d.image.Config.Env = delEnv(d.image.Config.Env, e.Key)
-			d.buildArgs = slices.DeleteFunc(d.buildArgs, func(arg instructions.KeyValuePairOptional) bool {
-				return shell.EqualEnvKeys(arg.Key, e.Key)
-			})
+			unsetEnv(d, e.Key)
 			keys = append(keys, e.Key)
 		}
 		return commitToHistory(&d.image, "ENV --unset "+strings.Join(keys, " "), false, nil, d.epoch)
@@ -1362,6 +1361,61 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, lint *linter.Lint
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
 	}
 	return commitToHistory(&d.image, commitMessage.String(), false, nil, d.epoch)
+}
+
+// unsetEnv removes an environment variable and a build arg with the same name.
+func unsetEnv(d *dispatchState, key string) {
+	for _, k := range getEnv(d.state).Keys() {
+		if shell.EqualEnvKeys(k, key) {
+			d.state = d.state.DelEnv(k)
+		}
+	}
+	d.image.Config.Env = delEnv(d.image.Config.Env, key)
+	d.buildArgs = slices.DeleteFunc(d.buildArgs, func(arg instructions.KeyValuePairOptional) bool {
+		return shell.EqualEnvKeys(arg.Key, key)
+	})
+}
+
+// resetBaseConfig clears the base image config fields set with FROM --reset.
+// ONBUILD triggers are skipped when the stages are resolved.
+func resetBaseConfig(d *dispatchState) {
+	for _, k := range d.stage.Reset {
+		switch k {
+		case dfcommand.Cmd:
+			d.image.Config.Cmd = nil
+		case dfcommand.Entrypoint:
+			d.image.Config.Entrypoint = nil
+		case dfcommand.Env:
+			for _, env := range slices.Clone(d.image.Config.Env) {
+				key, _ := parseKeyValue(env)
+				unsetEnv(d, key)
+			}
+		case dfcommand.Expose:
+			d.image.Config.ExposedPorts = nil
+		case dfcommand.Healthcheck:
+			d.image.Config.Healthcheck = nil
+		case dfcommand.Label:
+			d.image.Config.Labels = nil
+		case dfcommand.Shell:
+			d.image.Config.Shell = nil
+		case dfcommand.StopSignal:
+			d.image.Config.StopSignal = ""
+		case dfcommand.User:
+			d.image.Config.User = ""
+			d.state = d.state.User("")
+		case dfcommand.Volume:
+			d.image.Config.Volumes = nil
+		case dfcommand.Workdir:
+			d.image.Config.WorkingDir = ""
+			d.state = d.state.Dir("/")
+			// workdir no longer depends on the base image
+			d.workdirSet = true
+		}
+	}
+	// ArgsEscaped applies to both cmd and entrypoint
+	if len(d.stage.Reset) > 0 && len(d.image.Config.Cmd) == 0 && len(d.image.Config.Entrypoint) == 0 {
+		d.image.Config.ArgsEscaped = false //nolint:staticcheck // ignore SA1019: field is deprecated in OCI Image spec, but used for backward-compatibility with Docker image spec.
+	}
 }
 
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {

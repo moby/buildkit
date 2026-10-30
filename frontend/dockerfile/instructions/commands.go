@@ -527,6 +527,7 @@ type Stage struct {
 	OrigCmd  string    // original FROM command, used for rule checks
 	BaseName string    // name of the base stage or source
 	Platform string    // platform of base source to use
+	Reset    []string  // base image config fields to reset, see ResetKeys
 
 	DocComment string // doc-comment directly above the stage
 

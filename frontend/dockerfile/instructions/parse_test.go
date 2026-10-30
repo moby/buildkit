@@ -286,6 +286,16 @@ func TestUnsetDisabled(t *testing.T) {
 	}
 }
 
+func TestResetDisabled(t *testing.T) {
+	if resetEnabled {
+		t.Skip("--reset is enabled in this build")
+	}
+	ast, err := parser.Parse(strings.NewReader("FROM --reset=all busybox"))
+	require.NoError(t, err)
+	_, err = ParseInstruction(ast.AST.Children[0])
+	require.ErrorContains(t, err, "unknown flag: --reset")
+}
+
 func TestRunCmdFlagsUsed(t *testing.T) {
 	dockerfile := "RUN --mount=type=tmpfs,target=/foo/ echo hello"
 	r := strings.NewReader(dockerfile)

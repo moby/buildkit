@@ -36,7 +36,30 @@ var (
 	parseRunPostHooks []func(*RunCommand, parseRequest) error
 )
 
-var unsetEnabled = false
+var (
+	unsetEnabled = false
+	resetEnabled = false
+)
+
+// ResetAll is the FROM --reset value that resets all ResetKeys.
+const ResetAll = "all"
+
+// ResetKeys are the base image config fields that can be reset with
+// FROM --reset. Each field is named after the command that sets it.
+var ResetKeys = []string{
+	command.Cmd,
+	command.Entrypoint,
+	command.Env,
+	command.Expose,
+	command.Healthcheck,
+	command.Label,
+	command.Onbuild,
+	command.Shell,
+	command.StopSignal,
+	command.User,
+	command.Volume,
+	command.Workdir,
+}
 
 func nodeArgs(node *parser.Node) []string {
 	result := []string{}
@@ -451,8 +474,20 @@ func parseFrom(req parseRequest) (*Stage, error) {
 	}
 
 	flPlatform := req.flags.AddString("platform", "")
+	var flReset *Flag
+	if resetEnabled {
+		flReset = req.flags.AddStrings("reset")
+	}
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
+	}
+
+	var reset []string
+	if flReset != nil {
+		reset, err = parseResetKeys(flReset.StringValues)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	code := strings.TrimSpace(req.original)
@@ -463,10 +498,33 @@ func parseFrom(req parseRequest) (*Stage, error) {
 		SourceCode: code,
 		Commands:   []Command{},
 		Platform:   flPlatform.Value,
+		Reset:      reset,
 		Location:   req.location,
 		Comments:   req.comments,
 		DocComment: getDocComment(req.comments, stageName),
 	}, nil
+}
+
+// parseResetKeys returns the sorted list of fields for FROM --reset values.
+func parseResetKeys(values []string) ([]string, error) {
+	var keys []string
+	for _, v := range values {
+		for k := range strings.SplitSeq(v, ",") {
+			switch {
+			case k == ResetAll:
+				keys = append(keys, ResetKeys...)
+			case slices.Contains(ResetKeys, k):
+				keys = append(keys, k)
+			case strings.ToLower(k) == ResetAll || slices.Contains(ResetKeys, strings.ToLower(k)):
+				return nil, errors.Errorf("invalid FROM --reset value: %q (did you mean %s?)", k, strings.ToLower(k))
+			default:
+				err := errors.Errorf("invalid FROM --reset value: %q", k)
+				return nil, suggest.WrapError(err, k, append([]string{ResetAll}, ResetKeys...), true)
+			}
+		}
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys), nil
 }
 
 var validStageName = regexp.MustCompile("^[a-z][a-z0-9-_.]*$")
