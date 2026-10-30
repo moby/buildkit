@@ -736,6 +736,9 @@ func parseStopSignal(req parseRequest) (*StopSignalCommand, error) {
 	if len(req.args) != 1 {
 		return nil, errExactlyOneArgument("STOPSIGNAL")
 	}
+	if err := req.flags.Parse(); err != nil {
+		return nil, err
+	}
 	sig := req.args[0]
 
 	cmd := &StopSignalCommand{
@@ -748,6 +751,10 @@ func parseStopSignal(req parseRequest) (*StopSignalCommand, error) {
 func parseArg(req parseRequest) (*ArgCommand, error) {
 	if len(req.args) < 1 {
 		return nil, errAtLeastOneArgument("ARG")
+	}
+
+	if err := req.flags.Parse(); err != nil {
+		return nil, err
 	}
 
 	pairs := make([]KeyValuePairOptional, len(req.args))

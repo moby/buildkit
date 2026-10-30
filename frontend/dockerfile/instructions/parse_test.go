@@ -231,6 +231,16 @@ func TestErrorCases(t *testing.T) {
 			expectedError: "unknown flag: --boo",
 		},
 		{
+			name:          "ARG unknown flag",
+			dockerfile:    "ARG --boo foo",
+			expectedError: "unknown flag: --boo",
+		},
+		{
+			name:          "STOPSIGNAL unknown flag",
+			dockerfile:    "STOPSIGNAL --boo SIGTERM",
+			expectedError: "unknown flag: --boo",
+		},
+		{
 			name:          "Chaining ONBUILD",
 			dockerfile:    `ONBUILD ONBUILD RUN touch foobar`,
 			expectedError: "Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed",
