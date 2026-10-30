@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db/boltutil"
 	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -41,7 +42,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, cdiManager *cdidevices.Manager, policies ...compaction.Config) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless, rootlessDelegatedCgroup bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, cdiManager *cdidevices.Manager, policies ...compaction.Config) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -65,6 +66,16 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
+	var rootlessCgroup *resources.RootlessCgroup
+	if rootless {
+		rootlessCgroup, err = resources.PrepareRootlessCgroup(rootlessDelegatedCgroup)
+		if err != nil {
+			bklog.L.Infof("rootless: per-step resource limits are disabled: %v", err)
+		} else {
+			bklog.L.Infof("rootless: running build steps in cgroup %s", rootlessCgroup.Path)
+		}
+	}
+
 	exe, err := runcexecutor.New(runcexecutor.Opt{
 		// Root directory
 		Root: filepath.Join(root, "executor"),
@@ -73,6 +84,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		CommandCandidates: cmds,
 		// without root privileges
 		Rootless:            rootless,
+		RootlessCgroup:      rootlessCgroup,
 		ProcessMode:         processMode,
 		IdentityMapping:     idmap,
 		DNS:                 dns,
@@ -129,6 +141,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		wlabel.Network:        npResolvedMode,
 		wlabel.OCIProcessMode: processMode.String(),
 		wlabel.SELinuxEnabled: strconv.FormatBool(selinux),
+		wlabel.LinuxResources: strconv.FormatBool(!rootless || rootlessCgroup != nil),
 	}
 	if apparmorProfile != "" {
 		xlabels[wlabel.ApparmorProfile] = apparmorProfile

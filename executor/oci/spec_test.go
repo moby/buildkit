@@ -39,3 +39,12 @@ func TestAppendMissingTracingEnv(t *testing.T) {
 		require.Equal(t, env, appendMissingTracingEnv(env))
 	})
 }
+
+func TestIsSystemdCgroupParent(t *testing.T) {
+	require.True(t, IsSystemdCgroupParent("buildkit.slice:buildkit:"))
+	require.True(t, IsSystemdCgroupParent("user.slice:"))
+	require.False(t, IsSystemdCgroupParent("buildkit.slice"))
+	require.False(t, IsSystemdCgroupParent("buildkit-parent"))
+	require.False(t, IsSystemdCgroupParent("/user.slice/buildkit"))
+	require.False(t, IsSystemdCgroupParent(""))
+}

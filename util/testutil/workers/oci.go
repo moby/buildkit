@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"log"
 	"runtime"
@@ -59,6 +60,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 			fmt.Sprintf("--oci-worker-snapshotter=%s", s.Snapshotter))
 	}
 
+	var cleanupCgroup func() error
 	if s.UID != 0 {
 		if s.GID == 0 {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.UID, s.GID)
@@ -76,6 +78,17 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
 		buildkitdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, rootlessKitArgs...), buildkitdArgs...)
+
+		cgroupDir, cleanup, err := delegateCgroup(s.UID, s.GID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if cgroupDir != "" {
+			cleanupCgroup = cleanup
+			// Move the shell into the delegated cgroup before it starts the
+			// daemon, so that rootlesskit and buildkitd run in it.
+			buildkitdArgs = append([]string{"sh", "-c", `echo $$ > "$0/cgroup.procs" && exec "$@"`, cgroupDir}, buildkitdArgs...)
+		}
 	}
 
 	var extraEnv []string
@@ -84,8 +97,17 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 	}
 	buildkitdSock, debugSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.UID, s.GID, extraEnv)
 	if err != nil {
+		if cleanupCgroup != nil {
+			cleanupCgroup()
+		}
 		integration.PrintLogs(cfg.Logs, log.Println)
 		return nil, nil, err
+	}
+	if cleanupCgroup != nil {
+		stopDaemon := stop
+		stop = func() error {
+			return stderrors.Join(stopDaemon(), cleanupCgroup())
+		}
 	}
 
 	return backend{

@@ -58,6 +58,8 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	// client_exec_test.go
 	testCgroupParent,
 	testLinuxResources,
+	testLinuxResourcesEnforced,
+	testLinuxResourcesIgnoredWarning,
 	testPassthroughOp,
 	testRelativeMountpoint,
 	testRelativeWorkDir,
