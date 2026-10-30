@@ -50,7 +50,6 @@ require (
 	github.com/in-toto/in-toto-golang v0.11.0
 	github.com/klauspost/compress v1.20.1
 	github.com/moby/docker-image-spec v1.3.1
-	github.com/moby/go-archive v0.2.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/moby/policy-helpers v0.0.0-20261006174519-bd98f4747414
@@ -193,8 +192,6 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/in-toto/attestation v1.2.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
-	github.com/moby/sys/mount v0.3.5 // indirect
-	github.com/moby/sys/sequential v0.7.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
