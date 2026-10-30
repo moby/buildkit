@@ -3226,6 +3226,95 @@ func TestCacheExportingMergedKey(t *testing.T) {
 	require.Equal(t, 5, expTarget.numUniqueRecords())
 }
 
+// TestCacheExportDuringEdgeMerge exports a cache-loaded result while another
+// job merges into its edge. Run with -race.
+func TestCacheExportDuringEdgeMerge(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  NewInMemoryCacheManager(),
+	})
+	defer l.Close()
+
+	// vertexes with the same cache key seed and input results share a slow
+	// cache key, even with different inputs
+	g := func(name, input string) Edge {
+		return Edge{
+			Vertex: vtx(vtxOpt{
+				name:         name,
+				cacheKeySeed: "seed1",
+				value:        "result1",
+				inputs: []Edge{{Vertex: vtx(vtxOpt{
+					name:         input,
+					cacheKeySeed: "seed-" + input,
+					value:        "result2",
+				})}},
+				slowCacheCompute: map[int]ResultBasedCacheFunc{0: digestFromResult},
+			}),
+		}
+	}
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+	_, err = j0.Build(ctx, g("v1", "v2"))
+	require.NoError(t, err)
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// j1 loads the result through the slow cache key, so its exporter
+	// references the active edge
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+	defer j1.Discard()
+	res, err := j1.Build(ctx, g("v1", "v4"))
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		for i := 0; ; i++ {
+			if i == 1 {
+				close(started)
+			}
+			select {
+			case <-done:
+				return nil
+			default:
+			}
+			if _, err := res.CacheKeys()[0].Exporter.ExportTo(egCtx, newTestExporterTarget(), testExporterOpts(true)); err != nil {
+				return err
+			}
+		}
+	})
+	// keep exporting while j2 merges into the j1 edge
+	select {
+	case <-started:
+	case <-egCtx.Done():
+	}
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+	defer j2.Discard()
+	_, err = j2.Build(ctx, g("v1-diff", "v3"))
+	close(done)
+	require.NoError(t, err)
+	require.NoError(t, eg.Wait())
+
+	// the j2 edge was merged into the j1 edge
+	e := res.CacheKeys()[0].Exporter.(*exporter).edge
+	e.secondaryExportersMu.Lock()
+	defer e.secondaryExportersMu.Unlock()
+	require.NotEmpty(t, e.secondaryExporters)
+}
+
 // moby/buildkit#434
 func TestMergedEdgesLookup(t *testing.T) {
 	t.Parallel()

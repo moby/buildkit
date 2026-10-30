@@ -69,7 +69,10 @@ type edge struct {
 	keysDidChange bool
 	index         *edgeIndex
 
-	secondaryExporters []expDep
+	// secondaryExportersMu protects secondaryExporters, which the scheduler
+	// appends to on merge while cache exporters read it from other goroutines
+	secondaryExportersMu sync.Mutex
+	secondaryExporters   []expDep
 
 	failedOnce sync.Once
 	debug      bool
