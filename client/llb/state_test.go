@@ -32,6 +32,43 @@ func TestStateMeta(t *testing.T) {
 	assert.Equal(t, "abc", v)
 }
 
+func TestStateDelEnv(t *testing.T) {
+	t.Parallel()
+
+	s := Image("foo")
+	s = s.AddEnv("FOO", "abc").AddEnv("BAR", "def")
+	s2 := s.DelEnv("FOO").DelEnv("NOTSET")
+
+	_, ok := getEnvHelper(t, s2, "FOO")
+	assert.False(t, ok)
+
+	env, err := s2.Env(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"BAR=def"}, env.ToArray())
+
+	// original state is not modified
+	v, ok := getEnvHelper(t, s, "FOO")
+	assert.True(t, ok)
+	assert.Equal(t, "abc", v)
+
+	s3 := s2.AddEnv("FOO", "ghi")
+	env, err = s3.Env(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"BAR=def", "FOO=ghi"}, env.ToArray())
+
+	def, err := s2.Run(Shlex("true")).Marshal(t.Context())
+	require.NoError(t, err)
+	var execEnv []string
+	for _, dt := range def.Def {
+		var op pb.Op
+		require.NoError(t, op.UnmarshalVT(dt))
+		if e := op.GetExec(); e != nil {
+			execEnv = e.Meta.Env
+		}
+	}
+	assert.Equal(t, []string{"BAR=def"}, execEnv)
+}
+
 func TestFormattingPatterns(t *testing.T) {
 	t.Parallel()
 
