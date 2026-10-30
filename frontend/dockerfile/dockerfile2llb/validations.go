@@ -32,13 +32,8 @@ var reservedStageNames = map[string]struct{}{
 }
 
 func validateCopySourcePath(src string, cfg *copyConfig) error {
-	// Do not validate copy source paths if there is no dockerignore file
-	// or if the dockerignore file contains exclusions.
-	//
-	// Exclusions are too difficult to statically determine if they're proper
-	// because it's ok for a directory to be excluded and a file inside the directory
-	// to be negated.
-	if cfg.ignoreMatcher == nil || cfg.ignoreMatcher.Exclusions() {
+	// Do not validate copy source paths if there is no dockerignore file.
+	if cfg.ignoreMatcher == nil {
 		return nil
 	}
 	cmd := "Copy"
@@ -54,6 +49,17 @@ func validateCopySourcePath(src string, cfg *copyConfig) error {
 			return nil
 		}
 	}
+
+	// A negated pattern that re-includes a path at or below the source path
+	// makes the exclusion impossible to statically determine, because it's ok
+	// for a directory to be excluded and a file inside the directory to be
+	// negated. Skip the check for those source paths only. Negations that
+	// cannot affect anything at or below the source path are resolved
+	// correctly by MatchesOrParentMatches and must not disable the check.
+	if copySourceNegated(cfg.ignoreMatcher, src) {
+		return nil
+	}
+
 	ok, err := cfg.ignoreMatcher.MatchesOrParentMatches(src)
 	if err != nil {
 		return err
@@ -77,6 +83,83 @@ func copySourceRootIgnored(matcher *patternmatcher.PatternMatcher) bool {
 		}
 	}
 	return false
+}
+
+// copySourceNegated reports whether the dockerignore patterns contain a
+// negation that could re-include a path at or below src. Patterns and sources
+// with wildcards or escapes cannot be statically resolved, so they are assumed
+// to match anything at or below the longest path prefix that precedes the
+// first such element.
+func copySourceNegated(matcher *patternmatcher.PatternMatcher, src string) bool {
+	src, srcWildcard := patternLiteralPrefix(strings.TrimPrefix(src, "/"))
+	if src == "." {
+		src = ""
+	}
+	patterns := matcher.Patterns()
+	for i, pattern := range patterns {
+		if !pattern.Exclusion() {
+			continue
+		}
+		p := filepath.ToSlash(pattern.String())
+		prefix, wildcard := patternLiteralPrefix(p)
+		if !wildcard && negationOverridden(p, patterns[i+1:]) {
+			continue
+		}
+		if pathAtOrBelow(prefix, src) {
+			return true
+		}
+		// A pattern or source with a wildcard may still match a path below
+		// the other even if its literal prefix is above it, e.g. "*/keep.txt"
+		// and "sub", or "sub/keep.txt" and "*/*.txt".
+		if (wildcard || srcWildcard) && pathAtOrBelow(src, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// negationOverridden reports whether a literal negated path is excluded again
+// by the patterns that follow it, in which case the negation has no effect.
+func negationOverridden(path string, later []*patternmatcher.Pattern) bool {
+	if len(later) == 0 {
+		return false
+	}
+	strs := make([]string, 0, len(later))
+	for _, p := range later {
+		s := p.String()
+		if p.Exclusion() {
+			s = "!" + s
+		}
+		strs = append(strs, s)
+	}
+	pm, err := patternmatcher.New(strs)
+	if err != nil {
+		return false
+	}
+	ok, err := pm.MatchesOrParentMatches(path)
+	return err == nil && ok
+}
+
+// patternLiteralPrefix returns the path prefix of the pattern that precedes
+// the first path element containing a wildcard or escape character, and
+// whether the pattern contains one at all.
+func patternLiteralPrefix(pattern string) (string, bool) {
+	elems := strings.Split(pattern, "/")
+	for i, elem := range elems {
+		if strings.ContainsAny(elem, `*?[\`) {
+			return strings.Join(elems[:i], "/"), true
+		}
+	}
+	return pattern, false
+}
+
+// pathAtOrBelow reports whether path is base or is contained in base. An
+// empty base is the context root and contains every path.
+func pathAtOrBelow(path, base string) bool {
+	if base == "" {
+		return true
+	}
+	return path == base || strings.HasPrefix(path, base+"/")
 }
 
 func validateCircularDependency(states []*dispatchState) error {
