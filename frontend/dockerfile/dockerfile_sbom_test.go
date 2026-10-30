@@ -19,7 +19,6 @@ import (
 )
 
 func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureSBOM)
 	ctx := sb.Context()
 
@@ -35,7 +34,7 @@ func testSBOMScannerImage(t *testing.T, sb integration.Sandbox) {
 
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM busybox:latest
 COPY <<-"EOF" /scan.sh
 	set -e
@@ -48,10 +47,23 @@ COPY <<-"EOF" /scan.sh
 	BUNDLE
 EOF
 CMD sh /scan.sh
-`)
+`, `
+FROM nanoserver:latest
+COPY scan.cmd C:\scan.cmd
+COPY spdx.json C:\spdx.json
+CMD ["cmd", "/S", "/C", "C:\\scan.cmd"]
+`))
+	scannerFiles := integration.UnixOrWindows(
+		[]fstest.Applier{fstest.CreateFile("Dockerfile", dockerfile, 0600)},
+		[]fstest.Applier{
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			fstest.CreateFile("scan.cmd", []byte("@echo off\r\ncopy /Y C:\\spdx.json \"%BUILDKIT_SCAN_DESTINATION%\\spdx.json\" >NUL\r\n"), 0600),
+			fstest.CreateFile("spdx.json", []byte(`{"_type":"https://in-toto.io/Statement/v1","predicateType":"https://spdx.dev/Document","predicate":{"name":"sbom-scan"}}`), 0600),
+		},
+	)
 	scannerDir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		scannerFiles...,
 	)
 
 	scannerTarget := registry + "/buildkit/testsbomscanner:latest"
@@ -72,15 +84,25 @@ CMD sh /scan.sh
 	}, nil)
 	require.NoError(t, err)
 
-	dockerfile = []byte(`
+	dockerfile = []byte(integration.UnixOrWindows(`
 FROM scratch
 COPY <<EOF /foo
 data
 EOF
-`)
+`, `
+FROM nanoserver
+COPY foo C:\foo
+`))
+	targetFiles := integration.UnixOrWindows(
+		[]fstest.Applier{fstest.CreateFile("Dockerfile", dockerfile, 0600)},
+		[]fstest.Applier{
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			fstest.CreateFile("foo", []byte("data\n"), 0600),
+		},
+	)
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		targetFiles...,
 	)
 
 	target := registry + "/buildkit/testsbomscannertarget:latest"
@@ -112,7 +134,9 @@ EOF
 
 	img := imgs.Find(platforms.Format(platforms.Normalize(platforms.DefaultSpec())))
 	require.NotNil(t, img)
-	require.Equal(t, []byte("data\n"), img.Layers[0]["foo"].Data)
+	layerIndex := integration.UnixOrWindows(0, len(img.Layers)-1)
+	layerPath := integration.UnixOrWindows("foo", "Files/foo")
+	require.Equal(t, []byte("data\n"), img.Layers[layerIndex][layerPath].Data)
 
 	att := imgs.Find("unknown/unknown")
 	require.Equal(t, 1, len(att.LayersRaw))

@@ -597,7 +597,7 @@ echo -n $my_arg $* > /out
 }
 
 func testEmptyStringArgInEnv(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "empty ARG values are omitted from Windows process environments")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`

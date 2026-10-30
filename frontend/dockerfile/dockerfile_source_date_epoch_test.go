@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -32,15 +33,20 @@ import (
 )
 
 func testSourceDateEpochWithoutExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM scratch
 ENTRYPOINT foo bar
 COPY Dockerfile .
-`)
+`,
+		`
+FROM nanoserver
+ENTRYPOINT ["foo", "bar"]
+COPY Dockerfile C:\Dockerfile
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -99,22 +105,32 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	require.Equal(t, tm.Unix(), img.Created.Unix())
-	for _, h := range img.History {
+	history := img.History
+	if runtime.GOOS == "windows" {
+		require.GreaterOrEqual(t, len(history), 2)
+		history = history[len(history)-2:]
+	}
+	for _, h := range history {
 		require.Equal(t, tm.Unix(), h.Created.Unix())
 	}
 }
 
 func testSourceDateEpochDockerfileDefault(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
-	dockerfile := fmt.Appendf(nil, `
+	dockerfile := fmt.Appendf(nil, integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=%d
 FROM scratch
 COPY Dockerfile .
-`, tm.Unix())
+`,
+		`
+ARG SOURCE_DATE_EPOCH=%d
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	), tm.Unix())
 
 	dir := integration.Tmpdir(
 		t,
@@ -151,22 +167,29 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Equal(t, fmt.Sprintf("%d", tm.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Equal(t, fmt.Sprintf("%d", tm.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochDockerfileDefaultOverride(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	defaultTM := time.Unix(1700000001, 0).UTC()
 	overrideTM := time.Unix(1700000002, 0).UTC()
-	dockerfile := fmt.Appendf(nil, `
+	dockerfile := fmt.Appendf(nil, integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=%d
 FROM scratch
 COPY Dockerfile .
-`, defaultTM.Unix())
+`,
+		`
+ARG SOURCE_DATE_EPOCH=%d
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	), defaultTM.Unix())
 
 	dir := integration.Tmpdir(
 		t,
@@ -206,21 +229,28 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Equal(t, fmt.Sprintf("%d", overrideTM.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Equal(t, fmt.Sprintf("%d", overrideTM.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochDockerfileDefaultReset(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	tm := time.Date(2015, time.October, 21, 7, 28, 0, 0, time.UTC)
-	dockerfile := fmt.Appendf(nil, `
+	dockerfile := fmt.Appendf(nil, integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=%d
 FROM scratch
 COPY Dockerfile .
-`, tm.Unix())
+`,
+		`
+ARG SOURCE_DATE_EPOCH=%d
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	), tm.Unix())
 
 	dir := integration.Tmpdir(
 		t,
@@ -258,20 +288,27 @@ COPY Dockerfile .
 	require.NoError(t, err)
 
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Empty(t, mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Empty(t, mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochDockerfileDefaultInvalid(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=not-a-timestamp
 FROM scratch
 COPY Dockerfile .
-`)
+`,
+		`
+ARG SOURCE_DATE_EPOCH=not-a-timestamp
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -286,6 +323,7 @@ COPY Dockerfile .
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
+	defer outW.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
@@ -303,21 +341,27 @@ COPY Dockerfile .
 }
 
 func testSourceDateEpochContextGit(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	gitDir := t.TempDir()
-	dockerfile := []byte("FROM scratch\nCOPY Dockerfile /\n")
+	dockerfile := []byte(integration.UnixOrWindows(
+		"FROM scratch\nCOPY Dockerfile /\n",
+		"FROM nanoserver\nCOPY Dockerfile C:\\Dockerfile\n",
+	))
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "Dockerfile"), dockerfile, 0600))
 
 	commitTime := time.Unix(1700000101, 0).UTC()
+	commitCmd := integration.UnixOrWindows(
+		fmt.Sprintf("GIT_AUTHOR_DATE=%q GIT_COMMITTER_DATE=%q git commit -m msg", commitTime.Format(time.RFC3339), commitTime.Format(time.RFC3339)),
+		fmt.Sprintf("$env:GIT_AUTHOR_DATE='%s'; $env:GIT_COMMITTER_DATE='%s'; git commit -m msg", commitTime.Format(time.RFC3339), commitTime.Format(time.RFC3339)),
+	)
 	require.NoError(t, runShell(gitDir,
 		"git init",
 		"git config --local user.email test@example.com",
 		"git config --local user.name test",
 		"git add Dockerfile",
-		fmt.Sprintf("GIT_AUTHOR_DATE=%q GIT_COMMITTER_DATE=%q git commit -m msg", commitTime.Format(time.RFC3339), commitTime.Format(time.RFC3339)),
+		commitCmd,
 		"git update-server-info",
 	))
 
@@ -352,17 +396,20 @@ func testSourceDateEpochContextGit(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSourceDateEpochContextHTTPLastModified(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	lastModified := time.Unix(1700000201, 0).UTC()
 	archiveMaxTime := time.Unix(1700000202, 0).UTC()
+	dockerfile := []byte(integration.UnixOrWindows(
+		"FROM scratch\nCOPY foo /\n",
+		"FROM nanoserver\nCOPY foo C:\\foo\n",
+	))
 	resp := &httpserver.Response{
 		Etag:         identity.NewID(),
 		LastModified: &lastModified,
 		Content: makeTarContext(t,
-			tarContextFile{name: "Dockerfile", data: []byte("FROM scratch\nCOPY foo /\n"), modTime: archiveMaxTime.Add(-time.Hour)},
+			tarContextFile{name: "Dockerfile", data: dockerfile, modTime: archiveMaxTime.Add(-time.Hour)},
 			tarContextFile{name: "foo", data: []byte("bar"), modTime: archiveMaxTime},
 		),
 	}
@@ -399,15 +446,18 @@ func testSourceDateEpochContextHTTPLastModified(t *testing.T, sb integration.San
 }
 
 func testSourceDateEpochContextHTTPArchive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
 	archiveMaxTime := time.Unix(1700000302, 0).UTC()
+	dockerfile := []byte(integration.UnixOrWindows(
+		"FROM busybox\nARG SOURCE_DATE_EPOCH\nRUN echo -n \"$SOURCE_DATE_EPOCH\" >/epoch\n",
+		"FROM nanoserver\nARG SOURCE_DATE_EPOCH\nRUN >C:\\Windows\\Temp\\epoch echo %SOURCE_DATE_EPOCH%\n",
+	))
 	resp := &httpserver.Response{
 		Etag: identity.NewID(),
 		Content: makeTarContext(t,
-			tarContextFile{name: "Dockerfile", data: []byte("FROM busybox\nARG SOURCE_DATE_EPOCH\nRUN echo -n \"$SOURCE_DATE_EPOCH\" >/epoch\n"), modTime: archiveMaxTime.Add(-time.Hour)},
+			tarContextFile{name: "Dockerfile", data: dockerfile, modTime: archiveMaxTime.Add(-time.Hour)},
 			tarContextFile{name: "foo", data: []byte("bar"), modTime: archiveMaxTime},
 		),
 	}
@@ -449,17 +499,22 @@ func testSourceDateEpochContextHTTPArchive(t *testing.T, sb integration.Sandbox)
 	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 
 	layerMap := readOCILayerMap(t, dt, mfst.Layers[len(mfst.Layers)-1])
-	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), string(layerMap["epoch"].Data))
+	epochFile := integration.UnixOrWindows("epoch", "Files/Windows/Temp/epoch")
+	expected := integration.UnixOrWindows(fmt.Sprintf("%d", archiveMaxTime.Unix()), fmt.Sprintf("%d\r\n", archiveMaxTime.Unix()))
+	require.Contains(t, layerMap, epochFile)
+	require.Equal(t, expected, string(layerMap[epochFile].Data))
 
 	require.Equal(t, archiveMaxTime.Unix(), readOCIImageCreated(t, dt).Unix())
 }
 
 func testSourceDateEpochContextLocalUnset(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte("FROM scratch\nCOPY Dockerfile /\n")
+	dockerfile := []byte(integration.UnixOrWindows(
+		"FROM scratch\nCOPY Dockerfile /\n",
+		"FROM nanoserver\nCOPY Dockerfile C:\\Dockerfile\n",
+	))
 	dir := integration.Tmpdir(
 		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
@@ -496,12 +551,13 @@ func testSourceDateEpochContextLocalUnset(t *testing.T, sb integration.Sandbox) 
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Empty(t, mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Empty(t, mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochStageHTTPArchive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
@@ -516,14 +572,23 @@ func testSourceDateEpochStageHTTPArchive(t *testing.T, sb integration.Sandbox) {
 	})
 	defer server.Close()
 
-	dockerfile := fmt.Appendf(nil, `
+	dockerfile := fmt.Appendf(nil, integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=mysource
 FROM scratch AS mysource
 ADD %s/src.tar /
 FROM busybox
 ARG SOURCE_DATE_EPOCH
 RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
-`, server.URL)
+`,
+		`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+ADD %s/src.tar /
+FROM nanoserver
+ARG SOURCE_DATE_EPOCH
+RUN >C:\Windows\Temp\epoch echo %%SOURCE_DATE_EPOCH%%
+`,
+	), server.URL)
 
 	dir := integration.Tmpdir(
 		t,
@@ -563,12 +628,14 @@ RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
 	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 
 	layerMap := readOCILayerMap(t, dt, mfst.Layers[len(mfst.Layers)-1])
-	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), string(layerMap["epoch"].Data))
+	epochFile := integration.UnixOrWindows("epoch", "Files/Windows/Temp/epoch")
+	expected := integration.UnixOrWindows(fmt.Sprintf("%d", archiveMaxTime.Unix()), fmt.Sprintf("%d\r\n", archiveMaxTime.Unix()))
+	require.Contains(t, layerMap, epochFile)
+	require.Equal(t, expected, string(layerMap[epochFile].Data))
 	require.Equal(t, archiveMaxTime.Unix(), readOCIImageCreated(t, dt).Unix())
 }
 
 func testSourceDateEpochStageOverride(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
@@ -584,13 +651,21 @@ func testSourceDateEpochStageOverride(t *testing.T, sb integration.Sandbox) {
 	})
 	defer server.Close()
 
-	dockerfile := fmt.Appendf(nil, `
+	dockerfile := fmt.Appendf(nil, integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=mysource
 FROM scratch AS mysource
 ADD %s/src.tar /
 FROM scratch
 COPY Dockerfile .
-`, server.URL)
+`,
+		`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM scratch AS mysource
+ADD %s/src.tar /
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	), server.URL)
 
 	dir := integration.Tmpdir(
 		t,
@@ -628,12 +703,13 @@ COPY Dockerfile .
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Equal(t, fmt.Sprintf("%d", overrideTime.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Equal(t, fmt.Sprintf("%d", overrideTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 }
 
 func testSourceDateEpochStageInvalid(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
@@ -656,6 +732,7 @@ FROM scratch
 	out := filepath.Join(t.TempDir(), "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
+	defer outW.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalMounts: map[string]fsutil.FS{
@@ -673,7 +750,6 @@ FROM scratch
 }
 
 func testSourceDateEpochNamedContextHTTPLastModified(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
@@ -689,11 +765,17 @@ func testSourceDateEpochNamedContextHTTPLastModified(t *testing.T, sb integratio
 	})
 	defer server.Close()
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=mysource
 FROM scratch
 COPY Dockerfile .
-`)
+`,
+		`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM nanoserver
+COPY Dockerfile C:\Dockerfile
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -731,13 +813,14 @@ COPY Dockerfile .
 	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 	mfst := readOCIManifest(t, dt)
-	require.Len(t, mfst.Layers, 1)
-	require.Equal(t, fmt.Sprintf("%d", lastModified.Unix()), mfst.Layers[0].Annotations["buildkit/rewritten-timestamp"])
+	if runtime.GOOS != "windows" {
+		require.Len(t, mfst.Layers, 1)
+	}
+	require.Equal(t, fmt.Sprintf("%d", lastModified.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 	require.Equal(t, lastModified.Unix(), readOCIImageCreated(t, dt).Unix())
 }
 
 func testSourceDateEpochNamedContextHTTPArchive(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
 	f := getFrontend(t, sb)
 
@@ -752,12 +835,19 @@ func testSourceDateEpochNamedContextHTTPArchive(t *testing.T, sb integration.San
 	})
 	defer server.Close()
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 ARG SOURCE_DATE_EPOCH=mysource
 FROM busybox
 ARG SOURCE_DATE_EPOCH
 RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
-`)
+`,
+		`
+ARG SOURCE_DATE_EPOCH=mysource
+FROM nanoserver
+ARG SOURCE_DATE_EPOCH
+RUN >C:\Windows\Temp\epoch echo %SOURCE_DATE_EPOCH%
+`,
+	))
 
 	dir := integration.Tmpdir(
 		t,
@@ -800,7 +890,9 @@ RUN echo -n "$SOURCE_DATE_EPOCH" >/epoch
 	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), mfst.Layers[len(mfst.Layers)-1].Annotations["buildkit/rewritten-timestamp"])
 
 	layerMap := readOCILayerMap(t, dt, mfst.Layers[len(mfst.Layers)-1])
-	require.Equal(t, fmt.Sprintf("%d", archiveMaxTime.Unix()), string(layerMap["epoch"].Data))
+	epochFile := integration.UnixOrWindows("epoch", "Files/Windows/Temp/epoch")
+	expected := integration.UnixOrWindows(fmt.Sprintf("%d", archiveMaxTime.Unix()), fmt.Sprintf("%d\r\n", archiveMaxTime.Unix()))
+	require.Equal(t, expected, string(layerMap[epochFile].Data))
 	require.Equal(t, archiveMaxTime.Unix(), readOCIImageCreated(t, dt).Unix())
 }
 

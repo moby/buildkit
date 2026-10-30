@@ -881,7 +881,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 // #877
 func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "Windows local export does not preserve hardlinks")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

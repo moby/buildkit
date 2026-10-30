@@ -73,7 +73,6 @@ COPY foo foo
 }
 
 func testTarExporterMulti(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows", "Multi-platform tar export test specifically targets linux/amd64 and darwin/amd64 platforms as feature it's supported on Windows")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -83,6 +82,9 @@ COPY foo forlinux
 FROM scratch AS stage-darwin
 COPY bar fordarwin
 
+FROM scratch AS stage-windows
+COPY baz forwindows
+
 FROM stage-$TARGETOS
 `)
 
@@ -91,6 +93,7 @@ FROM stage-$TARGETOS
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("foo", []byte("data"), 0600),
 		fstest.CreateFile("bar", []byte("data2"), 0600),
+		fstest.CreateFile("baz", []byte("data3"), 0600),
 	)
 
 	c, err := client.New(sb.Context(), sb.Address())
@@ -115,9 +118,11 @@ FROM stage-$TARGETOS
 	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
 	require.NoError(t, err)
 
-	mi, ok := m["forlinux"]
+	firstFile := integration.UnixOrWindows("forlinux", "forwindows")
+	firstData := integration.UnixOrWindows("data", "data3")
+	mi, ok := m[firstFile]
 	require.Equal(t, true, ok)
-	require.Equal(t, "data", string(mi.Data))
+	require.Equal(t, firstData, string(mi.Data))
 
 	// repeat multi-platform
 	buf = &bytes.Buffer{}
@@ -129,7 +134,7 @@ FROM stage-$TARGETOS
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"platform": "linux/amd64,darwin/amd64",
+			"platform": integration.UnixOrWindows("linux/amd64,darwin/amd64", "windows/amd64,linux/amd64"),
 		},
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir,
@@ -145,9 +150,11 @@ FROM stage-$TARGETOS
 	require.Equal(t, true, ok)
 	require.Equal(t, "data", string(mi.Data))
 
-	mi, ok = m["darwin_amd64/fordarwin"]
+	secondPath := integration.UnixOrWindows("darwin_amd64/fordarwin", "windows_amd64/forwindows")
+	secondData := integration.UnixOrWindows("data2", "data3")
+	mi, ok = m[secondPath]
 	require.Equal(t, true, ok)
-	require.Equal(t, "data2", string(mi.Data))
+	require.Equal(t, secondData, string(mi.Data))
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
