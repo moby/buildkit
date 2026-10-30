@@ -32,6 +32,31 @@ func TestLoadGCPolicyInvalidQuote(t *testing.T) {
 	}
 }
 
+func TestLoadGHASigning(t *testing.T) {
+	cfg, err := Load(strings.NewReader(`
+[cache.gha.sign]
+  command = ["sign-cache", "--bundle", "-"]
+[cache.gha.verify]
+  required = true
+[cache.gha.verify.policy]
+  timestampThreshold = 2
+  tlogThreshold = 1
+  certificateIssuer = "https://issuer.example"
+  subjectAlternativeName = "https://github.com/org/*"
+  buildSignerURI = "https://github.com/org/builder@main"
+`))
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Cache.GHA)
+	require.NotNil(t, cfg.Cache.GHA.Sign)
+	require.Equal(t, []string{"sign-cache", "--bundle", "-"}, cfg.Cache.GHA.Sign.Command)
+	require.True(t, cfg.Cache.GHA.Verify.Required)
+	require.Equal(t, 2, cfg.Cache.GHA.Verify.Policy.TimestampThreshold)
+	require.Equal(t, 1, cfg.Cache.GHA.Verify.Policy.TlogThreshold)
+	require.Equal(t, "https://issuer.example", cfg.Cache.GHA.Verify.Policy.CertificateIssuer)
+	require.Equal(t, "https://github.com/org/*", cfg.Cache.GHA.Verify.Policy.SubjectAlternativeName)
+	require.Equal(t, "https://github.com/org/builder@main", cfg.Cache.GHA.Verify.Policy.BuildSignerURI)
+}
+
 func TestCompactionConfig(t *testing.T) {
 	for _, enabled := range []string{"", "[compaction]\nenabled = false", "[compaction]\nenabled = true"} {
 		cfg, err := Load(strings.NewReader(enabled))
