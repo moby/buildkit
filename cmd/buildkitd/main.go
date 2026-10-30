@@ -936,7 +936,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 	}
 
 	var verifierProvider func() (*policy.Verifier, error)
-	if cfg.Cache.GHA != nil && cfg.Cache.GHA.Verify.Required {
+	if cfg.Cache.GHA != nil && (cfg.Cache.GHA.Sign != nil || cfg.Cache.GHA.Verify.Required) {
 		verifierProvider = newVerifierProvider(cfg.Root)
 	}
 
