@@ -3982,6 +3982,7 @@ type vtxOpt struct {
 	slowCacheCompute map[int]ResultBasedCacheFunc
 	selectors        map[int]digest.Digest
 	cacheSource      CacheManager
+	cacheSources     []CacheManager
 	ignoreCache      bool
 }
 
@@ -4041,6 +4042,7 @@ func (v *vertex) Options() VertexOptions {
 	if v.opt.cacheSource != nil {
 		cache = append(cache, v.opt.cacheSource)
 	}
+	cache = append(cache, v.opt.cacheSources...)
 	return VertexOptions{
 		CacheSources: cache,
 		IgnoreCache:  v.opt.ignoreCache,
