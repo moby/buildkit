@@ -231,6 +231,16 @@ func TestErrorCases(t *testing.T) {
 			expectedError: "unknown flag: --boo",
 		},
 		{
+			name:          "ARG unknown flag",
+			dockerfile:    "ARG --boo foo",
+			expectedError: "unknown flag: --boo",
+		},
+		{
+			name:          "STOPSIGNAL unknown flag",
+			dockerfile:    "STOPSIGNAL --boo SIGTERM",
+			expectedError: "unknown flag: --boo",
+		},
+		{
 			name:          "Chaining ONBUILD",
 			dockerfile:    `ONBUILD ONBUILD RUN touch foobar`,
 			expectedError: "Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed",
@@ -257,6 +267,33 @@ func TestErrorCases(t *testing.T) {
 		_, err = ParseInstruction(n)
 		require.ErrorContains(t, err, c.expectedError)
 	}
+}
+
+func TestUnsetDisabled(t *testing.T) {
+	if unsetEnabled {
+		t.Skip("--unset is enabled in this build")
+	}
+	for _, dockerfile := range []string{
+		"ENV --unset FOO",
+		"LABEL --unset foo",
+		"ARG --unset FOO",
+		"VOLUME --unset /foo",
+	} {
+		ast, err := parser.Parse(strings.NewReader(dockerfile))
+		require.NoError(t, err)
+		_, err = ParseInstruction(ast.AST.Children[0])
+		require.ErrorContains(t, err, "unknown flag: --unset", dockerfile)
+	}
+}
+
+func TestResetDisabled(t *testing.T) {
+	if resetEnabled {
+		t.Skip("--reset is enabled in this build")
+	}
+	ast, err := parser.Parse(strings.NewReader("FROM --reset=all busybox"))
+	require.NoError(t, err)
+	_, err = ParseInstruction(ast.AST.Children[0])
+	require.ErrorContains(t, err, "unknown flag: --reset")
 }
 
 func TestRunCmdFlagsUsed(t *testing.T) {
