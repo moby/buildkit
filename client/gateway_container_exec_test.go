@@ -399,6 +399,18 @@ func testClientGatewayContainerExecPipeWithCleanup(t *testing.T, sb integration.
 
 		defer cleanup(ctx, ctr, pid1, pid1StdinW)
 
+		// Empty stdin can finish copying before the exec process starts.
+		empty, err := ctr.Start(ctx, client.StartRequest{
+			Args:  []string{"cat"},
+			Stdin: io.NopCloser(strings.NewReader("")),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := empty.Wait(); err != nil {
+			return nil, err
+		}
+
 		// first part is `echo testing | cat`
 		stdin2 := bytes.NewBuffer([]byte("testing"))
 		stdin3, stdout2 := io.Pipe()
