@@ -25,10 +25,10 @@ func TestCopy(t *testing.T) {
 	b0 := NewBuffer()
 	b1 := NewBuffer()
 
-	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{Size: -1})
+	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foobar")), ocispecs.Descriptor{Size: 6})
 	require.NoError(t, err)
 
-	err = Copy(ctx, b1, b0, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1}, "", nil)
+	err = Copy(ctx, b1, b0, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: 6}, "", nil)
 	require.NoError(t, err)
 
 	dt, err := content.ReadBlob(ctx, b1, ocispecs.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
@@ -77,7 +77,9 @@ func TestCopyRegistryRetryAfterEOF(t *testing.T) {
 	defer registry.Close()
 
 	ref := strings.TrimPrefix(registry.URL, "http://") + "/cache:latest"
-	resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+	resolver := docker.NewResolver(docker.ResolverOptions{
+		Hosts: docker.ConfigureDefaultRegistries(docker.WithPlainHTTP(docker.MatchAllHosts)),
+	})
 	pusher, err := resolver.Pusher(ctx, ref)
 	require.NoError(t, err)
 	provider := NewBuffer()

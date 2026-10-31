@@ -22,14 +22,14 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.27"
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   DESTDIR: "./bin"
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +51,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Build
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           provenance: false
           targets: binaries-for-test
@@ -65,7 +65,7 @@ jobs:
           tree -nh ${{ env.DESTDIR }}
       -
         name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: buildkit-${{ env.PLATFORM_PAIR }}
           path: ${{ env.DESTDIR }}/*
@@ -143,7 +143,7 @@ jobs:
           cache: false
       -
         name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: buildkit-windows-amd64
           path: ${{ github.workspace }}\bin
@@ -186,14 +186,14 @@ jobs:
       -
         name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-reports-${{ matrix.os }}-${{ env.TEST_REPORT_NAME }}
           path: ./bin/testreports
           retention-days: 1
 
   test-freebsd-amd64:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     needs:
       - build
     env:
@@ -204,57 +204,86 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       -
         name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: buildkit-freebsd-amd64
           path: ${{ env.DESTDIR }}
       -
-        name: Cache Vagrant boxes
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        name: Set up FreeBSD
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
         with:
-          path: ~/.vagrant.d/boxes
-          key: ${{ runner.os }}-vagrant-${{ hashFiles('hack/Vagrantfile.freebsd') }}
-          restore-keys: |
-            ${{ runner.os }}-vagrant-
+          release: "14.3"
+          prepare: |
+            set -eux
+            freebsd-version -kru
+            kldstat -m nullfs >/dev/null 2>&1 || kldload nullfs
+            pkg bootstrap -y
+            pkg install -y git
+            # TODO: Pin runj until https://github.com/samuelkarp/runj/issues/72 is fixed.
+            fetch -o /tmp/runj.pkg https://pkg.FreeBSD.org/FreeBSD:14:amd64/release_5/All/runj-0.2.0_9.pkg
+            test "$(sha256 -q /tmp/runj.pkg)" = c653f741c87e0764e1ede0e3bc711c412f727aa42ab0a205ba189589e40349bc
+            pkg -o ASSUME_ALWAYS_YES=yes add /tmp/runj.pkg
       -
-        name: Install vagrant
+        name: Start daemons
+        shell: freebsd {0}
         run: |
-          set -x
-          wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-          sudo apt-get update
-          sudo apt-get install -y libvirt-dev libvirt-daemon libvirt-daemon-system vagrant vagrant-libvirt ruby-libvirt
-          sudo systemctl enable --now libvirtd
-          sudo chmod a+rw /var/run/libvirt/libvirt-sock
-          vagrant plugin install vagrant-libvirt
-          vagrant --version
-      -
-        name: Set up vagrant
-        run: |
-          ln -sf hack/Vagrantfile.freebsd Vagrantfile
-          vagrant up --no-tty
+          set -eux
+          mkdir -p /var/run/buildkit
+          install -m 755 bin/buildkitd /usr/local/bin/buildkitd
+          install -m 755 bin/buildctl /usr/local/bin/buildctl
+          install -m 755 bin/containerd /bin/containerd
+          buildkitd --version
+          containerd --version
+          daemon -f -o /var/log/containerd.log containerd --log-level debug
+          attempt=0
+          until [ -S /var/run/containerd/containerd.sock ]; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 30 ]; then
+              echo "Timed out waiting for containerd" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          daemon -f -o /var/log/buildkitd.log /usr/local/bin/buildkitd --debug --debugaddr 127.0.0.1:6060
+          attempt=0
+          until buildctl debug workers; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 30 ]; then
+              echo "Timed out waiting for BuildKit" >&2
+              exit 1
+            fi
+            sleep 1
+          done
       -
         name: Smoke test
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
-        with:
-          timeout_minutes: 20
-          max_attempts: 5
-          command: |
-            vagrant up --provision-with=test-smoke
+        timeout-minutes: 1
+        run: |
+          freebsd /dev/stdin <<'EOF'
+          set -eux
+          mkdir -p .tmp/freebsd-smoke
+          cd .tmp/freebsd-smoke
+          cat > Dockerfile <<'DOCKERFILE'
+          FROM dougrabson/freebsd-minimal:13
+          RUN echo "Hello, buildkit!"
+          DOCKERFILE
+          buildctl build --frontend dockerfile.v0 --local context=. --local dockerfile=.
+          EOF
       -
         name: BuildKit logs
         if: always()
+        shell: freebsd {0}
         run: |
-          vagrant ssh -- "sudo cat /vagrant/.tmp/logs/buildkitd"
+          cat /var/log/buildkitd.log
       -
         name: Containerd logs
         if: always()
+        shell: freebsd {0}
         run: |
-          vagrant ssh -- "sudo cat /vagrant/.tmp/logs/containerd"
+          cat /var/log/containerd.log
 
   sandbox-build:
     if: ${{ github.repository == 'moby/buildkit' }}
-    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -271,7 +300,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Build
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           targets: integration-tests-base
           set: |

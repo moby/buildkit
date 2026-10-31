@@ -544,6 +544,9 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 }
 
 func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
+	// TODO: remove once CI has Git for Windows >= 2.56.0.windows.2
+	// https://github.com/git-for-windows/git/issues/6449
+	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)

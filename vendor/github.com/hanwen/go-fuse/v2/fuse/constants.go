@@ -40,5 +40,5 @@ const (
 	// being executed.
 	FMODE_EXEC = 0x20
 
-	logicalBlockSize = 512
+	logicalBlockSize = 4096
 )

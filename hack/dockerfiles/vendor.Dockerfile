@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
-ARG GO_VERSION=1.26
-ARG ALPINE_VERSION=3.23
+ARG GO_VERSION=1.27
+ARG ALPINE_VERSION=3.24
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS base
 RUN apk add --no-cache git rsync

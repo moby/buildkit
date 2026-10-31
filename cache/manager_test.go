@@ -1635,6 +1635,177 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+// TestMountDuringFinalize checks that readonly mounts can run concurrently with
+// Finalize of a lazily committed ref. Run with -race to detect unsynchronized
+// access to the equalMutable field.
+func TestMountDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			_, err := snap.Mount(egCtx, true, nil)
+			return err
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
+// TestGetDuringFinalize checks that a lazily committed ref can be looked up
+// by ID concurrently with its Finalize. Run with -race to detect
+// unsynchronized access to the record's equalMutable state.
+func TestGetDuringFinalize(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			ref, err := cm.Get(egCtx, snap.ID(), nil)
+			if err != nil {
+				return err
+			}
+			return ref.Release(context.WithoutCancel(egCtx))
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
+// TestGetDuringFinalizeAfterRestart is like TestGetDuringFinalize, but the
+// lazily committed ref and its equal mutable are loaded from metadata after
+// a restart and the mutable is looked up by ID while the ref is finalized.
+func TestGetDuringFinalizeAfterRestart(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, cm.Close())
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager
+
+	snap, err = cm.Get(ctx, snap.ID(), nil)
+	require.NoError(t, err)
+	defer snap.Release(context.WithoutCancel(ctx))
+
+	start := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-start
+		return snap.Finalize(egCtx)
+	})
+	for range 8 {
+		eg.Go(func() error {
+			<-start
+			ref, err := cm.Get(egCtx, active.ID(), nil)
+			if err != nil {
+				// the mutable is gone once finalize has completed
+				if IsNotFound(err) {
+					return nil
+				}
+				return err
+			}
+			return ref.Release(context.WithoutCancel(egCtx))
+		})
+	}
+	close(start)
+	require.NoError(t, eg.Wait())
+}
+
 func TestLoopLeaseContent(t *testing.T) {
 	t.Parallel()
 	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
@@ -2844,6 +3015,108 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestFinalizeAlreadyCommitted(t *testing.T) {
+	// This test simulates a snapshotter commit that was applied but reported
+	// as failed (e.g. a canceled containerd RPC). Finalize must notice the
+	// committed snapshot instead of failing on the missing active snapshot.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	mutRef := mref.(*mutableRef)
+
+	iref, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	err = cm.Snapshotter.Commit(ctx, immutRef.getSnapshotID(), mutRef.getSnapshotID())
+	require.NoError(t, err)
+
+	require.NoError(t, iref.Finalize(ctx))
+	require.Nil(t, immutRef.equalMutable)
+
+	// the committed snapshot must stay protected by the ref's lease
+	resources, err := co.lm.ListResources(ctx, leases.Lease{ID: immutRef.ID()})
+	require.NoError(t, err)
+	require.Contains(t, resources, leases.Resource{
+		ID:   immutRef.getSnapshotID(),
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	})
+
+	m, err := iref.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	mnts, release, err := m.Mount()
+	require.NoError(t, err)
+	require.NotEmpty(t, mnts)
+	require.NoError(t, release())
+
+	require.NoError(t, mref.Release(ctx))
+	require.NoError(t, iref.Release(ctx))
+}
+
+func TestFinalizeCanceledContext(t *testing.T) {
+	// Finalize ignores cancellation, as a remote snapshotter may apply a commit
+	// that the caller observes as canceled.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+
+	iref, err := mref.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	cctx, cancel := context.WithCancelCause(ctx)
+	cancel(errors.WithStack(context.Canceled))
+	require.NoError(t, iref.Finalize(cctx))
+	require.Nil(t, immutRef.equalMutable)
+
+	info, err := cm.Snapshotter.Stat(ctx, immutRef.getSnapshotID())
+	require.NoError(t, err)
+	require.Equal(t, snapshots.KindCommitted, info.Kind)
+
+	require.NoError(t, mref.Release(ctx))
+	require.NoError(t, iref.Release(ctx))
+}
+
 func TestMountReadOnly(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
@@ -2968,6 +3241,113 @@ func TestLoadBrokenParents(t *testing.T) {
 	refA, err = cm.Get(ctx, refAID, nil)
 	require.NoError(t, err)
 	require.Len(t, refA.(*immutableRef).refs, 1)
+}
+
+func TestLoadLazyChildDiskUsage(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	tmpdir := t.TempDir()
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+	opt := cmOpt{tmpdir: tmpdir, snapshotter: snapshotter, snapshotterName: "native"}
+	co, cleanup, err := newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	blob, desc, err := mapToBlob(map[string]string{"parent": "data"}, true)
+	require.NoError(t, err)
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "parent", bytes.NewReader(blob), desc))
+	parent, err := cm.GetByBlob(ctx, desc, nil)
+	require.NoError(t, err)
+	parentID := parent.ID()
+
+	_, childDesc, err := mapToBlob(map[string]string{"child": "data"}, true)
+	require.NoError(t, err)
+	child, err := cm.GetByBlob(ctx, childDesc, parent, DescHandlers{childDesc.Digest: {}})
+	require.NoError(t, err)
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
+	cleanup()
+
+	// The parent is available locally, but the child cannot be loaded without
+	// its remote provider after a restart.
+	co, cleanup, err = newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+	require.Equal(t, parentID, du[0].ID)
+	require.False(t, du[0].InUse)
+	require.Equal(t, int64(len(blob)), du[0].Size)
+
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true, Filter: []string{"id==" + parentID}}))
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Empty(t, du)
+}
+
+func TestLoadLazyChildRetry(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	blob, desc, err := mapToBlob(map[string]string{"parent": "data"}, true)
+	require.NoError(t, err)
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "parent", bytes.NewReader(blob), desc))
+	parent, err := cm.GetByBlob(ctx, desc, nil)
+	require.NoError(t, err)
+	parentID := parent.ID()
+
+	_, childDesc, err := mapToBlob(map[string]string{"child": "data"}, true)
+	require.NoError(t, err)
+	handlers := DescHandlers{childDesc.Digest: {}}
+	child, err := cm.GetByBlob(ctx, childDesc, parent, handlers)
+	require.NoError(t, err)
+	childID := child.ID()
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
+
+	// Load the persisted records on demand, without init discarding the lazy
+	// child's metadata before we can retry with its provider.
+	loader := &cacheManager{
+		records:       make(map[string]*cacheRecord),
+		Snapshotter:   cm.Snapshotter,
+		ContentStore:  cm.ContentStore,
+		LeaseManager:  cm.LeaseManager,
+		MetadataStore: cm.MetadataStore,
+	}
+	parent, err = loader.Get(ctx, parentID, nil)
+	require.NoError(t, err)
+	parentRec := parent.(*immutableRef).cacheRecord
+	require.Len(t, parentRec.refs, 1)
+
+	child, err = loader.Get(ctx, childID, nil)
+	var missing NeedsRemoteProviderError
+	require.ErrorAs(t, err, &missing)
+	require.Equal(t, NeedsRemoteProviderError{childDesc.Digest}, missing)
+	require.Nil(t, child)
+	require.NotContains(t, loader.records, childID)
+	require.Len(t, parentRec.refs, 1)
+
+	child, err = loader.Get(ctx, childID, nil, handlers)
+	require.NoError(t, err)
+	require.Equal(t, childID, child.ID())
+	childRec := child.(*immutableRef).cacheRecord
+	require.Same(t, childRec, loader.records[childID])
+	require.Same(t, parentRec, childRec.layerParent.cacheRecord)
+	require.Len(t, parentRec.refs, 2)
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
 }
 
 func TestCalculateKeepBytes(t *testing.T) {
@@ -3176,9 +3556,15 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor,
 	if !compress {
 		return mapToBlobWithCompression(m, nil)
 	}
-	return mapToBlobWithCompression(m, func(w io.Writer) (io.WriteCloser, string, error) {
-		return gzip.NewWriter(w), ocispecs.MediaTypeImageLayerGzip, nil
-	})
+	return mapToBlobWithCompression(m, gzipBlobWriter)
+}
+
+func gzipBlobWriter(w io.Writer) (io.WriteCloser, string, error) {
+	// Go 1.27 changed compress/flate output in CL 707355 for golang/go#75532.
+	// Use BuildKit's pinned Go 1.26 encoder when calculating expected digests.
+	compressor, _ := compression.Gzip.Compress(context.Background(), compression.New(compression.Gzip))
+	wc, err := compressor(w, ocispecs.MediaTypeImageLayerGzip)
+	return wc, ocispecs.MediaTypeImageLayerGzip, err
 }
 
 func mapToBlobWithCompression(m map[string]string, compress func(io.Writer) (io.WriteCloser, string, error)) ([]byte, ocispecs.Descriptor, error) {
@@ -3244,7 +3630,11 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 
 	var dest io.WriteCloser = &iohelper.NopWriteCloser{Writer: buf}
 	if compress {
-		dest = gzip.NewWriter(buf)
+		var err error
+		dest, _, err = gzipBlobWriter(buf)
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
 	}
 	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
 

@@ -386,7 +386,7 @@ func (b *blob) fetchRange(allData map[region]io.Writer, opts *options) error {
 
 	key := makeSyncKey(allData)
 	fetched := make(map[region]bool)
-	_, err, shared := b.fetchedRegionGroup.Do(key, func() (interface{}, error) {
+	_, err, shared := b.fetchedRegionGroup.Do(key, func() (any, error) {
 		return nil, b.fetchRegions(allData, fetched, opts)
 	})
 

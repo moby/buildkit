@@ -119,9 +119,9 @@ func (l *DirEntryList) addDirEntry(e *DirEntry, prefix int) bool {
 	copy(l.buf[oldLen:], e.Name)
 	oldLen += len(e.Name)
 
-	if padding > 0 {
-		l.buf[oldLen] = 0
-	}
+	// The buffer is recycled, so the padding may hold data from
+	// a previous request.
+	clear(l.buf[oldLen : oldLen+padding])
 	l.Offset = dirent.Off
 	return true
 }
@@ -177,6 +177,9 @@ func modeToType(mode uint32) uint32 {
 // be needed when a directory changes while READDIRPLUS is running.
 // Only the file type bits of mode are considered, the rest is masked out.
 func (l *DirEntryList) FixMode(mode uint32) {
+	if l.lastDirent == nil {
+		return
+	}
 	l.lastDirent.Typ = modeToType(mode)
 }
 

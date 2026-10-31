@@ -883,6 +883,15 @@ performance. Your build should work with any contents of the cache directory as
 another build may overwrite the files or GC may clean it if more storage space
 is needed.
 
+> [!NOTE]
+> Cache mounts are stored in the builder's local storage. They are not
+> included in [exported build cache](https://docs.docker.com/build/cache/backends/)
+> (`--cache-to`), and are not restored by `--cache-from`. If each build runs
+> on a new builder (e.g. on CI runners that provision a fresh machine
+> for each job), cache mounts start empty on every build. For a workaround on
+> GitHub Actions, see
+> [Cache mounts](https://docs.docker.com/build/ci/github-actions/cache/#cache-mounts).
+
 #### Example: cache Go packages
 
 ```dockerfile
@@ -2758,6 +2767,7 @@ RUN echo "I'm building for $TARGETPLATFORM"
 | `BUILDKIT_CACHE_MOUNT_NS`       | String | Set optional cache ID namespace.                                                                                                                                                                                 |
 | `BUILDKIT_CONTEXT_KEEP_GIT_DIR` | Bool   | Trigger Git context to keep the `.git` directory.                                                                                                                                                                |
 | `BUILDKIT_GIT_ADVICE`           | Bool   | Show Git advice messages from BuildKit-managed Git operations. Defaults to `false`.                                                                                                                              |
+| `BUILDKIT_GIT_DEBUG_COMMANDS`   | Bool   | Print executed Git commands for Git contexts and `ADD` sources in the build log. Defaults to `false`.                                                                                                             |
 | `BUILDKIT_INLINE_CACHE`[^2]     | Bool   | Inline cache metadata to image config or not.                                                                                                                                                                    |
 | `BUILDKIT_MULTI_PLATFORM`       | Bool   | Opt into deterministic output regardless of multi-platform output or not.                                                                                                                                        |
 | `BUILDKIT_SANDBOX_HOSTNAME`     | String | Set the hostname (default `buildkitsandbox`)                                                                                                                                                                     |

@@ -20,6 +20,7 @@ type testBackend struct {
 	free    int64
 	checks  atomic.Int64
 	saved   []State
+	opt     db.CompactOptions
 	stats   func() (db.CompactionStats, error)
 	compact func(context.Context) (db.CompactResult, error)
 }
@@ -47,12 +48,21 @@ func (b *testBackend) checkpoints() []State {
 	return append([]State(nil), b.saved...)
 }
 
-func (b *testBackend) Compact(ctx context.Context, _ db.CompactOptions) (db.CompactResult, error) {
+func (b *testBackend) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResult, error) {
+	b.mu.Lock()
+	b.opt = opt
+	b.mu.Unlock()
 	return b.compact(ctx)
 }
 
+func (b *testBackend) lastOptions() db.CompactOptions {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.opt
+}
+
 func testConfig() Config {
-	return Config{WritesPerCheck: 2, SizeWatermark: 100, SizeGrowthPercent: 100, MinReclaimBytes: 100, IdleTimeout: time.Second, MaxRetry: 2, MinReclaimPercent: 10}
+	return Config{WritesPerCheck: 2, SizeWatermark: 100, SizeGrowthPercent: 100, MinReclaimBytes: 100, IdleTimeout: time.Second, MaxRetry: 2, MinReclaimPercent: 10, MinReclaimPercentFloor: 10}
 }
 
 func write(s *Scheduler) {
@@ -352,6 +362,9 @@ func TestInvalidConfig(t *testing.T) {
 		func(c *Config) { c.IdleTimeout = 0 },
 		func(c *Config) { c.MaxRetry = -1 },
 		func(c *Config) { c.MinReclaimPercent = 101 },
+		func(c *Config) { c.MinReclaimPercentFloor = 0 },
+		func(c *Config) { c.MinReclaimPercentFloor = 101 },
+		func(c *Config) { c.MinReclaimPercentFloor = c.MinReclaimPercent + 1 },
 	} {
 		cfg := testConfig()
 		change(&cfg)
@@ -369,6 +382,7 @@ func TestReclaimability(t *testing.T) {
 		{name: "packed", size: 100, free: 0, floor: 10},
 		{name: "below both", size: 100, free: 24, floor: 26},
 		{name: "bytes reached", size: 1000, free: 100, floor: 100, want: true},
+		{name: "bytes reached below percent floor", size: 1000, free: 99, floor: 99},
 		{name: "percent reached", size: 100, free: 25, floor: 26, want: true},
 		{name: "exact thresholds", size: 100, free: 25, floor: 25, want: true},
 		{name: "fraction below", size: 101, free: 25, floor: 26},
@@ -391,6 +405,13 @@ func TestReclaimability(t *testing.T) {
 				time.Sleep(cfg.IdleTimeout)
 				synctest.Wait()
 				require.Equal(t, tc.want, calls.Load() == 1)
+				if tc.want {
+					require.Equal(t, db.CompactOptions{
+						MinReclaimBytes:        cfg.MinReclaimBytes,
+						MinReclaimPercent:      cfg.MinReclaimPercent,
+						MinReclaimPercentFloor: cfg.MinReclaimPercentFloor,
+					}, b.lastOptions())
+				}
 			})
 		})
 	}

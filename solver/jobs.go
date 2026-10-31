@@ -61,9 +61,10 @@ type state struct {
 	mspan    *tracing.MultiSpan
 	execSpan trace.Span
 
-	vtx          Vertex
-	clientVertex client.Vertex
-	origDigest   digest.Digest // original LLB digest. TODO: probably better to use string ID so this isn't needed
+	vtx            Vertex
+	clientVertex   client.Vertex
+	clientVertexMu sync.Mutex    // protects mutable clientVertex fields
+	origDigest     digest.Digest // original LLB digest. TODO: probably better to use string ID so this isn't needed
 
 	mu    sync.RWMutex
 	op    *sharedOp
@@ -327,6 +328,51 @@ func (s *state) combinedCacheManager() CacheManager {
 	}
 
 	return NewCombinedCacheManager(cms, mainCache)
+}
+
+// writeVertexSnapshot can read progress concurrently with
+// notifyStarted, which is the only writer of the mutable vertex fields.
+func (s *state) writeVertexSnapshot(pw progress.Writer) {
+	s.clientVertexMu.Lock()
+	defer s.clientVertexMu.Unlock()
+	// Keep the snapshot and write together so a newer update cannot be
+	// published before this snapshot.
+	pw.Write(identity.NewID(), s.clientVertex)
+}
+
+// vertexFailed lets the ancestor walk read the error concurrently with
+// progress updates from notifyStarted.
+func (s *state) vertexFailed() bool {
+	s.clientVertexMu.Lock()
+	defer s.clientVertexMu.Unlock()
+	return s.clientVertex.Error != ""
+}
+
+func (s *state) notifyStarted(ctx context.Context, cached bool) func(err error, cached bool) {
+	pw, _, _ := progress.NewFromContext(ctx)
+	s.clientVertexMu.Lock()
+	v := &s.clientVertex
+	start := time.Now()
+	v.Started = &start
+	v.Completed = nil
+	v.Cached = cached
+	id := identity.NewID()
+	pw.Write(id, *v)
+	s.clientVertexMu.Unlock()
+	return func(err error, cached bool) {
+		defer pw.Close()
+		s.clientVertexMu.Lock()
+		defer s.clientVertexMu.Unlock()
+		stop := time.Now()
+		v.Completed = &stop
+		v.Cached = cached
+		if err != nil {
+			v.Error = err.Error()
+		} else {
+			v.Error = ""
+		}
+		pw.Write(id, *v)
+	}
 }
 
 func (s *state) Release() {
@@ -689,7 +735,7 @@ func (jl *Solver) connectProgressFromState(target, src *state) {
 		if _, ok := target.allPw[pw]; !ok {
 			target.mpw.Add(pw)
 			target.allPw[pw] = struct{}{}
-			pw.Write(identity.NewID(), target.clientVertex)
+			target.writeVertexSnapshot(pw)
 			if span != nil && span.SpanContext().IsValid() {
 				target.mspan.Add(span)
 			}
@@ -1058,7 +1104,7 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, fun
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 	s.st.execSpan = span
-	notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, true)
+	notifyCompleted := s.st.notifyStarted(ctx, true)
 	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
 	tracing.FinishWithError(span, err)
 	notifyCompleted(err, true)
@@ -1145,7 +1191,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		if s.st.mspan.Span != nil {
 			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 		}
-		notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyCompleted := s.st.notifyStarted(ctx, false)
 		notifyCompleted(err, false)
 		return "", err
 	}
@@ -1177,7 +1223,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
 			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
-			notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+			notifyCompleted := s.st.notifyStarted(ctx, false)
 			defer func() {
 				tracing.FinishWithError(span, retErr)
 				notifyCompleted(retErr, false)
@@ -1263,7 +1309,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		// no cache hit. start evaluating the node
 		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name(), trace.WithAttributes(attribute.String("vertex", s.st.vtx.Digest().String())))
 		s.st.execSpan = span
-		notifyCompleted := notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyCompleted := s.st.notifyStarted(ctx, false)
 		defer func() {
 			tracing.FinishWithError(span, retErr)
 			notifyCompleted(retErr, false)
@@ -1294,6 +1340,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 
 				s.execRes = &execRes{execRes: wrapShared(res), execExporters: subExporters}
 			}
+			s.st.cloneErrorRefs(err)
 			s.execErr = err
 		}
 		if s.execRes == nil || err != nil {
@@ -1389,28 +1436,6 @@ func (v *vertexWithCacheOptions) Inputs() []Edge {
 	return v.inputs
 }
 
-func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) func(err error, cached bool) {
-	pw, _, _ := progress.NewFromContext(ctx)
-	start := time.Now()
-	v.Started = &start
-	v.Completed = nil
-	v.Cached = cached
-	id := identity.NewID()
-	pw.Write(id, *v)
-	return func(err error, cached bool) {
-		defer pw.Close()
-		stop := time.Now()
-		v.Completed = &stop
-		v.Cached = cached
-		if err != nil {
-			v.Error = err.Error()
-		} else {
-			v.Error = ""
-		}
-		pw.Write(id, *v)
-	}
-}
-
 type SlowCacheError struct {
 	error
 	Index Index
@@ -1437,6 +1462,20 @@ func WrapSlowCache(err error, index Index, res Result) error {
 		return nil
 	}
 	return &SlowCacheError{Index: index, Result: res, error: err}
+}
+
+// cloneErrorRefs retains a cached error's refs until the state is released.
+func (s *state) cloneErrorRefs(err error) {
+	for ; err != nil; err = errors.Unwrap(err) {
+		if re, ok := err.(interface {
+			EachRef(func(Result) error) error
+		}); ok {
+			re.EachRef(func(r Result) error {
+				s.cloneUntilRelease(r)
+				return nil
+			})
+		}
+	}
 }
 
 func releaseError(err error) {

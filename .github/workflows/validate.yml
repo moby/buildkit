@@ -24,7 +24,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       includes: ${{ steps.matrix.outputs.includes }}
     steps:
@@ -34,7 +34,7 @@ jobs:
       -
         name: Generate matrix
         id: generate
-        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action/subaction/matrix@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           target: validate
           fields: platforms
@@ -54,9 +54,9 @@ jobs:
             const privateRepo = core.getBooleanInput('private-repo');
             matrix.forEach(job => {
               if (job.platforms && job.platforms.startsWith('linux/arm') && !privateRepo) {
-                job.runner = 'ubuntu-24.04-arm';
+                job.runner = 'ubuntu-26.04-arm';
               } else {
-                job.runner = 'ubuntu-24.04';
+                job.runner = 'ubuntu-26.04';
               }
             });
             core.info(JSON.stringify(matrix, null, 2));
@@ -80,7 +80,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Validate
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           targets: ${{ matrix.target }}
           set: |

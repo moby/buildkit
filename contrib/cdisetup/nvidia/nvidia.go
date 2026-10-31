@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -201,24 +202,9 @@ func installPackages(ctx context.Context, osr *osrelease, dv string, pw progress
 
 	if _, err := os.Stat(keyTarget); err != nil {
 		fmt.Fprint(newStream(pw, 2, dgst), "Downloading NVIDIA GPG key\n")
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, aptURL+"3bf863cc.pub", nil)
-		if err != nil {
-			return errors.Wrapf(err, "failed to create request for NVIDIA GPG key")
+		if err := installKey(ctx, aptURL+"3bf863cc.pub", keyTarget, newStream(pw, 2, dgst)); err != nil {
+			return err
 		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return errors.Wrapf(err, "failed to download NVIDIA GPG key")
-		}
-
-		cmd := exec.CommandContext(ctx, "gpg", "--dearmor", "-o", keyTarget)
-		cmd.Stdin = resp.Body
-		cmd.Stderr = newStream(pw, 2, dgst)
-		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "failed to install NVIDIA GPG key")
-		}
-		resp.Body.Close()
 	}
 
 	if err := os.WriteFile("/etc/apt/sources.list.d/nvidia-cuda.list", []byte("deb [signed-by="+keyTarget+"] "+aptURL+" /"), 0644); err != nil {
@@ -240,6 +226,46 @@ func installPackages(ctx context.Context, osr *osrelease, dv string, pw progress
 	}
 
 	return run(ctx, append([]string{"apt-get", "install", "-y", "--no-install-recommends"}, pkgs...), pw, dgst)
+}
+
+func installKey(ctx context.Context, keyURL, keyTarget string, stderr io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, keyURL, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create request for NVIDIA GPG key")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "failed to download NVIDIA GPG key")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("failed to download NVIDIA GPG key from %s: %s", keyURL, resp.Status)
+	}
+
+	keyFile, err := os.CreateTemp(filepath.Dir(keyTarget), ".nvidia-key-*")
+	if err != nil {
+		return errors.Wrap(err, "failed to create NVIDIA GPG key file")
+	}
+	defer os.Remove(keyFile.Name())
+	defer keyFile.Close()
+
+	cmd := exec.CommandContext(ctx, "gpg", "--dearmor")
+	cmd.Stdin = resp.Body
+	cmd.Stdout = keyFile
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, "failed to import NVIDIA GPG key")
+	}
+	if err := keyFile.Chmod(0644); err != nil {
+		return errors.Wrap(err, "failed to set NVIDIA GPG key permissions")
+	}
+	if err := keyFile.Close(); err != nil {
+		return errors.Wrap(err, "failed to close NVIDIA GPG key file")
+	}
+	if err := os.Rename(keyFile.Name(), keyTarget); err != nil {
+		return errors.Wrap(err, "failed to install NVIDIA GPG key")
+	}
+	return nil
 }
 
 func readVersion() (string, error) {

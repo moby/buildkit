@@ -252,10 +252,7 @@ func testPrefetch(t *TestRunner, factory metadata.Store, lc layerConfig) {
 				if tt.chunkSize > 0 {
 					chunkSize = tt.chunkSize
 				}
-				minChunkSize := 0
-				if tt.minChunkSize > 0 {
-					minChunkSize = tt.minChunkSize
-				}
+				minChunkSize := max(tt.minChunkSize, 0)
 				sr, dgst, err := tutil.BuildEStargz(tt.in,
 					tutil.WithEStargzOptions(
 						estargz.WithChunkSize(chunkSize),
@@ -1127,7 +1124,7 @@ func getDirentAndNode(t TestingT, root *node, path string) (ent fuse.DirEntry, n
 	// get the target's parent directory.
 	var eo fuse.EntryOut
 	d := root
-	for _, name := range strings.Split(dir, "/") {
+	for name := range strings.SplitSeq(dir, "/") {
 		if len(name) == 0 {
 			continue
 		}
@@ -1169,7 +1166,7 @@ func getDirent(t TestingT, root *node, path string) (ent fuse.DirEntry, err erro
 	// get the target's parent directory.
 	var eo fuse.EntryOut
 	d := root
-	for _, name := range strings.Split(dir, "/") {
+	for name := range strings.SplitSeq(dir, "/") {
 		if len(name) == 0 {
 			continue
 		}

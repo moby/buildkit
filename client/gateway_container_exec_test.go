@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func testClientGatewayContainerCancelExecTty(t *testing.T, sb integration.Sandbo
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
@@ -189,7 +190,7 @@ func testClientGatewayContainerCancelPID1Tty(t *testing.T, sb integration.Sandbo
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, cancel := context.WithTimeoutCause(ctx, 10*time.Second, nil)
@@ -479,7 +480,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
 		defer timeout()
@@ -774,7 +775,7 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	product := "buildkit_test"
 
 	inputR, inputW := io.Pipe()
-	output := bytes.NewBuffer(nil)
+	output := &lockedBuffer{}
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		ctx, timeout := context.WithTimeoutCause(ctx, 10*time.Second, nil)
@@ -941,6 +942,105 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+// Linux signal numbers. The container is always Linux, and syscall does not
+// define these when the test binary is built for other platforms.
+const (
+	linuxSIGUSR1  = syscall.Signal(10)
+	linuxSIGWINCH = syscall.Signal(28)
+)
+
+// testClientGatewayContainerResizeSignal resizes and signals a container
+// process concurrently.
+func testClientGatewayContainerResizeSignal(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeoutCause(ctx, 30*time.Second, nil)
+		defer timeout()
+
+		def, err := llb.Image("busybox:latest").Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr.Release(ctx)
+
+		// outlive the test timeout, killed explicitly below
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "60"},
+		})
+		require.NoError(t, err)
+
+		// keep running until all events have been sent, stdio is needed as the
+		// runc executor fails tty processes without it
+		pid2, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh", "-c", `trap 'exit 0' USR1; while true; do sleep 0.1; done`},
+			Tty:    true,
+			Stdout: &iohelper.NopWriteCloser{Writer: io.Discard},
+			Stderr: &iohelper.NopWriteCloser{Writer: io.Discard},
+		})
+		require.NoError(t, err)
+
+		// allow for the shell script to setup the trap before we signal it
+		time.Sleep(time.Second)
+
+		var wg sync.WaitGroup
+		var resizeErr, signalErr error
+		wg.Go(func() {
+			for i := range 100 {
+				if resizeErr = pid2.Resize(ctx, client.WinSize{Rows: uint32(20 + i), Cols: uint32(80 + i)}); resizeErr != nil {
+					return
+				}
+			}
+		})
+		wg.Go(func() {
+			for range 100 {
+				// ignored by sh
+				if signalErr = pid2.Signal(ctx, linuxSIGWINCH); signalErr != nil {
+					return
+				}
+			}
+		})
+		wg.Wait()
+		require.NoError(t, resizeErr)
+		require.NoError(t, signalErr)
+
+		require.NoError(t, pid2.Signal(ctx, linuxSIGUSR1))
+		require.NoError(t, pid2.Wait())
+
+		require.NoError(t, pid1.Signal(ctx, syscall.SIGKILL))
+		pid1.Wait()
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
 // testClientGatewayExecError is testing gateway exec to recreate the container
 // process for a failed execop.
 func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
@@ -1056,7 +1156,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				defer inputW.Close()
 				defer inputR.Close()
 
-				pid1Output := bytes.NewBuffer(nil)
+				pid1Output := &lockedBuffer{}
 
 				prompt := newTestPrompt(ctx, t, inputW, pid1Output)
 				pid1, err := ctr.Start(ctx, client.StartRequest{
@@ -1071,7 +1171,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 
 				meta := exec.Meta
 				for _, p := range tt.Paths {
-					output := bytes.NewBuffer(nil)
+					output := &lockedBuffer{}
 					proc, err := ctr.Start(ctx, client.StartRequest{
 						Args:         []string{"cat", p},
 						Env:          meta.Env,
@@ -1348,10 +1448,29 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
+// lockedBuffer is a bytes.Buffer that the container output streams can write
+// to while testPrompt reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 type testPrompt struct {
 	ctx    context.Context
 	t      *testing.T
-	output *bytes.Buffer
+	output *lockedBuffer
 	input  io.Writer
 	prompt string
 	pos    int
@@ -1394,7 +1513,7 @@ func (p *testPrompt) wait(msg string) string {
 	}
 }
 
-func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *bytes.Buffer) *testPrompt {
+func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *lockedBuffer) *testPrompt {
 	return &testPrompt{
 		ctx:    ctx,
 		t:      t,

@@ -165,7 +165,7 @@ func (n *LoopbackNode) Mknod(ctx context.Context, name string, mode, rdev uint32
 	n.preserveOwner(ctx, p)
 	st := syscall.Stat_t{}
 	if err := syscall.Lstat(p, &st); err != nil {
-		syscall.Rmdir(p)
+		syscall.Unlink(p)
 		return nil, ToErrno(err)
 	}
 
@@ -244,20 +244,20 @@ var _ = (NodeCreater)((*LoopbackNode)(nil))
 func (n *LoopbackNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *Inode, fh FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	p := filepath.Join(n.path(), name)
 	flags = flags &^ syscall.O_APPEND
-	fd, err := syscall.Open(p, int(flags)|os.O_CREATE, mode)
+	f, err := os.OpenFile(p, int(flags)|os.O_CREATE, os.FileMode(mode))
 	if err != nil {
 		return nil, nil, 0, ToErrno(err)
 	}
 	n.preserveOwner(ctx, p)
 	st := syscall.Stat_t{}
-	if err := syscall.Fstat(fd, &st); err != nil {
-		syscall.Close(fd)
+	if err := syscall.Fstat(int(f.Fd()), &st); err != nil {
+		f.Close()
 		return nil, nil, 0, ToErrno(err)
 	}
 
 	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
-	lf := NewLoopbackFile(fd)
+	lf := NewLoopbackFileFromOS(f)
 
 	out.FromStat(&st)
 	return ch, lf, 0, 0
@@ -320,9 +320,17 @@ func (n *LoopbackNode) Symlink(ctx context.Context, target, name string, out *fu
 var _ = (NodeLinker)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Link(ctx context.Context, target InodeEmbedder, name string, out *fuse.EntryOut) (*Inode, syscall.Errno) {
+	e2, ok := target.(loopbackNodeEmbedder)
+	if !ok {
+		return nil, syscall.EXDEV
+	}
+
+	if e2.loopbackNode().RootData != n.RootData {
+		return nil, syscall.EXDEV
+	}
 
 	p := filepath.Join(n.path(), name)
-	err := syscall.Link(filepath.Join(n.RootData.Path, target.EmbeddedInode().Path(nil)), p)
+	err := syscall.Link(e2.loopbackNode().path(), p)
 	if err != nil {
 		return nil, ToErrno(err)
 	}
@@ -418,7 +426,9 @@ func (n *LoopbackNode) Setattr(ctx context.Context, f FileHandle, in *fuse.SetAt
 	p := n.path()
 	fsa, ok := f.(FileSetattrer)
 	if ok && fsa != nil {
-		fsa.Setattr(ctx, in, out)
+		if errno := fsa.Setattr(ctx, in, out); errno != 0 {
+			return errno
+		}
 	} else {
 		if m, ok := in.GetMode(); ok {
 			if err := syscall.Chmod(p, m); err != nil {
@@ -437,7 +447,15 @@ func (n *LoopbackNode) Setattr(ctx context.Context, f FileHandle, in *fuse.SetAt
 			if gok {
 				sgid = int(gid)
 			}
-			if err := syscall.Chown(p, suid, sgid); err != nil {
+			if err := unix.Fchownat(unix.AT_FDCWD, p, suid, sgid, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+				return ToErrno(err)
+			}
+		}
+
+		// Truncate before setting times, so an explicit mtime is
+		// not clobbered by the truncate.
+		if sz, ok := in.GetSize(); ok {
+			if err := syscall.Truncate(p, int64(sz)); err != nil {
 				return ToErrno(err)
 			}
 		}
@@ -463,12 +481,6 @@ func (n *LoopbackNode) Setattr(ctx context.Context, f FileHandle, in *fuse.SetAt
 			}
 			ts := []unix.Timespec{ta, tm}
 			if err := unix.UtimesNanoAt(unix.AT_FDCWD, p, ts, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-				return ToErrno(err)
-			}
-		}
-
-		if sz, ok := in.GetSize(); ok {
-			if err := syscall.Truncate(p, int64(sz)); err != nil {
 				return ToErrno(err)
 			}
 		}
@@ -513,19 +525,24 @@ var _ = (NodeCopyFileRanger)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
 	offIn uint64, out *Inode, fhOut FileHandle, offOut uint64,
-	len uint64, flags uint64) (uint32, syscall.Errno) {
-	lfIn, ok := fhIn.(*loopbackFile)
+	len uint64, flags uint64) (count uint32, errno syscall.Errno) {
+	lfIn, ok := fhIn.(*LoopbackFile)
 	if !ok {
 		return 0, unix.ENOTSUP
 	}
-	lfOut, ok := fhOut.(*loopbackFile)
+	lfOut, ok := fhOut.(*LoopbackFile)
 	if !ok {
 		return 0, unix.ENOTSUP
 	}
 	signedOffIn := int64(offIn)
 	signedOffOut := int64(offOut)
-	doCopyFileRange(lfIn.fd, signedOffIn, lfOut.fd, signedOffOut, int(len), int(flags))
-	return 0, syscall.ENOSYS
+	lfIn.withFd(func(fdIn int) syscall.Errno {
+		return lfOut.withFd(func(fdOut int) syscall.Errno {
+			count, errno = doCopyFileRange(fdIn, signedOffIn, fdOut, signedOffOut, int(len), int(flags))
+			return OK
+		})
+	})
+	return count, errno
 }
 
 // NewLoopbackRoot returns a root node for a loopback file system whose

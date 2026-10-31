@@ -27,9 +27,11 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -286,7 +288,7 @@ func makeFile(t TestingT, contents []byte, chunkSize int, factory metadata.Store
 	f, ok := ra.(*file)
 	if !ok {
 		vr.Close()
-		t.Fatalf("invalid type of file %q", tid)
+		t.Fatalf("invalid type of file %v", tid)
 	}
 	return f, vr.Close
 }
@@ -443,13 +445,7 @@ func (f *failIDVerifier) registerFails(fails []uint32) {
 func (f *failIDVerifier) verifier(id uint32, chunkDigest string) (digest.Verifier, error) {
 	f.failsMu.Lock()
 	defer f.failsMu.Unlock()
-	success := true
-	for _, n := range f.fails {
-		if n == id {
-			success = false
-			break
-		}
-	}
+	success := !slices.Contains(f.fails, id)
 	return &testVerifier{success}, nil
 }
 
@@ -495,12 +491,8 @@ func prepareMap(mr metadata.Reader, id uint32, p string) (off2id map[int64]uint3
 			retErr = err
 			return false
 		}
-		for k, v := range o2i {
-			off2id[k] = v
-		}
-		for k, v := range i2p {
-			id2path[k] = v
-		}
+		maps.Copy(off2id, o2i)
+		maps.Copy(id2path, i2p)
 		return true
 	})
 	if retErr != nil {
@@ -548,7 +540,7 @@ func testFailReader(t *TestRunner, factory metadata.Store) {
 
 					notexist := uint32(0)
 					found := false
-					for i := uint32(0); i < 1000000; i++ {
+					for i := range uint32(1000000) {
 						if _, err := gr.Metadata().GetAttr(i); err != nil {
 							notexist, found = i, true
 							break
@@ -968,7 +960,7 @@ func testProcessBatchChunks(t *TestRunner) {
 
 	createNormalChunks := func(chunkSize int64, totalChunks int) []chunkData {
 		var chunks []chunkData
-		for i := 0; i < totalChunks; i++ {
+		for i := range totalChunks {
 			chunks = append(chunks, chunkData{
 				offset:    int64(i) * chunkSize,
 				size:      chunkSize,
@@ -982,7 +974,7 @@ func testProcessBatchChunks(t *TestRunner) {
 	createOverlappingChunks := func(chunkSize int64, totalChunks int) []chunkData {
 		chunks := createNormalChunks(chunkSize, totalChunks)
 
-		for i := 0; i < totalChunks; i++ {
+		for i := range totalChunks {
 			if i > 0 && i%10 == 0 {
 				chunks = append(chunks, chunkData{
 					offset:    int64(i)*chunkSize - chunkSize/2,

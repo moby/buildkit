@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -197,4 +198,85 @@ func TestBearerAuthFallsBackToAnonymousTokenWithoutSession(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("expected anonymous token request")
 	}
+}
+
+// containerd attaches the streaming body of an upload to the request before
+// calling Authorize. If Authorize fails the request is never sent, so the
+// authorizer has to close the body or the writer feeding it blocks forever.
+func TestAuthorizeClosesRequestBodyOnFailure(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"token":      "token",
+			"expires_in": 60,
+		}); err != nil {
+			t.Errorf("failed to write token response: %v", err)
+		}
+	}))
+	defer tokenServer.Close()
+
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+
+	auth := newDockerAuthorizer(tokenServer.Client(), newAuthHandlerNS(sm), sm, session.NewGroup(""))
+
+	const target = "https://registry.example/v2/library/alpine/blobs/uploads/id"
+	challengeReq := httptest.NewRequestWithContext(t.Context(), http.MethodPut, target, nil)
+	res := &http.Response{
+		StatusCode: http.StatusUnauthorized,
+		Header:     http.Header{},
+		Request:    challengeReq,
+	}
+	res.Header.Set("WWW-Authenticate", fmt.Sprintf(
+		`Bearer realm=%q,service="registry.example",scope="repository:library/alpine:pull,push"`,
+		tokenServer.URL+"/token",
+	))
+	require.NoError(t, auth.AddResponses(t.Context(), []*http.Response{res}))
+
+	newUploadReq := func(ctx context.Context) (*http.Request, *io.PipeWriter) {
+		pr, pw := io.Pipe()
+		req := httptest.NewRequestWithContext(ctx, http.MethodPut, target, pr)
+		req.Body = pr
+		return req, pw
+	}
+
+	t.Run("failure", func(t *testing.T) {
+		// a canceled context makes fetching the token fail
+		ctx, cancel := context.WithCancelCause(t.Context())
+		cancel(context.Canceled)
+		req, pw := newUploadReq(ctx)
+
+		require.Error(t, auth.Authorize(ctx, req))
+
+		// Write only returns once the reader is closed, as nothing reads it.
+		writeErr := make(chan error, 1)
+		go func() {
+			_, err := pw.Write([]byte("data"))
+			writeErr <- err
+		}()
+		select {
+		case err := <-writeErr:
+			require.ErrorIs(t, err, io.ErrClosedPipe)
+		case <-time.After(5 * time.Second):
+			req.Body.Close() // release the blocked writer
+			t.Fatal("request body was not closed after Authorize failed")
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		req, pw := newUploadReq(t.Context())
+		defer req.Body.Close()
+
+		require.NoError(t, auth.Authorize(t.Context(), req))
+		require.Equal(t, "Bearer token", req.Header.Get("Authorization"))
+
+		// the body is still usable by the transport
+		go func() {
+			pw.Write([]byte("data"))
+			pw.Close()
+		}()
+		b, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		require.Equal(t, "data", string(b))
+	})
 }

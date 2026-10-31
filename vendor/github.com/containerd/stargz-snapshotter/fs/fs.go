@@ -262,7 +262,6 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 	// Also resolve and cache other layers in parallel
 	preResolve := src[0] // TODO: should we pre-resolve blobs in other sources as well?
 	for _, desc := range neighboringLayers(preResolve.Manifest, preResolve.Target) {
-		desc := desc
 		go func() {
 			// Avoids to get canceled by client.
 			ctx := log.WithLogger(context.Background(), log.G(ctx).WithField("mountpoint", mountpoint))
@@ -416,7 +415,7 @@ func (fs *filesystem) check(ctx context.Context, l layer.Layer, labels map[strin
 		retrynum = 1
 		rErr     = fmt.Errorf("failed to refresh connection")
 	)
-	for retry := 0; retry < retrynum; retry++ {
+	for retry := range retrynum {
 		log.G(ctx).Warnf("refreshing(%d)...", retry)
 		for _, s := range src {
 			err := l.Refresh(ctx, s.Hosts, s.Name, s.Target)

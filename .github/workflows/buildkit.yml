@@ -24,7 +24,7 @@ on:
       - 'frontend/dockerfile/docs/**'
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.27"
   SETUP_BUILDX_VERSION: "edge"
   SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
   SCOUT_VERSION: "1.20.2"
@@ -33,7 +33,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       binaries-platforms: ${{ steps.platforms.outputs.matrix }}
     steps:
@@ -43,18 +43,19 @@ jobs:
       -
         name: Platforms matrix
         id: platforms
-        uses: docker/bake-action/subaction/matrix@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action/subaction/matrix@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           target: release
           fields: platforms
 
   binaries:
-    uses: docker/github-builder/.github/workflows/bake.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
+    uses: docker/github-builder/.github/workflows/bake.yml@cbc9d42f8c89a55623392aadd03600965b80e963 # v1.18.1
     permissions:
       contents: read # same as global permission
       id-token: write # for signing attestation(s) with GitHub OIDC Token
     with:
-      runner: ubuntu-24.04
+      runner: ubuntu-26.04
+      buildkit-proxy-network: true
       artifact-name: buildkit-binaries
       artifact-upload: true
       cache: true
@@ -65,13 +66,13 @@ jobs:
       sign: ${{ github.event_name != 'pull_request' }}
 
   binaries-finalize:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs:
       - binaries
     steps:
       -
         name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: /tmp/buildx-output
           name: ${{ needs.binaries.outputs.artifact-name }}
@@ -100,7 +101,7 @@ jobs:
           tree -nh .
       -
         name: Upload release binaries
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: buildkit-release
           path: ${{ env.DESTDIR }}/*
@@ -138,7 +139,7 @@ jobs:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
   govulncheck:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read # same as global permission
       security-events: write # required to write sarif report
@@ -152,7 +153,7 @@ jobs:
           buildkitd-flags: --debug
       -
         name: Run
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
           targets: govulncheck
         env:
@@ -160,12 +161,12 @@ jobs:
       -
         name: Upload SARIF report
         if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ env.DESTDIR }}/govulncheck.out
 
   image-prepare:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       includes: ${{ steps.set.outputs.includes }}
     steps:
@@ -221,7 +222,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder/.github/workflows/bake.yml@58cb9f5b71b1836d6f690c1e95effdeb9b98cb8a # v1.17.0
+    uses: docker/github-builder/.github/workflows/bake.yml@cbc9d42f8c89a55623392aadd03600965b80e963 # v1.18.1
     needs:
       - image-prepare
       - test
@@ -233,7 +234,8 @@ jobs:
       contents: read # same as global permission
       id-token: write # for signing attestations, cache entries and logging in to Docker Hub with GitHub OIDC
     with:
-      runner: ubuntu-24.04
+      runner: ubuntu-26.04
+      buildkit-proxy-network: true
       target: image-cross
       cache: true
       cache-scope: image
@@ -286,7 +288,7 @@ jobs:
           connection_id: ${{ vars.BUILDKIT_OIDC_CONNECTIONID }}
 
   scout:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
       contents: read # same as global permission
@@ -306,7 +308,7 @@ jobs:
       -
         # FIXME: switch to OIDC once Scout supports it
         name: Login to DockerHub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -324,12 +326,12 @@ jobs:
           jq . ${{ steps.scout.outputs.result-file }}
       -
         name: Upload SARIF report
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ steps.scout.outputs.result-file }}
 
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       # required to create GitHub release
       contents: write
@@ -340,7 +342,7 @@ jobs:
     steps:
       -
         name: Download release binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: ${{ env.DESTDIR }}
           name: buildkit-release

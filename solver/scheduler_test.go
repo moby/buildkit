@@ -7,12 +7,15 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -205,6 +208,84 @@ func TestSingleLevelActiveGraph(t *testing.T) {
 
 	require.Equal(t, int64(1), *g4.Vertex.(*vertex).cacheCallCount)
 	require.Equal(t, int64(1), *g4.Vertex.(*vertex).execCallCount)
+}
+
+func TestProgressSnapshotDuringCompletion(t *testing.T) {
+	t.Parallel()
+	for range 100 {
+		pr, ctx, cancel := progress.NewContext(t.Context())
+		pw, _, _ := progress.NewFromContext(ctx)
+		j := &Job{pw: pw}
+		st := &state{
+			mpw:   progress.NewMultiWriter(),
+			allPw: map[progress.Writer]struct{}{},
+			jobs:  map[*Job]struct{}{j: {}},
+		}
+		completed := st.notifyStarted(progress.WithProgress(ctx, st.mpw), false)
+		start := make(chan struct{})
+		var eg errgroup.Group
+		eg.Go(func() error {
+			<-start
+			completed(nil, false)
+			return nil
+		})
+		eg.Go(func() error {
+			<-start
+			(&Solver{}).connectProgressFromState(st, st)
+			return nil
+		})
+		close(start)
+		err := eg.Wait()
+		pw.Close()
+		cancel(nil)
+		require.NoError(t, err)
+		items, err := pr.Read(t.Context())
+		require.NoError(t, err)
+		require.NotEmpty(t, items)
+		last := items[len(items)-1].Sys.(client.Vertex)
+		require.NotNil(t, last.Completed, "snapshot must not overwrite completion")
+	}
+}
+
+func TestCacheOptsDuringProgress(t *testing.T) {
+	t.Parallel()
+	st := &state{
+		op: &sharedOp{
+			cacheRes: []*CacheMap{{Opts: CacheOpts{"test": "value"}}},
+		},
+	}
+	ctx := withAncestorCacheOpts(t.Context(), st)
+	getter := CacheOptGetterOf(ctx)
+
+	completed := st.notifyStarted(ctx, false)
+	require.Equal(t, "value", getter(false, "test")["test"])
+	completed(errors.New("operation failed"), false)
+	require.Empty(t, getter(false, "test"))
+
+	completed = st.notifyStarted(ctx, false)
+	completed(nil, false)
+	require.Equal(t, "value", getter(false, "test")["test"])
+
+	// Cache option lookups can run while another operation reports progress.
+	var eg errgroup.Group
+	eg.Go(func() error {
+		for range 100 {
+			completed := st.notifyStarted(ctx, false)
+			completed(errors.New("operation failed"), false)
+			completed = st.notifyStarted(ctx, true)
+			completed(nil, true)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		for range 100 {
+			if value, ok := getter(false, "test")["test"]; ok {
+				require.Equal(t, "value", value)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, eg.Wait())
 }
 
 func TestSingleLevelCache(t *testing.T) {
@@ -1170,6 +1251,66 @@ func TestSlowCacheErrorResultReleasedWithJob(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return releaseCount.Load() == 1
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestExecErrorRefsReleasedAfterJobDiscard(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("exec error ref test timed out"))
+	defer cancel()
+
+	started := make(chan struct{})
+	resume := make(chan struct{})
+	resumeExec := sync.OnceFunc(func() { close(resume) })
+
+	var cloneCount, releaseCount atomic.Int64
+	failedRef := &countedResult{
+		id:           identity.NewID(),
+		cloneCount:   &cloneCount,
+		releaseCount: &releaseCount,
+	}
+	g := Edge{Vertex: vtx(vtxOpt{
+		name: "failed-exec",
+		execPreFunc: func(context.Context) error {
+			close(started)
+			<-resume
+			return &execRefError{error: errors.New("exec failed"), ref: failedRef}
+		},
+	})}
+
+	l := NewSolver(SolverOpt{ResolveOpFunc: testOpResolver})
+	defer l.Close()
+	j, err := l.NewJob("j0")
+	require.NoError(t, err)
+	defer j.Discard()
+	defer resumeExec()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := j.Build(ctx, g)
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("exec did not start")
+	}
+
+	// A failed exec can finish after its job has released the vertex.
+	require.NoError(t, j.Discard())
+	resumeExec()
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "exec failed")
+	case <-ctx.Done():
+		t.Fatal("build did not finish")
+	}
+
+	// Retaining no clones is also valid once the vertex has been released.
+	require.Eventually(t, func() bool {
+		return releaseCount.Load() == cloneCount.Load()
+	}, time.Second, 10*time.Millisecond,
+		"failed exec error refs must not outlive the job (clones=%d, releases=%d)",
+		cloneCount.Load(), releaseCount.Load())
 }
 
 // TestParallelInputs validates that inputs are processed in parallel
@@ -3085,6 +3226,95 @@ func TestCacheExportingMergedKey(t *testing.T) {
 	require.Equal(t, 5, expTarget.numUniqueRecords())
 }
 
+// TestCacheExportDuringEdgeMerge exports a cache-loaded result while another
+// job merges into its edge. Run with -race.
+func TestCacheExportDuringEdgeMerge(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  NewInMemoryCacheManager(),
+	})
+	defer l.Close()
+
+	// vertexes with the same cache key seed and input results share a slow
+	// cache key, even with different inputs
+	g := func(name, input string) Edge {
+		return Edge{
+			Vertex: vtx(vtxOpt{
+				name:         name,
+				cacheKeySeed: "seed1",
+				value:        "result1",
+				inputs: []Edge{{Vertex: vtx(vtxOpt{
+					name:         input,
+					cacheKeySeed: "seed-" + input,
+					value:        "result2",
+				})}},
+				slowCacheCompute: map[int]ResultBasedCacheFunc{0: digestFromResult},
+			}),
+		}
+	}
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+	_, err = j0.Build(ctx, g("v1", "v2"))
+	require.NoError(t, err)
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// j1 loads the result through the slow cache key, so its exporter
+	// references the active edge
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+	defer j1.Discard()
+	res, err := j1.Build(ctx, g("v1", "v4"))
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		for i := 0; ; i++ {
+			if i == 1 {
+				close(started)
+			}
+			select {
+			case <-done:
+				return nil
+			default:
+			}
+			if _, err := res.CacheKeys()[0].Exporter.ExportTo(egCtx, newTestExporterTarget(), testExporterOpts(true)); err != nil {
+				return err
+			}
+		}
+	})
+	// keep exporting while j2 merges into the j1 edge
+	select {
+	case <-started:
+	case <-egCtx.Done():
+	}
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+	defer j2.Discard()
+	_, err = j2.Build(ctx, g("v1-diff", "v3"))
+	close(done)
+	require.NoError(t, err)
+	require.NoError(t, eg.Wait())
+
+	// the j2 edge was merged into the j1 edge
+	e := res.CacheKeys()[0].Exporter.(*exporter).edge
+	e.secondaryExportersMu.Lock()
+	defer e.secondaryExportersMu.Unlock()
+	require.NotEmpty(t, e.secondaryExporters)
+}
+
 // moby/buildkit#434
 func TestMergedEdgesLookup(t *testing.T) {
 	t.Parallel()
@@ -3608,9 +3838,9 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NotNil(t, res)
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.Contains(t, s.actives[v0.Digest()].jobs, j0)
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j0))
 	require.Contains(t, s.actives, depV0.Digest())
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j0)
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j0))
 
 	// this edge should be merged with the one from j0
 	j1, err := s.NewJob("job1")
@@ -3621,36 +3851,36 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NotNil(t, res)
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.Contains(t, s.actives[v0.Digest()].jobs, j0)
-	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j1))
 	require.Contains(t, s.actives, depV0.Digest())
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j0)
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j1))
 
 	require.Contains(t, s.actives, v1.Digest())
-	require.NotContains(t, s.actives[v1.Digest()].jobs, j0)
-	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[v1.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[v1.Digest()], j1))
 	require.Contains(t, s.actives, depV1.Digest())
-	require.NotContains(t, s.actives[depV1.Digest()].jobs, j0)
-	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[depV1.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[depV1.Digest()], j1))
 
 	// discard j0, verify that v0 is still active and it's state contains j1 since j1's
 	// edge was merged to v0's state
 	require.NoError(t, j0.Discard())
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.NotContains(t, s.actives[v0.Digest()].jobs, j0)
-	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[v0.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j1))
 	require.Contains(t, s.actives, depV0.Digest())
-	require.NotContains(t, s.actives[depV0.Digest()].jobs, j0)
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[depV0.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j1))
 
 	require.Contains(t, s.actives, v1.Digest())
-	require.NotContains(t, s.actives[v1.Digest()].jobs, j0)
-	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[v1.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[v1.Digest()], j1))
 	require.Contains(t, s.actives, depV1.Digest())
-	require.NotContains(t, s.actives[depV1.Digest()].jobs, j0)
-	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
+	require.False(t, stateHasJob(s.actives[depV1.Digest()], j0))
+	require.True(t, stateHasJob(s.actives[depV1.Digest()], j1))
 
 	// verify another job can still merge
 	j2, err := s.NewJob("job2")
@@ -3661,43 +3891,43 @@ func TestStaleEdgeMerge(t *testing.T) {
 	require.NotNil(t, res)
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.Contains(t, s.actives[v0.Digest()].jobs, j1)
-	require.Contains(t, s.actives[v0.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j2))
 	require.Contains(t, s.actives, depV0.Digest())
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j1)
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j2))
 
 	require.Contains(t, s.actives, v1.Digest())
-	require.Contains(t, s.actives[v1.Digest()].jobs, j1)
-	require.NotContains(t, s.actives[v1.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[v1.Digest()], j1))
+	require.False(t, stateHasJob(s.actives[v1.Digest()], j2))
 	require.Contains(t, s.actives, depV1.Digest())
-	require.Contains(t, s.actives[depV1.Digest()].jobs, j1)
-	require.NotContains(t, s.actives[depV1.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[depV1.Digest()], j1))
+	require.False(t, stateHasJob(s.actives[depV1.Digest()], j2))
 
 	require.Contains(t, s.actives, v2.Digest())
-	require.NotContains(t, s.actives[v2.Digest()].jobs, j1)
-	require.Contains(t, s.actives[v2.Digest()].jobs, j2)
+	require.False(t, stateHasJob(s.actives[v2.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[v2.Digest()], j2))
 	require.Contains(t, s.actives, depV2.Digest())
-	require.NotContains(t, s.actives[depV2.Digest()].jobs, j1)
-	require.Contains(t, s.actives[depV2.Digest()].jobs, j2)
+	require.False(t, stateHasJob(s.actives[depV2.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[depV2.Digest()], j2))
 
 	// discard j1, verify only referenced edges still exist
 	require.NoError(t, j1.Discard())
 
 	require.Contains(t, s.actives, v0.Digest())
-	require.NotContains(t, s.actives[v0.Digest()].jobs, j1)
-	require.Contains(t, s.actives[v0.Digest()].jobs, j2)
+	require.False(t, stateHasJob(s.actives[v0.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[v0.Digest()], j2))
 	require.Contains(t, s.actives, depV0.Digest())
-	require.NotContains(t, s.actives[depV0.Digest()].jobs, j1)
-	require.Contains(t, s.actives[depV0.Digest()].jobs, j2)
+	require.False(t, stateHasJob(s.actives[depV0.Digest()], j1))
+	require.True(t, stateHasJob(s.actives[depV0.Digest()], j2))
 
 	require.NotContains(t, s.actives, v1.Digest())
 	require.NotContains(t, s.actives, depV1.Digest())
 
 	require.Contains(t, s.actives, v2.Digest())
-	require.Contains(t, s.actives[v2.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[v2.Digest()], j2))
 	require.Contains(t, s.actives, depV2.Digest())
-	require.Contains(t, s.actives[depV2.Digest()].jobs, j2)
+	require.True(t, stateHasJob(s.actives[depV2.Digest()], j2))
 
 	// discard the last job and verify everything was removed now
 	require.NoError(t, j2.Discard())
@@ -4110,6 +4340,7 @@ func (r *dummyResult) Clone() Result                 { return r }
 type countedResult struct {
 	id           string
 	value        string
+	cloneCount   *atomic.Int64
 	releaseCount *atomic.Int64
 }
 
@@ -4122,11 +4353,26 @@ func (r *countedResult) Release(context.Context) error {
 }
 func (r *countedResult) Sys() any { return &dummyResult{id: r.id, value: r.value} }
 func (r *countedResult) Clone() Result {
+	if r.cloneCount != nil {
+		r.cloneCount.Add(1)
+	}
 	return &countedResult{
 		id:           r.id,
 		value:        r.value,
+		cloneCount:   r.cloneCount,
 		releaseCount: r.releaseCount,
 	}
+}
+
+// execRefError models an exec error owning a failed snapshot without
+// importing llbsolver/errdefs, which depends on this package.
+type execRefError struct {
+	error
+	ref Result
+}
+
+func (e *execRefError) EachRef(fn func(Result) error) error {
+	return fn(e.ref)
 }
 
 func testOpResolver(v Vertex, b Builder) (Op, error) {
@@ -4238,4 +4484,15 @@ type testExporterRecord struct {
 	dgst    digest.Digest
 	results int
 	links   int
+}
+
+// stateHasJob checks map membership by key. require.Contains would compare j
+// with every other *Job key using reflect.DeepEqual, reading their live
+// progress state concurrently.
+func stateHasJob(st *state, j *Job) bool {
+	if st == nil {
+		return false
+	}
+	_, ok := st.jobs[j]
+	return ok
 }

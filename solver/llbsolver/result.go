@@ -118,12 +118,23 @@ func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithP
 	res, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies)
 	var ee *llberrdefs.ExecError
 	if errors.As(err, &ee) {
+		var refs []solver.Result
 		ee.EachRef(func(res solver.Result) error {
-			rp.errResults = append(rp.errResults, res)
+			refs = append(refs, res)
 			return nil
 		})
 		// acquire ownership so ExecError finalizer doesn't attempt to release as well
-		ee.OwnerBorrowed = true
+		ee.Borrow()
+		rp.mu.Lock()
+		if rp.released {
+			// released while the result was loading, Release has already run
+			for _, r := range refs {
+				r.Release(context.WithoutCancel(ctx))
+			}
+		} else {
+			rp.errResults = append(rp.errResults, refs...)
+		}
+		rp.mu.Unlock()
 	}
 	return res, err
 }

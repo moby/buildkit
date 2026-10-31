@@ -134,7 +134,7 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 	bufPool := config.BufPool
 	if bufPool == nil {
 		bufPool = &sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return new(bytes.Buffer)
 			},
 		}
@@ -146,7 +146,7 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 			maxEntry = defaultMaxLRUCacheEntry
 		}
 		dataCache = cacheutil.NewLRUCache(maxEntry)
-		dataCache.OnEvicted = func(key string, value interface{}) {
+		dataCache.OnEvicted = func(key string, value any) {
 			value.(*bytes.Buffer).Reset()
 			bufPool.Put(value)
 		}
@@ -158,7 +158,7 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 			maxEntry = defaultMaxCacheFds
 		}
 		fdCache = cacheutil.NewLRUCache(maxEntry)
-		fdCache.OnEvicted = func(key string, value interface{}) {
+		fdCache.OnEvicted = func(key string, value any) {
 			value.(*os.File).Close()
 		}
 	}

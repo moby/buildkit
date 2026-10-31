@@ -29,11 +29,6 @@ func unixgramSocketpair() (l, r *os.File, err error) {
 // Create a FUSE FS on the specified mount point without using
 // fusermount.
 func mountDirect(mountPoint string, opts *MountOptions, ready chan<- error) (fd int, err error) {
-	fd, err = syscall.Open("/dev/fuse", os.O_RDWR, 0) // use syscall.Open since we want an int fd
-	if err != nil {
-		return
-	}
-
 	// managed to open dev/fuse, attempt to mount
 	source := opts.FsName
 	if source == "" {
@@ -47,6 +42,11 @@ func mountDirect(mountPoint string, opts *MountOptions, ready chan<- error) (fd 
 
 	var st syscall.Stat_t
 	err = syscall.Stat(mountPoint, &st)
+	if err != nil {
+		return
+	}
+
+	fd, err = syscall.Open("/dev/fuse", os.O_RDWR, 0) // use syscall.Open since we want an int fd
 	if err != nil {
 		return
 	}
@@ -270,7 +270,7 @@ func maxPageLimit() (lim int) {
 		return lim
 	}
 
-	newLim, err := strconv.Atoi(string(d))
+	newLim, err := strconv.Atoi(strings.TrimSpace(string(d)))
 	if err != nil {
 		return lim
 	}

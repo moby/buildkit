@@ -103,6 +103,9 @@ var (
 		{2, "EXCHANGE"},
 		{4, "WHITEOUT"},
 	})
+	lockFlagNames = newFlagNames([]flagNameEntry{
+		{(1 << 0), "FLOCK"},
+	})
 )
 
 // flagNames associate flag bits to their names.
@@ -327,6 +330,10 @@ func (i *NotifyRetrieveIn) string() string {
 	return fmt.Sprintf("{[%d +%d)}", i.Offset, i.Size)
 }
 
+func (o *NotifyPruneOut) string() string {
+	return fmt.Sprintf("{%d}", o.Count)
+}
+
 func (f *FallocateIn) string() string {
 	return fmt.Sprintf("{Fh %d [%d +%d) mod 0%o}",
 		f.Fh, f.Offset, f.Length, f.Mode)
@@ -371,7 +378,7 @@ func (p *_PollIn) string() string {
 }
 
 // Print pretty prints FUSE data types for kernel communication
-func Print(obj interface{}) string {
+func Print(obj any) string {
 	t, ok := obj.(interface {
 		string() string
 	})
@@ -412,4 +419,16 @@ func (o *IoctlOut) string() string {
 		o.Result,
 		flagString(ioctlFlagNames, int64(o.Flags), ""),
 		o.InIovs, o.OutIovs)
+}
+
+func (l *LkIn) string() string {
+	return fmt.Sprintf("{Fh %d Owner %d %s %s}", l.Owner, l.Owner, l.Lk.string(), flagString(lockFlagNames, int64(l.LkFlags), ""))
+}
+
+func (lk *FileLock) string() string {
+	return fmt.Sprintf("{[%d,%d) t%d p%d}", lk.Start, lk.End, lk.Typ, lk.Pid)
+}
+
+func (l *LkOut) string() string {
+	return l.Lk.string()
 }

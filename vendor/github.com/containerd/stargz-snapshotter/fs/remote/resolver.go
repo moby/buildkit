@@ -29,10 +29,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -246,6 +248,11 @@ func newHTTPFetcher(ctx context.Context, fc *fetcherConfig) (*httpFetcher, int64
 			path.Join(host.Host, host.Path),
 			strings.TrimPrefix(fc.refspec.Locator, fc.refspec.Hostname()+"/"),
 			digest)
+		if isProxy(host, fc.refspec.Hostname()) {
+			// Qualify requests to mirror hosts with the upstream registry
+			// namespace, following the same convention as containerd.
+			blobURL += "?ns=" + url.QueryEscape(fc.refspec.Hostname())
+		}
 		url, header, err := redirect(ctx, blobURL, tr, timeout, host.Header)
 		if err != nil {
 			rErr = fmt.Errorf("failed to redirect (host %q, ref:%q, digest:%q): %v: %w", host.Host, fc.refspec, digest, err, rErr)
@@ -275,6 +282,22 @@ func newHTTPFetcher(ctx context.Context, fc *fetcherConfig) (*httpFetcher, int64
 	}
 
 	return nil, 0, fmt.Errorf("cannot resolve layer: %w", rErr)
+}
+
+// isProxy returns true when the host serves contents of other registries
+// (i.e. the host is configured as a mirror), following the same rule as
+// containerd's resolver. registry-1.docker.io is the canonical host of
+// "docker.io" references so it isn't a proxy for them.
+//
+// Ported from containerd's unexported RegistryHost.isProxy:
+// https://github.com/containerd/containerd/blob/77c84241c7cbdd9b4eca2591793e3d4f4317c590/core/remotes/docker/registry.go#L85-L92
+func isProxy(host docker.RegistryHost, refHost string) bool {
+	if refHost != host.Host {
+		if refHost != "docker.io" || host.Host != "registry-1.docker.io" {
+			return true
+		}
+	}
+	return false
 }
 
 type transport struct {
@@ -333,9 +356,7 @@ func redirect(ctx context.Context, blobURL string, tr http.RoundTripper, timeout
 		return "", nil, fmt.Errorf("failed to make request to the registry: %w", err)
 	}
 	req.Header = http.Header{}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	req.Close = false
 	req.Header.Set("Range", "bytes=0-1")
 	res, err := tr.RoundTrip(req)
@@ -372,9 +393,7 @@ func getSize(ctx context.Context, url string, tr http.RoundTripper, timeout time
 		return 0, err
 	}
 	req.Header = http.Header{}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	req.Close = false
 	res, err := tr.RoundTrip(req)
 	if err != nil {
@@ -394,9 +413,7 @@ func getSize(ctx context.Context, url string, tr http.RoundTripper, timeout time
 		return 0, fmt.Errorf("failed to make request to the registry: %w", err)
 	}
 	req.Header = http.Header{}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 	req.Close = false
 	req.Header.Set("Range", "bytes=0-1")
 	res, err = tr.RoundTrip(req)
@@ -471,9 +488,7 @@ func (f *httpFetcher) fetch(ctx context.Context, rs []region, retry bool) (multi
 		return nil, err
 	}
 	req.Header = http.Header{}
-	for k, v := range f.header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, f.header)
 	var ranges string
 	for _, reg := range requests {
 		ranges += fmt.Sprintf("%d-%d,", reg.b, reg.e)
@@ -546,9 +561,7 @@ func (f *httpFetcher) check() error {
 		return fmt.Errorf("check failed: failed to make request: %w", err)
 	}
 	req.Header = http.Header{}
-	for k, v := range f.header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, f.header)
 	req.Close = false
 	req.Header.Set("Range", "bytes=0-1")
 	res, err := f.tr.RoundTrip(req)
@@ -592,7 +605,7 @@ func (f *httpFetcher) refreshURL(ctx context.Context) error {
 }
 
 func (f *httpFetcher) genID(reg region) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s-%d-%d", f.blobURL, reg.b, reg.e)))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s-%d-%d", f.blobURL, reg.b, reg.e))
 	return fmt.Sprintf("%x", sum)
 }
 

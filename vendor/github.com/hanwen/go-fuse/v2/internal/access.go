@@ -6,41 +6,45 @@ package internal
 
 import (
 	"os/user"
+	"slices"
 	"strconv"
+	"syscall"
 )
 
 // HasAccess tests if a caller can access a file with permissions
-// `perm` in mode `mask`
+// `perm` in mode `mask`. This follows Unix semantics: the caller is
+// classified as owner, group member or other, and only the
+// permission bits of that single class are consulted. All bits in
+// mask must be granted.
 func HasAccess(callerUid, callerGid, fileUid, fileGid uint32, perm uint32, mask uint32) bool {
-	if callerUid == 0 {
-		// root can do anything.
-		return true
-	}
-	mask = mask & 7
+	mask &= 7
 	if mask == 0 {
 		return true
 	}
-
-	if callerUid == fileUid {
-		if perm&(mask<<6) != 0 {
-			return true
-		}
-	}
-	if callerGid == fileGid {
-		if perm&(mask<<3) != 0 {
-			return true
-		}
-	}
-	if perm&mask != 0 {
-		return true
+	if callerUid == 0 {
+		// Root can read and write anything, but for execute, at
+		// least one of the execute bits must be set, unless it is a
+		// directory.
+		return mask&1 == 0 || perm&0111 != 0 || perm&syscall.S_IFMT == syscall.S_IFDIR
 	}
 
-	// Check other groups.
-	if perm&(mask<<3) == 0 {
-		// avoid expensive lookup if it's not allowed anyway
-		return false
+	var bits uint32
+	switch {
+	case callerUid == fileUid:
+		bits = perm >> 6
+	case callerGid == fileGid:
+		bits = perm >> 3
+	case (perm>>3)&mask != perm&mask && isSupplementaryGroup(callerUid, fileGid):
+		// The expensive group lookup only matters if group and other
+		// bits differ for the requested mask.
+		bits = perm >> 3
+	default:
+		bits = perm
 	}
+	return bits&mask == mask
+}
 
+func isSupplementaryGroup(callerUid, fileGid uint32) bool {
 	u, err := user.LookupId(strconv.Itoa(int(callerUid)))
 	if err != nil {
 		return false
@@ -49,12 +53,5 @@ func HasAccess(callerUid, callerGid, fileUid, fileGid uint32, perm uint32, mask 
 	if err != nil {
 		return false
 	}
-
-	fileGidStr := strconv.Itoa(int(fileGid))
-	for _, gidStr := range gs {
-		if gidStr == fileGidStr {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(gs, strconv.Itoa(int(fileGid)))
 }

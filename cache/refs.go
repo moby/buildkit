@@ -967,7 +967,9 @@ func fieldsFromLabels(labels map[string]string) (fields []string) {
 }
 
 func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
-	if sr.equalMutable != nil && !readonly {
+	// Finalize is a no-op if there is no equalMutable. Don't check it here,
+	// equalMutable is protected by sr.mu.
+	if !readonly {
 		if err := sr.Finalize(ctx); err != nil {
 			return nil, err
 		}
@@ -1536,6 +1538,11 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 		return nil
 	}
 
+	// The snapshotter may apply the commit even when the caller sees a
+	// cancellation (e.g. a containerd RPC canceled in flight), leaving the
+	// mutable snapshot gone while the record still points to it.
+	ctx = context.WithoutCancel(ctx)
+
 	_, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = cr.ID()
 		l.Labels = map[string]string{
@@ -1553,13 +1560,23 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 		ID:   cr.getSnapshotID(),
 		Type: "snapshots/" + cr.cm.Snapshotter.Name(),
 	}); err != nil {
-		_ = cr.cm.LeaseManager.Delete(context.WithoutCancel(ctx), leases.Lease{ID: cr.ID()})
+		_ = cr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: cr.ID()})
 		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.getSnapshotID())
 	}
 
 	if err := cr.cm.Snapshotter.Commit(ctx, cr.getSnapshotID(), mutable.getSnapshotID()); err != nil {
-		_ = cr.cm.LeaseManager.Delete(context.WithoutCancel(ctx), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to commit %s to %s during finalize", mutable.getSnapshotID(), cr.getSnapshotID())
+		// the commit may still have been applied, e.g. if the response was lost
+		info, statErr := cr.cm.Snapshotter.Stat(ctx, cr.getSnapshotID())
+		if statErr != nil || info.Kind != snapshots.KindCommitted {
+			// keep the lease if it is unknown whether the commit was applied
+			if statErr == nil || errors.Is(statErr, cerrdefs.ErrNotFound) {
+				_ = cr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: cr.ID()})
+			} else {
+				bklog.G(ctx).WithError(statErr).Warnf("failed to check snapshot %s after commit error, keeping lease", cr.getSnapshotID())
+			}
+			return errors.Wrapf(err, "failed to commit %s to %s during finalize", mutable.getSnapshotID(), cr.getSnapshotID())
+		}
+		bklog.G(ctx).WithError(err).Warnf("snapshot %s was committed to %s despite commit error", mutable.getSnapshotID(), cr.getSnapshotID())
 	}
 	cr.mountCache = nil
 
@@ -1567,9 +1584,8 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	go func() {
 		cr.cm.mu.Lock()
 		defer cr.cm.mu.Unlock()
-		cleanupCtx := context.WithoutCancel(ctx)
-		if err := mutable.remove(cleanupCtx, true); err != nil {
-			bklog.G(cleanupCtx).Error(err)
+		if err := mutable.remove(ctx, true); err != nil {
+			bklog.G(ctx).Error(err)
 		}
 	}()
 

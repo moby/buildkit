@@ -52,6 +52,7 @@ sizeWatermark = 1073741824
 sizeGrowthPercent = 250
 minReclaimBytes = 536870912
 minReclaimPercent = 40
+minReclaimPercentFloor = 15
 `))
 	require.NoError(t, err)
 	policy, err := cfg.Compaction.Policy()
@@ -63,6 +64,13 @@ minReclaimPercent = 40
 	require.Equal(t, int64(250), policy.SizeGrowthPercent)
 	require.Equal(t, int64(536870912), policy.MinReclaimBytes)
 	require.Equal(t, int64(40), policy.MinReclaimPercent)
+	require.Equal(t, int64(15), policy.MinReclaimPercentFloor)
+
+	cfg, err = Load(strings.NewReader("[compaction]\nminReclaimPercent = 5\n"))
+	require.NoError(t, err)
+	policy, err = cfg.Compaction.Policy()
+	require.NoError(t, err)
+	require.Equal(t, int64(5), policy.MinReclaimPercentFloor)
 }
 
 func TestInvalidCompactionConfig(t *testing.T) {
@@ -80,6 +88,10 @@ func TestInvalidCompactionConfig(t *testing.T) {
 		`minReclaimPercent = 0`,
 		`minReclaimPercent = -1`,
 		`minReclaimPercent = 101`,
+		`minReclaimPercentFloor = 0`,
+		`minReclaimPercentFloor = -1`,
+		`minReclaimPercentFloor = 101`,
+		"minReclaimPercent = 5\nminReclaimPercentFloor = 10",
 	} {
 		t.Run(setting, func(t *testing.T) {
 			cfg, err := Load(strings.NewReader("[compaction]\nenabled = true\n" + setting))

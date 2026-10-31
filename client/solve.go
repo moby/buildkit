@@ -425,9 +425,13 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
 			return nil, err
 		}
-		for storePath, tag := range cacheOpt.storesToUpdate {
+		for storePath, store := range cacheOpt.storesToUpdate {
 			idx := ociindex.NewStoreIndex(storePath)
-			if err := idx.Put(manifestDesc, ociindex.Tag(tag)); err != nil {
+			if err := idx.Put(manifestDesc, ociindex.Tag(store.tag)); err != nil {
+				if store.ignoreError {
+					bklog.G(callerCtx).WithError(err).WithField("cache_store_path", storePath).Warn("failed to update cache index, ignoring")
+					continue
+				}
 				return nil, err
 			}
 		}
@@ -605,11 +609,16 @@ type cacheStoreRef struct {
 	store content.Store
 }
 
+type cacheStoreUpdate struct {
+	tag         string
+	ignoreError bool
+}
+
 type cacheOptions struct {
 	options        controlapi.CacheOptions
 	contentStores  map[string]content.Store // key: ID of content store ("local:" + csDir)
-	storesToUpdate map[string]string        // key: path to content store, value: tag
-	storesToReset  []cacheStoreRef          // cache stores with reset=true
+	storesToUpdate map[string]cacheStoreUpdate
+	storesToReset  []cacheStoreRef // cache stores with reset=true
 	frontendAttrs  map[string]string
 }
 
@@ -620,7 +629,7 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 	)
 	var storesToReset []cacheStoreRef
 	contentStores := make(map[string]content.Store)
-	storesToUpdate := make(map[string]string)
+	storesToUpdate := make(map[string]cacheStoreUpdate)
 	frontendAttrs := make(map[string]string)
 	for _, ex := range opt.CacheExports {
 		if ex.Type == "local" {
@@ -641,8 +650,14 @@ func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cach
 			if t, ok := ex.Attrs["tag"]; ok {
 				tag = t
 			}
+			update := cacheStoreUpdate{tag: tag}
+			if v, ok := ex.Attrs["ignore-error"]; ok {
+				if b, err := strconv.ParseBool(v); err == nil {
+					update.ignoreError = b
+				}
+			}
 			// TODO(AkihiroSuda): support custom index JSON path and tag
-			storesToUpdate[csDir] = tag
+			storesToUpdate[csDir] = update
 
 			if v, ok := ex.Attrs["reset"]; ok {
 				b, err := strconv.ParseBool(v)

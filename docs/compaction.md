@@ -13,15 +13,16 @@ Automatic compaction is disabled by default. Enable it in
 [buildkitd.toml](buildkitd.toml.md) with `[compaction].enabled = true`.
 The remaining defaults are:
 
-| Setting             | Default     | Meaning                                                                  |
-|---------------------|-------------|--------------------------------------------------------------------------|
-| `writesPerCheck`    | `10000`     | Committed write transactions between automatic eligibility checks.       |
-| `sizeWatermark`     | `134217728` | Initial database size watermark (128 MiB).                               |
-| `sizeGrowthPercent` | `100`       | Growth over the compacted size before the next size-triggered check.     |
-| `minReclaimBytes`   | `268435456` | Minimum estimated reclaimable bytes (256 MiB).                           |
-| `minReclaimPercent` | `25`        | Minimum estimated reclaimable percentage of the file.                    |
-| `idleTimeout`       | `1m`        | Required interval without database activity.                             |
-| `maxRetry`          | `3`         | Attempts that arriving writers may cancel before a copy makes them wait. |
+| Setting                  | Default     | Meaning                             |
+|--------------------------|-------------|-------------------------------------|
+| `writesPerCheck`         | `10000`     | Writes between eligibility checks.  |
+| `sizeWatermark`          | `134217728` | Initial size watermark (128 MiB).   |
+| `sizeGrowthPercent`      | `100`       | Growth from compacted file size.    |
+| `minReclaimBytes`        | `268435456` | Byte trigger (256 MiB).             |
+| `minReclaimPercent`      | `30`        | Percentage trigger.                 |
+| `minReclaimPercentFloor` | `10`        | Hard floor for all attempts.        |
+| `idleTimeout`            | `1m`        | Required time without DB activity.  |
+| `maxRetry`               | `3`         | Cancellations before forcing.       |
 
 The policy checks database size at most every five minutes, after committed
 writes. Reaching the size watermark makes the database eligible for a
@@ -33,8 +34,13 @@ for the adaptive watermark, while the configured initial watermark remains the
 minimum file size. This catches space released by deletions when bbolt reuses free
 pages without growing the file. Idle databases are not polled.
 
-Either reclaimability threshold must be met before compaction becomes pending.
-Deletion writes can therefore make a database eligible without further file growth.
+Either reclaimability threshold must be met before compaction becomes pending,
+and at least `minReclaimPercentFloor` of the file must be reclaimable. This
+prevents a large database from being copied to recover only a small fraction of
+its size. Deletion writes can make a database eligible without file growth.
+The floor cannot exceed `minReclaimPercent`. If only `minReclaimPercent` is
+configured below the default 10% floor, the floor follows that value so
+existing configurations retain their percentage trigger.
 Pending maintenance waits for no active transactions and the configured idle
 period; reads and writes both count as activity.
 

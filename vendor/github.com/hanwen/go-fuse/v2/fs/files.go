@@ -6,7 +6,8 @@ package fs
 
 import (
 	"context"
-	"sync"
+	"errors"
+	"os"
 	"syscall"
 	"unsafe"
 
@@ -16,87 +17,118 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// NewLoopbackFile creates a FileHandle out of a file descriptor. All
-// operations are implemented. When using the Fd from a *os.File, call
-// syscall.Dup() on the fd, to avoid os.File's finalizer from closing
-// the file descriptor.
+// NewLoopbackFile creates a FileHandle out of a file descriptor.
+//
+// This function is hard to use correctly. Most callers should use
+// NewLoopbackFileFromOS instead.
+//
+// All operations are implemented. NewLoopbackFile takes ownership of the
+// file descriptor: it is closed on Release, or when the FileHandle is
+// garbage collected.
 func NewLoopbackFile(fd int) FileHandle {
-	return &loopbackFile{fd: fd}
+	// Wart: this should return *LoopbackFile instead.
+	return NewLoopbackFileFromOS(os.NewFile(uintptr(fd), ""))
 }
 
-type loopbackFile struct {
-	mu sync.Mutex
-	fd int
+// NewLoopbackFileFromOS creates a FileHandle out of a *os.File. It
+// takes ownership of the file: it is closed on Release, and callers
+// should not use it afterwards.
+func NewLoopbackFileFromOS(f *os.File) *LoopbackFile {
+	return &LoopbackFile{f: f}
 }
 
-var _ = (FileHandle)((*loopbackFile)(nil))
-var _ = (FileReleaser)((*loopbackFile)(nil))
-var _ = (FileGetattrer)((*loopbackFile)(nil))
-var _ = (FileReader)((*loopbackFile)(nil))
-var _ = (FileWriter)((*loopbackFile)(nil))
-var _ = (FileGetlker)((*loopbackFile)(nil))
-var _ = (FileSetlker)((*loopbackFile)(nil))
-var _ = (FileSetlkwer)((*loopbackFile)(nil))
-var _ = (FileLseeker)((*loopbackFile)(nil))
-var _ = (FileFlusher)((*loopbackFile)(nil))
-var _ = (FileFsyncer)((*loopbackFile)(nil))
-var _ = (FileSetattrer)((*loopbackFile)(nil))
-var _ = (FileAllocater)((*loopbackFile)(nil))
-var _ = (FilePassthroughFder)((*loopbackFile)(nil))
-
-func (f *loopbackFile) PassthroughFd() (int, bool) {
-	// This Fd is not accessed concurrently, but lock anyway for uniformity.
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.fd, true
+// LoopbackFile is a FileHandle that implements all the FileXxxx
+// interfaces by forwarding all calls to the underlying file
+// descriptor. Create an instance by casting the return value of
+// NewLoopbackFile(). This type is public so it can be used as a basis
+// for other FileHandle implementations.
+type LoopbackFile struct {
+	f *os.File
 }
 
-func (f *loopbackFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.ReadResult, errno syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	r := fuse.ReadResultFd(uintptr(f.fd), off, len(buf))
-	return r, OK
-}
+var _ = (FileHandle)((*LoopbackFile)(nil))
+var _ = (FileReleaser)((*LoopbackFile)(nil))
+var _ = (FileGetattrer)((*LoopbackFile)(nil))
+var _ = (FileReader)((*LoopbackFile)(nil))
+var _ = (FileWriter)((*LoopbackFile)(nil))
+var _ = (FileGetlker)((*LoopbackFile)(nil))
+var _ = (FileSetlker)((*LoopbackFile)(nil))
+var _ = (FileSetlkwer)((*LoopbackFile)(nil))
+var _ = (FileLseeker)((*LoopbackFile)(nil))
+var _ = (FileFlusher)((*LoopbackFile)(nil))
+var _ = (FileFsyncer)((*LoopbackFile)(nil))
+var _ = (FileSetattrer)((*LoopbackFile)(nil))
+var _ = (FileAllocater)((*LoopbackFile)(nil))
+var _ = (FilePassthroughFder)((*LoopbackFile)(nil))
+var _ = (FileIoctler)((*LoopbackFile)(nil))
 
-func (f *loopbackFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	n, err := syscall.Pwrite(f.fd, data, off)
-	return uint32(n), ToErrno(err)
-}
-
-func (f *loopbackFile) Release(ctx context.Context) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.fd != -1 {
-		err := syscall.Close(f.fd)
-		f.fd = -1
-		return ToErrno(err)
-	}
-	return syscall.EBADF
-}
-
-func (f *loopbackFile) Flush(ctx context.Context) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	// Since Flush() may be called for each dup'd fd, we don't
-	// want to really close the file, we just want to flush. This
-	// is achieved by closing a dup'd fd.
-	newFd, err := syscall.Dup(f.fd)
-
+func (f *LoopbackFile) withFd(fn func(fd int) syscall.Errno) syscall.Errno {
+	sc, err := f.f.SyscallConn()
 	if err != nil {
-		return ToErrno(err)
+		return syscall.EBADF
 	}
-	err = syscall.Close(newFd)
+	errno := syscall.EBADF
+	sc.Control(func(fd uintptr) {
+		errno = fn(int(fd))
+	})
+	return errno
+}
+
+func (f *LoopbackFile) PassthroughFd() (int, bool) {
+	// The fd outlives the Control call below. It must stay alive
+	// until the the fd is reported to the kernel. (In the normal
+	// case, it survives until Release)
+	var fd int
+	errno := f.withFd(func(d int) syscall.Errno {
+		fd = d
+		return OK
+	})
+	return fd, errno == OK
+}
+
+func (f *LoopbackFile) Read(ctx context.Context, buf []byte, off int64) (res fuse.ReadResult, errno syscall.Errno) {
+	errno = f.withFd(func(fd int) syscall.Errno {
+		res = fuse.ReadResultFd(uintptr(fd), off, len(buf))
+		return OK
+	})
+	return res, errno
+}
+
+func (f *LoopbackFile) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
+	var n int
+	errno := f.withFd(func(fd int) syscall.Errno {
+		var err error
+		n, err = syscall.Pwrite(fd, data, off)
+		return ToErrno(err)
+	})
+	return uint32(n), errno
+}
+
+func (f *LoopbackFile) Release(ctx context.Context) syscall.Errno {
+	err := f.f.Close()
+	if errors.Is(err, os.ErrClosed) {
+		return syscall.EBADF
+	}
 	return ToErrno(err)
 }
 
-func (f *loopbackFile) Fsync(ctx context.Context, flags uint32) (errno syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	r := ToErrno(syscall.Fsync(f.fd))
+func (f *LoopbackFile) Flush(ctx context.Context) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		// Since Flush() may be called for each dup'd fd, we don't
+		// want to really close the file, we just want to flush. This
+		// is achieved by closing a dup'd fd.
+		newFd, err := syscall.Dup(fd)
+		if err != nil {
+			return ToErrno(err)
+		}
+		return ToErrno(syscall.Close(newFd))
+	})
+}
 
-	return r
+func (f *LoopbackFile) Fsync(ctx context.Context, flags uint32) (errno syscall.Errno) {
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(syscall.Fsync(fd))
+	})
 }
 
 const (
@@ -105,57 +137,57 @@ const (
 	_OFD_SETLKW = 38
 )
 
-func (f *loopbackFile) Getlk(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32, out *fuse.FileLock) (errno syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	flk := syscall.Flock_t{}
-	lk.ToFlockT(&flk)
-	errno = ToErrno(syscall.FcntlFlock(uintptr(f.fd), _OFD_GETLK, &flk))
-	out.FromFlockT(&flk)
-	return
+func (f *LoopbackFile) Getlk(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32, out *fuse.FileLock) (errno syscall.Errno) {
+	return f.withFd(func(fd int) syscall.Errno {
+		flk := syscall.Flock_t{}
+		lk.ToFlockT(&flk)
+		errno := ToErrno(syscall.FcntlFlock(uintptr(fd), _OFD_GETLK, &flk))
+		out.FromFlockT(&flk)
+		return errno
+	})
 }
 
-func (f *loopbackFile) Setlk(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32) (errno syscall.Errno) {
+func (f *LoopbackFile) Setlk(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32) (errno syscall.Errno) {
 	return f.setLock(ctx, owner, lk, flags, false)
 }
 
-func (f *loopbackFile) Setlkw(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32) (errno syscall.Errno) {
+func (f *LoopbackFile) Setlkw(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32) (errno syscall.Errno) {
 	return f.setLock(ctx, owner, lk, flags, true)
 }
 
-func (f *loopbackFile) setLock(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32, blocking bool) (errno syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if (flags & fuse.FUSE_LK_FLOCK) != 0 {
-		var op int
-		switch lk.Typ {
-		case syscall.F_RDLCK:
-			op = syscall.LOCK_SH
-		case syscall.F_WRLCK:
-			op = syscall.LOCK_EX
-		case syscall.F_UNLCK:
-			op = syscall.LOCK_UN
-		default:
-			return syscall.EINVAL
-		}
-		if !blocking {
-			op |= syscall.LOCK_NB
-		}
-		return ToErrno(syscall.Flock(f.fd, op))
-	} else {
-		flk := syscall.Flock_t{}
-		lk.ToFlockT(&flk)
-		var op int
-		if blocking {
-			op = _OFD_SETLKW
+func (f *LoopbackFile) setLock(ctx context.Context, owner uint64, lk *fuse.FileLock, flags uint32, blocking bool) (errno syscall.Errno) {
+	return f.withFd(func(fd int) syscall.Errno {
+		if (flags & fuse.FUSE_LK_FLOCK) != 0 {
+			var op int
+			switch lk.Typ {
+			case syscall.F_RDLCK:
+				op = syscall.LOCK_SH
+			case syscall.F_WRLCK:
+				op = syscall.LOCK_EX
+			case syscall.F_UNLCK:
+				op = syscall.LOCK_UN
+			default:
+				return syscall.EINVAL
+			}
+			if !blocking {
+				op |= syscall.LOCK_NB
+			}
+			return ToErrno(syscall.Flock(fd, op))
 		} else {
-			op = _OFD_SETLK
+			flk := syscall.Flock_t{}
+			lk.ToFlockT(&flk)
+			var op int
+			if blocking {
+				op = _OFD_SETLKW
+			} else {
+				op = _OFD_SETLK
+			}
+			return ToErrno(syscall.FcntlFlock(uintptr(fd), op, &flk))
 		}
-		return ToErrno(syscall.FcntlFlock(uintptr(f.fd), op, &flk))
-	}
+	})
 }
 
-func (f *loopbackFile) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+func (f *LoopbackFile) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
 	if errno := f.setAttr(ctx, in); errno != 0 {
 		return errno
 	}
@@ -163,23 +195,25 @@ func (f *loopbackFile) Setattr(ctx context.Context, in *fuse.SetAttrIn, out *fus
 	return f.Getattr(ctx, out)
 }
 
-func (f *loopbackFile) fchmod(mode uint32) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return ToErrno(syscall.Fchmod(f.fd, mode))
+func (f *LoopbackFile) fchmod(mode uint32) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(syscall.Fchmod(fd, mode))
+	})
 }
 
-func (f *loopbackFile) fchown(uid, gid int) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return ToErrno(syscall.Fchown(f.fd, uid, gid))
+func (f *LoopbackFile) fchown(uid, gid int) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(syscall.Fchown(fd, uid, gid))
+	})
 }
 
-func (f *loopbackFile) ftruncate(sz uint64) syscall.Errno {
-	return ToErrno(syscall.Ftruncate(f.fd, int64(sz)))
+func (f *LoopbackFile) ftruncate(sz uint64) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(syscall.Ftruncate(fd, int64(sz)))
+	})
 }
 
-func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Errno {
+func (f *LoopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.Errno {
 	var errno syscall.Errno
 	if mode, ok := in.GetMode(); ok {
 		if errno := f.fchmod(mode); errno != 0 {
@@ -204,6 +238,14 @@ func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.
 		}
 	}
 
+	// Truncate before setting times, so an explicit mtime is not
+	// clobbered by the truncate.
+	if sz, ok := in.GetSize(); ok {
+		if errno := f.ftruncate(sz); errno != 0 {
+			return errno
+		}
+	}
+
 	mtime, mok := in.GetMTime()
 	atime, aok := in.GetATime()
 
@@ -221,57 +263,55 @@ func (f *loopbackFile) setAttr(ctx context.Context, in *fuse.SetAttrIn) syscall.
 			return errno
 		}
 	}
+	return OK
+}
 
-	if sz, ok := in.GetSize(); ok {
-		if errno := f.ftruncate(sz); errno != 0 {
-			return errno
+func (f *LoopbackFile) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		st := syscall.Stat_t{}
+		err := syscall.Fstat(fd, &st)
+		if err != nil {
+			return ToErrno(err)
 		}
-	}
-	return OK
+		a.FromStat(&st)
+
+		return OK
+	})
 }
 
-func (f *loopbackFile) Getattr(ctx context.Context, a *fuse.AttrOut) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	st := syscall.Stat_t{}
-	err := syscall.Fstat(f.fd, &st)
-	if err != nil {
+func (f *LoopbackFile) Lseek(ctx context.Context, off uint64, whence uint32) (uint64, syscall.Errno) {
+	var n int64
+	errno := f.withFd(func(fd int) syscall.Errno {
+		var err error
+		n, err = unix.Seek(fd, int64(off), int(whence))
 		return ToErrno(err)
-	}
-	a.FromStat(&st)
-
-	return OK
+	})
+	return uint64(n), errno
 }
 
-func (f *loopbackFile) Lseek(ctx context.Context, off uint64, whence uint32) (uint64, syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	n, err := unix.Seek(f.fd, int64(off), int(whence))
-	return uint64(n), ToErrno(err)
+func (f *LoopbackFile) Allocate(ctx context.Context, off uint64, sz uint64, mode uint32) syscall.Errno {
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(fallocate.Fallocate(fd, mode, int64(off), int64(sz)))
+	})
 }
 
-func (f *loopbackFile) Allocate(ctx context.Context, off uint64, sz uint64, mode uint32) syscall.Errno {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	err := fallocate.Fallocate(f.fd, mode, int64(off), int64(sz))
-	if err != nil {
-		return ToErrno(err)
-	}
-	return OK
-}
+func (f *LoopbackFile) Ioctl(ctx context.Context, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno) {
+	errno = f.withFd(func(fd int) syscall.Errno {
+		argWord := uintptr(arg)
+		ioc := ioctl.Command(cmd)
+		if ioc.Read() && ioc.Write() {
+			// The kernel updates the buffer in place.
+			copy(output, input)
+			argWord = uintptr(unsafe.Pointer(&output[0]))
+		} else if ioc.Write() {
+			argWord = uintptr(unsafe.Pointer(&input[0]))
+		} else if ioc.Read() {
+			argWord = uintptr(unsafe.Pointer(&output[0]))
+		}
 
-func (f *loopbackFile) Ioctl(ctx context.Context, cmd uint32, arg uint64, input []byte, output []byte) (result int32, errno syscall.Errno) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	argWord := uintptr(arg)
-	ioc := ioctl.Command(cmd)
-	if ioc.Read() {
-		argWord = uintptr(unsafe.Pointer(&input[0]))
-	} else if ioc.Write() {
-		argWord = uintptr(unsafe.Pointer(&output[0]))
-	}
-
-	res, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(f.fd), uintptr(cmd), argWord)
-	return int32(res), errno
+		res, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(cmd), argWord)
+		result = int32(res)
+		return errno
+	})
+	return result, errno
 }

@@ -167,8 +167,29 @@ type MountOptions struct {
 	// Concurrency for synchronous I/O is not limited.
 	MaxBackground int
 
+	// MaxInflightRequestBytes controls the number of bytes used for
+	// request structs and input buffers checked out by go-fuse. This
+	// includes buffers used by readers waiting on the kernel and requests
+	// being processed concurrently.
+	//
+	// It also applies to requests that do not expect a reply, such as
+	// FORGET and BATCH_FORGET. If unset, it defaults to math.MaxInt. If
+	// set smaller than the bytes needed for a single request, one request
+	// is still allowed through.
+	MaxInflightRequestBytes int
+
+	// CongestionThreshold is the in-flight async-request count at which
+	// the kernel marks the FUSE backing-dev as congested, throttling new
+	// submissions. It corresponds to
+	// /sys/fs/fuse/connections/<id>/congestion_threshold.
+	//
+	// If 0, go-fuse falls back to the kernel-FUSE convention of
+	// 3/4 * MaxBackground. The value is silently clamped by the kernel
+	// to MaxBackground if it is set higher.
+	CongestionThreshold int
+
 	// MaxWrite is the max size for read and write requests. If 0, use
-	// go-fuse default (currently 64 kiB).
+	// go-fuse default (currently 128 kiB).
 	// This number is internally capped at MAX_KERNEL_WRITE (higher values don't make
 	// sense).
 	//
@@ -228,8 +249,9 @@ type MountOptions struct {
 	// locking wrapper.
 	SingleThreaded bool
 
-	// DisableXAttrs, if set, returns ENOSYS for Getxattr calls, so the kernel
-	// does not issue any Xattr operations at all.
+	// DisableXAttrs, if set, returns ENOSYS for Getxattr, Setxattr and
+	// Removexattr calls, so the kernel does not issue any Xattr operations
+	// at all.
 	DisableXAttrs bool
 
 	// Debug, if set, enables verbose debugging information.
@@ -287,17 +309,14 @@ type MountOptions struct {
 	// invalidating data cache.
 	ExplicitDataCacheControl bool
 
-	// SyncRead, if set, makes go-fuse enable the
-	// FUSE_CAP_ASYNC_READ capability.
-	// The kernel then submits multiple concurrent reads to service
-	// userspace requests and kernel readahead.
-	//
-	// Setting SyncRead disables the FUSE_CAP_ASYNC_READ capability.
-	// The kernel then only sends one read request per file handle at a time,
-	// and orders the requests by offset.
-	//
-	// This is useful if reading out of order or concurrently is expensive for
+	// SyncRead disables the CAP_ASYNC_READ capability.  The
+	// kernel then only sends one read request per file handle at
+	// a time, and orders the requests by offset.  This is useful
+	// if reading out of order or concurrently is expensive for
 	// (example: Amazon Cloud Drive).
+	//
+	// If unset, multiple concurrent reads may be issued to
+	// service userspace requests and kernel readahead.
 	//
 	// See the comment to FUSE_CAP_ASYNC_READ in
 	// https://github.com/libfuse/libfuse/blob/master/include/fuse_common.h
@@ -338,11 +357,16 @@ type MountOptions struct {
 	// DisableSplice, if set, disables splicing from files to the FUSE device.
 	DisableSplice bool
 
+	// PanicHandler is called if an FS routine panics. The handler
+	// should return a nonzero status. If not set, the default is
+	// to print a stack trace and return EIO.
+	PanicHandler func(any) Status
+
 	// MaxStackDepth is the maximum stacking depth for passthrough files.
 	// If unset, the default is 1.
 	MaxStackDepth int
 
-	// RawFileSystem, if set, enables an ID-mapped mount if the Kernel supports
+	// IDMappedMount, if set, enables an ID-mapped mount if the Kernel supports
 	// it.
 	//
 	// An ID-mapped mount allows the device to be mounted on the system with the
@@ -354,6 +378,15 @@ type MountOptions struct {
 	// checks to the kernel. For requests that create new inodes, FUSE will send
 	// the mapped UID/GIDs. For all other requests, FUSE will send "-1".
 	IDMappedMount bool
+
+	// DisabledCapabilities is a bitmask, containing capablities
+	// (the CAP_* bitmasks) that must be disabled for the entire
+	// mount.
+	DisabledCapabilities uint64
+
+	// ExtraCapabilities is a bitmask of capabilities which
+	// must be enabled in addition to the defaults.
+	ExtraCapabilities uint64
 }
 
 // RawFileSystem is an interface close to the FUSE wire protocol.

@@ -18,10 +18,14 @@ import (
 
 type debugCompactor struct {
 	calls   atomic.Int64
+	stats   db.CompactionStats
 	compact func(context.Context, db.CompactOptions) (db.CompactResult, error)
 }
 
 func (d *debugCompactor) CompactionStats() (db.CompactionStats, error) {
+	if d.stats.Size != 0 {
+		return d.stats, nil
+	}
 	return db.CompactionStats{Size: 1024, Reclaimable: 512}, nil
 }
 
@@ -38,11 +42,26 @@ func TestDebugCompaction(t *testing.T) {
 	}
 }
 
+func TestDebugCompactionStatusBelowPercentFloor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := &debugCompactor{stats: db.CompactionStats{Size: 100 << 30, Reclaimable: 256 << 20}}
+	cfg := compaction.DefaultConfig()
+	cfg.ManualOnly = true
+	s, err := compaction.NewFile(cfg, path, true, d)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+
+	w := httptest.NewRecorder()
+	handleCompactionStatus(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/debug/compaction", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "reclaimable space below threshold")
+}
+
 func testDebugCompaction(t *testing.T, manualOnly bool) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
 	d := &debugCompactor{compact: func(_ context.Context, opt db.CompactOptions) (db.CompactResult, error) {
-		if opt.MinReclaimBytes != 1 || opt.MinReclaimPercent != 25 {
+		if opt.MinReclaimBytes != 1 || opt.MinReclaimPercent != 30 || opt.MinReclaimPercentFloor != 10 {
 			t.Error("manual attempt lost policy thresholds")
 		}
 		select {

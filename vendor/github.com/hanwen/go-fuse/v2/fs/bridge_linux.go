@@ -42,13 +42,13 @@ func (b *rawBridge) Statx(cancel <-chan struct{}, in *fuse.StatxIn, out *fuse.St
 	errno := syscall.ENOSYS
 	if sx, ok := n.ops.(NodeStatxer); ok {
 		errno = sx.Statx(ctx, fh, in.SxFlags, in.SxMask, out)
-	} else if fsx, ok := n.ops.(FileStatxer); ok {
+	} else if fsx, ok := fh.(FileStatxer); ok {
 		errno = fsx.Statx(ctx, in.SxFlags, in.SxMask, out)
 	}
 
 	if errno == 0 {
 		if out.Ino != 0 && n.stableAttr.Ino > 1 && out.Ino != n.stableAttr.Ino {
-			b.logf("warning: rawBridge.getattr: overriding ino %d with %d", out.Ino, n.stableAttr.Ino)
+			b.logf("warning: rawBridge.Statx: overriding ino %d with %d", out.Ino, n.stableAttr.Ino)
 		}
 		out.Ino = n.stableAttr.Ino
 		out.Mode = (out.Statx.Mode & 07777) | uint16(n.stableAttr.Mode)

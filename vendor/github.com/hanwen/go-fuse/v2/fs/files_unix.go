@@ -11,12 +11,13 @@ import (
 )
 
 // Utimens - file handle based version of loopbackFileSystem.Utimens()
-func (f *loopbackFile) utimens(a *time.Time, m *time.Time) syscall.Errno {
+func (f *LoopbackFile) utimens(a *time.Time, m *time.Time) syscall.Errno {
 	var ts [2]syscall.Timespec
 	ts[0] = fuse.UtimeToTimespec(a)
 	ts[1] = fuse.UtimeToTimespec(m)
-	err := futimens(int(f.fd), &ts)
-	return ToErrno(err)
+	return f.withFd(func(fd int) syscall.Errno {
+		return ToErrno(futimens(fd, &ts))
+	})
 }
 
 // futimens - futimens(3) calls utimensat(2) with "pathname" set to null and

@@ -60,6 +60,7 @@ var allTests = integration.TestFuncs(
 	// dockerfile_cache_test.go
 	testCacheReleased,
 	testMissingCopySourceReleasesCache,
+	testCanceledRunReleasesCache,
 	testExportCacheLoop,
 	testCacheMultiPlatformImportExport,
 	testImageManifestCacheImportExport,
@@ -220,6 +221,7 @@ var allTests = integration.TestFuncs(
 	testFrontendDeduplicateSources,
 	testDuplicateLayersProvenance,
 	testProvenanceExportLocal,
+	testProvenanceMultipleExporters,
 	testProvenanceExportLocalForceSplit,
 	testProvenanceExportLocalMultiPlatform,
 	testProvenanceExportLocalMultiPlatformNoSplit,

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile-upstream:master
 # check=error=true
 
-ARG GO_VERSION=1.26
-ARG ALPINE_VERSION=3.23
+ARG GO_VERSION=1.27
+ARG ALPINE_VERSION=3.24
 ARG DEBIAN_VERSION=trixie
 
 ARG BUILD_LOONG64=${TARGETPLATFORM#linux/amd64}

@@ -1,10 +1,9 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.5.2
-ARG CONTAINERD_VERSION=v2.4.1
+ARG CONTAINERD_VERSION=v2.4.2
 # CONTAINERD_ALT_VERSION_... defines fallback containerd version for integration tests
-ARG CONTAINERD_ALT_VERSION_23=v2.3.6
-ARG CONTAINERD_ALT_VERSION_17=v1.7.36
+ARG CONTAINERD_ALT_VERSION_23=v2.3.7
 ARG REGISTRY_VERSION=v2.8.3
 ARG ROOTLESSKIT_VERSION=v3.2.0
 ARG CNI_VERSION=v1.9.1
@@ -21,11 +20,11 @@ ARG DOCKER_CLI_VERSION=${DOCKER_VERSION}
 ARG BUILDX_VERSION=0.37.1
 
 ARG EXPORT_BASE=alpine
-ARG ALPINE_VERSION=3.23
+ARG ALPINE_VERSION=3.24
 ARG UBUNTU_VERSION=24.04
 
-ARG GO_VERSION=1.26
-ARG XX_VERSION=1.9.0
+ARG GO_VERSION=1.27
+ARG XX_VERSION=1.10.0
 ARG BUILDKIT_DEBUG
 
 # silo for s3 integration tests
@@ -283,13 +282,6 @@ ARG CONTAINERD_ALT_VERSION_23
 ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_23" .
 RUN /build.sh
 
-# containerd-alt-17 builds containerd v1.7 for integration tests
-FROM containerd-build AS containerd-alt-17
-WORKDIR /go/src/github.com/containerd/containerd
-ARG CONTAINERD_ALT_VERSION_17
-ADD --keep-git-dir=true "https://github.com/containerd/containerd.git#$CONTAINERD_ALT_VERSION_17" .
-RUN /build.sh
-
 FROM gobuild-base AS registry
 WORKDIR /go/src/github.com/docker/distribution
 ARG REGISTRY_VERSION
@@ -335,6 +327,7 @@ RUN wget https://github.com/dragonflyoss/nydus/releases/download/$NYDUS_VERSION/
 RUN mkdir -p /out/nydus-static && tar xzvf nydus-static-$NYDUS_VERSION-$TARGETOS-$TARGETARCH.tgz -C /out
 
 FROM gobuild-base AS gotestsum
+ENV CGO_ENABLED=0
 ARG GOTESTSUM_VERSION
 ARG TARGETPLATFORM
 RUN --mount=target=/root/.cache,type=cache <<EOT
@@ -449,7 +442,7 @@ RUN curl -fsSL https://raw.githubusercontent.com/moby/moby/v25.0.1/hack/dind > /
   && chmod 0755 /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.3=/opt/containerd-alt-23/bin,containerd-1.7=/opt/containerd-alt-17/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-2.3=/opt/containerd-alt-23/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV BUILDKIT_SETUP_CGROUPV2_ROOT=1
 ENV BUILDKIT_TEST_SIGN_FIXTURES=/tmp/buildkit_test_sign_fixtures
@@ -466,7 +459,6 @@ COPY --link --from=nydus /out/nydus-static/* /usr/bin/
 COPY --link --from=stargz-snapshotter /out/* /usr/bin/
 COPY --link --from=rootlesskit /rootlesskit /usr/bin/
 COPY --link --from=containerd-alt-23 /out/containerd* /opt/containerd-alt-23/bin/
-COPY --link --from=containerd-alt-17 /out/containerd* /opt/containerd-alt-17/bin/
 COPY --link --from=registry /out /usr/bin/
 COPY --link --from=runc /usr/bin/runc /usr/bin/
 COPY --link --from=containerd /out/containerd* /usr/bin/
