@@ -1110,6 +1110,25 @@ COPY Dockerfile .
 			},
 		},
 	})
+
+	dockerfile = []byte(`
+FROM some-image:${VERSION}
+`)
+	checkLinterWarnings(t, sb, &lintTestParams{
+		Dockerfile: dockerfile,
+		Warnings: []expectedLintWarning{
+			{
+				RuleName:    "UndefinedArgInFrom",
+				Description: "FROM command must use declared ARGs",
+				URL:         "https://docs.docker.com/go/dockerfile/rule/undefined-arg-in-from/",
+				Detail:      "FROM argument 'VERSION' is not declared",
+				Level:       1,
+				Line:        2,
+			},
+		},
+		BuildErr:         "undefined ARG \"VERSION\" in FROM: failed to parse stage name \"some-image:\": invalid reference format",
+		BuildErrLocation: 2,
+	})
 }
 
 func testWorkdirRelativePath(t *testing.T, sb integration.Sandbox) {

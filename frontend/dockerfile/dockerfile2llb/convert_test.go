@@ -98,6 +98,10 @@ COPY --from=0 f2 /
 	df = `FROM ${BLANK} AS foo`
 	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	require.Error(t, err)
+
+	df = `FROM some-image:${VERSION}`
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.EqualError(t, err, `undefined ARG "VERSION" in FROM: failed to parse stage name "some-image:": invalid reference format`)
 }
 
 func TestDockerfileParsingMarshal(t *testing.T) {

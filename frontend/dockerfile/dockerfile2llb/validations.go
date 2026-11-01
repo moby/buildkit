@@ -223,6 +223,16 @@ func reportUnusedFromArgs(testArgKeys map[string]struct{}, unmatched map[string]
 	}
 }
 
+func wrapFromArgError(err error, unmatched map[string]struct{}, options []string) error {
+	for arg := range unmatched {
+		if match, ok := suggest.Search(arg, options, true); ok {
+			return errors.Wrapf(err, "undefined ARG %q in FROM (did you mean %s?)", arg, match)
+		}
+		return errors.Wrapf(err, "undefined ARG %q in FROM", arg)
+	}
+	return err
+}
+
 func reportRedundantTargetPlatform(platformVar string, nameMatch shell.ProcessWordResult, location []parser.Range, env shell.EnvGetter, lint *linter.Linter) {
 	// Only match this rule if there was only one matched name.
 	// It's psosible there were multiple args and that one of them expanded to an empty

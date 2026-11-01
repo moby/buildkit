@@ -424,6 +424,7 @@ func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) er
 			outline:        dctx.outline.clone(),
 			epoch:          dctx.epoch,
 		}
+		ds.baseNameUnmatched = nameMatch.Unmatched
 
 		if v := st.Platform; v != "" {
 			platMatch, err := dctx.shlex.ProcessWordWithMatches(v, dctx.globalArgs)
@@ -628,7 +629,8 @@ func (dctx *dispatchContext) resolveBaseImage(ctx context.Context, d *dispatchSt
 	origName := d.stage.BaseName
 	ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
+		err = errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
+		return wrapFromArgError(err, d.baseNameUnmatched, dctx.globalArgs.Keys())
 	}
 	platform := d.platform
 	if platform == nil {
@@ -1166,20 +1168,21 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
-	opt          dispatchOpt
-	state        llb.State
-	image        dockerspec.DockerOCIImage
-	namedContext *dockerui.NamedContext
-	platform     *ocispecs.Platform
-	stage        instructions.Stage
-	base         *dispatchState
-	baseImg      *dockerspec.DockerOCIImage // immutable, unlike image
-	dispatched   bool
-	resolved     bool // resolved is set to true if base image has been resolved
-	onBuildInit  bool
-	deps         map[*dispatchState]instructions.Command
-	buildArgs    []instructions.KeyValuePairOptional
-	commands     []command
+	opt               dispatchOpt
+	state             llb.State
+	image             dockerspec.DockerOCIImage
+	namedContext      *dockerui.NamedContext
+	platform          *ocispecs.Platform
+	stage             instructions.Stage
+	baseNameUnmatched map[string]struct{}
+	base              *dispatchState
+	baseImg           *dockerspec.DockerOCIImage // immutable, unlike image
+	dispatched        bool
+	resolved          bool // resolved is set to true if base image has been resolved
+	onBuildInit       bool
+	deps              map[*dispatchState]instructions.Command
+	buildArgs         []instructions.KeyValuePairOptional
+	commands          []command
 	// ctxPaths marks the paths this dispatchState uses from the build context.
 	ctxPaths map[string]struct{}
 	// paths marks the paths that are used by this dispatchState.
