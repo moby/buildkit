@@ -395,6 +395,10 @@ func (lbf *llbBridgeForwarder) discard() {
 	lbf.mountsMu.Unlock()
 
 	lbf.discarded = true
+	for _, ee := range lbf.execErrors {
+		ee.Release()
+	}
+	lbf.execErrors = nil
 	for id, res := range lbf.resultByID {
 		res.Release(context.TODO())
 		delete(lbf.resultByID, id)
@@ -600,6 +604,7 @@ type llbBridgeForwarder struct {
 	refs         map[string]solver.ResultProxy
 	resultByID   map[string]solver.Result
 	discarded    bool
+	execErrors   []*llberrdefs.ExecError
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
@@ -726,6 +731,13 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 		subject  errdefs.IsSolve_Subject
 	)
 	if errors.As(solveErr, &ee) {
+		lbf.mu.Lock()
+		if lbf.discarded {
+			ee.Release()
+		} else if !slices.Contains(lbf.execErrors, ee) {
+			lbf.execErrors = append(lbf.execErrors, ee)
+		}
+		lbf.mu.Unlock()
 		var err error
 		inputIDs, err = lbf.registerResultIDs(ee.Inputs...)
 		if err != nil {
@@ -741,7 +753,7 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 	}
 	if errors.As(solveErr, &sce) {
 		var err error
-		inputIDs, err = lbf.registerSlowCacheResult(sce.Result)
+		inputIDs, err = lbf.registerResultIDs(sce.Result)
 		if err != nil {
 			return err
 		}
@@ -750,32 +762,14 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 	return errdefs.WithSolveError(solveErr, subject, inputIDs, mountIDs)
 }
 
+// registerResultIDs retains gateway-owned clones of error refs until discard.
 func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids []string, err error) {
-	lbf.mu.Lock()
-	defer lbf.mu.Unlock()
-
-	return lbf.registerResultIDsLocked(results...)
-}
-
-// registerSlowCacheResult registers a clone of a result borrowed from the
-// solver job. The clone is only taken before the forwarder is discarded, as the
-// job may be released after that.
-func (lbf *llbBridgeForwarder) registerSlowCacheResult(res solver.Result) ([]string, error) {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
 	if lbf.discarded {
 		return nil, nil
 	}
-	// Validate before cloning so a type error can't leak the clone. Once
-	// cloned, registerResultIDsLocked either keeps or releases it.
-	if _, ok := res.Sys().(*worker.WorkerRef); !ok {
-		return nil, errors.Errorf("unexpected type for result, got %T", res.Sys())
-	}
-	return lbf.registerResultIDsLocked(res.Clone())
-}
-
-func (lbf *llbBridgeForwarder) registerResultIDsLocked(results ...solver.Result) (ids []string, err error) {
 	ids = make([]string, len(results))
 	for i, res := range results {
 		if res == nil {
@@ -787,16 +781,11 @@ func (lbf *llbBridgeForwarder) registerResultIDsLocked(results ...solver.Result)
 		}
 		id := workerRef.ID()
 		ids[i] = id
-		if existing, ok := lbf.resultByID[id]; ok {
-			if existing != res {
-				if err := res.Release(context.TODO()); err != nil {
-					return ids, errors.WithStack(err)
-				}
-			}
-			continue
+		if _, ok := lbf.resultByID[id]; !ok {
+			// Cached sharedOp.Exec errors have snapshots pinned by the active
+			// solver state, even after the original error refs are released.
+			lbf.resultByID[id] = res.Clone()
 		}
-		// Keep the result wrapper so Release balances split-result ownership.
-		lbf.resultByID[id] = res
 	}
 	return ids, nil
 }

@@ -10,6 +10,13 @@ import (
 )
 
 // ExecError will be returned when an error is encountered when evaluating an op.
+// The error owns its original refs until Borrow or the first Release. Proxies
+// and gateways retain the error; gateways also keep independent clones. They may
+// clone cached originals after Release, which native result handles support
+// while another ref pins the snapshot. When sharedOp.Exec completes with an
+// active solver state, that state pins error refs until its last job leaves.
+// Pinning follows a single Unwrap chain, not errors.Join branches; CacheMap and
+// Acquire errors do not get that pin.
 type ExecError struct {
 	error
 	Inputs        []solver.Result
@@ -55,6 +62,7 @@ func (e *ExecError) EachRef(fn func(solver.Result) error) (err error) {
 // Borrow marks the error's refs as owned by a caller, so the finalizer and
 // Release do not release them. The same error can be shared by multiple
 // callers; Borrow returns false if the refs were already borrowed.
+// The successful caller must release the refs; later callers acquire no ownership.
 func (e *ExecError) Borrow() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -70,8 +78,7 @@ func (e *ExecError) Release() error {
 		return nil
 	}
 	return e.EachRef(func(r solver.Result) error {
-		r.Release(context.TODO())
-		return nil
+		return r.Release(context.TODO())
 	})
 }
 

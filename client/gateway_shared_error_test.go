@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/llbbuild"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
+	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -181,5 +183,69 @@ func testClientGatewayExecErrorReleasedDuringLoad(t *testing.T, sb integration.S
 	require.NoError(t, err)
 	require.ErrorContains(t, <-readErr, "evaluating released result")
 
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayRepeatedExecError checks that solving a failed exec with
+// several mounts of the same base keeps returning its exit error.
+func testClientGatewayRepeatedExecError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("repeated exec error test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Both mounts use base, so the exec error holds distinct result wrappers
+	// with the same worker ref ID.
+	base := llb.Image("busybox:latest")
+	def, err := base.Run(llb.Shlexf("sh -c 'echo %s; exit 3'", identity.NewID())).AddMount("/state", base).Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", func(ctx context.Context, gc gwclient.Client) (*gwclient.Result, error) {
+		for i := range 3 {
+			_, err := gc.Solve(ctx, gwclient.SolveRequest{Definition: def.ToPB(), Evaluate: true})
+			var exitErr *gwpb.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode != 3 {
+				return nil, errors.Errorf("solve %d lost exit code 3: %v", i, err)
+			}
+		}
+		return gwclient.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientBuildOpExecErrorReleased is testClientGatewayRepeatedExecError for
+// an exec that fails inside a BuildOp.
+func testClientBuildOpExecErrorReleased(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("build op error test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("busybox:latest")
+	inner, err := base.Run(llb.Shlexf("sh -c 'echo %s; exit 7'", identity.NewID())).AddMount("/state", base).Marshal(ctx)
+	require.NoError(t, err)
+	dt, err := inner.ToPB().Marshal()
+	require.NoError(t, err)
+	def, err := llb.Scratch().File(llb.Mkfile("/def.llb", 0o644, dt)).With(llbbuild.Build(llbbuild.WithFilename("def.llb"))).Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", func(ctx context.Context, gc gwclient.Client) (*gwclient.Result, error) {
+		for i := range 3 {
+			_, err := gc.Solve(ctx, gwclient.SolveRequest{Definition: def.ToPB(), Evaluate: true})
+			var exitErr *gwpb.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode != 7 {
+				return nil, errors.Errorf("solve %d lost exit code 7: %v", i, err)
+			}
+		}
+		return gwclient.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }

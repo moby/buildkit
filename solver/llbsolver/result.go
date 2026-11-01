@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	cacheconfig "github.com/moby/buildkit/cache/config"
@@ -46,7 +47,7 @@ type resultProxy struct {
 	released   bool
 	v          solver.CachedResult
 	err        error
-	errResults []solver.Result
+	execErrors []*llberrdefs.ExecError
 	provenance *provenance.Capture
 }
 
@@ -72,8 +73,8 @@ func (rp *resultProxy) Provenance() any {
 func (rp *resultProxy) Release(ctx context.Context) (err error) {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
-	for _, res := range rp.errResults {
-		rerr := res.Release(ctx)
+	for _, ee := range rp.execErrors {
+		rerr := ee.Release()
 		if rerr != nil {
 			err = rerr
 		}
@@ -118,21 +119,11 @@ func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithP
 	res, err := rp.b.loadResult(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies)
 	var ee *llberrdefs.ExecError
 	if errors.As(err, &ee) {
-		var refs []solver.Result
-		ee.EachRef(func(res solver.Result) error {
-			refs = append(refs, res)
-			return nil
-		})
-		// acquire ownership so ExecError finalizer doesn't attempt to release as well
-		ee.Borrow()
 		rp.mu.Lock()
 		if rp.released {
-			// released while the result was loading, Release has already run
-			for _, r := range refs {
-				r.Release(context.WithoutCancel(ctx))
-			}
-		} else {
-			rp.errResults = append(rp.errResults, refs...)
+			ee.Release()
+		} else if !slices.Contains(rp.execErrors, ee) {
+			rp.execErrors = append(rp.execErrors, ee)
 		}
 		rp.mu.Unlock()
 	}
