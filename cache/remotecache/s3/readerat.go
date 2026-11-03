@@ -47,6 +47,7 @@ func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
 			return 0, err
 		}
 		hrs.rc = rc
+		hrs.offset = off
 	}
 	if ra, ok := hrs.rc.(io.ReaderAt); ok {
 		hrs.ra = ra
