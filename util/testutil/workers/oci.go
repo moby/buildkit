@@ -79,10 +79,7 @@ func (s *OCI) New(ctx context.Context, cfg *integration.BackendConfig) (integrat
 		// TODO: make sure the user exists and subuid/subgid are configured.
 		buildkitdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.UID), "-i", "--", "exec", "rootlesskit"}, rootlessKitArgs...), buildkitdArgs...)
 
-		cgroupDir, cleanup, err := delegateCgroup(s.UID, s.GID)
-		if err != nil {
-			return nil, nil, err
-		}
+		cgroupDir, cleanup := delegateCgroup(s.UID, s.GID)
 		if cgroupDir != "" {
 			cleanupCgroup = cleanup
 			// Move the shell into the delegated cgroup before it starts the

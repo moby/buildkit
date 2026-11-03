@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	runcoptions "github.com/containerd/containerd/api/types/runc/options"
 	ctd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/pkg/gc"
@@ -16,8 +17,10 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/executor/resources"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
@@ -102,8 +105,18 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 	if workerOpts.ApparmorProfile != "" {
 		xlabels[wlabel.ApparmorProfile] = workerOpts.ApparmorProfile
 	}
+	var rootlessCgroupControllers []string
+	if workerOpts.Rootless && oci.IsSystemdCgroupParent(workerOpts.CgroupParent) {
+		if !systemdCgroupDriver(workerOpts.Runtime) {
+			bklog.L.Infof("rootless: per-step resource limits are disabled: cgroup parent %q needs SystemdCgroup = true in [worker.containerd.runtime.options]", workerOpts.CgroupParent)
+		} else if controllers, err := resources.OwnCgroupControllers(); err != nil {
+			bklog.L.Infof("rootless: per-step resource limits are disabled: %v", err)
+		} else {
+			rootlessCgroupControllers = controllers
+		}
+	}
 	if runtime.GOOS == "linux" {
-		xlabels[wlabel.LinuxResources] = strconv.FormatBool(!workerOpts.Rootless || oci.IsSystemdCgroupParent(workerOpts.CgroupParent))
+		xlabels[wlabel.LinuxResources] = strconv.FormatBool(!workerOpts.Rootless || rootlessCgroupControllers != nil)
 	}
 	xlabels[wlabel.ContainerdNamespace] = workerOpts.Namespace
 	xlabels[wlabel.ContainerdUUID] = serverInfo.UUID
@@ -147,19 +160,20 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 	}
 
 	executorOpts := containerdexecutor.ExecutorOptions{
-		Client:           client,
-		Root:             root,
-		CgroupParent:     workerOpts.CgroupParent,
-		ApparmorProfile:  workerOpts.ApparmorProfile,
-		DNSConfig:        workerOpts.DNS,
-		Selinux:          workerOpts.Selinux,
-		TraceSocket:      workerOpts.TraceSocket,
-		Rootless:         workerOpts.Rootless,
-		Runtime:          workerOpts.Runtime,
-		CDIManager:       workerOpts.CDIManager,
-		NetworkProviders: np,
-		ProxyProvider:    proxyProvider,
-		HyperVIsolation:  workerOpts.HyperVIsolation,
+		Client:                    client,
+		Root:                      root,
+		CgroupParent:              workerOpts.CgroupParent,
+		ApparmorProfile:           workerOpts.ApparmorProfile,
+		DNSConfig:                 workerOpts.DNS,
+		Selinux:                   workerOpts.Selinux,
+		TraceSocket:               workerOpts.TraceSocket,
+		Rootless:                  workerOpts.Rootless,
+		RootlessCgroupControllers: rootlessCgroupControllers,
+		Runtime:                   workerOpts.Runtime,
+		CDIManager:                workerOpts.CDIManager,
+		NetworkProviders:          np,
+		ProxyProvider:             proxyProvider,
+		HyperVIsolation:           workerOpts.HyperVIsolation,
 	}
 
 	opt := base.WorkerOpt{
@@ -183,4 +197,17 @@ func newContainerd(client *ctd.Client, workerOpts WorkerOptions) (base.WorkerOpt
 		CDIManager:       workerOpts.CDIManager,
 	}
 	return opt, nil
+}
+
+// systemdCgroupDriver reports whether the runc runtime is configured to use
+// the systemd cgroup driver. Only that driver understands a systemd slice
+// cgroup path like "buildkit.slice:buildkit:<id>". buildkitd always sends its
+// own runtime options to containerd, so the setting has to be in the
+// buildkitd config, and the runtime options of containerd do not count.
+func systemdCgroupDriver(rt *RuntimeInfo) bool {
+	if rt == nil {
+		return false
+	}
+	opts, ok := rt.Options.(*runcoptions.Options)
+	return ok && opts.SystemdCgroup
 }

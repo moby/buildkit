@@ -352,8 +352,14 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 	if w.rootless {
 		var removedMounts []string
 		if w.rootlessCgroup != nil {
-			dropUnsupportedCpuset(ctx, spec, w.rootlessCgroup.Controllers)
-			removedMounts, err = rootlessspecconv.ToRootlessWithCgroup(spec, path.Join(w.rootlessCgroup.Path, "buildkit", id))
+			// Only the delegated cgroup is writable for rootless runc, so
+			// the step goes there whatever cgroup parent it asked for.
+			if meta.CgroupParent != "" {
+				executor.WarnCgroupParentIgnored(ctx)
+			}
+			executor.DropUnsupportedCpuset(ctx, spec, w.rootlessCgroup.Controllers)
+			spec.Linux.CgroupsPath = path.Join(w.rootlessCgroup.Path, "buildkit", id)
+			removedMounts, err = rootlessspecconv.ToRootlessWithCgroup(spec)
 		} else {
 			executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
 			removedMounts, err = rootlessspecconv.ToRootless(spec)
@@ -860,21 +866,4 @@ func doKillProc(ctx context.Context, p *procHandle) error {
 	<-p.ended
 	bklog.G(ctx).Warnf("container id %s took %s to exit", p.killer.id, time.Since(start))
 	return nil
-}
-
-// dropUnsupportedCpuset removes the cpuset limits from spec when the cpuset
-// controller is not enabled in the rootless cgroup, because runc cannot start
-// the container otherwise. systemd does not delegate cpuset to user services
-// unless configured to.
-func dropUnsupportedCpuset(ctx context.Context, spec *specs.Spec, controllers []string) {
-	if slices.Contains(controllers, "cpuset") {
-		return
-	}
-	r := spec.Linux.Resources
-	if r == nil || r.CPU == nil || (r.CPU.Cpus == "" && r.CPU.Mems == "") {
-		return
-	}
-	r.CPU.Cpus = ""
-	r.CPU.Mems = ""
-	executor.WarnCpusetIgnored(ctx)
 }

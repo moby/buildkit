@@ -42,7 +42,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, cdiManager *cdidevices.Manager, policies ...compaction.Config) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless, rootlessDelegatedCgroup bool, processMode oci.ProcessMode, labels map[string]string, idmap *user.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary, apparmorProfile string, selinux bool, parallelismSem *semaphore.Weighted, traceSocket, defaultCgroupParent string, cdiManager *cdidevices.Manager, policies ...compaction.Config) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -68,11 +68,14 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 
 	var rootlessCgroup *resources.RootlessCgroup
 	if rootless {
-		rootlessCgroup, err = resources.PrepareRootlessCgroup()
+		rootlessCgroup, err = resources.PrepareRootlessCgroup(rootlessDelegatedCgroup)
 		if err != nil {
 			bklog.L.Infof("rootless: per-step resource limits are disabled: %v", err)
 		} else {
 			bklog.L.Infof("rootless: running build steps in cgroup %s", rootlessCgroup.Path)
+			if defaultCgroupParent != "" {
+				bklog.L.Warnf("rootless: defaultCgroupParent %q is ignored, build steps run in cgroup %s", defaultCgroupParent, rootlessCgroup.Path)
+			}
 		}
 	}
 

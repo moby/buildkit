@@ -151,9 +151,11 @@ func testLinuxResourcesIgnoredWarning(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
+	// Resource limits are not part of the cache key, so make both steps run
+	// even when the sandbox has run them before.
 	img := llb.Image("alpine:latest")
-	st := img.Run(llb.Shlex(`sh -c "echo limited > /out"`), llb.MemoryLimit(64*1024*1024)).Root()
-	st = st.Run(llb.Shlex(`sh -c "echo unlimited > /out"`)).Root()
+	st := img.Run(llb.Shlex(`sh -c "echo limited > /out"`), llb.MemoryLimit(64*1024*1024), llb.IgnoreCache).Root()
+	st = st.Run(llb.Shlex(`sh -c "echo unlimited > /out"`), llb.IgnoreCache).Root()
 
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
