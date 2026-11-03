@@ -427,7 +427,8 @@ func (hs *httpSourceHandler) resolveMetadataRef(ctx context.Context, jobCtx solv
 		// we need to add accept-encoding header manually because stdlib only adds it to GET requests
 		// some servers will return different etags if Accept-Encoding header is different
 		req.Header.Set("Accept-Encoding", "gzip")
-		resp, err := doRequest(ctx, client, req)
+		// Best-effort: on any error we fall through to the GET below, which is retried.
+		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
 				respETag := etagValue(resp.Header.Get("ETag"))
