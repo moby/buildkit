@@ -543,6 +543,88 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, false)
 }
 
+// testGitResolveCacheAfterFailure resolves the same ref repeatedly in one
+// build after a failed and a cached resolve, so the resolver cache is read
+// after both have released their lock.
+func testGitResolveCacheAfterFailure(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	gitCommands := []string{
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo a > a",
+		"git add a",
+		"git commit -m a",
+		"git branch v1",
+		"echo b > b",
+		"git add b",
+		"git commit -m b",
+		"git update-server-info",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+
+	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v1")
+	cmd.Dir = gitDir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	commitV1 := strings.TrimSpace(string(out))
+
+	cmd = exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD")
+	cmd.Dir = gitDir
+	out, err = cmd.Output()
+	require.NoError(t, err)
+	commitHead := strings.TrimSpace(string(out))
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	_, err = c.Build(ctx, SolveOpt{}, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		resolve := func(checksum string) (*sourceresolver.MetaResponse, error) {
+			attrs := map[string]string{
+				"git.fullurl": server.URL + "/.git",
+			}
+			if checksum != "" {
+				attrs[pb.AttrGitChecksum] = checksum
+			}
+			return c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+				Identifier: "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git#v1",
+				Attrs:      attrs,
+			}, sourceresolver.Opt{})
+		}
+
+		// failed resolve
+		_, err := resolve(commitHead)
+		require.ErrorContains(t, err, "expected checksum to match")
+
+		md, err := resolve("")
+		require.NoError(t, err)
+		require.NotNil(t, md.Git)
+		require.Equal(t, commitV1, md.Git.Checksum)
+
+		// resolved from cache
+		md, err = resolve("")
+		require.NoError(t, err)
+		require.NotNil(t, md.Git)
+		require.Equal(t, commitV1, md.Git.Checksum)
+
+		// cached value does not match the checksum
+		_, err = resolve(commitHead)
+		require.ErrorContains(t, err, "expected checksum to match")
+
+		return gateway.NewResult(), nil
+	}, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, false)
+}
+
 func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 	// TODO: remove once CI has Git for Windows >= 2.56.0.windows.2
 	// https://github.com/git-for-windows/git/issues/6449
