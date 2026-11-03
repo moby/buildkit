@@ -434,7 +434,9 @@ func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(any) er
 }
 
 type Job struct {
-	mu            sync.Mutex // protects completedTime, pw, span
+	mu            sync.Mutex // protects completedTime, pw, span, builds, discarded
+	builds        int
+	discarded     bool
 	list          *Solver
 	pr            *progress.MultiReader
 	pw            progress.Writer
@@ -846,11 +848,17 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 }
 
 func (j *Job) Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error) {
-	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-		j.mu.Lock()
-		j.span = span
+	j.mu.Lock()
+	if j.discarded {
 		j.mu.Unlock()
+		return nil, errors.Errorf("build on discarded job %s", j.id)
 	}
+	j.builds++
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		j.span = span
+	}
+	j.mu.Unlock()
+	defer j.buildDone()
 
 	v, err := j.list.load(ctx, e.Vertex, nil, j)
 	if err != nil {
@@ -919,7 +927,32 @@ func (j *Job) CloseProgress() {
 	j.pw.Close()
 }
 
+// buildDone finishes a pending Discard when the last running build returns.
+func (j *Job) buildDone() {
+	j.mu.Lock()
+	j.builds--
+	last := j.discarded && j.builds == 0
+	j.mu.Unlock()
+	if last {
+		j.discard()
+	}
+}
+
+// Discard releases the job's states. While builds are still running the states
+// are released when the last one returns, so results that complete after
+// Discard are released with their state.
 func (j *Job) Discard() error {
+	j.mu.Lock()
+	j.discarded = true
+	running := j.builds > 0
+	j.mu.Unlock()
+	if running {
+		return nil
+	}
+	return j.discard()
+}
+
+func (j *Job) discard() error {
 	j.list.mu.Lock()
 	defer j.list.mu.Unlock()
 

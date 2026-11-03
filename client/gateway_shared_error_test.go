@@ -249,3 +249,70 @@ func testClientBuildOpExecErrorReleased(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }
+
+// testClientGatewaySolveReleasedAfterDiscard checks that the refs of a solve
+// that finishes after the gateway is discarded are released.
+func testClientGatewaySolveReleasedAfterDiscard(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx, cancel := context.WithTimeoutCause(sb.Context(), time.Minute, errors.New("released late solve test timed out"))
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	id := identity.NewID()
+	// The exec succeeds only after a marker appears in a shared cache mount.
+	// The marker is written once the first build has returned, so the solve
+	// always finishes after the gateway is discarded.
+	cache := llb.AsPersistentCacheDir(id, llb.CacheMountShared)
+	def, err := llb.Image("busybox:latest").Run(
+		llb.Shlexf("sh -c 'echo %s; i=0; while [ ! -e /cache/go ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done'", id),
+		llb.AddMount("/cache", llb.Scratch(), cache),
+	).Root().Marshal(ctx)
+	require.NoError(t, err)
+	markerDef, err := llb.Image("busybox:latest").Run(
+		llb.Shlexf("sh -c 'echo %s; touch /cache/go'", id),
+		llb.AddMount("/cache", llb.Scratch(), cache),
+	).Root().Marshal(ctx)
+	require.NoError(t, err)
+
+	started := make(chan struct{})
+	statusCh := make(chan *SolveStatus)
+	statusDone := make(chan struct{})
+	go func() {
+		defer close(statusDone)
+		var once sync.Once
+		for st := range statusCh {
+			for _, v := range st.Vertexes {
+				if v.Started != nil && strings.Contains(v.Name, id) {
+					once.Do(func() { close(started) })
+				}
+			}
+		}
+	}()
+
+	solveErr := make(chan error, 1)
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", func(ctx context.Context, gc gwclient.Client) (*gwclient.Result, error) {
+		go func() {
+			_, err := gc.Solve(ctx, gwclient.SolveRequest{Definition: def.ToPB(), Evaluate: true})
+			solveErr <- err
+		}()
+		// return while the exec is running so the gateway is discarded
+		select {
+		case <-started:
+		case <-ctx.Done():
+			return nil, errors.WithStack(context.Cause(ctx))
+		}
+		return gwclient.NewResult(), nil
+	}, statusCh)
+	require.NoError(t, err)
+	<-statusDone
+
+	// the gateway has been discarded, let the exec finish
+	_, err = c.Solve(ctx, markerDef, SolveOpt{}, nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, <-solveErr, "gateway forwarder is closing")
+
+	checkAllReleasable(t, c, sb, true)
+}

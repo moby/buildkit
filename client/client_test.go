@@ -285,6 +285,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayRepeatedExecError,
 		testClientBuildOpExecErrorReleased,
 		testClientGatewayExecErrorReleasedDuringLoad,
+		testClientGatewaySolveReleasedAfterDiscard,
 		testClientGatewayExecFileActionError,
 		testClientGatewaySlowCacheExecError,
 
