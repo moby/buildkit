@@ -3115,6 +3115,56 @@ func testCommitTimeMtimes(t *testing.T, format string, keepGitDir bool, subdir s
 	}
 }
 
+func TestSubmoduleFileProtocol(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	// A permissive host config must not allow a remote repository to fetch
+	// submodules from the daemon's filesystem.
+	home := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[protocol \"file\"]\n\tallow = always\n"), 0600))
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, ".gitconfig"))
+
+	repo := setupGitRepo(t, "sha1")
+	runShell(t, repo.mainPath,
+		"git checkout feature",
+		"git config -f .gitmodules submodule.sub.url "+strconv.Quote("file://"+filepath.ToSlash(repo.subPath)),
+		"git add .gitmodules",
+		"git commit -m local-submodule",
+	)
+
+	// Confirm that the submodule is accessible when Git inherits host config.
+	checkout := t.TempDir()
+	runShell(t, checkout,
+		"git clone --branch feature "+strconv.Quote(repo.mainURL)+" .",
+		"git submodule update --init --recursive --depth=1",
+	)
+	dt, err := os.ReadFile(filepath.Join(checkout, "sub", "subfile"))
+	require.NoError(t, err)
+	require.Equal(t, "subcontents\n", string(dt))
+
+	for _, keepGitDir := range []bool{false, true} {
+		t.Run(fmt.Sprintf("keepGitDir=%t", keepGitDir), func(t *testing.T) {
+			ctx := logProgressStreams(t.Context(), t)
+			gs := setupGitSource(t, t.TempDir())
+			id := &GitIdentifier{Remote: repo.mainURL, Ref: "feature", KeepGitDir: keepGitDir}
+			g, err := gs.Resolve(ctx, id, nil, nil)
+			require.NoError(t, err)
+
+			_, _, _, _, err = g.CacheKey(ctx, nil, 0)
+			require.NoError(t, err)
+			ref, err := g.Snapshot(ctx, nil)
+			if ref != nil {
+				defer ref.Release(t.Context())
+			}
+			require.ErrorContains(t, err, "failed to update submodules")
+			require.ErrorContains(t, err, "transport 'file' not allowed")
+		})
+	}
+}
+
 type progressLogBuffer struct {
 	mu sync.Mutex
 	sb strings.Builder
