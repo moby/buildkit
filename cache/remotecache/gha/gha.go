@@ -143,20 +143,35 @@ func ResolveCacheExporterFunc(conf *ghatypes.CacheConfig, v VerifierProvider) re
 		if err != nil {
 			return nil, err
 		}
-		return NewExporter(cfg)
+		compressionConfig, err := compression.ParseAttributes(attrs)
+		if err != nil {
+			return nil, err
+		}
+		return newExporter(cfg, compressionConfig)
 	}
 }
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains     *v1.CacheChains
-	cache      *actionscache.Cache
-	config     *Config
-	keyMapOnce sync.Once
-	keyMap     map[string]struct{}
+	chains      *v1.CacheChains
+	cache       *actionscache.Cache
+	config      *Config
+	compression compression.Config
+	keyMapOnce  sync.Once
+	keyMap      map[string]struct{}
 }
 
+// NewExporter returns an exporter that compresses new layers with the default
+// compression.
 func NewExporter(c *Config) (remotecache.Exporter, error) {
+	e, err := newExporter(c, compression.New(compression.Default))
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
+}
+
+func newExporter(c *Config, comp compression.Config) (*exporter, error) {
 	cc := v1.NewCacheChains()
 	cache, err := actionscache.New(c.Token, c.URL, c.Version > 1, actionscache.Opt{
 		Client:    tracing.DefaultClient,
@@ -166,7 +181,7 @@ func NewExporter(c *Config) (remotecache.Exporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &exporter{CacheExporterTarget: cc, chains: cc, cache: cache, config: c}, nil
+	return &exporter{CacheExporterTarget: cc, chains: cc, cache: cache, config: c, compression: comp}, nil
 }
 
 func (*exporter) Name() string {
@@ -175,7 +190,7 @@ func (*exporter) Name() string {
 
 func (ce *exporter) Config() remotecache.Config {
 	return remotecache.Config{
-		Compression: compression.New(compression.Default),
+		Compression: ce.compression,
 	}
 }
 
