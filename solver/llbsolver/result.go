@@ -82,9 +82,8 @@ func (rp *resultProxy) Release(ctx context.Context) (err error) {
 		if rp.released {
 			bklog.G(ctx).Warnf("release of already released result")
 		}
-		rerr := rp.v.Release(ctx)
-		if err != nil {
-			return rerr
+		if rerr := rp.v.Release(ctx); rerr != nil {
+			err = rerr
 		}
 	}
 	rp.released = true
