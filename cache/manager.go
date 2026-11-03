@@ -394,6 +394,11 @@ func (cm *cacheManager) init(ctx context.Context) error {
 			cm.LeaseManager.Delete(ctx, leases.Lease{ID: si.ID() + "-variants"})
 		}
 	}
+	if n, err := cm.MetadataStore.ClearOrphans(); err != nil {
+		bklog.G(ctx).Warnf("failed to remove external metadata of deleted cache records: %v", err)
+	} else if n > 0 {
+		bklog.G(ctx).Infof("removed external metadata of %d deleted cache records", n)
+	}
 	return nil
 }
 
