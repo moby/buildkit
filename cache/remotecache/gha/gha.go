@@ -364,7 +364,12 @@ func verifySignature(ctx context.Context, dgst digest.Digest, bundle []byte, con
 		return errors.New("no verifier available for signed github actions cache")
 	}
 
-	sig, err := v.VerifyArtifact(ctx, dgst, bundle, policy.WithSLSANotRequired())
+	policyRules := config.Verify.Policy
+	opts := []policy.ArtifactVerifyOpt{policy.WithSLSANotRequired()}
+	if policyRules.TlogThreshold != nil {
+		opts = append(opts, policy.WithTlogThreshold(*policyRules.TlogThreshold))
+	}
+	sig, err := v.VerifyArtifact(ctx, dgst, bundle, opts...)
 	if err != nil {
 		return err
 	}
@@ -372,18 +377,8 @@ func verifySignature(ctx context.Context, dgst digest.Digest, bundle []byte, con
 		return errors.New("signature verification failed: no signer found")
 	}
 	numTimestamps := len(sig.Timestamps)
-	numTlog := 0
-	for _, t := range sig.Timestamps {
-		if t.Type == "Tlog" {
-			numTlog++
-		}
-	}
-	policyRules := config.Verify.Policy
 	if policyRules.TimestampThreshold > numTimestamps {
 		return errors.Errorf("signature verification failed: not enough timestamp authorities: have %d, need %d", numTimestamps, policyRules.TimestampThreshold)
-	}
-	if policyRules.TlogThreshold > numTlog {
-		return errors.Errorf("signature verification failed: not enough tlog authorities: have %d, need %d", numTlog, policyRules.TlogThreshold)
 	}
 
 	certRules, err := certToStringMap(&config.Verify.Policy.Summary)

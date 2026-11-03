@@ -17,7 +17,7 @@ type VerifyConfig struct {
 }
 
 type VerifyPolicy struct {
-	TimestampThreshold int `toml:"timestampThreshold"`
-	TlogThreshold      int `toml:"tlogThreshold"`
+	TimestampThreshold int  `toml:"timestampThreshold"`
+	TlogThreshold      *int `toml:"tlogThreshold"`
 	certificate.Summary
 }
