@@ -94,8 +94,9 @@ if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
     echo >&2 "go race detector requires CGO_ENABLED=1"
     exit 1
   fi
-  # force buildkitd to halt on detected race conditions, which will cause the tests to fail
-  export GORACE="halt_on_error=1"
+  gotestArgs="$gotestArgs -race"
+  # Let the test process report races and continue running the remaining tests.
+  export GORACE="halt_on_error=0"
   export VERIFYFLAGS="" # prevent -static verification
 fi
 
@@ -196,6 +197,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     buildxCmd build $cacheFromFlags \
       --build-arg "CHANNEL=$release" --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
+      --build-arg "CGO_ENABLED=${CGO_ENABLED:-0}" --build-arg "GOBUILDFLAGS=$GOBUILDFLAGS" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
       --output "type=oci,dest=$tarout" \
       $currentcontext

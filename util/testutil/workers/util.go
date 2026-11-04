@@ -101,6 +101,7 @@ func runBuildkitd(
 		os.Environ(),
 		"BUILDKIT_DEBUG_EXEC_OUTPUT=1",
 		"BUILDKIT_DEBUG_PANIC_ON_ERROR=1",
+		"GORACE=halt_on_error=1",
 		"BUILDKITD_DEBUGADDR="+debugAddress,
 		"TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	if v := os.Getenv("GO_TEST_COVERPROFILE"); v != "" {

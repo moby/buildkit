@@ -1,0 +1,257 @@
+name: race
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 0'
+
+env:
+  GO_VERSION: "1.27"
+  SETUP_BUILDX_VERSION: "edge"
+  SETUP_BUILDKIT_IMAGE: "moby/buildkit:latest"
+  DOCKER_BUILD_SUMMARY: "false"
+
+jobs:
+  race:
+    name: race-${{ matrix.suite }}
+    runs-on: ubuntu-26.04
+    env:
+      CGO_ENABLED: "1"
+      GOBUILDFLAGS: "-race"
+      VERIFYFLAGS: ""
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            kind: integration
+            packages: ./...
+            skip-integration-tests: "1"
+            flags: -v -count=20 -parallel=4 -timeout=60m
+          - suite: integration-oci
+            kind: integration
+            packages: ./...
+            skip-integration-tests: "0"
+            flags: -v -count=2 -parallel=2 -timeout=60m -run=//worker=oci$
+          - suite: integration-containerd
+            kind: integration
+            packages: ./...
+            skip-integration-tests: "0"
+            flags: -v -count=2 -parallel=2 -timeout=60m -run=//worker=containerd$
+          - suite: dockerfile-oci
+            kind: dockerfile
+            packages: ./frontend/dockerfile
+            skip-integration-tests: "0"
+            flags: -v -count=2 -parallel=2 -timeout=60m -run=//worker=oci$
+          - suite: dockerfile-containerd
+            kind: dockerfile
+            packages: ./frontend/dockerfile
+            skip-integration-tests: "0"
+            flags: -v -count=2 -parallel=2 -timeout=60m -run=//worker=containerd$
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      -
+        name: Expose GitHub Runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      -
+        name: Set up QEMU
+        if: ${{ matrix.suite != 'unit' }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+        with:
+          version: ${{ env.SETUP_BUILDX_VERSION }}
+          driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
+          buildkitd-flags: --debug
+      -
+        name: Build test image
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          targets: integration-tests
+          set: |
+            *.cache-from=type=gha,scope=build-integration-tests
+      -
+        name: Test
+        id: test
+        shell: bash
+        run: |
+          mkdir -p ./bin/testreports
+          ./hack/test ${KIND} 2>&1 | tee ./bin/testreports/race-tests.log
+        env:
+          KIND: ${{ matrix.kind }}
+          TEST_IMAGE_BUILD: "0"
+          TESTPKGS: ${{ matrix.packages }}
+          TESTFLAGS: ${{ matrix.flags }}
+          SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
+          TEST_REPORT_SUFFIX: -race-${{ matrix.suite }}
+      -
+        name: Record test outcome
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SUITE: ${{ matrix.suite }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            fs.mkdirSync('./bin/testreports', {recursive: true});
+            fs.writeFileSync('./bin/testreports/outcome.json', JSON.stringify({
+              suite: process.env.SUITE,
+              outcome: process.env.TEST_OUTCOME || 'not run',
+            }));
+      -
+        name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-race-${{ matrix.suite }}
+          path: ./bin/testreports
+          retention-days: 1
+
+  summary:
+    if: always()
+    runs-on: ubuntu-26.04
+    needs:
+      - race
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      -
+        name: Download test reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-reports-race-*
+          path: ./bin/race-reports
+      -
+        name: Summarize race reports
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TEST_RESULT: ${{ needs.race.result }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const readline = require('node:readline');
+
+            // Group by the conflicting accesses, not the goroutines' creation stacks.
+            // Sorting the accesses also handles reports where their order is reversed.
+            function fingerprint(lines, complete) {
+              const accesses = [];
+              for (const line of lines) {
+                if (/^\s*Goroutine \d+/.test(line)) break;
+                if (line.includes('==================')) break;
+                if (/^(?:Previous )?(?:Read|Write) at /i.test(line.trim())) {
+                  accesses.push([]);
+                }
+                if (accesses.length) {
+                  accesses.at(-1).push(line.trim()
+                    .replace(/^Previous /i, '')
+                    .replace(/^read at /i, 'Read at ')
+                    .replace(/^write at /i, 'Write at ')
+                    .replace(/0x[\da-f]+/gi, '<address>')
+                    .replace(/goroutine \d+/g, 'goroutine <id>')
+                    .replace(/\s+\+<address>/g, ''));
+                }
+              }
+              // Incomplete or unrecognized reports must not collapse into an empty key.
+              if (!complete || accesses.length !== 2) return JSON.stringify(lines);
+              return JSON.stringify(accesses.map(stack => stack.filter(Boolean).join('\n')).sort());
+            }
+
+            function codeBlock(text) {
+              const fence = '`'.repeat(Math.max(3, ...Array.from(text.matchAll(/`+/g), match => match[0].length + 1)));
+              return `${fence}text\n${text}\n${fence}`;
+            }
+
+            async function summarize(core, input, output, result) {
+              const groups = new Map();
+              const suites = [];
+              const entries = fs.existsSync(input) ? fs.readdirSync(input, {withFileTypes: true}) : [];
+              for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+                if (!entry.isDirectory() || !entry.name.startsWith('test-reports-race-')) continue;
+                const dir = path.join(input, entry.name);
+                const suite = entry.name.slice('test-reports-race-'.length);
+                const outcomeFile = path.join(dir, 'outcome.json');
+                const outcome = fs.existsSync(outcomeFile) ? JSON.parse(fs.readFileSync(outcomeFile, 'utf8')).outcome : 'unavailable';
+                const log = path.join(dir, 'race-tests.log');
+                const hasLog = fs.existsSync(log);
+                suites.push({suite, outcome, hasLog});
+                if (!hasLog) continue;
+
+                const add = (lines, complete) => {
+                  const key = fingerprint(lines, complete);
+                  let group = groups.get(key);
+                  if (!group) {
+                    group = {trace: lines.join('\n'), complete, occurrences: 0, suites: {}};
+                    groups.set(key, group);
+                  }
+                  group.occurrences++;
+                  group.suites[suite] = (group.suites[suite] || 0) + 1;
+                };
+                let report = null;
+                const lines = readline.createInterface({input: fs.createReadStream(log), crlfDelay: Infinity});
+                for await (const line of lines) {
+                  if (line.includes('WARNING: DATA RACE')) {
+                    if (report) add(report, false);
+                    report = [];
+                  }
+                  if (report) {
+                    report.push(line);
+                    if (line.includes('==================')) {
+                      add(report, true);
+                      report = null;
+                    }
+                  }
+                }
+                if (report) add(report, false);
+              }
+
+              const reports = [...groups.values()];
+              const occurrences = reports.reduce((sum, report) => sum + report.occurrences, 0);
+              let summary = `## Race tests\n\nMatrix result: ${result}.\n\n`;
+              summary += '| Suite | Test outcome | Console log |\n| --- | --- | --- |\n';
+              for (const {suite, outcome, hasLog} of suites) {
+                summary += `| ${suite} | ${outcome} | ${hasLog ? 'available' : 'missing'} |\n`;
+              }
+              summary += '\n';
+              if (reports.length) {
+                summary += `Found **${reports.length} distinct race report(s)** across ${occurrences} logged occurrences. Counts include repeated logging of the same report.\n\n`;
+                for (const [index, report] of reports.slice(0, 20).entries()) {
+                  const preview = report.trace.slice(0, 8000);
+                  summary += `<details>\n<summary>Race ${index + 1}: ${report.occurrences} logged occurrences</summary>\n\n`;
+                  summary += `Suites: ${Object.entries(report.suites).map(([suite, count]) => `${suite} (${count})`).join(', ')}.\n\n`;
+                  summary += codeBlock(preview + (preview.length < report.trace.length ? '\n[Trace truncated in summary]' : ''));
+                  summary += '\n\n</details>\n\n';
+                }
+                summary += 'Showing up to 20 distinct reports. Full representative traces and occurrence counts are in the `race-summary` artifact; original logs remain in each `test-reports-race-*` artifact.\n';
+              } else {
+                summary += 'No race reports found in the available logs. This does not establish a successful run; check the matrix result, test outcomes, and missing logs.\n';
+              }
+              summary += '\nSuites without uploaded artifacts cannot be listed above.\n';
+              fs.mkdirSync(output, {recursive: true});
+              fs.writeFileSync(path.join(output, 'race-reports.json'), JSON.stringify({result, suites, reports}, null, 2));
+              fs.writeFileSync(path.join(output, 'summary.md'), summary);
+              core.summary.addRaw(summary);
+              await core.summary.write();
+            }
+            await summarize(core, './bin/race-reports', './bin/race-summary', process.env.TEST_RESULT);
+      -
+        name: Upload consolidated race reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: race-summary
+          path: ./bin/race-summary
+          retention-days: 1
