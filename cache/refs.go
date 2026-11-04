@@ -103,6 +103,10 @@ type cacheRecord struct {
 	equalMutable   *mutableRef
 	equalImmutable *immutableRef
 
+	// layerDigestChainCache memoizes layerDigestChain. It is only set when
+	// every layer has a blob, as a blob can't be replaced after it is set.
+	// Access is serialized by cacheManager.mu, as computing the chain of a
+	// record also fills the memoized chains of its parents.
 	layerDigestChainCache []digest.Digest
 }
 
@@ -554,18 +558,10 @@ func (sr *immutableRef) layerWalk(f func(*immutableRef)) {
 			parent.layerWalk(f)
 		}
 	case Diff:
-		lower := sr.diffParents.lower
-		upper := sr.diffParents.upper
-		// If upper is only one blob different from lower, then re-use that blob
-		switch {
-		case upper != nil && lower == nil && upper.kind() == BaseLayer:
-			// upper is a single layer being diffed with scratch
-			f(upper)
-		case upper != nil && lower != nil && upper.kind() == Layer && upper.layerParent.ID() == lower.ID():
-			// upper is a single layer on top of lower
-			f(upper)
-		default:
-			// otherwise, the diff will be computed and turned into its own single blob
+		if sr.diffReusesUpper() {
+			f(sr.diffParents.upper)
+		} else {
+			// the diff will be computed and turned into its own single blob
 			f(sr)
 		}
 	case Layer:
@@ -576,30 +572,65 @@ func (sr *immutableRef) layerWalk(f func(*immutableRef)) {
 	}
 }
 
-// hold cacheRecord.mu lock before calling
+// diffReusesUpper reports whether the Diff record cr is exported as the blob
+// of its upper, because upper is only one blob different from lower. Such a
+// diff never gets a blob of its own.
+func (cr *cacheRecord) diffReusesUpper() bool {
+	lower := cr.diffParents.lower
+	upper := cr.diffParents.upper
+	switch {
+	case upper != nil && lower == nil && upper.kind() == BaseLayer:
+		// upper is a single layer being diffed with scratch
+		return true
+	case upper != nil && lower != nil && upper.kind() == Layer && upper.layerParent.ID() == lower.ID():
+		// upper is a single layer on top of lower
+		return true
+	default:
+		return false
+	}
+}
+
+// layerDigestChain returns the blob digests of the layers of cr, or nil if any
+// of them has no blob yet. Such a record has never been exported, so no image
+// can reference it. The caller must hold cacheManager.mu and cacheRecord.mu.
 func (cr *cacheRecord) layerDigestChain() []digest.Digest {
 	if cr.layerDigestChainCache != nil {
 		return cr.layerDigestChainCache
 	}
+	// The own blob of a record is checked before its parents, so that a
+	// record without a blob doesn't walk its ancestors on every call.
+	var chain []digest.Digest
 	switch cr.kind() {
 	case Diff:
-		if cr.getBlob() == "" && cr.diffParents.upper != nil {
-			// this diff just reuses the upper blob
-			cr.layerDigestChainCache = cr.diffParents.upper.layerDigestChain()
-		} else {
-			cr.layerDigestChainCache = append(cr.layerDigestChainCache, cr.getBlob())
+		if blob := cr.getBlob(); blob != "" {
+			chain = []digest.Digest{blob}
+		} else if cr.diffReusesUpper() {
+			// export uses the blob of upper as the only layer of the diff
+			if blob := cr.diffParents.upper.getBlob(); blob != "" {
+				chain = []digest.Digest{blob}
+			}
 		}
 	case Merge:
 		for _, parent := range cr.mergeParents {
-			cr.layerDigestChainCache = append(cr.layerDigestChainCache, parent.layerDigestChain()...)
+			parentChain := parent.layerDigestChain()
+			if parentChain == nil {
+				return nil
+			}
+			chain = append(chain, parentChain...)
 		}
 	case Layer:
-		cr.layerDigestChainCache = append(cr.layerDigestChainCache, cr.layerParent.layerDigestChain()...)
-		fallthrough
+		if blob := cr.getBlob(); blob != "" {
+			if parentChain := cr.layerParent.layerDigestChain(); parentChain != nil {
+				chain = slices.Concat(parentChain, []digest.Digest{blob})
+			}
+		}
 	case BaseLayer:
-		cr.layerDigestChainCache = append(cr.layerDigestChainCache, cr.getBlob())
+		if blob := cr.getBlob(); blob != "" {
+			chain = []digest.Digest{blob}
+		}
 	}
-	return cr.layerDigestChainCache
+	cr.layerDigestChainCache = chain
+	return chain
 }
 
 type RefList []ImmutableRef
