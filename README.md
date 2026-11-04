@@ -469,6 +469,24 @@ BuildKit supports the following cache exporters:
 * `registry`: push the image and the cache separately
 * `local`: export to a local directory
 * `gha`: export to GitHub Actions cache
+* `s3`: export to Amazon S3
+* `azblob`: export to Azure Blob Storage
+
+All standalone cache exporters (`registry`, `local`, `gha`, `s3`, and `azblob`)
+support these compression options on `--export-cache`:
+
+* `compression=<uncompressed|gzip|estargz|zstd>`: compression for newly created
+  layers (default: `gzip`).
+* `compression-level=<value>`: compression level for gzip and estargz (0-9),
+  or zstd (0-22).
+* `force-compression=true`: apply the selected compression to existing layers
+  as well.
+
+Invalid compression options fail export configuration even with
+`ignore-error=true`. These options do not apply to `--import-cache`. Inline
+cache uses the image exporter's compression settings, configured on `--output`.
+The `gha`, `s3`, and `azblob` backends do not preserve eStargz annotations, so
+selecting `estargz` does not enable lazy pulling from these caches.
 
 In most case you want to use the `inline` cache exporter.
 However, note that the `inline` cache exporter only supports `min` cache mode.
@@ -580,6 +598,8 @@ in your workflow to expose the runtime.
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `timeout=<duration>`: sets the timeout duration for cache export (default: `10m`)
 
+The [common compression options](#export-cache) also apply to `type=gha` exports.
+
 `--import-cache` options:
 * `type=gha`
 * `scope=<scope>`: which scope cache object belongs to (default `buildkit`)
@@ -631,11 +651,10 @@ Beware, these configurations must be available at buildkit daemon level, not at 
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `touch_refresh=24h`: Instead of being uploaded again when not changed, blobs files will be "touched" on s3 every `touch_refresh`, default is 24h. Due to this, an expiration policy can be set on the S3 bucket to cleanup useless files automatically. Manifests files are systematically rewritten, there is no need to touch them.
 * `upload_parallelism=4`: This parameter changes the number of layers uploaded to s3 in parallel. Each individual layer is uploaded with 5 threads, using the Upload manager provided by the AWS SDK.
-* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. `estargz` layers are recorded as plain `gzip` layers in the s3 cache manifest (their eStargz annotations are not preserved), so they cannot be lazily pulled from s3
-* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
-* `force-compression=true`: forcibly apply `compression` option to all layers
 * `retry_mode=<standard|adaptive>`: sets the AWS SDK retry mode (default: `standard`). `standard` uses exponential backoff, `adaptive` adds client-side rate limiting. See [AWS retry documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html).
 * `retry_max_attempts=<int>`: sets the maximum number of attempts for each S3 request, including the initial request and all retries (default: 3). Must be a positive integer.
+
+The [common compression options](#export-cache) also apply to `type=s3` exports.
 
 `--import-cache` options:
 * `type=s3`
@@ -685,6 +704,9 @@ There are 2 options supported for Azure Blob Storage authentication:
 * `name=<manifest>`: specify name of the manifest to use (default: `buildkit`)
   * Multiple manifest names can be specified at the same time, separated by `;`. The standard use case is to use the git sha1 as name, and the branch name as duplicate, and load both with 2 `import-cache` commands.
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
+
+The [common compression options](#export-cache) also apply to `type=azblob`
+exports.
 
 `--import-cache` options:
 * `type=azblob`

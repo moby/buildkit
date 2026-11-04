@@ -22,7 +22,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
 	bkversion "github.com/moby/buildkit/version"
@@ -166,12 +165,6 @@ func NewExporter(c *Config) (remotecache.Exporter, error) {
 
 func (*exporter) Name() string {
 	return "exporting to GitHub Actions Cache"
-}
-
-func (ce *exporter) Config() remotecache.Config {
-	return remotecache.Config{
-		Compression: compression.New(compression.Default),
-	}
 }
 
 func blobKeyPrefix() string {

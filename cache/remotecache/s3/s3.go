@@ -25,7 +25,6 @@ import (
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -208,36 +207,24 @@ func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
 			return nil, err
 		}
 
-		compressionConfig, err := compression.ParseAttributes(attrs)
-		if err != nil {
-			return nil, err
-		}
-
 		s3Client, err := newS3Client(ctx, config)
 		if err != nil {
 			return nil, err
 		}
 		cc := v1.NewCacheChains()
-		return &exporter{CacheExporterTarget: cc, chains: cc, s3Client: s3Client, config: config, compression: compressionConfig}, nil
+		return &exporter{CacheExporterTarget: cc, chains: cc, s3Client: s3Client, config: config}, nil
 	}
 }
 
 type exporter struct {
 	solver.CacheExporterTarget
-	chains      *v1.CacheChains
-	s3Client    *s3Client
-	config      Config
-	compression compression.Config
+	chains   *v1.CacheChains
+	s3Client *s3Client
+	config   Config
 }
 
 func (*exporter) Name() string {
 	return "exporting cache to Amazon S3"
-}
-
-func (e *exporter) Config() remotecache.Config {
-	return remotecache.Config{
-		Compression: e.compression,
-	}
 }
 
 type nopCloserSectionReader struct {

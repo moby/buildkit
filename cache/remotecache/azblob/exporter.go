@@ -22,7 +22,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -138,12 +137,6 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	}
 
 	return nil, nil
-}
-
-func (ce *exporter) Config() remotecache.Config {
-	return remotecache.Config{
-		Compression: compression.New(compression.Default),
-	}
 }
 
 // For uploading manifests, use the Upload API which follows "last writer wins" sematics

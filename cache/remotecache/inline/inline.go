@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -35,12 +34,6 @@ type exporter struct {
 
 func (*exporter) Name() string {
 	return "exporting inline cache"
-}
-
-func (ce *exporter) Config() remotecache.Config {
-	return remotecache.Config{
-		Compression: compression.New(compression.Default),
-	}
 }
 
 func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {

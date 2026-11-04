@@ -9,7 +9,6 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
 	sessioncontent "github.com/moby/buildkit/session/content"
-	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -39,10 +38,6 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if store == "" {
 			return nil, errors.New("local cache exporter requires dest")
 		}
-		compressionConfig, err := compression.ParseAttributes(attrs)
-		if err != nil {
-			return nil, err
-		}
 		ociMediatypes := true
 		if v, ok := attrs[attrOCIMediatypes]; ok {
 			b, err := strconv.ParseBool(v)
@@ -67,7 +62,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if err != nil {
 			return nil, err
 		}
-		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, imageManifest, compressionConfig)}, nil
+		return &exporter{remotecache.NewExporter(cs, "", ociMediatypes, imageManifest)}, nil
 	}
 }
 
