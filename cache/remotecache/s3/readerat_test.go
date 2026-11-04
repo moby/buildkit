@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"testing/iotest"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -74,4 +75,35 @@ func TestReaderAtAtEndOfBlob(t *testing.T) {
 	require.Equal(t, 0, n)
 	require.ErrorIs(t, err, io.EOF)
 	require.Empty(t, obj.opens)
+}
+
+func TestReaderAtPartialReads(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data string
+		err  error
+	}{
+		{
+			name: "full buffer",
+			data: "abcdefgh",
+		},
+		{
+			name: "short buffer at EOF",
+			data: "abcdef",
+			err:  io.EOF,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := toReaderAtCloser(func(off int64) (io.ReadCloser, error) {
+				return io.NopCloser(iotest.HalfReader(bytes.NewReader([]byte(tc.data)[off:]))), nil
+			})
+			t.Cleanup(func() { require.NoError(t, r.Close()) })
+
+			buf := make([]byte, 8)
+			n, err := r.ReadAt(buf, 0)
+			require.ErrorIs(t, err, tc.err)
+			require.Equal(t, len(tc.data), n)
+			require.Equal(t, tc.data, string(buf[:n]))
+		})
+	}
 }

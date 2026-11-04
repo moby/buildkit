@@ -58,7 +58,7 @@ func (hrs *readerAtCloser) ReadAt(p []byte, off int64) (n int, err error) {
 			nn, err = hrs.rc.Read(p)
 			n += nn
 			p = p[nn:]
-			if nn == len(p) || err != nil {
+			if len(p) == 0 || err != nil {
 				break
 			}
 		}
