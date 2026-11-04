@@ -838,6 +838,16 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 
 	lbf.mu.Lock()
 
+	if lbf.discarded {
+		// A solve that finished after Discard has no one to release its refs.
+		lbf.mu.Unlock()
+		res.EachRef(func(r solver.ResultProxy) error {
+			r.Release(context.TODO())
+			return nil
+		})
+		return nil, stack.Enable(status.Error(codes.Unavailable, "gateway forwarder is closing"))
+	}
+
 	if res.Refs != nil {
 		ids := make(map[string]string, len(res.Refs))
 		defs := make(map[string]*opspb.Definition, len(res.Refs))

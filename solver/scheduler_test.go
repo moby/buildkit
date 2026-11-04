@@ -1297,6 +1297,8 @@ func TestExecErrorRefsReleasedAfterJobDiscard(t *testing.T) {
 
 	// A failed exec can finish after its job has released the vertex.
 	require.NoError(t, j.Discard())
+	_, err = j.Build(ctx, g)
+	require.ErrorContains(t, err, "build on discarded job")
 	resumeExec()
 	select {
 	case err := <-done:
@@ -1608,15 +1610,15 @@ func TestMultipleCacheSources(t *testing.T) {
 		}),
 	}
 
-	res, err = j1.Build(ctx, g2)
+	res, err = j2.Build(ctx, g2)
 	require.NoError(t, err)
 	require.Equal(t, "result2", unwrap(res))
 
 	require.Equal(t, int64(2), cacheManager.loadCounter)
 	require.Equal(t, int64(0), cacheManager2.loadCounter)
 
-	require.NoError(t, j1.Discard())
-	j1 = nil
+	require.NoError(t, j2.Discard())
+	j2 = nil
 }
 
 func TestRepeatBuildWithIgnoreCache(t *testing.T) {
