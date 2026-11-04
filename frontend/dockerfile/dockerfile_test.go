@@ -192,6 +192,7 @@ var allTests = integration.TestFuncs(
 	testOnBuildInheritedStageWithFrom,
 	testOnBuildNewDeps,
 	testOnBuildWithCacheMount,
+	testOnBuildDisabled,
 
 	// dockerfile_platform_test.go
 	testPlatformArgsImplicit,

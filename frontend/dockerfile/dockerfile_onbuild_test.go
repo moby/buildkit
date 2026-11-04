@@ -701,3 +701,55 @@ RUN --mount=type=cache,target=C:\cache type C:\cache\foo | findstr "42" && type 
 	}, nil)
 	require.NoError(t, err)
 }
+
+func testOnBuildDisabled(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	f := getFrontend(t, sb)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	solve := func(dockerfile string, buildArgs map[string]string) error {
+		dir := integration.Tmpdir(
+			t,
+			fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+		)
+		attrs := map[string]string{}
+		for k, v := range buildArgs {
+			attrs["build-arg:"+k] = v
+		}
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			FrontendAttrs: attrs,
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		return err
+	}
+
+	dockerfile := `
+FROM busybox AS base
+ONBUILD RUN false
+
+FROM base
+RUN true
+`
+	err = solve(dockerfile, nil)
+	require.ErrorContains(t, err, "did not complete successfully")
+
+	err = solve(dockerfile, map[string]string{"BUILDKIT_DISABLE_ONBUILD": "1"})
+	require.NoError(t, err)
+
+	err = solve(dockerfile, map[string]string{"BUILDKIT_DISABLE_ONBUILD": "maybe"})
+	require.ErrorContains(t, err, `invalid BUILDKIT_DISABLE_ONBUILD value "maybe"`)
+
+	dockerfile = "ARG BUILDKIT_DISABLE_ONBUILD=true\n" + dockerfile
+
+	err = solve(dockerfile, nil)
+	require.NoError(t, err)
+
+	err = solve(dockerfile, map[string]string{"BUILDKIT_DISABLE_ONBUILD": "false"})
+	require.ErrorContains(t, err, "did not complete successfully")
+}
