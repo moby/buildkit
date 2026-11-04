@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -10,14 +11,185 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
+
+type execStreamServer struct {
+	pb.UnimplementedLLBBridgeServer
+	init    chan string
+	failure chan error
+	start   bool
+	exit    bool
+	finish  bool
+}
+
+func (s *execStreamServer) ExecProcess(stream pb.LLBBridge_ExecProcessServer) error {
+	var pids []string
+	received := make(chan *pb.ExecMessage)
+	go func() {
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				return
+			}
+			select {
+			case received <- msg:
+			case <-stream.Context().Done():
+				return
+			}
+		}
+	}()
+	for {
+		select {
+		case err := <-s.failure:
+			if s.exit {
+				for _, pid := range pids {
+					messages := []*pb.ExecMessage{
+						{ProcessID: pid, Input: &pb.ExecMessage_Exit{Exit: &pb.ExitMessage{}}},
+					}
+					if s.finish {
+						messages = append(messages, &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Done{Done: &pb.DoneMessage{}}})
+					}
+					for _, msg := range messages {
+						if err := stream.Send(msg); err != nil {
+							return err
+						}
+					}
+				}
+			}
+			return err
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case msg := <-received:
+			if msg.GetInit() != nil {
+				pids = append(pids, msg.ProcessID)
+				s.init <- msg.ProcessID
+				if s.start {
+					if err := stream.Send(&pb.ExecMessage{
+						ProcessID: msg.ProcessID,
+						Input:     &pb.ExecMessage_Started{Started: &pb.StartedMessage{}},
+					}); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestExecStreamFailureReleasesProcesses(t *testing.T) {
+	for _, transport := range []struct {
+		name string
+		err  error
+	}{
+		{name: "EOF"},
+		{name: "unavailable", err: status.Error(codes.Unavailable, "connection lost")},
+		{name: "canceled", err: status.Error(codes.Canceled, "remote session ended")},
+		{name: "deadline", err: status.Error(codes.DeadlineExceeded, "remote exec deadline exceeded")},
+	} {
+		for _, phase := range []string{"starting", "waiting", "exited", "completed"} {
+			t.Run(transport.name+"/"+phase, func(t *testing.T) {
+				ctx, cancel := context.WithTimeoutCause(t.Context(), 10*time.Second, errors.New("exec stream failure test timed out"))
+				defer cancel()
+				server := &execStreamServer{
+					init:    make(chan string, 2),
+					failure: make(chan error, 1),
+					start:   phase != "starting",
+					exit:    phase == "exited" || phase == "completed",
+					finish:  phase == "completed",
+				}
+				var lc net.ListenConfig
+				listener, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
+				require.NoError(t, err)
+				t.Cleanup(func() { listener.Close() })
+				srv := grpc.NewServer()
+				pb.RegisterLLBBridgeServer(srv, server)
+				t.Cleanup(srv.Stop)
+				go srv.Serve(listener)
+				conn, err := grpc.NewClient(listener.Addr().String(),
+					grpc.WithTransportCredentials(insecure.NewCredentials()),
+				)
+				require.NoError(t, err)
+				t.Cleanup(func() { conn.Close() })
+				forwarder := newMessageForwarder(ctx, pb.NewLLBBridgeClient(conn))
+				require.NoError(t, forwarder.Start())
+				t.Cleanup(func() {
+					err := forwarder.Release()
+					if code := status.Code(transport.err); transport.err == nil || code == codes.Canceled {
+						require.NoError(t, err)
+					} else {
+						require.Equal(t, code, status.Code(err))
+						require.ErrorContains(t, err, status.Convert(transport.err).Message())
+					}
+				})
+				ctr := &container{id: "stream-failure", execMsgs: forwarder}
+				done := make(chan error, 2)
+				ready := make(chan struct{}, 2)
+				for range 2 {
+					input, writer := io.Pipe()
+					t.Cleanup(func() {
+						input.Close()
+						writer.Close()
+					})
+					req := client.StartRequest{Stdin: input}
+					go func() {
+						process, err := ctr.Start(ctx, req)
+						if err == nil {
+							ready <- struct{}{}
+							err = process.Wait()
+						}
+						done <- err
+					}()
+					select {
+					case <-server.init:
+					case <-ctx.Done():
+						t.Fatal(context.Cause(ctx))
+					}
+					if server.start {
+						select {
+						case <-ready:
+						case <-ctx.Done():
+							t.Fatal(context.Cause(ctx))
+						}
+					}
+				}
+				server.failure <- transport.err
+				for range 2 {
+					select {
+					case err := <-done:
+						require.NoError(t, context.Cause(ctx), "caller context must remain live")
+						if server.finish {
+							require.NoError(t, err)
+						} else if transport.err == nil {
+							require.ErrorIs(t, err, io.EOF)
+						} else {
+							require.Equal(t, status.Code(transport.err), status.Code(err))
+							require.ErrorContains(t, err, status.Convert(transport.err).Message())
+						}
+					case <-ctx.Done():
+						t.Fatal(context.Cause(ctx))
+					}
+				}
+				// Release cancels the stream itself, so wait for the server's status,
+				// which can arrive after completed processes return.
+				<-forwarder.ctx.Done()
+				require.NoError(t, context.Cause(ctx), "remote exec stream did not end")
+			})
+		}
+	}
+}
 
 type outputErrorClient struct {
 	pb.LLBBridgeClient
 	pb.LLBBridge_ExecProcessClient
 	ctx      context.Context
 	messages chan *pb.ExecMessage
+	stdinEOF chan struct{}
+	stdinErr error
 }
 
 func (c *outputErrorClient) ExecProcess(ctx context.Context, _ ...grpc.CallOption) (pb.LLBBridge_ExecProcessClient, error) {
@@ -26,6 +198,12 @@ func (c *outputErrorClient) ExecProcess(ctx context.Context, _ ...grpc.CallOptio
 }
 
 func (c *outputErrorClient) Send(msg *pb.ExecMessage) error {
+	if file := msg.GetFile(); file != nil && file.Fd == 0 && file.EOF {
+		if c.stdinEOF != nil {
+			close(c.stdinEOF)
+		}
+		return c.stdinErr
+	}
 	if msg.GetInit() != nil {
 		c.messages <- &pb.ExecMessage{
 			ProcessID: msg.ProcessID,
@@ -44,6 +222,90 @@ func (c *outputErrorClient) Recv() (*pb.ExecMessage, error) {
 	}
 }
 
+func TestProcessStdinEOF(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		closeInput bool
+		stdinErr   error
+		exitCode   uint32
+	}{
+		{
+			name:       "input EOF",
+			closeInput: true,
+		},
+		{
+			name:       "input EOF send error",
+			closeInput: true,
+			stdinErr:   io.EOF,
+		},
+		{
+			name:     "successful process with open stdin",
+			stdinErr: io.EOF,
+		},
+		{
+			name:     "failed process with open stdin",
+			stdinErr: io.EOF,
+			exitCode: 42,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("stdin EOF test timed out"))
+			defer cancel()
+			bridge := &outputErrorClient{
+				messages: make(chan *pb.ExecMessage, 2),
+				stdinEOF: make(chan struct{}),
+				stdinErr: tc.stdinErr,
+			}
+			forwarder := newMessageForwarder(ctx, bridge)
+			require.NoError(t, forwarder.Start())
+			t.Cleanup(func() { require.NoError(t, forwarder.Release()) })
+			ctr := &container{id: "stdin-eof", execMsgs: forwarder}
+			input, writer := io.Pipe()
+			t.Cleanup(func() {
+				input.Close()
+				writer.Close()
+			})
+			process, err := ctr.Start(ctx, client.StartRequest{Stdin: input})
+			require.NoError(t, err)
+			if tc.closeInput {
+				require.NoError(t, writer.Close())
+				select {
+				case <-bridge.stdinEOF:
+				case <-ctx.Done():
+					t.Fatal(context.Cause(ctx))
+				}
+			}
+			if !tc.closeInput || tc.stdinErr == nil {
+				exit := &pb.ExitMessage{Code: tc.exitCode}
+				if tc.exitCode != 0 {
+					exit.Error = &spb.Status{Code: int32(codes.Unknown), Message: "process failed"}
+				}
+				pid := process.(*containerProcess).id
+				bridge.messages <- &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Exit{Exit: exit}}
+				// The gateway server waits for stdin EOF before sending Done.
+				select {
+				case <-bridge.stdinEOF:
+				case <-ctx.Done():
+					t.Fatal(context.Cause(ctx))
+				}
+				bridge.messages <- &pb.ExecMessage{ProcessID: pid, Input: &pb.ExecMessage_Done{Done: &pb.DoneMessage{}}}
+			}
+			err = process.Wait()
+			require.NoError(t, context.Cause(ctx))
+			switch {
+			case tc.closeInput && tc.stdinErr != nil:
+				require.ErrorIs(t, err, tc.stdinErr)
+			case tc.exitCode != 0:
+				var exitError *pb.ExitError
+				require.ErrorAs(t, err, &exitError)
+				require.Equal(t, tc.exitCode, exitError.ExitCode)
+			default:
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestProcessWaitReturnsOutputError(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -58,7 +320,11 @@ func TestProcessWaitReturnsOutputError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeoutCause(t.Context(), 5*time.Second, errors.New("process output-error test timed out"))
 			defer cancel()
-			bridge := &outputErrorClient{messages: make(chan *pb.ExecMessage, 1)}
+			bridge := &outputErrorClient{
+				messages: make(chan *pb.ExecMessage, 1),
+				stdinEOF: make(chan struct{}),
+				stdinErr: io.EOF,
+			}
 			forwarder := newMessageForwarder(ctx, bridge)
 			require.NoError(t, forwarder.Start())
 			t.Cleanup(func() { require.NoError(t, forwarder.Release()) })
@@ -92,6 +358,13 @@ func TestProcessWaitReturnsOutputError(t *testing.T) {
 			select {
 			case err := <-wait:
 				require.ErrorIs(t, err, io.ErrClosedPipe)
+				if tc.stdin {
+					select {
+					case <-bridge.stdinEOF:
+					default:
+						t.Fatal("output-error cleanup did not send stdin EOF")
+					}
+				}
 			case <-ctx.Done():
 				t.Fatal(context.Cause(ctx))
 			}
