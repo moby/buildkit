@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -226,7 +227,62 @@ func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"container":         "cachecontainer",
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+
+	cred, err := azblob.NewSharedKeyCredential(opts.AccountName, opts.AccountKey)
+	require.NoError(t, err)
+	azClient, err := azblob.NewClientWithSharedKeyCredential(azAddr, cred, nil)
+	require.NoError(t, err)
+	readBlob := func(t *testing.T, name string) []byte {
+		t.Helper()
+		resp, err := azClient.DownloadStream(sb.Context(), "cachecontainer", name, nil)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		dt, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return dt
+	}
+
+	for _, tc := range []struct {
+		name  string
+		comp  compression.Type
+		frame ctdcompression.Compression
+	}{
+		{
+			name:  "default",
+			comp:  compression.Gzip,
+			frame: ctdcompression.Gzip,
+		},
+		{
+			name:  "zstd",
+			comp:  compression.Zstd,
+			frame: ctdcompression.Zstd,
+		},
+		{
+			name:  "uncompressed",
+			comp:  compression.Uncompressed,
+			frame: ctdcompression.Uncompressed,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			im.Attrs["name"] = tc.name
+			ex.Attrs["name"] = tc.name
+			if tc.name != "default" {
+				ex.Attrs["compression"] = tc.comp.String()
+				ex.Attrs["force-compression"] = "true"
+			}
+			testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+
+			var config cacheimporttypes.CacheConfig
+			require.NoError(t, json.Unmarshal(readBlob(t, "manifests/"+tc.name), &config))
+			require.NotEmpty(t, config.Layers)
+			for _, layer := range config.Layers {
+				require.NotNil(t, layer.Annotations)
+				require.True(t, compression.IsMediaType(tc.comp, layer.Annotations.MediaType))
+				blob := readBlob(t, "blobs/"+layer.Blob.String())
+				require.Equal(t, tc.frame, ctdcompression.DetectCompression(blob))
+			}
+		})
+	}
 }
 
 func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {
