@@ -669,6 +669,43 @@ func TestFileOwnerWithUIDAndGID(t *testing.T) {
 	require.Equal(t, 1001, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
 }
 
+// uid_t and gid_t span 0..2^32-1, so the upper half of that range must still be
+// treated as a numeric ID and not fall back to a name lookup.
+func TestFileOwnerWithUIDAndGIDAboveInt32(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("2147483648:4294967295")))
+	def, err := st.Marshal(t.Context())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, 2147483648, int(mkdir.Owner.User.User.(*pb.UserOpt_ByID).ByID))
+	require.Equal(t, 4294967295, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
+}
+
+// A sign prefix is not a valid ID, so it stays a name lookup instead of
+// wrapping around to the top of the ID range.
+func TestFileOwnerWithNegativeUID(t *testing.T) {
+	t.Parallel()
+
+	st := Image("foo").File(Mkdir("bar/baz", 0701, WithUser("-1")))
+	def, err := st.Marshal(t.Context())
+
+	require.NoError(t, err)
+
+	_, arr := parseDef(t, def.Def)
+
+	action := arr[1].Op.(*pb.Op_File).File.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+
+	require.Equal(t, "-1", mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+}
+
 func TestFileCopyOwner(t *testing.T) {
 	t.Parallel()
 
