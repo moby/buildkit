@@ -1,14 +1,19 @@
 package cacheimport
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
+	cerrdefs "github.com/containerd/errdefs"
+	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -161,4 +166,76 @@ func TestMarshalLayerMediaTypes(t *testing.T) {
 
 func dgst(s string) digest.Digest {
 	return digest.FromBytes([]byte(s))
+}
+
+// countingProvider fails Info for a blob once it has been checked more than failAfter times, modelling a blob
+// that becomes unavailable while the config is being marshaled.
+type countingProvider struct {
+	failAfter map[digest.Digest]int
+	calls     map[digest.Digest]int
+}
+
+func (p *countingProvider) Info(_ context.Context, dgst digest.Digest) (content.Info, error) {
+	p.calls[dgst]++
+	if n, ok := p.failAfter[dgst]; ok && p.calls[dgst] > n {
+		return content.Info{}, errors.Wrapf(cerrdefs.ErrNotFound, "blob %s", dgst)
+	}
+	return content.Info{Digest: dgst}, nil
+}
+
+func (p *countingProvider) ReaderAt(context.Context, ocispecs.Descriptor) (content.ReaderAt, error) {
+	return nil, cerrdefs.ErrNotImplemented
+}
+
+func TestMarshalUnavailableBlob(t *testing.T) {
+	chain := []ocispecs.Descriptor{{Digest: dgst("d0")}, {Digest: dgst("d1")}, {Digest: dgst("d2")}}
+
+	marshal := func(t *testing.T, p *countingProvider) *cacheimporttypes.CacheConfig {
+		cc := NewCacheChains()
+		base, ok, err := cc.Add(outputKey(dgst("base"), 0), nil, nil)
+		require.NoError(t, err)
+		require.True(t, ok)
+		// built with append: a one-element literal makes gosec report G602 on deps[i][j] in Add
+		var deps [][]solver.CacheLink
+		deps = append(deps, []solver.CacheLink{{Src: base}})
+		_, ok, err = cc.Add(outputKey(dgst("run"), 0), deps, []solver.CacheExportResult{{
+			CreatedAt: time.Now(),
+			Result:    &solver.Remote{Descriptors: chain, Provider: p},
+		}})
+		require.NoError(t, err)
+		require.True(t, ok)
+		cfg, _, err := cc.Marshal(t.Context())
+		require.NoError(t, err)
+		return cfg
+	}
+
+	t.Run("unavailable", func(t *testing.T) {
+		// the bottom blob is gone: the result is dropped, nothing of its chain is exported
+		cfg := marshal(t, &countingProvider{failAfter: map[digest.Digest]int{dgst("d0"): 0}, calls: map[digest.Digest]int{}})
+		require.Empty(t, cfg.Layers)
+		for _, r := range cfg.Records {
+			require.Empty(t, r.Results)
+		}
+	})
+
+	t.Run("becomes unavailable", func(t *testing.T) {
+		// the bottom blob passes the first check and fails afterwards: the chain is exported whole or not at all,
+		// never rooted on d1 or d2
+		cfg := marshal(t, &countingProvider{failAfter: map[digest.Digest]int{dgst("d0"): 1}, calls: map[digest.Digest]int{}})
+		for _, l := range cfg.Layers {
+			for l.ParentIndex != -1 {
+				l = cfg.Layers[l.ParentIndex]
+			}
+			require.Equal(t, dgst("d0"), l.Blob, "layer chain rooted on %s instead of the image root", l.Blob)
+		}
+		for _, r := range cfg.Records {
+			for _, res := range r.Results {
+				n, l := 1, cfg.Layers[res.LayerIndex]
+				for l.ParentIndex != -1 {
+					l, n = cfg.Layers[l.ParentIndex], n+1
+				}
+				require.Equal(t, len(chain), n)
+			}
+		}
+	})
 }
