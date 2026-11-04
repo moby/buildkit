@@ -442,6 +442,13 @@ func (r *readerAt) Size() int64 {
 	return r.size
 }
 
+func (r *readerAt) ReadAt(p []byte, off int64) (int, error) {
+	if off >= r.size {
+		return 0, io.EOF
+	}
+	return r.ReaderAtCloser.ReadAt(p, off)
+}
+
 type s3Client struct {
 	*s3.Client
 	transferManager *transfermanager.Client
