@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +64,9 @@ type cmOpt struct {
 	snapshotterName string
 	snapshotter     snapshots.Snapshotter
 	tmpdir          string
+	// pruneRefChecker is passed to the cache manager to report which records
+	// are shared with external images.
+	pruneRefChecker ExternalRefCheckerFunc
 }
 
 type cmOut struct {
@@ -100,7 +104,7 @@ func (s *prepareLabelSnapshotter) getSnapshotRef() string {
 	return s.snapshotRef
 }
 
-func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, cleanup func(), err error) {
+func newCacheManager(ctx context.Context, t testing.TB, opt cmOpt) (co *cmOut, cleanup func(), err error) {
 	ns, ok := namespaces.Namespace(ctx)
 	if !ok {
 		return nil, nil, errors.New("namespace required for test")
@@ -176,15 +180,16 @@ func newCacheManager(ctx context.Context, t *testing.T, opt cmOpt) (co *cmOut, c
 
 	metadataSnapshotter := mdb.Snapshotter(opt.snapshotterName)
 	cm, err := NewManager(ManagerOpt{
-		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, metadataSnapshotter), nil),
-		MetadataStore:  md,
-		ContentStore:   store,
-		LeaseManager:   lm,
-		GarbageCollect: mdb.GarbageCollect,
-		Applier:        applier,
-		Differ:         differ,
-		Root:           tmpdir,
-		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
+		Snapshotter:     snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, metadataSnapshotter), nil),
+		MetadataStore:   md,
+		ContentStore:    store,
+		LeaseManager:    lm,
+		GarbageCollect:  mdb.GarbageCollect,
+		Applier:         applier,
+		Differ:          differ,
+		Root:            tmpdir,
+		MountPoolRoot:   filepath.Join(tmpdir, "cachemounts"),
+		PruneRefChecker: opt.pruneRefChecker,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -3750,4 +3755,234 @@ func isReadOnly(mnt mount.Mount) bool {
 		return !hasUpperdir
 	}
 	return false
+}
+
+// TestDiskUsageSharedAfterExport checks that a record whose layer digest chain
+// was computed before it had a blob is still reported as shared once it is
+// exported to an image. Disk usage and GC compute the chains of all records,
+// including ones that are not exported yet, so a chain must not be memoized
+// before the blobs of all its layers are set.
+func TestDiskUsageSharedAfterExport(t *testing.T) {
+	t.Parallel()
+	ctx, cm, checker := newSharedTestManager(t)
+
+	base := newFileRef(ctx, t, cm, nil, "base")
+	child := newFileRef(ctx, t, cm, base, "child")
+
+	// Neither record has a blob yet, so neither can be referenced by an image.
+	requireShared(ctx, t, cm, map[string]bool{base.ID(): false, child.ID(): false})
+
+	chain := exportChain(ctx, t, child)
+	require.Len(t, chain, 2)
+	require.Equal(t, chain, layerDigestChainOf(t, child))
+	require.Equal(t, chain[:1], layerDigestChainOf(t, base))
+
+	checker.set(chain)
+	requireShared(ctx, t, cm, map[string]bool{base.ID(): true, child.ID(): true})
+}
+
+// TestDiskUsageSharedAfterExportMerge is TestDiskUsageSharedAfterExport for a
+// Merge record, whose chain is made of the chains of its parents and is only
+// complete once all of them are.
+func TestDiskUsageSharedAfterExportMerge(t *testing.T) {
+	t.Parallel()
+	ctx, cm, checker := newSharedTestManager(t)
+
+	a := newFileRef(ctx, t, cm, nil, "a")
+	b := newFileRef(ctx, t, cm, nil, "b")
+	merged, err := cm.Merge(ctx, []ImmutableRef{a, b}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { merged.Release(context.WithoutCancel(ctx)) })
+
+	// Only one of the parents has a blob, so the merge has no chain yet.
+	exportChain(ctx, t, a)
+	requireShared(ctx, t, cm, map[string]bool{a.ID(): false, b.ID(): false, merged.ID(): false})
+	require.Nil(t, layerDigestChainOf(t, merged))
+
+	chain := exportChain(ctx, t, merged)
+	require.Len(t, chain, 2)
+	require.Equal(t, chain, layerDigestChainOf(t, merged))
+
+	checker.set(chain)
+	requireShared(ctx, t, cm, map[string]bool{a.ID(): true, b.ID(): true, merged.ID(): true})
+}
+
+// TestDiskUsageSharedAfterExportDiff checks the chains of Diff records. A diff
+// of a single layer on top of its lower is exported as the blob of that layer,
+// a diff from an ancestor as a merge of such diffs, and any other diff as a
+// blob of its own. None of them is shared with an image of their upper.
+func TestDiskUsageSharedAfterExportDiff(t *testing.T) {
+	t.Parallel()
+	ctx, cm, checker := newSharedTestManager(t)
+
+	other := newFileRef(ctx, t, cm, nil, "other")
+	base := newFileRef(ctx, t, cm, nil, "base")
+	mid := newFileRef(ctx, t, cm, base, "mid")
+	upper := newFileRef(ctx, t, cm, mid, "upper")
+	upperChain := exportChain(ctx, t, upper)
+	require.Len(t, upperChain, 3)
+
+	// upper is a single layer on top of mid, so this diff reuses its blob.
+	reused := newDiff(ctx, t, cm, mid, upper)
+	// base is an ancestor of upper, so this diff is a merge of the diffs that
+	// reuse the blobs of mid and upper.
+	ancestor := newDiff(ctx, t, cm, base, upper)
+	require.Equal(t, Merge, ancestor.(*immutableRef).kind())
+	// upper is unrelated to other, so this diff gets a blob of its own.
+	computed := newDiff(ctx, t, cm, other, upper)
+
+	checker.set(upperChain)
+	requireShared(ctx, t, cm, map[string]bool{upper.ID(): true, reused.ID(): false, ancestor.ID(): false, computed.ID(): false})
+	require.Nil(t, layerDigestChainOf(t, computed))
+
+	for _, ref := range []ImmutableRef{reused, ancestor, computed} {
+		chain := exportChain(ctx, t, ref)
+		require.Equal(t, chain, layerDigestChainOf(t, ref))
+		checker.set(chain)
+		requireShared(ctx, t, cm, map[string]bool{ref.ID(): true})
+	}
+}
+
+// BenchmarkDiskUsageUnexportedChain measures disk usage for a long chain of
+// records that have no blobs, as with a builder that never exports. Their
+// chains are not memoized, so computing one must not walk the ancestors of
+// the record, or every call costs the square of the chain length.
+func BenchmarkDiskUsageUnexportedChain(b *testing.B) {
+	ctx, cm, _ := newSharedTestManager(b)
+
+	var parent ImmutableRef
+	for range 500 {
+		active, err := cm.New(ctx, parent, nil, CachePolicyRetain)
+		require.NoError(b, err)
+		ref, err := active.Commit(ctx)
+		require.NoError(b, err)
+		b.Cleanup(func() { ref.Release(context.WithoutCancel(ctx)) })
+		parent = ref
+	}
+	// The first call computes every chain, measure the calls that follow.
+	_, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(b, err)
+
+	for b.Loop() {
+		_, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+		require.NoError(b, err)
+	}
+}
+
+// newSharedTestManager creates a cache manager that reports records as shared
+// with the image of the returned checker. The tests using it mount and export
+// records, which is only supported on Linux.
+func newSharedTestManager(t testing.TB) (context.Context, Manager, *chainRefChecker) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	checker := &chainRefChecker{}
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		pruneRefChecker: func() (ExternalRefChecker, error) {
+			return checker, nil
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	t.Cleanup(func() { done(context.WithoutCancel(ctx)) })
+
+	return ctx, co.manager, checker
+}
+
+// newFileRef commits a record on top of parent that contains a single file
+// named name, so that every record created by it has a distinct blob.
+func newFileRef(ctx context.Context, t *testing.T, cm Manager, parent ImmutableRef, name string) ImmutableRef {
+	t.Helper()
+	active, err := cm.New(ctx, parent, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	m, err := active.Mount(ctx, false, nil)
+	require.NoError(t, err)
+	lm := snapshot.LocalMounter(m)
+	target, err := lm.Mount()
+	require.NoError(t, err)
+	require.NoError(t, fstest.Apply(fstest.CreateFile(name, []byte(name), 0644)).Apply(target))
+	require.NoError(t, lm.Unmount())
+	ref, err := active.Commit(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { ref.Release(context.WithoutCancel(ctx)) })
+	return ref
+}
+
+// newDiff creates the diff between lower and upper.
+func newDiff(ctx context.Context, t *testing.T, cm Manager, lower, upper ImmutableRef) ImmutableRef {
+	t.Helper()
+	ref, err := cm.Diff(ctx, lower, upper, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { ref.Release(context.WithoutCancel(ctx)) })
+	return ref
+}
+
+// exportChain creates the blobs of ref and returns the layers of the image
+// that exporting ref produces. The layers must be distinct, or a chain that
+// is missing or repeating a layer could still match the image.
+func exportChain(ctx context.Context, t *testing.T, ref ImmutableRef) []digest.Digest {
+	t.Helper()
+	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil)
+	require.NoError(t, err)
+	require.Len(t, remotes, 1)
+	var chain []digest.Digest
+	for _, desc := range remotes[0].Descriptors {
+		require.NotContains(t, chain, desc.Digest)
+		chain = append(chain, desc.Digest)
+	}
+	return chain
+}
+
+// layerDigestChainOf returns the layer digest chain of ref, taking the locks
+// that layerDigestChain requires.
+func layerDigestChainOf(t *testing.T, ref ImmutableRef) []digest.Digest {
+	t.Helper()
+	cr := ref.(*immutableRef).cacheRecord
+	cr.cm.mu.Lock()
+	defer cr.cm.mu.Unlock()
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	return cr.layerDigestChain()
+}
+
+// requireShared checks the shared status that disk usage reports for the
+// records in expected.
+func requireShared(ctx context.Context, t *testing.T, cm Manager, expected map[string]bool) {
+	t.Helper()
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	actual := map[string]bool{}
+	for _, info := range du {
+		if _, ok := expected[info.ID]; ok {
+			actual[info.ID] = info.Shared
+		}
+	}
+	require.Equal(t, expected, actual)
+}
+
+// chainRefChecker is an ExternalRefChecker that reports a single image made of
+// the layers in chain. Like an image store, it only matches a record whose
+// whole layer digest chain is the same as the layers of the image.
+type chainRefChecker struct {
+	mu    sync.Mutex
+	chain []digest.Digest
+}
+
+// set replaces the layers of the image.
+func (c *chainRefChecker) set(chain []digest.Digest) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.chain = chain
+}
+
+// Exists reports if blobs are the layers of the image.
+func (c *chainRefChecker) Exists(_ string, blobs []digest.Digest) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.chain != nil && slices.Equal(c.chain, blobs)
 }

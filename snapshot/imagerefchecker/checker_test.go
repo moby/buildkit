@@ -15,7 +15,7 @@ import (
 )
 
 func TestExists(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	cs, err := local.NewStore(t.TempDir())
 	require.NoError(t, err)
