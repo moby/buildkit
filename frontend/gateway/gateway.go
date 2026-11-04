@@ -281,6 +281,10 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	lbf, ctx := serveLLBBridgeForwarder(ctx, llbBridge, exec, gf.workers, inputs, sid, sm)
 	defer lbf.Discard()
 	defer lbf.conn.Close()
+	// The executor may pass these fds directly to the frontend process, so
+	// close them only after Run has returned and no fork can still use them.
+	defer lbf.Stdin.Close()
+	defer lbf.Stdout.Close()
 
 	mdmnt, release, err := metadataMount(frontendDef)
 	if err != nil {
@@ -475,7 +479,6 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		refs:               map[string]solver.ResultProxy{},
 		resultByID:         map[string]solver.Result{},
 		doneCh:             make(chan struct{}),
-		pipe:               newPipe(),
 		workers:            workers,
 		inputs:             inputs,
 		sid:                sid,
@@ -490,6 +493,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, exec executor.Executor, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, exec, workers, inputs, sid, sm)
+	lbf.pipe = newPipe()
 	serverOpt := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor),
 		grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor),
@@ -528,7 +532,7 @@ func newPipe() *pipe {
 		conn: &conn{
 			Reader:  pr2,
 			Writer:  pw1,
-			closers: []io.Closer{pr2, pw1, pr1, pw2},
+			closers: []io.Closer{pr2, pw1},
 		},
 	}
 }
