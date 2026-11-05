@@ -80,6 +80,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testInvalidExporter,
 	testLazyImagePush,
 	testOCIExporter,
+	testOCIExporterScratchLayers,
 	testOCIExporterContentStore,
 	testPullWithDigestCheck,
 	testPullZstdImage,
