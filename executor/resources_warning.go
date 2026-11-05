@@ -8,7 +8,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const linuxResourcesIgnoredMsg = "resource limits are ignored by the rootless worker"
@@ -33,17 +32,16 @@ func WarnLinuxResourcesIgnored(ctx context.Context, res *pb.LinuxResources) {
 	pw.Close()
 }
 
-// hasLinuxResources reports whether any limit is set in res. Range only visits
-// fields with a non-zero value, so new fields are covered without listing them
-// here.
+// hasLinuxResources reports whether any limit is set in res.
 func hasLinuxResources(res *pb.LinuxResources) bool {
 	if res == nil {
 		return false
 	}
-	set := false
-	res.ProtoReflect().Range(func(protoreflect.FieldDescriptor, protoreflect.Value) bool {
-		set = true
-		return false
-	})
-	return set
+	return res.Memory != 0 ||
+		res.MemorySwap != 0 ||
+		res.CpuShares != 0 ||
+		res.CpuPeriod != 0 ||
+		res.CpuQuota != 0 ||
+		res.CpusetCpus != "" ||
+		res.CpusetMems != ""
 }
