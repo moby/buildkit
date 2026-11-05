@@ -712,6 +712,9 @@ func testImageCacheAcrossAttestationChanges(t *testing.T, sb integration.Sandbox
 // image's source cache (GHSA-f2v9-hprr-32q3).
 func testImageCacheRejectsUnverifiedDiffIDs(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+	if workers.IsTestDockerdMoby(sb) {
+		t.Skip("moby graphdriver pulls images without the BuildKit cache manager's layer verification")
+	}
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
