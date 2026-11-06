@@ -1130,6 +1130,31 @@ COPY sub/dir1 subdest6
 	require.Equal(t, "foo-contents", string(dt))
 }
 
+func testCopyWildcardsInvalidDestination(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, command := range []string{"COPY", "ADD"} {
+		t.Run(command, func(t *testing.T) {
+			dockerfile := fmt.Sprintf("FROM %s\n%s *.txt test.txt\n", integration.UnixOrWindows("scratch", "nanoserver"), command)
+			dir := integration.Tmpdir(t,
+				fstest.CreateFile("Dockerfile", []byte(dockerfile), 0o600),
+				fstest.CreateFile("test1.txt", []byte("test1"), 0o600),
+				fstest.CreateFile("test2.txt", []byte("test2"), 0o600),
+			)
+			_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
+				},
+			}, nil)
+			require.ErrorContains(t, err, "destination must be a directory")
+		})
+	}
+}
+
 func testCopyRelative(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
