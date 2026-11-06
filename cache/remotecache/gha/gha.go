@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/tracing"
 	bkversion "github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
@@ -195,6 +196,38 @@ func indexKey(scope string, config *Config) string {
 	return key
 }
 
+// uploadBlob saves a layer blob unless the cache already has it.
+func (ce *exporter) uploadBlob(ctx context.Context, dgstPair v1.DescriptorProviderPair) error {
+	ce.initActiveKeyMap(ctx)
+	key := blobKey(dgstPair.Descriptor.Digest)
+	if ce.keyMap != nil {
+		if _, ok := ce.keyMap[key]; ok {
+			return nil
+		}
+	} else {
+		b, err := ce.cache.Load(ctx, key)
+		if err != nil {
+			return err
+		}
+		if b != nil {
+			return nil
+		}
+	}
+	layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", dgstPair.Descriptor.Digest))
+	ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
+	if err != nil {
+		return layerDone(err)
+	}
+	err = ce.cache.Save(ctx, key, ra)
+	ra.Close()
+	if err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return layerDone(errors.Wrap(err, "error writing layer blob"))
+		}
+	}
+	return layerDone(nil)
+}
+
 func (ce *exporter) initActiveKeyMap(ctx context.Context) {
 	ce.keyMapOnce.Do(func() {
 		if ce.config.Repository == "" || ce.config.GHToken == "" {
@@ -231,7 +264,8 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 		return nil, err
 	}
 
-	// TODO: push parallel
+	// Annotate every layer before uploading anything, so that an invalid layer
+	// fails the export before any upload starts.
 	for i, l := range config.Layers {
 		dgstPair, ok := descs[l.Blob]
 		if !ok {
@@ -250,39 +284,6 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 			return nil, errors.Wrapf(err, "failed to parse uncompressed annotation")
 		}
 		diffID = dgst
-		ce.initActiveKeyMap(ctx)
-
-		key := blobKey(dgstPair.Descriptor.Digest)
-
-		exists := false
-		if ce.keyMap != nil {
-			if _, ok := ce.keyMap[key]; ok {
-				exists = true
-			}
-		} else {
-			b, err := ce.cache.Load(ctx, key)
-			if err != nil {
-				return nil, err
-			}
-			if b != nil {
-				exists = true
-			}
-		}
-		if !exists {
-			layerDone := progress.OneOff(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-			ra, err := dgstPair.Provider.ReaderAt(ctx, dgstPair.Descriptor)
-			if err != nil {
-				return nil, layerDone(err)
-			}
-			err = ce.cache.Save(ctx, key, ra)
-			ra.Close()
-			if err != nil {
-				if !errors.Is(err, os.ErrExist) {
-					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
-				}
-			}
-			layerDone(nil)
-		}
 		la := &cacheimporttypes.LayerAnnotations{
 			DiffID:    diffID,
 			Size:      dgstPair.Descriptor.Size,
@@ -296,6 +297,21 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 			la.CreatedAt = t.UTC()
 		}
 		config.Layers[i].Annotations = la
+	}
+
+	// Check and upload the blobs in parallel, bounded like registry cache
+	// pushes. descs has one entry per blob, so a blob that backs layers in
+	// several parent chains is uploaded once: saving the same key twice at
+	// once would race.
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(int(limited.Default.Size()))
+	for _, dgstPair := range descs {
+		eg.Go(func() error {
+			return ce.uploadBlob(egCtx, dgstPair)
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
 	dt, err := json.Marshal(config)
