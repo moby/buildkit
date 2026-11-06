@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/history"
 	"github.com/moby/buildkit/solver/result"
 	spb "github.com/moby/buildkit/sourcepolicy/pb"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -44,6 +45,7 @@ type RemoteCacheExporter struct {
 	remotecache.Exporter
 	solver.CacheExportMode
 	IgnoreError bool
+	Compression compression.Config
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases

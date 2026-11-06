@@ -118,7 +118,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					ctx := withDescHandlerCacheOpts(ctx, ref)
 
 					// Configure compression
-					compressionConfig := exp.Config().Compression
+					compressionConfig := exp.Compression
 
 					// all keys have same export chain so exporting others is not needed
 					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{

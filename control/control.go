@@ -42,6 +42,7 @@ import (
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/db"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/imageutil"
@@ -474,34 +475,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, errors.Errorf("duplicate cache exports %s", types)
 	}
 	req.Cache.Exports = rest
-	var cacheExporters []llbsolver.RemoteCacheExporter
-	for _, e := range req.Cache.Exports {
-		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
-		if !ok {
-			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
-		}
-		var exp llbsolver.RemoteCacheExporter
-		exp.Exporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
-		}
-		if exp.Exporter == nil {
-			bklog.G(ctx).Debugf("cache exporter resolver for %v returned nil, skipping exporter", e.Type)
-			continue
-		}
-		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
-			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
-		} else {
-			exp.CacheExportMode = exportMode
-		}
-		if ignoreErrorStr, ok := e.Attrs["ignore-error"]; ok {
-			if ignoreError, supported := parseCacheExportIgnoreError(ignoreErrorStr); !supported {
-				bklog.G(ctx).Debugf("skipping invalid cache export ignore-error: %s", e.Attrs["ignore-error"])
-			} else {
-				exp.IgnoreError = ignoreError
-			}
-		}
-		cacheExporters = append(cacheExporters, exp)
+	cacheExporters, err := c.resolveCacheExporters(ctx, session.NewGroup(req.Session), req.Cache.Exports)
+	if err != nil {
+		return nil, err
 	}
 
 	var cacheImports []frontend.CacheOptionsEntry
@@ -856,4 +832,46 @@ func entitlementsFromPB(elems []string) []entitlements.Entitlement {
 		clone[i] = entitlements.Entitlement(e)
 	}
 	return clone
+}
+
+// resolveCacheExporters configures shared export options and backend storage.
+func (c *Controller) resolveCacheExporters(ctx context.Context, g session.Group, entries []*controlapi.CacheOptionsEntry) ([]llbsolver.RemoteCacheExporter, error) {
+	var cacheExporters []llbsolver.RemoteCacheExporter
+	for _, e := range entries {
+		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
+		if !ok {
+			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
+		}
+		var exp llbsolver.RemoteCacheExporter
+		var err error
+		// Inline cache uses the image exporter's compression settings.
+		if e.Type != "inline" {
+			exp.Compression, err = compression.ParseAttributes(e.Attrs)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
+			}
+		}
+		exp.Exporter, err = cacheExporterFunc(ctx, g, e.Attrs)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
+		}
+		if exp.Exporter == nil {
+			bklog.G(ctx).Debugf("cache exporter resolver for %v returned nil, skipping exporter", e.Type)
+			continue
+		}
+		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
+			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
+		} else {
+			exp.CacheExportMode = exportMode
+		}
+		if ignoreErrorStr, ok := e.Attrs["ignore-error"]; ok {
+			if ignoreError, supported := parseCacheExportIgnoreError(ignoreErrorStr); !supported {
+				bklog.G(ctx).Debugf("skipping invalid cache export ignore-error: %s", e.Attrs["ignore-error"])
+			} else {
+				exp.IgnoreError = ignoreError
+			}
+		}
+		cacheExporters = append(cacheExporters, exp)
+	}
+	return cacheExporters, nil
 }

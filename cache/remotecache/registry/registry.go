@@ -13,7 +13,6 @@ import (
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/push"
@@ -54,10 +53,6 @@ func (*exporter) Name() string {
 
 func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
-		compressionConfig, err := compression.ParseAttributes(attrs)
-		if err != nil {
-			return nil, err
-		}
 		ref, err := canonicalizeRef(attrs[attrRef])
 		if err != nil {
 			return nil, err
@@ -96,7 +91,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, imageManifest, compressionConfig)}, nil
+		return &exporter{remotecache.NewExporter(contentutil.FromPusher(pusher), refString, ociMediatypes, imageManifest)}, nil
 	}
 }
 
