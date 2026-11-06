@@ -205,6 +205,7 @@ var allTests = integration.TestFuncs(
 	testGitProvenanceAttestationSHA256,
 	testMultiPlatformProvenance,
 	testClientFrontendProvenance,
+	testProvenanceTmpfsMountUnusedContext,
 	testGatewayBuiltinSyntaxSourceProvenance,
 	testClientLLBProvenance,
 	testGatewayProvenanceRootRequest,
