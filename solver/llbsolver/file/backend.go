@@ -292,7 +292,11 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 			ci.IncludePatterns = action.IncludePatterns
 			ci.ExcludePatterns = action.ExcludePatterns
 			ci.Chown = ch
-			ci.Utime = timestampToTime(action.Timestamp)
+			if action.TimestampOnlyCreatedDirs {
+				ci.CreatedDirsUtime = timestampToTime(action.Timestamp)
+			} else {
+				ci.Utime = timestampToTime(action.Timestamp)
+			}
 			if action.ModeStr != "" {
 				ci.ModeStr = action.ModeStr
 			} else if m := int(action.Mode); m != -1 {
@@ -334,7 +338,7 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 
 	for _, s := range m {
 		if action.AttemptUnpackDockerCompatibility {
-			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), idmap); err != nil {
+			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), action.TimestampOnlyCreatedDirs, idmap); err != nil {
 				return errors.WithStack(err)
 			} else if ok {
 				continue
