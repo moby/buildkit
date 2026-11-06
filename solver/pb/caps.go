@@ -88,6 +88,7 @@ const (
 	CapFileCopyAlwaysReplaceExistingDestPaths apicaps.CapID = "file.copy.alwaysreplaceexistingdestpaths"
 	CapFileCopyModeStringFormat               apicaps.CapID = "file.copy.modestring"
 	CapFileSymlinkCreate                      apicaps.CapID = "file.symlink.create"
+	CapFileCopyTimestampOnlyCreatedDirs       apicaps.CapID = "file.copy.timestamponlycreateddirs"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
@@ -538,6 +539,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapFileSymlinkCreate,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapFileCopyTimestampOnlyCreatedDirs,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

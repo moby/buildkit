@@ -584,6 +584,11 @@ type CopyInfo struct {
 	ChownOpt                       *ChownOpt
 	CreatedTime                    *time.Time
 	AlwaysReplaceExistingDestPaths bool
+	// CreatedDirsTime sets the timestamps of the directories created
+	// implicitly by the copy (missing parents of the destination, directories
+	// missing from an unpacked archive), while copied files keep their own.
+	// CreatedTime takes precedence when set.
+	CreatedDirsTime *time.Time
 }
 
 func (mi *CopyInfo) SetCopyOption(mi2 *CopyInfo) {
@@ -621,6 +626,10 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 		Timestamp:                        marshalTime(a.info.CreatedTime),
 		AlwaysReplaceExistingDestPaths:   a.info.AlwaysReplaceExistingDestPaths,
 	}
+	if a.timestampOnlyCreatedDirs() {
+		c.Timestamp = marshalTime(a.info.CreatedDirsTime)
+		c.TimestampOnlyCreatedDirs = true
+	}
 	if a.info.Mode != nil {
 		if a.info.Mode.ModeStr != "" {
 			c.ModeStr = a.info.Mode.ModeStr
@@ -652,7 +661,14 @@ func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
 	return path.Join(dir, p), nil
 }
 
+func (a *fileActionCopy) timestampOnlyCreatedDirs() bool {
+	return a.info.CreatedTime == nil && a.info.CreatedDirsTime != nil
+}
+
 func (a *fileActionCopy) addCaps(f *FileOp) {
+	if a.timestampOnlyCreatedDirs() {
+		addCap(&f.constraints, pb.CapFileCopyTimestampOnlyCreatedDirs)
+	}
 	if len(a.info.IncludePatterns) != 0 || len(a.info.ExcludePatterns) != 0 {
 		addCap(&f.constraints, pb.CapFileCopyIncludeExcludePatterns)
 	}
@@ -687,6 +703,19 @@ func (c CreatedTime) SetSymlinkOption(si *SymlinkInfo) {
 
 func (c CreatedTime) SetCopyOption(mi *CopyInfo) {
 	mi.CreatedTime = (*time.Time)(&c)
+}
+
+// CreatedDirsTime is a CopyOption setting CopyInfo.CreatedDirsTime.
+type CreatedDirsTime time.Time
+
+// WithCreatedDirsTime sets the timestamps of the directories created
+// implicitly by a copy, while copied files keep their own timestamps.
+func WithCreatedDirsTime(t time.Time) CreatedDirsTime {
+	return CreatedDirsTime(t)
+}
+
+func (c CreatedDirsTime) SetCopyOption(mi *CopyInfo) {
+	mi.CreatedDirsTime = (*time.Time)(&c)
 }
 
 func marshalTime(t *time.Time) int64 {
