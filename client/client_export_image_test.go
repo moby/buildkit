@@ -1329,6 +1329,67 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+// testOCIExporterScratchLayers verifies that an image without any layers is
+// exported with an empty "layers" array rather than null.
+// https://github.com/moby/buildkit/issues/7341
+func testOCIExporterScratchLayers(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		def, err := llb.Scratch().Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		res := gateway.NewResult()
+		res.SetRef(ref)
+		return res, nil
+	}
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+	require.NoError(t, err)
+	require.Len(t, index.Manifests, 1)
+
+	var mfst map[string]json.RawMessage
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+	require.Contains(t, mfst, "layers")
+	require.JSONEq(t, `[]`, string(mfst["layers"]))
+}
+
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
 	requiresLinux(t)
