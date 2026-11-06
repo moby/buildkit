@@ -570,3 +570,64 @@ func TestCopyLinkChownByName(t *testing.T) {
 		})
 	}
 }
+
+func sourceIdentifiers(t *testing.T, df string) []string {
+	t.Helper()
+	res, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.NoError(t, err)
+
+	def, err := res.State.Marshal(t.Context())
+	require.NoError(t, err)
+
+	var ids []string
+	for _, dt := range def.Def {
+		var op pb.Op
+		require.NoError(t, op.UnmarshalVT(dt))
+		if src := op.GetSource(); src != nil {
+			ids = append(ids, src.Identifier)
+		}
+	}
+	return ids
+}
+
+func TestAddGitPlusHTTPS(t *testing.T) {
+	t.Parallel()
+
+	// "git+https://" marks a URL without the ".git" suffix as a git source
+	assert.Equal(t, []string{"git://git.sr.ht/~foo/bar#main"}, sourceIdentifiers(t, `
+FROM scratch
+ADD git+https://git.sr.ht/~foo/bar#main /dst
+`))
+
+	// "git+https://" also works along with the ".git" suffix
+	assert.Equal(t, []string{"git://github.com/moby/buildkit.git#master"}, sourceIdentifiers(t, `
+FROM scratch
+ADD git+https://github.com/moby/buildkit.git#master /dst
+`))
+
+	// --checksum accepts "git+https://" sources
+	assert.Equal(t, []string{"git://git.sr.ht/~foo/bar#main"}, sourceIdentifiers(t, `
+FROM scratch
+ADD --checksum=0123456789abcdef0123456789abcdef01234567 git+https://git.sr.ht/~foo/bar#main /dst
+`))
+
+	// without the prefix, a URL without the ".git" suffix stays an HTTP source
+	assert.Equal(t, []string{"https://git.sr.ht/~foo/bar"}, sourceIdentifiers(t, `
+FROM scratch
+ADD https://git.sr.ht/~foo/bar /dst
+`))
+
+	// "git+" only supports HTTP(S)
+	_, err := Dockerfile2LLB(appcontext.Context(), []byte(`
+FROM scratch
+ADD git+ssh://git@github.com/moby/buildkit.git /dst
+`), ConvertOpt{})
+	require.ErrorContains(t, err, "invalid protocol")
+
+	// COPY does not accept git sources
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(`
+FROM scratch
+COPY git+https://git.sr.ht/~foo/bar /dst
+`), ConvertOpt{})
+	require.ErrorContains(t, err, "source can't be a git ref for COPY")
+}
