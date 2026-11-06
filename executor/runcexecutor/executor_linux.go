@@ -28,7 +28,13 @@ func updateRuncFieldsForHostOS(runtime *runc.Runc) {
 }
 
 func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo, started func(), keep bool) error {
-	killer := newRunProcKiller(w.runc, id)
+	var pidfile string
+	if w.processMode == oci.NoProcessSandbox {
+		// subprocesses survive the kill only under host pidns, we need a pidfile to kill them
+		pidfile = filepath.Join(bundle, "pid")
+	}
+	killer := newRunProcKiller(w.runc, id, pidfile)
+	defer killer.Cleanup()
 	return w.callWithIO(ctx, process, started, killer, func(ctx context.Context, started chan<- int, io runc.IO, pidfile string) error {
 		extraArgs := []string{}
 		if keep {
@@ -42,6 +48,7 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 			NoNewKeyring: w.processMode == oci.NoProcessSandbox,
 			Started:      started,
 			IO:           io,
+			PidFile:      pidfile,
 			ExtraArgs:    extraArgs,
 		})
 		return err
@@ -86,6 +93,13 @@ func (w *runcExecutor) callWithIO(ctx context.Context, process executor.ProcessI
 	eg.Go(func() error {
 		return handleSignals(ctx, runcProcess, process.Signal)
 	})
+
+	if killer.mountNS != nil {
+		eg.Go(func() error {
+			killer.pinFromPidfile(ctx)
+			return nil
+		})
+	}
 
 	if !process.Meta.Tty {
 		runcIO := &forwardIO{stdout: process.Stdout, stderr: process.Stderr}
