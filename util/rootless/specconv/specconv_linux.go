@@ -16,6 +16,23 @@ import (
 //
 // See docs/rootless.md for the supported runc revision.
 func ToRootless(spec *specs.Spec) ([]string, error) {
+	removed := removeSysMounts(spec)
+	// Remove cgroups so as to avoid `container_linux.go:337: starting container process caused "process_linux.go:280: applying cgroup configuration for process caused \"mkdir /sys/fs/cgroup/cpuset/buildkit: permission denied\""`
+	spec.Linux.Resources = nil
+	spec.Linux.CgroupsPath = ""
+	return removed, nil
+}
+
+// ToRootlessWithCgroup is like ToRootless, but it keeps the resource limits
+// and the cgroup path of spec. The caller sets spec.Linux.CgroupsPath to a
+// cgroup that the rootless runtime can create, for example a child of a
+// cgroup that systemd delegated to the user (Delegate=yes), or a systemd slice
+// path ("buildkit.slice:buildkit:<id>") that runc creates through systemd.
+func ToRootlessWithCgroup(spec *specs.Spec) ([]string, error) {
+	return removeSysMounts(spec), nil
+}
+
+func removeSysMounts(spec *specs.Spec) []string {
 	// Remove /sys mount because we can't mount /sys when the daemon netns
 	// is not unshared from the host.
 	//
@@ -38,9 +55,5 @@ func ToRootless(spec *specs.Spec) ([]string, error) {
 		mounts = append(mounts, mount)
 	}
 	spec.Mounts = mounts
-
-	// Remove cgroups so as to avoid `container_linux.go:337: starting container process caused "process_linux.go:280: applying cgroup configuration for process caused \"mkdir /sys/fs/cgroup/cpuset/buildkit: permission denied\""`
-	spec.Linux.Resources = nil
-	spec.Linux.CgroupsPath = ""
-	return removed, nil
+	return removed
 }

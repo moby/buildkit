@@ -13,4 +13,5 @@ const (
 	OCIProcessMode      = prefix + "oci.process-mode"     // OCI worker: process mode ("sandbox", "no-sandbox")
 	ContainerdUUID      = prefix + "containerd.uuid"      // containerd worker: containerd UUID
 	ContainerdNamespace = prefix + "containerd.namespace" // containerd worker: containerd namespace
+	LinuxResources      = prefix + "linux.resources"      // "true" if per-step resource limits (cgroups) are applied
 )

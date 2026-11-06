@@ -94,8 +94,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	}
 	if cgroupParent != "" {
 		var cgroupsPath string
-		lastSeparator := cgroupParent[len(cgroupParent)-1:]
-		if strings.Contains(cgroupParent, ".slice") && lastSeparator == ":" {
+		if IsSystemdCgroupParent(cgroupParent) {
 			cgroupsPath = cgroupParent + id
 		} else {
 			cgroupsPath = filepath.Join("/", cgroupParent, "buildkit", id)
@@ -390,4 +389,11 @@ func compactLongOverlayMount(m mount.Mount, ro bool) (mount.Mount, func() error,
 	}
 
 	return bind(mp, ro), lm.Unmount, nil
+}
+
+// IsSystemdCgroupParent reports whether cgroupParent is in the systemd
+// "slice:prefix:" form, e.g. "buildkit.slice:buildkit:", which runc resolves
+// through systemd when the runtime uses the systemd cgroup driver.
+func IsSystemdCgroupParent(cgroupParent string) bool {
+	return strings.Contains(cgroupParent, ".slice") && strings.HasSuffix(cgroupParent, ":")
 }

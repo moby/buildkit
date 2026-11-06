@@ -7,6 +7,28 @@ Rootless mode allows running BuildKit daemon as a non-root user.
   On kernel >= 4.18, the `fuse-overlayfs` snapshotter is used instead of `overlayfs`.
   On kernel < 4.18, the `native` snapshotter is used.
 * Network mode is always set to `network.host`.
+* Per-step resource limits (`--resource` in Buildx, `resources` in Bake) need a
+  cgroup v2 tree delegated to the rootless user.
+  The OCI worker uses the cgroup that `buildkitd` starts in when systemd marked it as
+  delegated (`user.delegate` extended attribute), or when
+  `rootlessDelegatedCgroup = true` is set in `[worker.oci]`
+  (`--oci-worker-rootless-delegated-cgroup`).
+  Set it when `buildkitd` runs as a systemd user service with `Delegate=yes`, since
+  the per-user systemd does not mark its units.
+  Also set `DelegateSubgroup=init` (systemd 254 or later) in the unit. `buildkitd`
+  then runs in the `init` child and uses the unit cgroup for the build steps, and
+  systemd can still start `ExecReload=` and `ExecStop=` commands.
+  The cgroup also needs the `cpu` and `memory` controllers.
+  The containerd worker applies limits when `defaultCgroupParent` in
+  `[worker.containerd]` is a systemd slice, for example `buildkit.slice:buildkit:`,
+  and `SystemdCgroup = true` is set in `[worker.containerd.runtime.options]`,
+  so that runc gets the cgroup from the user's systemd.
+  In all other cases the limits are ignored with a warning.
+  When a rootless worker applies limits, a step with its own cgroup parent runs in
+  the cgroup of the worker instead, with a warning. The containerd worker keeps the
+  cgroup parent of a step when it is a systemd slice.
+  The worker label `org.mobyproject.buildkit.worker.linux.resources` shows whether
+  limits are applied. `cpuset` limits also need the `cpuset` controller.
 
 ## Running BuildKit in Rootless mode (OCI worker)
 
