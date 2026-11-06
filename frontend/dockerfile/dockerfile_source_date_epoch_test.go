@@ -1178,3 +1178,68 @@ COPY foo /
 	cache4 := readCache(build(map[string]string{"source-date-epoch": ""}))
 	require.NotEqual(t, cache3, cache4)
 }
+
+// testSourceDateEpochCacheExportRewriteTimestamp checks that the layers of
+// the exported cache are rewritten with the rewrite-timestamp option.
+func testSourceDateEpochCacheExportRewriteTimestamp(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	// without the rewrite, /foo has the time of the build as timestamp
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=42
+FROM busybox
+RUN touch /foo
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	build := func(rewrite string) map[string]string {
+		cacheDir := t.TempDir()
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			CacheExports: []client.CacheOptionsEntry{{Type: "local", Attrs: map[string]string{
+				"dest":              cacheDir,
+				"mode":              "max",
+				"rewrite-timestamp": rewrite,
+			}}},
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+		ensurePruneAll(t, c, sb)
+
+		m := map[string]string{}
+		fsys := os.DirFS(cacheDir)
+		require.NoError(t, fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			dt, err := fs.ReadFile(fsys, p)
+			if err != nil {
+				return err
+			}
+			m[filepath.Base(p)] = string(dt)
+			return nil
+		}))
+		return m
+	}
+
+	cache1 := build("true")
+	time.Sleep(2 * time.Second)
+	cache2 := build("true")
+	require.Equal(t, cache1, cache2)
+
+	cache3 := build("false")
+	time.Sleep(2 * time.Second)
+	cache4 := build("false")
+	require.NotEqual(t, cache3, cache4)
+}

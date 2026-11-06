@@ -20,6 +20,7 @@ import (
 	sessionexporter "github.com/moby/buildkit/session/exporter"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress"
@@ -115,6 +116,15 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		id := fmt.Sprint(j.SessionID, "-cache-", i)
 		eg.Go(func() (err error) {
 			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
+				tm := cacheExportEpoch(exp.Epoch, frontendEpoch)
+				var rewriter *timestampRewriter
+				if exp.RewriteTimestamp {
+					if tm != nil {
+						rewriter = newTimestampRewriter(*tm, exp.Compression)
+					} else {
+						bklog.G(ctx).Warn("rewrite-timestamp is specified, but no source-date-epoch was found")
+					}
+				}
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 					ctx := withDescHandlerCacheOpts(ctx, ref)
@@ -122,9 +132,14 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					// Configure compression
 					compressionConfig := exp.Compression
 
+					resolveRemotes := workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g)
+					if rewriter != nil {
+						resolveRemotes = rewriter.wrap(resolveRemotes)
+					}
+
 					// all keys have same export chain so exporting others is not needed
 					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
-						ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
+						ResolveRemotes: resolveRemotes,
 						Mode:           exp.CacheExportMode,
 						Session:        g,
 						CompressionOpt: &compressionConfig,
@@ -135,7 +150,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}
 				prepareDone(nil)
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
-				resps[i], err = exp.Finalize(cacheimport.WithSourceDateEpoch(ctx, cacheExportEpoch(exp.Epoch, frontendEpoch)))
+				resps[i], err = exp.Finalize(cacheimport.WithSourceDateEpoch(ctx, tm))
 				return finalizeDone(err)
 			})
 			if exp.IgnoreError {

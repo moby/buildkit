@@ -82,6 +82,15 @@ To apply the build arg value to the timestamps of the files inside the image, sp
 ```
 
 The `rewrite-timestamp` option is available since BuildKit v0.13.
+
+The cache exporters (except `inline`, which follows the image exporter) also
+support `rewrite-timestamp=true`, to apply the build arg value to the timestamps
+of the files inside the exported cache layers:
+```
+--cache-to type=registry,ref=docker.io/username/image:cache,mode=max,rewrite-timestamp=true
+```
+Only the layers created by the build are rewritten: layers pulled from a
+registry (base images, imported cache) are exported as is.
 See [v0.12 documentation](https://github.com/moby/buildkit/blob/v0.12/docs/build-repro.md#caveats) for dealing with timestamps
 in BuildKit v0.12 and v0.11.
 

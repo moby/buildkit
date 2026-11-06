@@ -51,6 +51,9 @@ type RemoteCacheExporter struct {
 	// timestamps of the exported cache are clamped to. A non-nil Epoch with
 	// a nil Value disables clamping.
 	Epoch *epoch.Epoch
+	// RewriteTimestamp clamps the timestamps of the files in the exported
+	// layers to the epoch.
+	RewriteTimestamp bool
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases

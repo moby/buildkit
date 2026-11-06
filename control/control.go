@@ -874,6 +874,15 @@ func (c *Controller) resolveCacheExporters(ctx context.Context, g session.Group,
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
 		}
+		if v, ok := e.Attrs["rewrite-timestamp"]; ok {
+			exp.RewriteTimestamp, err = strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to configure %v cache exporter: invalid rewrite-timestamp", e.Type)
+			}
+			if exp.RewriteTimestamp && e.Type == "inline" {
+				return nil, errors.New("rewrite-timestamp is not supported by the inline cache exporter, set it on the image exporter instead")
+			}
+		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
 		} else {
