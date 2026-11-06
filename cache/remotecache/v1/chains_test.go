@@ -239,3 +239,24 @@ func TestMarshalUnavailableBlob(t *testing.T) {
 		}
 	})
 }
+
+func TestAddResultDedupe(t *testing.T) {
+	now := time.Now()
+	remote := func(names ...string) *solver.Remote {
+		r := &solver.Remote{}
+		for _, n := range names {
+			r.Descriptors = append(r.Descriptors, ocispecs.Descriptor{Digest: dgst(n)})
+		}
+		return r
+	}
+	it := &item{}
+	it.addResult(solver.CacheExportResult{CreatedAt: now, Result: remote("a", "b")})
+	it.addResult(solver.CacheExportResult{CreatedAt: now, Result: remote("a", "b")})
+	require.Len(t, it.results, 1, "identical results are deduplicated")
+
+	it.addResult(solver.CacheExportResult{CreatedAt: now, Result: remote("a", "c")})
+	require.Len(t, it.results, 2, "results with different layers created at the same time are kept")
+
+	it.addResult(solver.CacheExportResult{CreatedAt: now.Add(time.Second), Result: remote("a", "b")})
+	require.Len(t, it.results, 3)
+}
