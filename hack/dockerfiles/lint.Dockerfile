@@ -5,7 +5,6 @@ ARG ALPINE_VERSION=3.24
 ARG XX_VERSION=1.10.0
 ARG PROTOLINT_VERSION=0.56.4
 ARG GOLANGCI_LINT_VERSION=v2.14.0
-ARG GOLANGCI_FROM_SOURCE=false
 ARG GOPLS_VERSION=v0.38.0
 # GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated simplifyrange unusedfunc unusedvariable
 ARG GOPLS_ANALYZERS="embeddirective fillreturns infertypeargs maprange modernize nonewvars noresultvalues simplifycompositelit simplifyslice unusedparams yield"
@@ -14,27 +13,11 @@ FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS g
 FROM --platform=$BUILDPLATFORM yoheimuta/protolint:${PROTOLINT_VERSION} AS protolint-base
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:${XX_VERSION} AS xx
 
-
-FROM golang-base AS golangci-build
-WORKDIR /src
-ARG GOLANGCI_LINT_VERSION
-ADD https://github.com/golangci/golangci-lint.git#${GOLANGCI_LINT_VERSION} .
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/ go mod download
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/ mkdir -p out && go build -o /out/golangci-lint ./cmd/golangci-lint
-
-
-FROM scratch AS golangci-binary-false
-FROM scratch AS golangci-binary-true
-COPY --from=golangci-build /out/golangci-lint golangci-lint
-FROM golangci-binary-${GOLANGCI_FROM_SOURCE} AS golangci-binary
-
 FROM golang-base AS base
 ENV GOFLAGS="-buildvcs=false"
 RUN apk add --no-cache gcc musl-dev yamllint
 ARG GOLANGCI_LINT_VERSION
-ARG GOLANGCI_FROM_SOURCE
-COPY --link --from=golangci-binary / /usr/bin/
-RUN [ "${GOLANGCI_FROM_SOURCE}" = "true" ] && exit 0; wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh | sh -s ${GOLANGCI_LINT_VERSION}
+RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh | sh -s ${GOLANGCI_LINT_VERSION}
 COPY --link --from=protolint-base /usr/local/bin/protolint /usr/local/bin/protolint
 COPY --link --from=xx / /
 WORKDIR /go/src/github.com/moby/buildkit
@@ -48,18 +31,11 @@ RUN --mount=target=/go/src/github.com/moby/buildkit \
   xx-go --wrap && \
   golangci-lint run --build-tags "${BUILDTAGS}" && \
   touch /golangci-lint.done
-  
 
-FROM base AS golangci-verify-false
+FROM base AS golangci-verify
 RUN --mount=target=/go/src/github.com/moby/buildkit \
   golangci-lint config verify && \
   touch /golangci-verify.done
-
-FROM scratch AS golangci-verify-true
-COPY <<EOF /golangci-verify.done
-EOF
-
-FROM golangci-verify-${GOLANGCI_FROM_SOURCE} AS golangci-verify
 
 FROM base AS yamllint
 RUN --mount=target=/go/src/github.com/moby/buildkit \
