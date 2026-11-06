@@ -144,6 +144,39 @@ func testLinuxResources(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "50000 100000", strings.TrimSpace(string(dt3)))
 }
 
+func testLinuxResourcesIgnoredWarning(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	img := llb.Image("alpine:latest")
+	st := img.Run(llb.Shlex(`sh -c "echo limited > /out"`), llb.MemoryLimit(64*1024*1024)).Root()
+	st = st.Run(llb.Shlex(`sh -c "echo unlimited > /out"`)).Root()
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	wc := newWarningsCapture()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, wc.status)
+	require.NoError(t, err)
+
+	var ignored []*VertexWarning
+	for _, w := range wc.wait() {
+		if strings.Contains(string(w.Short), "resource limits are ignored") {
+			ignored = append(ignored, w)
+		}
+	}
+	if sb.Rootless() {
+		// Only the step that asked for a limit gets the warning.
+		require.Len(t, ignored, 1)
+		require.Equal(t, 1, ignored[0].Level)
+	} else {
+		require.Empty(t, ignored)
+	}
+}
+
 func testPassthroughOp(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
