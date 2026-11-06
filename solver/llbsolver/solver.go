@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/executor/resources"
 	resourcestypes "github.com/moby/buildkit/executor/resources/types"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/exporter/verifier"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -46,6 +47,10 @@ type RemoteCacheExporter struct {
 	solver.CacheExportMode
 	IgnoreError bool
 	Compression compression.Config
+	// Epoch overrides the SOURCE_DATE_EPOCH set by the frontend that the
+	// timestamps of the exported cache are clamped to. A non-nil Epoch with
+	// a nil Value disables clamping.
+	Epoch *epoch.Epoch
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -396,7 +401,11 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		done(context.WithoutCancel(ctx))
 	})
 
-	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters)
+	frontendEpoch, err := epoch.ParseMetadata(res.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	cacheExporters, inlineCacheExporter := splitCacheExporters(exp.CacheExporters, frontendEpoch)
 
 	if exp.EnableSessionExporter {
 		exporters, err := s.getSessionExporters(ctx, j.SessionID, len(exp.Exporters), inp)
@@ -432,7 +441,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	var cacheExporterResponse map[string]string
 	eg.Go(func() error {
 		var err error
-		cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp)
+		cacheExporterResponse, err = runCacheExporters(egCtx, cacheExporters, j, cached, inp, frontendEpoch)
 		return err
 	})
 	if err := eg.Wait(); err != nil {
