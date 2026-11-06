@@ -384,6 +384,32 @@ func TestFileCopy(t *testing.T) {
 	require.Equal(t, int64(-1), copy.Timestamp)
 }
 
+func TestFileOpCaps(t *testing.T) {
+	t.Parallel()
+
+	st := Scratch().File(
+		Copy(Image("bar"), "foo", "/a/", &CopyInfo{IncludePatterns: []string{"*.txt"}}).
+			Symlink("/a", "/b"),
+	)
+	def, err := st.Marshal(t.Context())
+	require.NoError(t, err)
+
+	var caps map[string]bool
+	for _, dt := range def.Def {
+		var op pb.Op
+		require.NoError(t, op.UnmarshalVT(dt))
+		if _, ok := op.Op.(*pb.Op_File); ok {
+			caps = map[string]bool{}
+			for k, v := range def.Metadata[digest.FromBytes(dt)].Caps {
+				caps[string(k)] = v
+			}
+		}
+	}
+	require.True(t, caps[string(pb.CapFileBase)])
+	require.True(t, caps[string(pb.CapFileCopyIncludeExcludePatterns)])
+	require.True(t, caps[string(pb.CapFileSymlinkCreate)])
+}
+
 func TestFileCopyFromAction(t *testing.T) {
 	t.Parallel()
 
