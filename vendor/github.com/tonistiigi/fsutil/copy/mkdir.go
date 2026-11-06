@@ -66,6 +66,13 @@ func MkdirAll(path string, perm os.FileMode, user Chowner, tm *time.Time) ([]str
 			return nil, err
 		}
 	}
+	// Creating path updated the modification time of its parent: set it
+	// again if the parent was also created by this call.
+	if n := len(createdDirs); tm != nil && n > 0 {
+		if err := Utimes(createdDirs[n-1], tm); err != nil {
+			return nil, err
+		}
+	}
 	createdDirs = append(createdDirs, path)
 
 	if err := Chown(path, nil, user); err != nil {
