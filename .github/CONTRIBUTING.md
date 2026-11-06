@@ -456,3 +456,10 @@ The rules:
 If you are having trouble getting into the mood of idiomatic Go, we recommend
 reading through [Effective Go](https://golang.org/doc/effective_go.html). The
 [Go Blog](https://blog.golang.org) is also a great resource.
+
+## AI Usage Policy
+
+BuildKit follows the shared [Moby AI usage policy](https://github.com/moby/.github/blob/main/AI_POLICY.md).
+
+Before submitting AI-assisted contributions, read and follow the full policy.
+Coding agents should retrieve and read the linked policy before starting work.
