@@ -32,7 +32,8 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 	if err != nil {
 		return false, err
 	}
-	if _, err := copy.MkdirAll(dest, 0755, ch, tm); err != nil {
+	createdDirs, err := copy.MkdirAll(dest, 0755, ch, tm)
+	if err != nil {
 		return false, err
 	}
 
@@ -54,7 +55,20 @@ func unpack(srcRoot string, src string, destRoot string, dest string, ch copy.Ch
 			GID: u.GID,
 		}
 	}
-	return true, chrootarchive.Untar(file, dest, opts)
+	if err := chrootarchive.Untar(file, dest, opts); err != nil {
+		return true, err
+	}
+	// Creating the directories one after the other, then extracting the
+	// archive in the last one, updated their modification times: set them
+	// again.
+	if tm != nil {
+		for _, d := range createdDirs {
+			if err := copy.Utimes(d, tm); err != nil {
+				return true, err
+			}
+		}
+	}
+	return true, nil
 }
 
 func isArchivePath(path string) (bool, error) {
