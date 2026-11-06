@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -199,6 +200,19 @@ func (d *Daemon) StopWithError() (err error) {
 	tick := ticker.C
 
 	d.Log.Logf("[%s] stopping daemon", d.id)
+
+	// os.Process.Signal supports only os.Kill on Windows.
+	if runtime.GOOS == "windows" {
+		if err := d.cmd.Process.Kill(); err != nil {
+			return err
+		}
+		select {
+		case <-d.Wait:
+			return nil
+		case <-time.After(10 * time.Second):
+			return errors.Errorf("[%s] daemon still running 10s after kill", d.id)
+		}
+	}
 
 	if err := d.cmd.Process.Signal(os.Interrupt); err != nil {
 		if strings.Contains(err.Error(), "os: process already finished") {
