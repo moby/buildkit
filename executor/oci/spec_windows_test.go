@@ -198,10 +198,40 @@ func TestMountSourcePath(t *testing.T) {
 		{"plain drive letter", `C:\cache\sel`, `C:\cache\sel`},
 		{"similar prefix", `\\x\C:\cache\sel`, `\\x\C:\cache\sel`},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, tc.want, mountSourcePath(tc.in))
 		})
+	}
+}
+
+func TestNormalizeNamedPipeDestination(t *testing.T) {
+	for _, input := range []string{
+		`\\.\pipe\openssh-ssh-agent`,
+		`\\.\PIPE\openssh-ssh-agent`,
+		`//./pipe/openssh-ssh-agent`,
+		`//./PIPE/openssh-ssh-agent`,
+	} {
+		actual, err := normalizeNamedPipeDestination(input)
+		require.NoError(t, err)
+		require.Equal(t, `\\.\pipe\openssh-ssh-agent`, actual)
+	}
+	const prefix = `\\.\pipe\`
+	actual, err := normalizeNamedPipeDestination(prefix + strings.Repeat("a", 256-len(prefix)))
+	require.NoError(t, err)
+	require.Equal(t, prefix+strings.Repeat("a", 256-len(prefix)), actual)
+	for _, input := range []string{
+		prefix,
+		prefix + `foo\bar`,
+		`//./pipe/foo/bar`,
+		prefix + "agent\x00suffix",
+		prefix + strings.Repeat("a", 257-len(prefix)),
+		`C:\ssh-agent.sock`,
+		`/run/buildkit/ssh_agent.0`,
+	} {
+		_, err := normalizeNamedPipeDestination(input)
+		require.ErrorContains(t, err, "invalid Windows named pipe destination")
 	}
 }
 
