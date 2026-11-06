@@ -1052,7 +1052,7 @@ github.com/theupdateframework/go-tuf/v2/metadata/updater
 # github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323
 ## explicit; go 1.21
 github.com/tonistiigi/dchapes-mode
-# github.com/tonistiigi/fsutil v0.0.0-20261103125000-e075fd9305eb
+# github.com/tonistiigi/fsutil v0.0.0-20261103125000-e075fd9305eb => github.com/fenollp/fsutil v0.0.0-20261107185037-e49a6ad82671
 ## explicit; go 1.25.0
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
@@ -1491,3 +1491,4 @@ tags.cncf.io/container-device-interface/pkg/parser
 # tags.cncf.io/container-device-interface/specs-go v1.1.1
 ## explicit; go 1.19
 tags.cncf.io/container-device-interface/specs-go
+# github.com/tonistiigi/fsutil => github.com/fenollp/fsutil v0.0.0-20261107185037-e49a6ad82671
