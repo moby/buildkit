@@ -265,6 +265,7 @@ var reproTests = integration.TestFuncs(
 	testSourceDateEpochStageInvalid,
 	testSourceDateEpochNamedContextHTTPLastModified,
 	testSourceDateEpochNamedContextHTTPArchive,
+	testSourceDateEpochCacheExport,
 
 	// dockerfile_workdir_test.go
 	testWorkdirSourceDateEpochReproducible,
