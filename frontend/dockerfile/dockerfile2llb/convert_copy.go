@@ -65,6 +65,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		copyOpt = append(copyOpt, llb.WithExcludePatterns(cfg.excludePatterns))
 	}
 
+	// With SOURCE_DATE_EPOCH, the directories created implicitly by the copy
+	// get its value instead of the time of the build, while copied files keep
+	// their own timestamps.
+	// cfg.opt.llbCaps can be nil in unit tests
+	if d.epoch != nil && cfg.opt.llbCaps != nil && cfg.opt.llbCaps.Supports(pb.CapFileCopyTimestampOnlyCreatedDirs) == nil {
+		copyOpt = append(copyOpt, llb.WithCreatedDirsTime(*d.epoch))
+	}
+
 	var chopt *llb.ChmodOpt
 	if cfg.chmod != "" {
 		chopt = &llb.ChmodOpt{}

@@ -2650,8 +2650,13 @@ type FileActionCopy struct {
 	// required paths that must be included in the copy. This is only used when
 	// include_patterns has at least one pattern.
 	RequiredPaths []string `protobuf:"bytes,16,rep,name=required_paths,json=requiredPaths,proto3" json:"required_paths,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// timestampOnlyCreatedDirs makes timestamp only apply to the directories
+	// created implicitly by the copy: the missing parents of dest and the
+	// directories of an unpacked archive that have no entry in it. Copied
+	// files and directories keep their own timestamps.
+	TimestampOnlyCreatedDirs bool `protobuf:"varint,17,opt,name=timestampOnlyCreatedDirs,proto3" json:"timestampOnlyCreatedDirs,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *FileActionCopy) Reset() {
@@ -2794,6 +2799,13 @@ func (x *FileActionCopy) GetRequiredPaths() []string {
 		return x.RequiredPaths
 	}
 	return nil
+}
+
+func (x *FileActionCopy) GetTimestampOnlyCreatedDirs() bool {
+	if x != nil {
+		return x.TimestampOnlyCreatedDirs
+	}
+	return false
 }
 
 type FileActionMkFile struct {
@@ -3778,7 +3790,7 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x05mkdir\x18\x06 \x01(\v2\x13.pb.FileActionMkDirH\x00R\x05mkdir\x12\"\n" +
 	"\x02rm\x18\a \x01(\v2\x10.pb.FileActionRmH\x00R\x02rm\x121\n" +
 	"\asymlink\x18\b \x01(\v2\x15.pb.FileActionSymlinkH\x00R\asymlinkB\b\n" +
-	"\x06action\"\x85\x05\n" +
+	"\x06action\"\xc1\x05\n" +
 	"\x0eFileActionCopy\x12\x10\n" +
 	"\x03src\x18\x01 \x01(\tR\x03src\x12\x12\n" +
 	"\x04dest\x18\x02 \x01(\tR\x04dest\x12\"\n" +
@@ -3796,7 +3808,8 @@ const file_github_com_moby_buildkit_solver_pb_ops_proto_rawDesc = "" +
 	"\x10exclude_patterns\x18\r \x03(\tR\x0fexcludePatterns\x12F\n" +
 	"\x1ealwaysReplaceExistingDestPaths\x18\x0e \x01(\bR\x1ealwaysReplaceExistingDestPaths\x12\x18\n" +
 	"\amodeStr\x18\x0f \x01(\tR\amodeStr\x12%\n" +
-	"\x0erequired_paths\x18\x10 \x03(\tR\rrequiredPaths\"\x90\x01\n" +
+	"\x0erequired_paths\x18\x10 \x03(\tR\rrequiredPaths\x12:\n" +
+	"\x18timestampOnlyCreatedDirs\x18\x11 \x01(\bR\x18timestampOnlyCreatedDirs\"\x90\x01\n" +
 	"\x10FileActionMkFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\x05R\x04mode\x12\x12\n" +
