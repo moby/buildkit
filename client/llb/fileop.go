@@ -662,7 +662,7 @@ func (a *fileActionCopy) addCaps(f *FileOp) {
 	if a.info.AlwaysReplaceExistingDestPaths {
 		addCap(&f.constraints, pb.CapFileCopyAlwaysReplaceExistingDestPaths)
 	}
-	if a.info.Mode.ModeStr != "" {
+	if a.info.Mode != nil && a.info.Mode.ModeStr != "" {
 		addCap(&f.constraints, pb.CapFileCopyModeStringFormat)
 	}
 }
@@ -849,6 +849,10 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	state := newMarshalState(ctx)
+	_, err := state.add(f.action, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
 	for _, st := range state.actions {
 		if adder, isCapAdder := st.action.(capAdder); isCapAdder {
 			adder.addCaps(f)
@@ -859,11 +863,6 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	pop.Platform = nil // file op is not platform specific
 	pop.Op = &pb.Op_File{
 		File: pfo,
-	}
-
-	_, err := state.add(f.action, c)
-	if err != nil {
-		return "", nil, nil, nil, err
 	}
 	pop.Inputs = state.inputs
 
