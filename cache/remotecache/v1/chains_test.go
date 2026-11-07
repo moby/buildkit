@@ -239,3 +239,77 @@ func TestMarshalUnavailableBlob(t *testing.T) {
 		}
 	})
 }
+
+func TestMarshalSourceDateEpoch(t *testing.T) {
+	sde := time.Unix(42, 0).UTC()
+	before := time.Unix(10, 0).UTC()
+
+	build := func(createdAt time.Time) (*CacheChains, *solver.Remote) {
+		cc := NewCacheChains()
+		createdAtText, err := createdAt.MarshalText()
+		require.NoError(t, err)
+		r := &solver.Remote{
+			Descriptors: []ocispecs.Descriptor{{
+				Digest:      dgst("d0"),
+				Annotations: map[string]string{"buildkit/createdat": string(createdAtText), "foo": "bar"},
+			}, {
+				Digest:      dgst("d1"),
+				Annotations: map[string]string{"buildkit/createdat": before.Format(time.RFC3339Nano)},
+			}},
+		}
+		foo, _, err := cc.Add(outputKey(dgst("foo"), 0), nil, nil)
+		require.NoError(t, err)
+		// built with append: a one-element literal makes gosec report G602 on deps[i][j] in Add
+		var deps [][]solver.CacheLink
+		deps = append(deps, []solver.CacheLink{{Src: foo}})
+		_, _, err = cc.Add(outputKey(dgst("bar"), 0), deps, []solver.CacheExportResult{{
+			CreatedAt: createdAt,
+			Result:    r,
+		}})
+		require.NoError(t, err)
+		_, _, err = cc.Add(outputKey(dgst("baz"), 0), nil, []solver.CacheExportResult{{
+			CreatedAt: before,
+			Result:    &solver.Remote{Descriptors: r.Descriptors[1:]},
+		}})
+		require.NoError(t, err)
+		return cc, r
+	}
+
+	cc1, r1 := build(time.Now())
+	ctx := WithSourceDateEpoch(t.Context(), &sde)
+	cfg1, descs1, err := cc1.Marshal(ctx)
+	require.NoError(t, err)
+
+	for _, rec := range cfg1.Records {
+		for _, res := range rec.Results {
+			if rec.Digest == outputKey(dgst("baz"), 0) {
+				require.Equal(t, before, res.CreatedAt, "timestamps before the epoch are kept")
+			} else {
+				require.Equal(t, sde, res.CreatedAt)
+			}
+		}
+	}
+	require.Equal(t, "1970-01-01T00:00:42Z", descs1[dgst("d0")].Descriptor.Annotations["buildkit/createdat"])
+	require.Equal(t, "bar", descs1[dgst("d0")].Descriptor.Annotations["foo"])
+	require.Equal(t, before.Format(time.RFC3339Nano), descs1[dgst("d1")].Descriptor.Annotations["buildkit/createdat"])
+	require.NotEqual(t, "1970-01-01T00:00:42Z", r1.Descriptors[0].Annotations["buildkit/createdat"], "descriptors of the ref are not modified")
+
+	// same cache created at another time marshals to the same config
+	cc2, _ := build(time.Now().Add(time.Hour))
+	cfg2, descs2, err := cc2.Marshal(ctx)
+	require.NoError(t, err)
+	dt1, err := json.Marshal(cfg1)
+	require.NoError(t, err)
+	dt2, err := json.Marshal(cfg2)
+	require.NoError(t, err)
+	require.Equal(t, string(dt1), string(dt2))
+	require.Equal(t, descs1[dgst("d0")].Descriptor, descs2[dgst("d0")].Descriptor)
+
+	// without an epoch, timestamps are kept
+	cfg3, descs3, err := cc2.Marshal(t.Context())
+	require.NoError(t, err)
+	dt3, err := json.Marshal(cfg3)
+	require.NoError(t, err)
+	require.NotEqual(t, string(dt2), string(dt3))
+	require.NotEqual(t, "1970-01-01T00:00:42Z", descs3[dgst("d0")].Descriptor.Annotations["buildkit/createdat"])
+}
