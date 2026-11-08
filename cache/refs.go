@@ -46,7 +46,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var additionalAnnotations = append(append(compression.EStargzAnnotations, obdlabel.OverlayBDAnnotations...), labels.LabelUncompressed)
+var additionalAnnotations = slices.Concat(
+	compression.EStargzAnnotations,
+	compression.ZstdChunkedAnnotations,
+	obdlabel.OverlayBDAnnotations,
+	[]string{labels.LabelUncompressed},
+)
 
 // Ref is a reference to cacheable objects.
 type Ref interface {
