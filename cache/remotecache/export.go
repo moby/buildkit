@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
@@ -210,9 +211,13 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		return nil, err
 	}
 
-	// Add blobs to cache manifest in order.
+	// Add blobs to cache manifest in order. Distribution source annotations
+	// are only push hints (cross-repo mounts): they depend on where the
+	// builder happened to pull layers from, so keeping them would make the
+	// manifest digest differ between builders for the same cache. Every blob
+	// has been pushed to the cache target above, so importers don't need them.
 	for _, desc := range layerDescs {
-		cache.AddCacheBlob(desc)
+		cache.AddCacheBlob(stripDistributionSourceAnnotations(desc))
 	}
 
 	cache.FinalizeCache(ctx)
@@ -265,6 +270,21 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	mfstDone(nil)
 
 	return res, nil
+}
+
+func stripDistributionSourceAnnotations(desc ocispecs.Descriptor) ocispecs.Descriptor {
+	var out map[string]string
+	for k, v := range desc.Annotations {
+		if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, len(desc.Annotations))
+		}
+		out[k] = v
+	}
+	desc.Annotations = out
+	return desc
 }
 
 func withRemoteCacheErrorDetails(err error) error {

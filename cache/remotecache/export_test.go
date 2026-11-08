@@ -1,7 +1,14 @@
 package remotecache
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
+	"time"
+
+	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/plugins/content/local"
+	"github.com/moby/buildkit/solver"
 
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
@@ -36,3 +43,78 @@ func TestLayerBlobsDeduplicated(t *testing.T) {
 	_, err = layerBlobs(config, descs)
 	require.ErrorContains(t, err, "missing blob")
 }
+
+// TestExportManifestIndependentOfPullSource checks that the cache manifest
+// lists each blob once and does not depend on where the builder pulled the
+// layers from (distribution source annotations).
+func TestExportManifestIndependentOfPullSource(t *testing.T) {
+	ctx := t.Context()
+
+	src, err := local.NewStore(t.TempDir())
+	require.NoError(t, err)
+	blob := func(s string) ocispecs.Descriptor {
+		dt := []byte(s)
+		desc := ocispecs.Descriptor{
+			MediaType: ocispecs.MediaTypeImageLayerGzip,
+			Digest:    digest.FromBytes(dt),
+			Size:      int64(len(dt)),
+		}
+		require.NoError(t, content.WriteBlob(ctx, src, s, bytesReader(dt), desc))
+		return desc
+	}
+	base, l1, l2 := blob("base"), blob("layer1"), blob("layer2")
+
+	export := func(dsl string) ocispecs.Descriptor {
+		annotate := func(d ocispecs.Descriptor) ocispecs.Descriptor {
+			d.Annotations = map[string]string{
+				"containerd.io/distribution.source.docker.io": dsl,
+				"containerd.io/uncompressed":                  d.Digest.String(),
+			}
+			return d
+		}
+		dst, err := local.NewStore(t.TempDir())
+		require.NoError(t, err)
+		e := NewExporter(dst, "", true, false)
+		now := time.Unix(1700000000, 0).UTC()
+		// base is shared by two chains: base->l1 and base->l2, and l1 is
+		// also reused on top of l2 (same blob, different parent chain).
+		for i, r := range [][]ocispecs.Descriptor{
+			{annotate(base), annotate(l1)},
+			{annotate(base), annotate(l2)},
+			{annotate(base), annotate(l2), annotate(l1)},
+		} {
+			_, _, err := e.Add(digest.FromString(string(rune('a'+i))), nil, []solver.CacheExportResult{{
+				CreatedAt: now,
+				Result:    &solver.Remote{Descriptors: r, Provider: src},
+			}})
+			require.NoError(t, err)
+		}
+		res, err := e.Finalize(ctx)
+		require.NoError(t, err)
+		var desc ocispecs.Descriptor
+		require.NoError(t, json.Unmarshal([]byte(res[ExporterResponseManifestDesc]), &desc))
+
+		dt, err := content.ReadBlob(ctx, dst, desc)
+		require.NoError(t, err)
+		var idx ocispecs.Index
+		require.NoError(t, json.Unmarshal(dt, &idx))
+		seen := map[digest.Digest]int{}
+		for _, m := range idx.Manifests {
+			seen[m.Digest]++
+			for k := range m.Annotations {
+				require.NotContains(t, k, "distribution.source", "manifest must not carry pull-source hints")
+			}
+		}
+		for d, n := range seen {
+			require.Equal(t, 1, n, "blob %s listed %d times", d, n)
+		}
+		require.Len(t, seen, 4) // 3 layers + config
+		return desc
+	}
+
+	d1 := export("library/alpine")
+	d2 := export("library/alpine,mirror/alpine")
+	require.Equal(t, d1.Digest, d2.Digest)
+}
+
+func bytesReader(dt []byte) *bytes.Reader { return bytes.NewReader(dt) }
