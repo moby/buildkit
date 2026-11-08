@@ -250,10 +250,10 @@ func (s *Store) releaseHelper(tx *bolt.Tx, id, resultID string) error {
 }
 
 func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
+	// Keys that only ever had links (no results) have no result bucket.
+	// They must still be collected, otherwise the release cascade stops at
+	// them and leaks every key above them in the chain.
 	results := tx.Bucket([]byte(resultBucket)).Bucket(id)
-	if results == nil {
-		return nil
-	}
 
 	isEmptyLinks := true
 	links := tx.Bucket([]byte(linksBucket)).Bucket(id)
