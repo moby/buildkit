@@ -239,3 +239,34 @@ func TestMarshalUnavailableBlob(t *testing.T) {
 		}
 	})
 }
+
+// TestAddMergeRelatedCandidates covers Add matching several existing items
+// where one is a descendant of the other. Merging them used to make an item
+// its own ancestor, after which Marshal and NewCacheKeyStorage recursed
+// forever (fatal stack overflow). The merge candidate is picked by map
+// iteration, so repeat to hit both orders.
+func TestAddMergeRelatedCandidates(t *testing.T) {
+	for range 50 {
+		cc := NewCacheChains()
+		root, _, err := cc.Add(dgst("root"), nil, nil)
+		require.NoError(t, err)
+
+		d := outputKey(dgst("op"), 0)
+		a, _, err := cc.Add(d, [][]solver.CacheLink{{{Src: root}}}, nil)
+		require.NoError(t, err)
+		// same op on top of itself, e.g. two identical consecutive steps
+		_, _, err = cc.Add(d, [][]solver.CacheLink{{{Src: a}}}, nil)
+		require.NoError(t, err)
+		// one input with two alternative sources matches both items above
+		merged, _, err := cc.Add(d, [][]solver.CacheLink{{{Src: root}, {Src: a}}}, nil)
+		require.NoError(t, err)
+		// a following step on top of the merged item
+		_, _, err = cc.Add(outputKey(dgst("next"), 0), [][]solver.CacheLink{{{Src: merged}}}, nil)
+		require.NoError(t, err)
+
+		_, _, err = cc.Marshal(t.Context())
+		require.NoError(t, err)
+		_, _, err = NewCacheKeyStorage(cc, nil)
+		require.NoError(t, err)
+	}
+}
