@@ -95,9 +95,12 @@ func TestSimpleMarshal(t *testing.T) {
 	err = Parse(dt, descPairs, newChains)
 	require.NoError(t, err)
 
-	cfg3, _, err := cc.Marshal(t.Context())
+	// time.Time internals differ after a round trip, so compare JSON
+	cfg3, _, err := newChains.Marshal(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, cfg, cfg3)
+	dt3, err := json.Marshal(cfg3)
+	require.NoError(t, err)
+	require.JSONEq(t, string(dt), string(dt3))
 
 	// add extra item
 	_, ok, err := cc.Add(outputKey(dgst("bay"), 0), nil, nil)
