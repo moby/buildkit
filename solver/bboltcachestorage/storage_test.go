@@ -25,7 +25,7 @@ func TestBoltCacheStorage(t *testing.T) {
 
 	testutil.RunSolverTests(t, testutil.SolverTestOptions{
 		NewCacheManager: func(t *testing.T) solver.CacheManager {
-			return solver.NewCacheManager(
+			return solver.NewKeyValueCacheManager(
 				t.Context(),
 				"local",
 				newStore(t),
