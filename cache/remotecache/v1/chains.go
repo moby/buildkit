@@ -1,6 +1,7 @@
 package cacheimport
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"maps"
@@ -400,9 +401,25 @@ func (c *item) bestResult() *solver.CacheExportResult {
 		return nil
 	}
 	slices.SortFunc(c.results, func(a, b solver.CacheExportResult) int {
-		return b.CreatedAt.Compare(a.CreatedAt)
+		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), compareRemotes(a.Result, b.Result))
 	})
 	return &c.results[0]
+}
+
+// compareRemotes orders remotes by the digests of their descriptors so that
+// picking between results created at the same time is deterministic.
+func compareRemotes(a, b *solver.Remote) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return -1
+	case b == nil:
+		return 1
+	}
+	return slices.CompareFunc(a.Descriptors, b.Descriptors, func(x, y ocispecs.Descriptor) int {
+		return cmp.Compare(x.Digest, y.Digest)
+	})
 }
 
 func (c *item) walkChildren(fn func(i *item) error, visited map[*item]struct{}) error {
