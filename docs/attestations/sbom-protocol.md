@@ -13,11 +13,12 @@ The SBOM generator image is expected to follow the rules of the BuildKit SBOM
 generator protocol, defined in this document.
 
 > [!NOTE]
-> Currently, only SBOMs in the [SPDX](https://spdx.dev) JSON format are
-> supported.
+> SBOMs in [SPDX](https://spdx.dev) JSON format and
+> [CycloneDX](https://cyclonedx.org) JSON format are supported.
 >
-> These SBOMs will be attached to the final image as an in-toto attestation
-> with the `https://spdx.dev/Document` predicate type.
+> SPDX SBOMs will be attached as in-toto attestations with the
+> `https://spdx.dev/Document` predicate type. CycloneDX SBOMs will use
+> the `https://cyclonedx.org/bom` predicate type.
 
 ## Implementations
 
@@ -39,7 +40,9 @@ by BuildKit:
 - `BUILDKIT_SCAN_DESTINATION` (required)
 
   This variable specifies the directory where the scanner should write its
-  SBOM data. Scanners should write their SBOMs to `$BUILDKIT_SCAN_DESTINATION/<scan>.spdx.json`
+  SBOM data. Scanners should write their SBOMs to
+  `$BUILDKIT_SCAN_DESTINATION/<scan>.spdx.json` for SPDX format or
+  `$BUILDKIT_SCAN_DESTINATION/<scan>.cdx.json` for CycloneDX format,
   where `<scan>` is the name of an arbitrary scan. A scanner may produce
   multiple scans for a single target - scan names must be unique within a
   target, but should not be considered significant by producers or consumers.
@@ -50,7 +53,8 @@ by BuildKit:
   filesystem of the final build result.
 
   The scanner should scan this filesystem, and write its SBOM result to
-  `$BUILDKIT_SCAN_DESTINATION/$(basename $BUILDKIT_SCAN_SOURCE).spdx.json`.
+  `$BUILDKIT_SCAN_DESTINATION/$(basename $BUILDKIT_SCAN_SOURCE).spdx.json`
+  (or `.cdx.json` for CycloneDX).
 
 - `BUILDKIT_SCAN_SOURCE_EXTRAS` (optional)
 
@@ -59,7 +63,8 @@ by BuildKit:
   a directory that does not exist, then no extras should be scanned.
 
   The scanner should iterate through this directory, and write its SBOM scans
-  to `$BUILDKIT_SCAN_DESTINATION/<scan>.spdx.json`, similar to above.
+  to `$BUILDKIT_SCAN_DESTINATION/<scan>.spdx.json` (or `.cdx.json` for
+  CycloneDX), similar to above.
 
 A scanner must not error if optional parameters are not set.
 
