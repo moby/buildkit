@@ -6,13 +6,17 @@ import (
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
-	"github.com/klauspost/compress/zstd"
+	"github.com/moby/klauspost-compress/zstd"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// zstdEncoderCompat pins the zstd encoder output so that updating the zstd
+// library does not change the produced layer blobs.
+const zstdEncoderCompat = zstd.EncoderCompatV1_20_2
+
 func (c zstdType) Compress(ctx context.Context, comp Config) (compressorFunc Compressor, finalize Finalizer) {
 	return func(dest io.Writer, _ string) (io.WriteCloser, error) {
-		var opts []zstd.EOption
+		opts := []zstd.EOption{zstd.WithEncoderCompat(zstdEncoderCompat)}
 		if comp.Level != nil {
 			opts = append(opts, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(*comp.Level)))
 		}

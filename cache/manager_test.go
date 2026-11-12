@@ -35,7 +35,6 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/stargz-snapshotter/estargz"
-	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -51,6 +50,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/overlay"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/moby/klauspost-compress/zstd"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -3582,7 +3582,7 @@ func esgzBlobDigest(uncompressedBlobBytes []byte) (blobDigest digest.Digest, err
 
 func zstdBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
 	b := bytes.NewBuffer(nil)
-	w, err := zstd.NewWriter(b)
+	w, err := zstd.NewWriter(b, zstd.WithEncoderCompat(zstd.EncoderCompatV1_20_2))
 	if err != nil {
 		return "", err
 	}
