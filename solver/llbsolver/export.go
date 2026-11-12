@@ -10,14 +10,17 @@ import (
 	"github.com/moby/buildkit/cache"
 	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/remotecache"
+	cacheimport "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/util/epoch"
 	"github.com/moby/buildkit/exporter/verifier"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	sessionexporter "github.com/moby/buildkit/session/exporter"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/result"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress"
@@ -105,7 +108,7 @@ func (s *Solver) finalizeSessionExport(ctx context.Context, sessionID string, ex
 	return err
 }
 
-func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef]) (map[string]string, error) {
+func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *solver.Job, cached *result.Result[solver.CachedResult], inp *result.Result[cache.ImmutableRef], frontendEpoch *time.Time) (map[string]string, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	g := session.NewGroup(j.SessionID)
 	resps := make([]map[string]string, len(exporters))
@@ -113,6 +116,15 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 		id := fmt.Sprint(j.SessionID, "-cache-", i)
 		eg.Go(func() (err error) {
 			err = inBuilderContext(ctx, j, exp.Name(), id, func(ctx context.Context, _ solver.JobContext) error {
+				tm := cacheExportEpoch(exp.Epoch, frontendEpoch)
+				var rewriter *timestampRewriter
+				if exp.RewriteTimestamp {
+					if tm != nil {
+						rewriter = newTimestampRewriter(*tm, exp.Compression)
+					} else {
+						bklog.G(ctx).Warn("rewrite-timestamp is specified, but no source-date-epoch was found")
+					}
+				}
 				prepareDone := progress.OneOff(ctx, "preparing build cache for export")
 				if err := result.EachRef(cached, inp, func(res solver.CachedResult, ref cache.ImmutableRef) error {
 					ctx := withDescHandlerCacheOpts(ctx, ref)
@@ -120,9 +132,14 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 					// Configure compression
 					compressionConfig := exp.Compression
 
+					resolveRemotes := workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g)
+					if rewriter != nil {
+						resolveRemotes = rewriter.wrap(resolveRemotes)
+					}
+
 					// all keys have same export chain so exporting others is not needed
 					_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
-						ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
+						ResolveRemotes: resolveRemotes,
 						Mode:           exp.CacheExportMode,
 						Session:        g,
 						CompressionOpt: &compressionConfig,
@@ -133,7 +150,7 @@ func runCacheExporters(ctx context.Context, exporters []RemoteCacheExporter, j *
 				}
 				prepareDone(nil)
 				finalizeDone := progress.OneOff(ctx, "sending cache export")
-				resps[i], err = exp.Finalize(ctx)
+				resps[i], err = exp.Finalize(cacheimport.WithSourceDateEpoch(ctx, tm))
 				return finalizeDone(err)
 			})
 			if exp.IgnoreError {
@@ -261,11 +278,11 @@ func (s *Solver) runExporters(ctx context.Context, ref string, exporters []expor
 	return exporterResponse, finalizeFuncs, descs, nil
 }
 
-func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExporter, inline inlineCacheExporter) {
+func splitCacheExporters(exporters []RemoteCacheExporter, frontendEpoch *time.Time) (rest []RemoteCacheExporter, inline inlineCacheExporter) {
 	rest = make([]RemoteCacheExporter, 0, len(exporters))
 	for _, exp := range exporters {
 		if ic, ok := asInlineCache(exp.Exporter); ok {
-			inline = ic
+			inline = &epochInlineCacheExporter{inlineCacheExporter: ic, epoch: cacheExportEpoch(exp.Epoch, frontendEpoch)}
 			continue
 		}
 		rest = append(rest, exp)
@@ -276,6 +293,28 @@ func splitCacheExporters(exporters []RemoteCacheExporter) (rest []RemoteCacheExp
 type inlineCacheExporter interface {
 	solver.CacheExporterTarget
 	ExportForLayers(context.Context, []digest.Digest) ([]byte, error)
+}
+
+// cacheExportEpoch returns the time to clamp the timestamps of an exported
+// cache to: the exporter's source-date-epoch attribute when set (possibly to
+// an empty value, disabling clamping), otherwise the SOURCE_DATE_EPOCH of the
+// frontend.
+func cacheExportEpoch(exp *epoch.Epoch, frontendEpoch *time.Time) *time.Time {
+	if exp != nil {
+		return exp.Value
+	}
+	return frontendEpoch
+}
+
+// epochInlineCacheExporter clamps the timestamps of the inline cache, which is
+// embedded in the image config, to the SOURCE_DATE_EPOCH.
+type epochInlineCacheExporter struct {
+	inlineCacheExporter
+	epoch *time.Time
+}
+
+func (e *epochInlineCacheExporter) ExportForLayers(ctx context.Context, layers []digest.Digest) ([]byte, error) {
+	return e.inlineCacheExporter.ExportForLayers(cacheimport.WithSourceDateEpoch(ctx, e.epoch), layers)
 }
 
 func asInlineCache(e remotecache.Exporter) (inlineCacheExporter, bool) {
