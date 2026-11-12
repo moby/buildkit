@@ -250,9 +250,10 @@ RUN echo ok> /foo
 
 					require.NotEmpty(t, pred.RunDetails.Metadata.InvocationID)
 
-					require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
-					require.Equal(t, "context", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
-					require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[1].Name)
+					// the Dockerfile does not read from the build context, so only the
+					// dockerfile local is part of the build
+					require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+					require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
 
 					require.NotNil(t, pred.RunDetails.Metadata.FinishedOn)
 					require.Less(t, time.Since(*pred.RunDetails.Metadata.FinishedOn), 5*time.Minute)
@@ -364,9 +365,8 @@ RUN echo ok> /foo
 
 					require.NotEmpty(t, pred.Metadata.BuildInvocationID)
 
-					require.Equal(t, 2, len(pred.Invocation.Parameters.Locals), "%+v", pred.Invocation.Parameters.Locals)
-					require.Equal(t, "context", pred.Invocation.Parameters.Locals[0].Name)
-					require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[1].Name)
+					require.Equal(t, 1, len(pred.Invocation.Parameters.Locals), "%+v", pred.Invocation.Parameters.Locals)
+					require.Equal(t, "dockerfile", pred.Invocation.Parameters.Locals[0].Name)
 
 					require.NotNil(t, pred.Metadata.BuildFinishedOn)
 					require.Less(t, time.Since(*pred.Metadata.BuildFinishedOn), 5*time.Minute)
@@ -398,6 +398,74 @@ RUN echo ok> /foo
 			})
 		}
 	}
+}
+
+// testProvenanceTmpfsMountUnusedContext verifies that a RUN --mount=type=tmpfs
+// is not treated as reading from the build context, so the context local does
+// not become part of the provenance.
+func testProvenanceTmpfsMountUnusedContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=type=tmpfs,target=/tmp true
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	target := registry + "/buildkit/tmpfsprovenance:latest"
+	_, err = f.Solve(ctx, c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"attest:provenance": "mode=max",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(ctx, target)
+	require.NoError(t, err)
+	imgs, err := testutil.ReadImages(ctx, provider, desc)
+	require.NoError(t, err)
+
+	att := imgs.Find("unknown/unknown")
+	require.NotNil(t, att)
+	type stmtT struct {
+		Predicate provenancetypes.ProvenancePredicateSLSA1 `json:"predicate"`
+	}
+	var stmt stmtT
+	require.NoError(t, json.Unmarshal(att.LayersRaw[0], &stmt))
+
+	locals := stmt.Predicate.BuildDefinition.ExternalParameters.Request.Locals
+	require.Equal(t, 1, len(locals), "%+v", locals)
+	require.Equal(t, "dockerfile", locals[0].Name)
 }
 
 func testGitProvenanceAttestationSHA1(t *testing.T, sb integration.Sandbox) {
@@ -955,7 +1023,8 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "The", args["build-arg:FOO"])
 	require.Equal(t, "armtarget", args["target"])
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+	require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+	require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
 	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, armBase)
 
@@ -984,7 +1053,8 @@ func testClientFrontendProvenance(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, "Moby", args["build-arg:FOO"])
 	require.Equal(t, "x86target", args["target"])
 
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals))
+	require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+	require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
 	require.Equal(t, 1, len(pred.BuildDefinition.ResolvedDependencies))
 	require.Contains(t, pred.BuildDefinition.ResolvedDependencies[0].URI, amdBase)
 }
@@ -1090,7 +1160,8 @@ COPY --from=base C:\out C:\Files
 	require.Equal(t, "dockerfile.v0", pred.BuildDefinition.ExternalParameters.Request.Frontend)
 	require.Equal(t, daemonDockerfileVersion(ctx, t, c), pred.BuildDefinition.InternalParameters.DockerfileVersion)
 	require.NotContains(t, pred.BuildDefinition.ExternalParameters.Request.Args, "source")
-	require.Equal(t, 2, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+	require.Equal(t, 1, len(pred.BuildDefinition.ExternalParameters.Request.Locals), "%+v", pred.BuildDefinition.ExternalParameters.Request.Locals)
+	require.Equal(t, "dockerfile", pred.BuildDefinition.ExternalParameters.Request.Locals[0].Name)
 
 	expectedBaseImage := integration.UnixOrWindows("busybox", "nanoserver")
 	expectedBase := fmt.Sprintf("pkg:docker/%s@latest?platform=%s", expectedBaseImage, url.PathEscape(platforms.Format(platforms.Normalize(platforms.DefaultSpec()))))
