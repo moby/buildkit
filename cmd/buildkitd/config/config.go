@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/moby/buildkit/cache/remotecache/signing"
+	signingconfig "github.com/moby/buildkit/cache/remotecache/signing/config"
 	"github.com/moby/buildkit/util/db/compaction"
 	resolverconfig "github.com/moby/buildkit/util/resolver/config"
 )
@@ -105,7 +105,7 @@ func (c CompactionConfig) Policy() (compaction.Config, error) {
 }
 
 type CacheConfig struct {
-	GHA *signing.Config `toml:"gha"`
+	GHA *signingconfig.Config `toml:"gha"`
 }
 
 type SystemConfig struct {

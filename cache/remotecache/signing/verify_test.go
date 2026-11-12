@@ -3,6 +3,7 @@ package signing
 import (
 	"testing"
 
+	"github.com/moby/buildkit/cache/remotecache/signing/config"
 	policy "github.com/moby/policy-helpers"
 	"github.com/moby/policy-helpers/types"
 	digest "github.com/opencontainers/go-digest"
@@ -99,7 +100,7 @@ func TestVerifyPolicy(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name       string
-		policy     VerifyPolicy
+		policy     config.VerifyPolicy
 		signer     *certificate.Summary
 		timestamps []types.TimestampVerificationResult
 		wantErr    string
@@ -114,7 +115,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "matching identity and extension",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				Summary: certificate.Summary{
 					CertificateIssuer:      "https://issuer.example",
 					SubjectAlternativeName: "https://github.com/org/*",
@@ -127,7 +128,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "wrong issuer",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				Summary: certificate.Summary{
 					CertificateIssuer: "https://other.example",
 				},
@@ -137,7 +138,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "wrong workflow",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				Summary: certificate.Summary{
 					SubjectAlternativeName: "https://github.com/trusted/*",
 				},
@@ -147,7 +148,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "missing required extension",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				Summary: certificate.Summary{
 					Extensions: certificate.Extensions{
 						SourceRepositoryURI: "https://github.com/org/repo",
@@ -159,7 +160,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "multiple verified timestamps",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				TimestampThreshold: 2,
 			},
 			signer: signer,
@@ -174,7 +175,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "log also counts toward timestamp threshold",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				TimestampThreshold: 1,
 			},
 			signer: signer,
@@ -186,7 +187,7 @@ func TestVerifyPolicy(t *testing.T) {
 		},
 		{
 			name: "insufficient timestamps",
-			policy: VerifyPolicy{
+			policy: config.VerifyPolicy{
 				TimestampThreshold: 1,
 			},
 			signer:  signer,
@@ -234,7 +235,7 @@ func TestVerifierProvider(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			v := NewVerifier(VerifyPolicy{}, tc.provider)
+			v := NewVerifier(config.VerifyPolicy{}, tc.provider)
 			err := v.Verify(t.Context(), digest.FromString("payload"), nil)
 			require.ErrorContains(t, err, tc.wantErr)
 			if tc.name == "provider failure" {
@@ -246,7 +247,7 @@ func TestVerifierProvider(t *testing.T) {
 
 func TestVerifierRejectsMalformedBundle(t *testing.T) {
 	calls := 0
-	v := NewVerifier(VerifyPolicy{}, func() (*policy.Verifier, error) {
+	v := NewVerifier(config.VerifyPolicy{}, func() (*policy.Verifier, error) {
 		calls++
 		// Malformed bundles are rejected before loading trust material.
 		return &policy.Verifier{}, nil
@@ -257,7 +258,7 @@ func TestVerifierRejectsMalformedBundle(t *testing.T) {
 }
 
 func TestVerifierNegativeTlogThreshold(t *testing.T) {
-	v := NewVerifier(VerifyPolicy{TlogThreshold: new(-1)}, func() (*policy.Verifier, error) {
+	v := NewVerifier(config.VerifyPolicy{TlogThreshold: new(-1)}, func() (*policy.Verifier, error) {
 		return &policy.Verifier{}, nil
 	})
 	err := v.Verify(t.Context(), digest.FromString("cache index"), nil)
