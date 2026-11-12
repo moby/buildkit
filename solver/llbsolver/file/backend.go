@@ -314,7 +314,22 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 		}
 	}
 
-	for _, s := range m {
+	for i, s := range m {
+		if i == 1 {
+			// The first source may create a directory by copying directory
+			// contents or unpacking an archive, even without a trailing slash.
+			p, err := fs.RootPath(dest, destPath)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			fi, err := os.Stat(p)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if !fi.IsDir() {
+				return errors.Errorf("destination must be a directory when copying multiple sources: %s", action.Dest)
+			}
+		}
 		if action.AttemptUnpackDockerCompatibility {
 			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), idmap); err != nil {
 				return errors.WithStack(err)
