@@ -83,6 +83,11 @@ var (
 	// Value: int (0-22) for zstd
 	OptKeyCompressionLevel ImageExporterOptKey = "compression-level"
 
+	// Number of threads used to compress each layer. Only applies to zstd.
+	// 0 uses all available CPUs.
+	// Value: int (>= 0)
+	OptKeyCompressionThreads ImageExporterOptKey = "compression-threads"
+
 	// Rewrite timestamps in layers to match SOURCE_DATE_EPOCH
 	// Value: bool <true|false>
 	OptKeyRewriteTimestamp ImageExporterOptKey = "rewrite-timestamp"
