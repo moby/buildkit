@@ -51,6 +51,7 @@ require (
 	github.com/klauspost/compress v1.20.2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/go-archive v0.2.0
+	github.com/moby/klauspost-compress v1.20.4
 	github.com/moby/locker v1.0.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/moby/policy-helpers v0.0.0-20261111163703-6acab594b423
