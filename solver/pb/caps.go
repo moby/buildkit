@@ -531,6 +531,12 @@ func init() {
 	})
 
 	Caps.Init(apicaps.Cap{
+		ID:      CapFileCopyModeStringFormat,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
 		ID:      CapFileSymlinkCreate,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
