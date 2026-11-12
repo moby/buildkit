@@ -486,6 +486,523 @@ func TestGetByBlobRejectsBlobChainWithDifferentTOC(t *testing.T) {
 	require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
 }
 
+func TestGetByBlobReusesPulledSnapshots(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		snapshotter    string
+		baseRef        bool
+		upperRef       bool
+		wrongParent    bool
+		wrongRef       bool
+		wantBaseReuse  bool
+		wantUpperReuse bool
+	}{
+		{
+			name:           "native",
+			snapshotter:    "native",
+			baseRef:        true,
+			upperRef:       true,
+			wantBaseReuse:  true,
+			wantUpperReuse: true,
+		},
+		{
+			name:           "overlayfs",
+			snapshotter:    "overlayfs",
+			baseRef:        true,
+			upperRef:       true,
+			wantBaseReuse:  true,
+			wantUpperReuse: true,
+		},
+		{
+			name:        "legacy",
+			snapshotter: "native",
+		},
+		{
+			name:        "legacy parent",
+			snapshotter: "native",
+			upperRef:    true,
+		},
+		{
+			name:          "legacy child",
+			snapshotter:   "native",
+			baseRef:       true,
+			wantBaseReuse: true,
+		},
+		{
+			name:          "wrong parent",
+			snapshotter:   "native",
+			baseRef:       true,
+			upperRef:      true,
+			wrongParent:   true,
+			wantBaseReuse: true,
+		},
+		{
+			name:        "wrong reference",
+			snapshotter: "native",
+			baseRef:     true,
+			upperRef:    true,
+			wrongRef:    true,
+		},
+		{
+			name:        "lazy snapshotter",
+			snapshotter: "stargz",
+			baseRef:     true,
+			upperRef:    true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+			// Use the native fixture to exercise the cache's snapshotter-name
+			// policy without importing a platform-specific snapshotter.
+			co, cleanup, err := newCacheManager(ctx, t, cmOpt{snapshotterName: tc.snapshotter})
+			require.NoError(t, err)
+			t.Cleanup(cleanup)
+			cm := co.manager.(*cacheManager)
+
+			lease, err := co.lm.Create(ctx, leases.WithID("pulled-image"))
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, co.lm.Delete(ctx, lease)) })
+			ctx = leases.WithLease(ctx, lease.ID)
+			var parent ImmutableRef
+			var chainID digest.Digest
+			for i, hasRef := range []bool{tc.baseRef, tc.upperRef} {
+				blob, desc, err := mapToBlob(map[string]string{fmt.Sprintf("file%d", i): "pulled"}, true)
+				require.NoError(t, err)
+				require.NoError(t, content.WriteBlob(ctx, co.cs, fmt.Sprintf("blob%d", i), bytes.NewReader(blob), desc))
+				parentID := chainID.String()
+				diffID := digest.Digest(desc.Annotations[labels.LabelUncompressed])
+				if i == 0 {
+					chainID = diffID
+				} else {
+					chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
+					if tc.wrongParent {
+						parentID = ""
+					}
+				}
+				key := fmt.Sprintf("pull%d", i)
+				mnts, err := co.testSnapshotter.Prepare(ctx, key, parentID)
+				require.NoError(t, err)
+				applied, err := cm.Applier.Apply(ctx, desc, mnts)
+				require.NoError(t, err)
+				require.Equal(t, diffID, applied.Digest)
+				snapshotLabels := map[string]string{}
+				if hasRef {
+					snapshotLabels[snapshots.LabelSnapshotRef] = chainID.String()
+					if tc.wrongRef {
+						snapshotLabels[snapshots.LabelSnapshotRef] = digest.FromString("wrong").String()
+					}
+				}
+				require.NoError(t, co.testSnapshotter.Commit(ctx, chainID.String(), key, snapshots.WithLabels(snapshotLabels)))
+
+				// Manifest annotations must not establish snapshot provenance.
+				desc.Annotations[snapshots.LabelSnapshotRef] = chainID.String()
+				ref, err := cm.GetByBlob(ctx, desc, parent)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, ref.Release(ctx)) })
+				ir := ref.(*immutableRef)
+				wantReuse := tc.wantBaseReuse
+				if i == 1 {
+					wantReuse = tc.wantUpperReuse
+				}
+				require.False(t, hasLegacyLayerSnapshotID(ir))
+				wantID := snapshot.LayerSnapshotID(chainID)
+				if wantReuse {
+					wantID = chainID.String()
+					// Existing snapshots must be usable without an extraction applier.
+					applier := cm.Applier
+					cm.Applier = nil
+					require.NoError(t, ref.Extract(ctx, nil))
+					cm.Applier = applier
+					_, err := co.testSnapshotter.Stat(ctx, snapshot.LayerSnapshotID(chainID))
+					require.True(t, cerrdefs.IsNotFound(err))
+				} else {
+					require.NoError(t, ref.Extract(ctx, nil))
+				}
+				require.Equal(t, wantReuse, ir.getBool(keySharedSnapshot))
+				require.Equal(t, wantID, ir.getSnapshotID())
+				resources, err := co.lm.ListResources(ctx, leases.Lease{ID: ref.ID()})
+				require.NoError(t, err)
+				require.Contains(t, resources, leases.Resource{ID: wantID, Type: "snapshots/" + tc.snapshotter})
+				if !wantReuse {
+					require.NotContains(t, resources, leases.Resource{ID: chainID.String(), Type: "snapshots/" + tc.snapshotter})
+				}
+				parent = ref
+			}
+		})
+	}
+}
+
+func TestPulledSnapshotsSurviveRestart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	tmpdir := t.TempDir()
+	sn, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, sn.Close()) })
+	opt := cmOpt{snapshotter: sn, tmpdir: tmpdir}
+	co, cleanup, err := newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+
+	// Pull two layers before creating cache records for them.
+	var descriptors []ocispecs.Descriptor
+	var chainIDs []string
+	parentID := ""
+	for _, name := range []string{"base", "child"} {
+		blob, desc, err := mapToBlob(map[string]string{name: "pulled"}, true)
+		require.NoError(t, err)
+		require.NoError(t, content.WriteBlob(ctx, co.cs, name, bytes.NewReader(blob), desc))
+		diffID := digest.Digest(desc.Annotations[labels.LabelUncompressed])
+		chainID := diffID
+		if parentID != "" {
+			chainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(parentID), diffID})
+		}
+		mounts, err := co.testSnapshotter.Prepare(ctx, name, parentID)
+		require.NoError(t, err)
+		applied, err := cm.Applier.Apply(ctx, desc, mounts)
+		require.NoError(t, err)
+		require.Equal(t, diffID, applied.Digest)
+		require.NoError(t, co.testSnapshotter.Commit(ctx, chainID.String(), name, snapshots.WithLabels(map[string]string{
+			snapshots.LabelSnapshotRef: chainID.String(),
+		})))
+		descriptors = append(descriptors, desc)
+		chainIDs = append(chainIDs, chainID.String())
+		parentID = chainID.String()
+	}
+	base, err := cm.GetByBlob(ctx, descriptors[0], nil)
+	require.NoError(t, err)
+	child, err := cm.GetByBlob(ctx, descriptors[1], base)
+	require.NoError(t, err)
+	require.NoError(t, child.Extract(ctx, nil))
+
+	// A different compression must link to the same adopted snapshot.
+	blob, desc, err := mapToBlob(map[string]string{"child": "pulled"}, false)
+	require.NoError(t, err)
+	require.NotEqual(t, descriptors[1].Digest, desc.Digest)
+	require.Equal(t, descriptors[1].Annotations[labels.LabelUncompressed], desc.Annotations[labels.LabelUncompressed])
+	require.NoError(t, content.WriteBlob(ctx, co.cs, "uncompressed", bytes.NewReader(blob), desc))
+	linked, err := cm.GetByBlob(ctx, desc, base)
+	require.NoError(t, err)
+	require.NotEqual(t, child.ID(), linked.ID())
+	require.Equal(t, chainIDs[1], linked.(*immutableRef).getSnapshotID())
+	require.False(t, hasLegacyLayerSnapshotID(linked.(*immutableRef)))
+	baseID, childID, linkedID := base.ID(), child.ID(), linked.ID()
+	require.NoError(t, linked.Release(ctx))
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, base.Release(ctx))
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, opt)
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager.(*cacheManager)
+	_, err = cm.GarbageCollect(ctx)
+	require.NoError(t, err)
+	// Cache leases alone must retain the layers; re-extraction must not hide
+	// a pinning failure after restart and GC.
+	for _, key := range chainIDs {
+		_, err := co.testSnapshotter.Stat(ctx, key)
+		require.NoError(t, err)
+	}
+	cm.Applier = nil
+	base, err = cm.GetByBlob(ctx, descriptors[0], nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, base.Release(ctx)) })
+	require.Equal(t, baseID, base.ID())
+	child, err = cm.GetByBlob(ctx, descriptors[1], base)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, child.Release(ctx)) })
+	require.Equal(t, childID, child.ID())
+	linked, err = cm.GetByBlob(ctx, desc, base)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, linked.Release(ctx)) })
+	require.Equal(t, linkedID, linked.ID())
+	require.False(t, hasLegacyLayerSnapshotID(linked.(*immutableRef)))
+	mnt, err := linked.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	mounter := snapshot.LocalMounter(mnt)
+	root, err := mounter.Mount()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, mounter.Unmount()) })
+	for _, name := range []string{"base", "child"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		require.NoError(t, err)
+		require.Equal(t, "pulled", string(data))
+	}
+}
+
+// commitHookSnapshotter lets a competing pull commit immediately before a build.
+type commitHookSnapshotter struct {
+	snapshot.MergeSnapshotter
+	beforeCommit func(context.Context) error
+	once         sync.Once
+	err          error
+}
+
+func (s *commitHookSnapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+	s.once.Do(func() { s.err = s.beforeCommit(ctx) })
+	if s.err != nil {
+		return s.err
+	}
+	return s.MergeSnapshotter.Commit(ctx, name, key, opts...)
+}
+
+func TestPullBuildSnapshotRace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		order    string
+		verified bool
+	}{
+		{
+			name:     "pull before extraction",
+			order:    "before",
+			verified: true,
+		},
+		{
+			name:     "pull during extraction",
+			order:    "during",
+			verified: true,
+		},
+		{
+			name:     "build before pull",
+			order:    "after",
+			verified: true,
+		},
+		{
+			name:  "unverified snapshot before extraction",
+			order: "before",
+		},
+		{
+			name:  "unverified snapshot during extraction",
+			order: "during",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+			co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
+			require.NoError(t, err)
+			t.Cleanup(cleanup)
+			cm := co.manager.(*cacheManager)
+			blob, desc, err := mapToBlob(map[string]string{"proof": "verified"}, true)
+			require.NoError(t, err)
+			require.NoError(t, content.WriteBlob(ctx, co.cs, "blob", bytes.NewReader(blob), desc))
+			chainID := digest.Digest(desc.Annotations[labels.LabelUncompressed])
+
+			// The build allocates its cache record before the pull commits.
+			ref, err := cm.GetByBlob(ctx, desc, nil)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, ref.Release(ctx)) })
+			require.Equal(t, snapshot.LayerSnapshotID(chainID), ref.(*immutableRef).getSnapshotID())
+			// Reserve a linked record with a different compression as well.
+			linkedBlob, linkedDesc, err := mapToBlob(map[string]string{"proof": "verified"}, false)
+			require.NoError(t, err)
+			require.NoError(t, content.WriteBlob(ctx, co.cs, "linked", bytes.NewReader(linkedBlob), linkedDesc))
+			linked, err := cm.GetByBlob(ctx, linkedDesc, nil)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, linked.Release(ctx)) })
+			require.Equal(t, snapshot.LayerSnapshotID(chainID), linked.(*immutableRef).getSnapshotID())
+			pullLease, err := co.lm.Create(ctx, leases.WithID("external-pull"))
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, co.lm.Delete(ctx, pullLease)) })
+			pullCtx := leases.WithLease(ctx, pullLease.ID)
+			mounts, err := co.testSnapshotter.Prepare(pullCtx, "pull", "")
+			require.NoError(t, err)
+			pullDesc := desc
+			if !tc.verified {
+				poison, poisonDesc, err := mapToBlob(map[string]string{"proof": "unverified"}, true)
+				require.NoError(t, err)
+				require.NoError(t, content.WriteBlob(ctx, co.cs, "poison", bytes.NewReader(poison), poisonDesc))
+				pullDesc = poisonDesc
+			}
+			applied, err := cm.Applier.Apply(ctx, pullDesc, mounts)
+			require.NoError(t, err)
+			require.Equal(t, pullDesc.Annotations[labels.LabelUncompressed], applied.Digest.String())
+			commitPull := func(ctx context.Context) error {
+				ctx = leases.WithLease(ctx, pullLease.ID)
+				var opts []snapshots.Opt
+				if tc.verified {
+					opts = append(opts, snapshots.WithLabels(map[string]string{
+						snapshots.LabelSnapshotRef: chainID.String(),
+					}))
+				}
+				return co.testSnapshotter.Commit(ctx, chainID.String(), "pull", opts...)
+			}
+			switch tc.order {
+			case "before":
+				require.NoError(t, commitPull(ctx))
+				if tc.verified {
+					cm.Applier = nil // A completed, verified pull must not be extracted again.
+				}
+			case "during":
+				cm.Snapshotter = &commitHookSnapshotter{MergeSnapshotter: cm.Snapshotter, beforeCommit: commitPull}
+			}
+			var eg errgroup.Group
+			eg.Go(func() error { return ref.Extract(ctx, nil) })
+			eg.Go(func() error { return linked.Extract(ctx, nil) })
+			require.NoError(t, eg.Wait())
+			if !tc.verified {
+				for _, recovered := range []ImmutableRef{ref, linked} {
+					require.Equal(t, snapshot.LayerSnapshotID(chainID), recovered.(*immutableRef).getSnapshotID())
+					loaded, err := cm.Get(ctx, recovered.ID(), nil)
+					require.NoError(t, err)
+					require.NoError(t, loaded.Release(ctx))
+					resources, err := co.lm.ListResources(ctx, leases.Lease{ID: recovered.ID()})
+					require.NoError(t, err)
+					require.Contains(t, resources, leases.Resource{ID: snapshot.LayerSnapshotID(chainID), Type: "snapshots/native"})
+					require.NotContains(t, resources, leases.Resource{ID: chainID.String(), Type: "snapshots/native"})
+				}
+				mnt, err := ref.Mount(ctx, true, nil)
+				require.NoError(t, err)
+				mounter := snapshot.LocalMounter(mnt)
+				root, err := mounter.Mount()
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, mounter.Unmount()) })
+				data, err := os.ReadFile(filepath.Join(root, "proof"))
+				require.NoError(t, err)
+				require.Equal(t, "verified", string(data))
+				return
+			}
+			if tc.order == "after" {
+				require.True(t, cerrdefs.IsAlreadyExists(commitPull(ctx)))
+				require.NoError(t, co.testSnapshotter.Remove(ctx, "pull"))
+			}
+			var committed int
+			require.NoError(t, co.testSnapshotter.Walk(ctx, func(_ context.Context, info snapshots.Info) error {
+				require.Equal(t, snapshots.KindCommitted, info.Kind)
+				require.Equal(t, chainID.String(), info.Name)
+				require.Equal(t, chainID.String(), info.Labels[snapshots.LabelSnapshotRef])
+				committed++
+				return nil
+			}))
+			require.Equal(t, 1, committed)
+			_, err = co.testSnapshotter.Stat(ctx, snapshot.LayerSnapshotID(chainID))
+			require.True(t, cerrdefs.IsNotFound(err))
+		})
+	}
+}
+
+func TestSharedSnapshotFallbackInMergeAndDiff(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	for _, operation := range []string{"merge", "diff"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+			co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
+			require.NoError(t, err)
+			t.Cleanup(cleanup)
+			cm := co.manager.(*cacheManager)
+			var refs []ImmutableRef
+			for _, name := range []string{"lower", "upper"} {
+				blob, desc, err := mapToBlob(map[string]string{name: "verified"}, true)
+				require.NoError(t, err)
+				require.NoError(t, content.WriteBlob(ctx, co.cs, name, bytes.NewReader(blob), desc))
+				ref, err := cm.GetByBlob(ctx, desc, nil)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, ref.Release(ctx)) })
+				refs = append(refs, ref)
+				// Occupy the reserved key with an unverified, empty snapshot.
+				_, err = co.testSnapshotter.Prepare(ctx, name, "")
+				require.NoError(t, err)
+				require.NoError(t, co.testSnapshotter.Commit(ctx, ref.(*immutableRef).getChainID().String(), name))
+			}
+			var result ImmutableRef
+			if operation == "merge" {
+				result, err = cm.Merge(ctx, refs, nil)
+			} else {
+				result, err = cm.Diff(ctx, refs[0], refs[1], nil)
+			}
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, result.Release(ctx)) })
+			mnt, err := result.Mount(ctx, true, nil)
+			require.NoError(t, err)
+			mounter := snapshot.LocalMounter(mnt)
+			root, err := mounter.Mount()
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, mounter.Unmount()) })
+			data, err := os.ReadFile(filepath.Join(root, "upper"))
+			require.NoError(t, err)
+			require.Equal(t, "verified", string(data))
+			if operation == "merge" {
+				data, err := os.ReadFile(filepath.Join(root, "lower"))
+				require.NoError(t, err)
+				require.Equal(t, "verified", string(data))
+			}
+			for _, ref := range refs {
+				ir := ref.(*immutableRef)
+				require.Equal(t, snapshot.LayerSnapshotID(ir.getChainID()), ir.getSnapshotID())
+			}
+		})
+	}
+}
+
+func TestSharedSnapshotFallsBackWithUnverifiedParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager.(*cacheManager)
+	var parent ImmutableRef
+	parentID := ""
+	var descriptors []ocispecs.Descriptor
+	var snapshotIDs []string
+	for _, name := range []string{"base", "child"} {
+		blob, desc, err := mapToBlob(map[string]string{name: "data"}, true)
+		require.NoError(t, err)
+		descriptors = append(descriptors, desc)
+		require.NoError(t, content.WriteBlob(ctx, co.cs, name, bytes.NewReader(blob), desc))
+		// Reserve the shared key before an external writer creates the snapshot.
+		ref, err := cm.GetByBlob(ctx, desc, parent)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, ref.Release(ctx)) })
+		key := ref.(*immutableRef).getChainID().String()
+		snapshotIDs = append(snapshotIDs, key)
+		parent = ref
+	}
+	for i, desc := range descriptors {
+		key := snapshotIDs[i]
+		name := fmt.Sprintf("unpack-%d", i)
+		mounts, err := co.testSnapshotter.Prepare(ctx, name, parentID)
+		require.NoError(t, err)
+		_, err = cm.Applier.Apply(ctx, desc, mounts)
+		require.NoError(t, err)
+		var opts []snapshots.Opt
+		if i == 1 {
+			opts = append(opts, snapshots.WithLabels(map[string]string{
+				snapshots.LabelSnapshotRef: key,
+			}))
+		}
+		require.NoError(t, co.testSnapshotter.Commit(ctx, key, name, opts...))
+		parentID = key
+	}
+	// Recover both records in the original operation, including the labeled
+	// child whose shared parent turned out to be unverified.
+	require.NoError(t, parent.Extract(ctx, nil))
+	for _, ref := range parent.(*immutableRef).layerChain() {
+		require.Equal(t, snapshot.LayerSnapshotID(ref.getChainID()), ref.getSnapshotID())
+	}
+}
+
 func TestGetByBlobIgnoresLegacyChainIDSnapshot(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
@@ -538,6 +1055,7 @@ func TestGetByBlobIgnoresLegacyChainIDSnapshot(t *testing.T) {
 
 	legacy := legacyRef.(*immutableRef)
 	legacy.queueSnapshotID(legacySnapshotID)
+	legacy.queueValue(keySharedSnapshot, false, "")
 	legacy.queueBlobOnly(false)
 	require.NoError(t, legacy.commitMetadata())
 	require.NoError(t, legacyRef.Release(ctx))
@@ -590,6 +1108,7 @@ func TestGetByBlobQuarantinesLegacyLayerAncestry(t *testing.T) {
 	require.NoError(t, err)
 	legacyRef := legacy.(*immutableRef)
 	legacyRef.queueSnapshotID(legacyRef.getChainID().String())
+	legacyRef.queueValue(keySharedSnapshot, false, "")
 	legacyRef.queueBlobOnly(false)
 	require.NoError(t, legacyRef.commitMetadata())
 	require.True(t, isLegacyLayerSnapshotID(legacyRef))

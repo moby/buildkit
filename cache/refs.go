@@ -1288,38 +1288,42 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progres
 // should be called within sizeG.Do call for this ref's ID
 func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool, ensureContentStore bool) (rerr error) {
 	eg, egctx := errgroup.WithContext(ctx)
-	var diffs []snapshot.Diff
-	sr.layerWalk(func(sr *immutableRef) {
-		var diff snapshot.Diff
-		switch sr.kind() {
-		case Diff:
-			if sr.diffParents.lower != nil {
-				diff.Lower = sr.diffParents.lower.getSnapshotID()
-				eg.Go(func() error {
-					return sr.diffParents.lower.unlazy(egctx, dhs, pg, s, false, ensureContentStore)
-				})
+	layers := sr.layerChain()
+	diffs := make([]snapshot.Diff, len(layers))
+	for i, layer := range layers {
+		eg.Go(func() error {
+			var diff snapshot.Diff
+			switch layer.kind() {
+			case Diff:
+				if lower := layer.diffParents.lower; lower != nil {
+					if err := lower.unlazy(egctx, dhs, pg, s, false, ensureContentStore); err != nil {
+						return err
+					}
+					diff.Lower = lower.getSnapshotID()
+				}
+				if upper := layer.diffParents.upper; upper != nil {
+					if err := upper.unlazy(egctx, dhs, pg, s, false, ensureContentStore); err != nil {
+						return err
+					}
+					diff.Upper = upper.getSnapshotID()
+				}
+			case Layer, BaseLayer:
+				if err := layer.unlazy(egctx, dhs, pg, s, false, ensureContentStore); err != nil {
+					return err
+				}
+				if layer.layerParent != nil {
+					diff.Lower = layer.layerParent.getSnapshotID()
+				}
+				diff.Upper = layer.getSnapshotID()
 			}
-			if sr.diffParents.upper != nil {
-				diff.Upper = sr.diffParents.upper.getSnapshotID()
-				eg.Go(func() error {
-					return sr.diffParents.upper.unlazy(egctx, dhs, pg, s, false, ensureContentStore)
-				})
-			}
-		case Layer:
-			diff.Lower = sr.layerParent.getSnapshotID()
-			fallthrough
-		case BaseLayer:
-			diff.Upper = sr.getSnapshotID()
-			eg.Go(func() error {
-				return sr.unlazy(egctx, dhs, pg, s, false, ensureContentStore)
-			})
-		}
-		diffs = append(diffs, diff)
-	})
+			// Read snapshot IDs after materialization resolves the final keys.
+			diffs[i] = diff
+			return nil
+		})
+	}
 	if err := eg.Wait(); err != nil {
 		return err
 	}
-
 	if pg != nil {
 		action := "merging"
 		if sr.kind() == Diff {
@@ -1341,6 +1345,10 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, p
 	return sr.cm.Snapshotter.Merge(ctx, sr.getSnapshotID(), diffs)
 }
 
+func matchesSharedSnapshot(info snapshots.Info, key, parent string) bool {
+	return info.Kind == snapshots.KindCommitted && info.Parent == parent && info.Labels[snapshots.LabelSnapshotRef] == key
+}
+
 // should be called within sizeG.Do call for this ref's ID
 func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, ensureContentStore bool) (rerr error) {
 	if !sr.getBlobOnly() {
@@ -1355,10 +1363,6 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		if sr.getBlob() == "" {
 			return errors.Errorf("failed to restore missing snapshot %s: no blob available", sr.getSnapshotID())
 		}
-	}
-
-	if sr.cm.Applier == nil {
-		return errors.New("unlazy requires an applier")
 	}
 
 	leaseID, hasLease := leases.FromContext(ctx)
@@ -1433,6 +1437,48 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		return err
 	}
 
+	snapshotID := sr.getSnapshotID()
+	sharedID := sr.getChainID().String()
+	saveSnapshot := func() error {
+		sr.queueSnapshotID(snapshotID)
+		sr.queueValue(keySharedSnapshot, snapshotID == sharedID, "")
+		sr.queueBlobOnly(false)
+		sr.queueSize(sizeUnknown)
+		return sr.commitMetadata()
+	}
+
+	// Decide on the common key only after the parent is materialized. Keep the
+	// record's versioned ID until a verified shared snapshot actually exists.
+	if snapshotID == snapshot.LayerSnapshotID(sr.getChainID()) && (sr.cm.Snapshotter.Name() == "overlayfs" || sr.cm.Snapshotter.Name() == "native") && (sr.layerParent == nil || sr.layerParent.getBool(keySharedSnapshot)) {
+		lease := leases.Lease{ID: sr.ID()}
+		resourceType := "snapshots/" + sr.cm.Snapshotter.Name()
+		if err := sr.cm.LeaseManager.AddResource(ctx, lease, leases.Resource{ID: sharedID, Type: resourceType}); err != nil {
+			return err
+		}
+		versionedID := snapshotID
+		defer func() {
+			unusedID := sharedID
+			if sr.getSnapshotID() == sharedID {
+				unusedID = versionedID
+			}
+			if err := sr.cm.LeaseManager.DeleteResource(context.WithoutCancel(ctx), lease, leases.Resource{ID: unusedID, Type: resourceType}); err != nil {
+				bklog.G(ctx).Warn(errors.Wrapf(err, "failed to release unused snapshot %s", unusedID))
+			}
+		}()
+		info, err := sr.cm.Snapshotter.Stat(ctx, sharedID)
+		switch {
+		case cerrdefs.IsNotFound(err):
+			snapshotID = sharedID
+		case err != nil:
+			return err
+		case matchesSharedSnapshot(info, sharedID, parentID):
+			snapshotID = sharedID
+			return saveSnapshot()
+		}
+	}
+	if sr.cm.Applier == nil {
+		return errors.New("unlazy requires an applier")
+	}
 	if pg == nil && dh != nil {
 		pg = dh.Progress
 	}
@@ -1484,19 +1530,35 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 	if err := unmount(); err != nil {
 		return err
 	}
-	if err := sr.cm.Snapshotter.Commit(ctx, sr.getSnapshotID(), key); err != nil {
+	for {
+		var commitOpts []snapshots.Opt
+		if snapshotID == sharedID {
+			commitOpts = append(commitOpts, snapshots.WithLabels(map[string]string{
+				snapshots.LabelSnapshotRef: snapshotID,
+			}))
+		}
+		err := sr.cm.Snapshotter.Commit(ctx, snapshotID, key, commitOpts...)
+		if err == nil {
+			removeActive = false
+			break
+		}
 		if !errors.Is(err, cerrdefs.ErrAlreadyExists) {
 			return err
 		}
-	} else {
-		removeActive = false
+		if snapshotID != sr.getSnapshotID() {
+			info, err := sr.cm.Snapshotter.Stat(ctx, sharedID)
+			if err != nil {
+				return err
+			}
+			if !matchesSharedSnapshot(info, sharedID, parentID) {
+				// Keep the verified extraction and commit it under the original key.
+				snapshotID = sr.getSnapshotID()
+				continue
+			}
+		}
+		break
 	}
-	sr.queueBlobOnly(false)
-	sr.queueSize(sizeUnknown)
-	if err := sr.commitMetadata(); err != nil {
-		return err
-	}
-	return nil
+	return saveSnapshot()
 }
 
 func (sr *immutableRef) Release(ctx context.Context) error {

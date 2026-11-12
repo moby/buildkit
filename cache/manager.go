@@ -120,7 +120,7 @@ func isLegacyLayerRecord(ref *cacheRecord) bool {
 		return false
 	}
 	chainID := ref.getChainID()
-	return chainID != "" && ref.getBlob() != "" && ref.getSnapshotID() == chainID.String()
+	return chainID != "" && ref.getBlob() != "" && ref.getSnapshotID() == chainID.String() && !ref.getBool(keySharedSnapshot)
 }
 
 // hasLegacyLayerSnapshotID reports whether ref depends on a pre-versioning layer snapshot.
@@ -289,8 +289,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 
 	id := identity.NewID()
 	snapshotID := snapshot.LayerSnapshotID(chainID)
+	sharedSnapshot := false
 	if link != nil {
 		snapshotID = link.getSnapshotID()
+		sharedSnapshot = snapshotID == chainID.String()
 		go link.Release(context.WithoutCancel(ctx))
 	}
 
@@ -356,6 +358,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	rec.queueChainID(chainID)
 	rec.queueBlobChainID(blobChainID)
 	rec.queueSnapshotID(snapshotID)
+	rec.queueValue(keySharedSnapshot, sharedSnapshot, "")
 	rec.queueBlobOnly(true)
 	rec.queueMediaType(desc.MediaType)
 	rec.queueBlobSize(desc.Size)

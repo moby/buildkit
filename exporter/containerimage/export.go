@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	remoteserrors "github.com/containerd/containerd/v2/core/remotes/errors"
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/epoch"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/containerd/v2/pkg/rootfs"
@@ -436,6 +437,18 @@ func (e *imageExporterInstance) pushImage(ctx context.Context, src *exporter.Sou
 	return push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), dgst, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations)
 }
 
+// unpackSnapshotter labels snapshots committed by rootfs.ApplyLayers after it
+// verifies their DiffIDs. Prepare must not carry this label: containerd interprets
+// it as a target snapshot and may return AlreadyExists, which ApplyLayers retries.
+type unpackSnapshotter struct {
+	snapshots.Snapshotter
+}
+
+func (s unpackSnapshotter) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+	opts = append(opts, snapshots.WithLabels(map[string]string{snapshots.LabelSnapshotRef: name}))
+	return s.Snapshotter.Commit(ctx, name, key, opts...)
+}
+
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src *exporter.Source, remotes *result.Result[*solver.Remote]) (err0 error) {
 	matcher := platforms.Only(platforms.Normalize(platforms.DefaultSpec()))
 
@@ -512,7 +525,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 
 	// note that calling ApplyLayer in a loop here as alternative is not safe because
 	// single ApplyLayer does not have a safe way to ensure parents are not removed during unpack.
-	appliedChainID, err := rootfs.ApplyLayers(ctx, layers, ctrdSnapshotter, applier)
+	appliedChainID, err := rootfs.ApplyLayers(ctx, layers, unpackSnapshotter{ctrdSnapshotter}, applier)
 	if err != nil {
 		return err
 	}
