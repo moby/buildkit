@@ -373,8 +373,8 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithConnectParams(connParams),
 				grpc.WithContextDialer(dialer.ContextDialer),
-				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
-				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(8 * defaults.DefaultMaxRecvMsgSize)),
+				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(8 * defaults.DefaultMaxSendMsgSize)),
 			}
 			// ignore SA1019 NewClient has different behavior and needs to be tested
 			//nolint:staticcheck
