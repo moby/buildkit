@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/moby/buildkit/cache/remotecache/signing"
+	signingconfig "github.com/moby/buildkit/cache/remotecache/signing/config"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -186,7 +186,7 @@ func requiresLinux(t *testing.T) {
 func TestIndexKeySigning(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		config signing.Config
+		config signingconfig.Config
 		key    string
 	}{
 		{
@@ -195,22 +195,22 @@ func TestIndexKeySigning(t *testing.T) {
 		},
 		{
 			name: "signing",
-			config: signing.Config{
-				Sign: &signing.SignConfig{Command: []string{"sign-cache"}},
+			config: signingconfig.Config{
+				Sign: &signingconfig.SignConfig{Command: []string{"sign-cache"}},
 			},
 			key: "index-buildkit-1-e3b0c442-sig",
 		},
 		{
 			name: "required verification",
-			config: signing.Config{
-				Verify: signing.VerifyConfig{Required: true},
+			config: signingconfig.Config{
+				Verify: signingconfig.VerifyConfig{Required: true},
 			},
 			key: "index-buildkit-1-e3b0c442-sig",
 		},
 		{
 			name: "legacy empty signing command",
-			config: signing.Config{
-				Sign: &signing.SignConfig{},
+			config: signingconfig.Config{
+				Sign: &signingconfig.SignConfig{},
 			},
 			key: "index-buildkit-1-e3b0c442-sig",
 		},
@@ -279,8 +279,8 @@ func TestLoadScopeSignature(t *testing.T) {
 			})
 			require.NoError(t, err)
 			token := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none"}`)) + "." + base64.RawURLEncoding.EncodeToString(claims) + "."
-			cfg, err := getConfig(&signing.Config{
-				Verify: signing.VerifyConfig{Required: tc.required},
+			cfg, err := getConfig(&signingconfig.Config{
+				Verify: signingconfig.VerifyConfig{Required: tc.required},
 			}, nil, map[string]string{
 				attrToken:      token,
 				attrURL:        "https://cache.example",

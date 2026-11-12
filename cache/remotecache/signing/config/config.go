@@ -1,4 +1,4 @@
-package signing
+package config
 
 import "github.com/sigstore/sigstore-go/pkg/fulcio/certificate"
 
