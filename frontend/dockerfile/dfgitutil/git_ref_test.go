@@ -268,6 +268,64 @@ func TestParseGitRef(t *testing.T) {
 			ref: "https://github.com/moby/buildkit.git?invalid=123",
 			err: "unexpected query \"invalid\"",
 		},
+		{
+			// The "git+" scheme prefix marks an HTTP(S) URL as a git URL regardless of the ".git" suffix,
+			// e.g., for git forges that do not support the suffix, such as Azure DevOps or SourceHut.
+			ref: "git+https://git.sr.ht/~foo/bar",
+			expected: &GitRef{
+				Remote:    "https://git.sr.ht/~foo/bar",
+				ShortName: "bar",
+			},
+		},
+		{
+			ref: "git+https://dev.azure.com/org/project/_git/repo#main:sub/dir",
+			expected: &GitRef{
+				Remote:    "https://dev.azure.com/org/project/_git/repo",
+				ShortName: "repo",
+				Ref:       "main",
+				SubDir:    "sub/dir",
+			},
+		},
+		{
+			ref: "git+https://github.com/moby/buildkit.git?tag=v1.0.0&keep-git-dir",
+			expected: &GitRef{
+				Remote:     "https://github.com/moby/buildkit.git",
+				ShortName:  "buildkit",
+				Ref:        "refs/tags/v1.0.0",
+				KeepGitDir: new(true),
+			},
+		},
+		{
+			ref: "GIT+HTTPS://git.sr.ht/~foo/bar",
+			expected: &GitRef{
+				Remote:    "https://git.sr.ht/~foo/bar",
+				ShortName: "bar",
+			},
+		},
+		{
+			ref: "git+http://example.com/foo",
+			expected: &GitRef{
+				Remote:         "http://example.com/foo",
+				ShortName:      "foo",
+				UnencryptedTCP: true,
+			},
+		},
+		{
+			ref: "git+ssh://git@github.com/moby/buildkit.git",
+			err: "invalid protocol",
+		},
+		{
+			ref: "git+git://github.com/moby/buildkit.git",
+			err: "invalid protocol",
+		},
+		{
+			ref: "git+https://git.sr.ht/~foo/bar?invalid=123",
+			err: "unexpected query \"invalid\"",
+		},
+		{
+			ref:      "git+foo",
+			expected: nil,
+		},
 	}
 	for i, tt := range cases {
 		t.Run(fmt.Sprintf("case%d", i+1), func(t *testing.T) {
@@ -446,6 +504,11 @@ func TestFragmentFormat(t *testing.T) {
 			ref:      "https://github.com/moby/buildkit.git?invalid=123",
 			expected: "https://github.com/moby/buildkit.git?invalid=123",
 			ok:       false,
+		},
+		{
+			ref:      "git+https://git.sr.ht/~foo/bar?ref=main",
+			expected: "https://git.sr.ht/~foo/bar#main",
+			ok:       true,
 		},
 	}
 	for i, tt := range cases {

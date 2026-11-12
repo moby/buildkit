@@ -1509,8 +1509,9 @@ BuildKit detects the type of `<src>` and processes it accordingly.
 
 #### Adding files from the build context
 
-Any relative or local path that doesn't begin with a `http://`, `https://`, or
-`git@` protocol prefix is considered a local file path. The local file path is
+Any relative or local path that doesn't begin with a `http://`, `https://`,
+`git+http://`, `git+https://`, or `git@` protocol prefix is considered a local
+file path. The local file path is
 relative to the build context. For example, if the build context is the current
 directory, `ADD file.txt /` adds the file at `./file.txt` to the root of the
 filesystem in the build container.
@@ -1639,6 +1640,17 @@ ADD git@github.com:moby/buildkit.git#v0.14.1:docs /buildkit-docs
 
 For more information about Git URL fragments,
 see [URL fragments](https://docs.docker.com/build/building/context/#url-fragments).
+
+An HTTP or HTTPS URL is treated as a Git repository only when its path ends
+with `.git`. For Git forges that don't use the `.git` suffix in clone URLs,
+such as Azure DevOps or SourceHut, prefix the URL scheme with `git+` to mark
+the URL as a Git repository:
+
+```dockerfile
+ADD git+https://git.sr.ht/~user/repo#main /mydir/
+```
+
+The `git+` prefix is only supported for `http://` and `https://` URLs.
 
 When adding from a Git repository, the permissions bits for files
 are 644. If a file in the repository has the executable bit set, it will have
