@@ -669,6 +669,9 @@ func (ic *ImageWriter) commitAttestationsManifest(ctx context.Context, opts *Ima
 			SchemaVersion: 2,
 		},
 		Config: configDesc,
+		// layers is a required array in the image manifest schema, so keep it
+		// non-nil for attestation manifests without statements.
+		Layers: make([]ocispecs.Descriptor, 0, len(statements)),
 	}
 
 	if ociArtifact {
