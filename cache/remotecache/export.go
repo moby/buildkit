@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
@@ -190,13 +191,9 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 
 	// Collect layer descriptors for parallel pushing.
-	layerDescs := make([]ocispecs.Descriptor, len(config.Layers))
-	for i, l := range config.Layers {
-		dgstPair, ok := descs[l.Blob]
-		if !ok {
-			return nil, errors.Errorf("missing blob %s", l.Blob)
-		}
-		layerDescs[i] = dgstPair.Descriptor
+	layerDescs, err := layerBlobs(config, descs)
+	if err != nil {
+		return nil, err
 	}
 
 	// Push all layer blobs in parallel using images.Dispatch.
@@ -214,9 +211,13 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		return nil, err
 	}
 
-	// Add blobs to cache manifest in order.
+	// Add blobs to cache manifest in order. Distribution source annotations
+	// are only push hints (cross-repo mounts): they depend on where the
+	// builder happened to pull layers from, so keeping them would make the
+	// manifest digest differ between builders for the same cache. Every blob
+	// has been pushed to the cache target above, so importers don't need them.
 	for _, desc := range layerDescs {
-		cache.AddCacheBlob(desc)
+		cache.AddCacheBlob(stripDistributionSourceAnnotations(desc))
 	}
 
 	cache.FinalizeCache(ctx)
@@ -271,10 +272,46 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	return res, nil
 }
 
+func stripDistributionSourceAnnotations(desc ocispecs.Descriptor) ocispecs.Descriptor {
+	var out map[string]string
+	for k, v := range desc.Annotations {
+		if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, len(desc.Annotations))
+		}
+		out[k] = v
+	}
+	desc.Annotations = out
+	return desc
+}
+
 func withRemoteCacheErrorDetails(err error) error {
 	var statusErr remoteserrors.ErrUnexpectedStatus
 	if errors.As(err, &statusErr) {
 		return errutil.WithDetails(err)
 	}
 	return err
+}
+
+// layerBlobs returns the descriptors of the blobs of the layers of config,
+// in order. Several layers can share a blob (the same layer on top of
+// different parents): each blob is only returned once, so that it is not
+// pushed concurrently with itself or listed several times in the manifest.
+func layerBlobs(config *cacheimporttypes.CacheConfig, descs v1.DescriptorProvider) ([]ocispecs.Descriptor, error) {
+	layerDescs := make([]ocispecs.Descriptor, 0, len(config.Layers))
+	seen := make(map[digest.Digest]struct{}, len(config.Layers))
+	for _, l := range config.Layers {
+		if _, ok := seen[l.Blob]; ok {
+			continue
+		}
+		seen[l.Blob] = struct{}{}
+		dgstPair, ok := descs[l.Blob]
+		if !ok {
+			return nil, errors.Errorf("missing blob %s", l.Blob)
+		}
+		layerDescs = append(layerDescs, dgstPair.Descriptor)
+	}
+	return layerDescs, nil
 }
