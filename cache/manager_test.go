@@ -44,6 +44,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/compression/zstdchunked"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/converter"
 	"github.com/moby/buildkit/util/disk"
@@ -2237,7 +2238,7 @@ func TestConversion(t *testing.T) {
 
 	// Tests all combination of the conversions from type i to type j preserve
 	// the uncompressed digest.
-	allCompression := []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd}
+	allCompression := []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd, compression.ZstdChunked}
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, orgDesc := range []ocispecs.Descriptor{orgDescGo, orgDescSys} {
 		for _, i := range allCompression {
@@ -2264,6 +2265,13 @@ func TestConversion(t *testing.T) {
 					if convertFunc != nil {
 						resDesc, err = convertFunc(egctx, store, *srcDesc)
 						require.NoError(t, err, testName)
+					}
+
+					if j == compression.ZstdChunked {
+						require.Contains(t, resDesc.Annotations, zstdchunked.ManifestChecksumAnnotation, testName)
+						ok, err := compression.ZstdChunked.Is(egctx, store, resDesc.Digest)
+						require.NoError(t, err, testName)
+						require.True(t, ok, testName)
 					}
 
 					// Check the uncompressed digest is the same as the original
