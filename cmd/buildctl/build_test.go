@@ -24,15 +24,24 @@ import (
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	dir := integration.Tmpdir(
 		t,
-		fstest.CreateFile("foo", []byte("bar"), 0600),
+		fstest.CreateFile("foo", integration.UnixOrWindows([]byte("bar"), []byte("bar\r\n")), 0600),
 	)
 
-	st := llb.Image("busybox").
-		Run(llb.Shlex("sh -c 'echo -n bar > foo2'")).
-		Run(llb.Shlex("cmp -s /mnt/foo foo2"))
+	img := integration.UnixOrWindows("busybox", "nanoserver:latest")
+	createFile := integration.UnixOrWindows(
+		"sh -c 'echo -n bar > foo2'",
+		`cmd /S /C "echo bar>C:/foo2"`,
+	)
+	compareFiles := integration.UnixOrWindows(
+		"cmp -s /mnt/foo foo2",
+		`cmd /S /C "findstr /X /C:bar C:\\mnt\\foo >NUL"`,
+	)
+
+	st := llb.Image(img).
+		Run(llb.Shlex(createFile)).
+		Run(llb.Shlex(compareFiles))
 
 	st.AddMount("/mnt", llb.Local("src"), llb.Readonly)
 
@@ -194,14 +203,14 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildPushProgress(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
 
-	st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data")))
+	base := integration.UnixOrWindows(llb.Scratch(), llb.Image("nanoserver:latest"))
+	st := base.File(llb.Mkfile("foo", 0600, []byte("data")))
 	rdr, err := marshal(sb.Context(), st)
 	require.NoError(t, err)
 

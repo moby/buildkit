@@ -219,7 +219,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 				}
 				name := fn + "/worker=" + br.Name() + mv.functionSuffix()
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
-					ok := t.Run(testName, func(t *testing.T) {
+					t.Run(testName, func(t *testing.T) {
 						if strings.Contains(fn, "NoRootless") && br.Rootless() {
 							// skip sandbox setup
 							t.Skip("rootless")
@@ -252,7 +252,6 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						}()
 						tc.Run(t, sb)
 					})
-					require.True(t, ok)
 				}(fn, name, br, tc, mv)
 			}
 		}
