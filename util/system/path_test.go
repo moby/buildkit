@@ -465,3 +465,26 @@ func TestIsAbs(t *testing.T) {
 		})
 	}
 }
+
+func TestIsNamedPipePath(t *testing.T) {
+	testCases := []struct {
+		name    string
+		path    string
+		inputOS string
+		want    bool
+	}{
+		{name: "windows backslash pipe", path: `\\.\pipe\openssh-ssh-agent`, inputOS: "windows", want: true},
+		{name: "windows forward-slash pipe", path: "//./pipe/openssh-ssh-agent", inputOS: "windows", want: true},
+		{name: "windows mixed-case pipe", path: `\\.\Pipe\Foo`, inputOS: "windows", want: true},
+		{name: "windows regular path", path: `C:\foo\bar`, inputOS: "windows", want: false},
+		{name: "windows UNC share", path: `\\server\share`, inputOS: "windows", want: false},
+		{name: "pipe path on linux", path: `\\.\pipe\openssh-ssh-agent`, inputOS: "linux", want: false},
+		{name: "empty path", path: "", inputOS: "windows", want: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, IsNamedPipePath(tc.path, tc.inputOS))
+		})
+	}
+}
