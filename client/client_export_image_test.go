@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/v2/core/content/proxy"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/plugins/content/local"
 	cerrdefs "github.com/containerd/errdefs"
@@ -29,6 +30,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
@@ -178,7 +180,7 @@ func testBuildExportScratch(t *testing.T, sb integration.Sandbox) {
 
 // testBuildExportUnpackWithRewriteTimestamp verifies that the "unpack" exporter option
 // can be used together with "rewrite-timestamp", and that the image is unpacked to the
-// snapshot that matches the rewritten layers.
+// snapshot that matches the rewritten layers and can be reused by another build.
 // https://github.com/moby/buildkit/issues/4230
 func testBuildExportUnpackWithRewriteTimestamp(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureImageExporter, workers.FeatureSourceDateEpoch)
@@ -259,8 +261,33 @@ func testBuildExportUnpackWithRewriteTimestamp(t *testing.T, sb integration.Sand
 
 	chainID := imagespecidentity.ChainID(ociimg.RootFS.DiffIDs)
 	snapshotService := client.SnapshotService(sb.Snapshotter())
-	_, err = snapshotService.Stat(ctx, chainID.String())
+	info, err := snapshotService.Stat(ctx, chainID.String())
 	require.NoError(t, err)
+	require.Equal(t, chainID.String(), info.Labels[snapshots.LabelSnapshotRef])
+
+	// Building from the exported image must reuse the unpacked snapshot rather
+	// than extract a second copy under the versioned key.
+	fromImage := llb.Image(target, llb.ResolveModePreferLocal)
+	def, err = llb.Scratch().File(llb.Copy(fromImage, "/data", "/data")).Marshal(sb.Context())
+	require.NoError(t, err)
+	destDir := t.TempDir()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	dt, err = os.ReadFile(filepath.Join(destDir, "data"))
+	require.NoError(t, err)
+	require.Equal(t, "foo", string(dt))
+	// The default containerd snapshotter on Linux is overlayfs.
+	if sb.Snapshotter() == "" || sb.Snapshotter() == "overlayfs" || sb.Snapshotter() == "native" {
+		_, err = snapshotService.Stat(ctx, snapshot.LayerSnapshotID(chainID))
+		require.True(t, cerrdefs.IsNotFound(err), "exported snapshot should be reused: %v", err)
+	}
 
 	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
 	require.NoError(t, err)
