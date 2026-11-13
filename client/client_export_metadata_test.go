@@ -195,6 +195,85 @@ func testAttestationBundle(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
+func testAttestationEmptyBundle(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		p := platforms.MustParse("linux/amd64")
+		pk := platforms.Format(p)
+		// An empty bundle unpacks to zero statements in the image exporter.
+		def, err := llb.Scratch().File(llb.Mkdir("/bundle", 0700)).Marshal(ctx, llb.Platform(p))
+		if err != nil {
+			return nil, err
+		}
+		r, err := c.Solve(ctx, gateway.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := r.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		res := gateway.NewResult()
+		res.AddRef(pk, ref)
+		res.AddAttestation(pk, gateway.Attestation{
+			Kind: gatewaypb.AttestationKind_Bundle,
+			Ref:  ref,
+			Path: "/bundle",
+		})
+		dt, err := json.Marshal(exptypes.Platforms{
+			Platforms: []exptypes.Platform{
+				{
+					ID:       pk,
+					Platform: p,
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+		return res, nil
+	}
+
+	for _, ociArtifact := range []bool{false, true} {
+		t.Run("oci-artifact="+strconv.FormatBool(ociArtifact), func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out.tar")
+			outW, err := os.Create(out)
+			require.NoError(t, err)
+			_, err = c.Build(sb.Context(), SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type: ExporterOCI,
+						Attrs: map[string]string{
+							"oci-artifact": strconv.FormatBool(ociArtifact),
+						},
+						Output: fixedWriteCloser(outW),
+					},
+				},
+			}, "", frontend, nil)
+			require.NoError(t, err)
+			dt, err := os.ReadFile(out)
+			require.NoError(t, err)
+			m, err := testutil.ReadTarToMap(dt, false)
+			require.NoError(t, err)
+			var index ocispecs.Index
+			require.NoError(t, json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index))
+			require.Len(t, index.Manifests, 1)
+			require.NoError(t, json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &index))
+			require.Len(t, index.Manifests, 1)
+			desc := index.Manifests[0]
+			require.NotNil(t, desc.Platform)
+			require.Equal(t, "linux/amd64", platforms.Format(*desc.Platform))
+			require.NotContains(t, desc.Annotations, attestation.DockerAnnotationReferenceType)
+		})
+	}
+}
+
 func testAttestationDefaultSubject(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
 	c, err := New(sb.Context(), sb.Address())
