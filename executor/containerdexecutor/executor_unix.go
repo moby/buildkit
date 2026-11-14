@@ -159,6 +159,7 @@ func (w *containerdExecutor) createOCISpec(ctx context.Context, id, resolvConf, 
 	releasers = append(releasers, cleanup)
 	spec.Process.Terminal = meta.Tty
 	if w.rootless {
+		executor.WarnLinuxResourcesIgnored(ctx, meta.LinuxResources)
 		removedMounts, err := rootlessspecconv.ToRootless(spec)
 		if err != nil {
 			releaseAll()
