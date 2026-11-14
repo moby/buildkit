@@ -37,6 +37,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testMultipleRecordsWithSameLayersCacheImportExport,
 	testRemoteCacheSharedMergeBranches,
 	testMultipleRegistryCacheImportExport,
+	testRegistryCacheReexport,
 	testRegistryCacheImportSessionRebind,
 	testRegistryEmptyCacheExport,
 	testSnapshotWithMultipleBlobs,

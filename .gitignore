@@ -4,3 +4,5 @@
 bin
 .certs
 .tmp
+
+AGENTS.md
