@@ -142,6 +142,10 @@ func init() {
 		})
 	}
 	flags = append(flags, &cli.BoolFlag{
+		Name:  "oci-worker-rootless-delegated-cgroup",
+		Usage: "in rootless mode, use the delegated cgroup v2 that buildkitd runs in for per-step resource limits",
+	})
+	flags = append(flags, &cli.BoolFlag{
 		Name:  "oci-worker-no-process-sandbox",
 		Usage: "use the host PID namespace and procfs (WARNING: allows build containers to kill (and potentially ptrace) an arbitrary process in the host namespace)",
 	})
@@ -211,6 +215,9 @@ func applyOCIFlags(c *cli.Command, cfg *config.Config) error {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
 		cfg.Workers.OCI.Rootless = c.Bool("oci-worker-rootless")
+	}
+	if c.IsSet("oci-worker-rootless-delegated-cgroup") {
+		cfg.Workers.OCI.RootlessDelegatedCgroup = c.Bool("oci-worker-rootless-delegated-cgroup")
 	}
 	if c.IsSet("oci-worker-no-process-sandbox") {
 		cfg.Workers.OCI.NoProcessSandbox = c.Bool("oci-worker-no-process-sandbox")
@@ -329,7 +336,7 @@ func ociWorkerInitializer(c *cli.Command, common workerInitializerOpt) ([]worker
 		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cdiManager, common.compaction...)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, cfg.RootlessDelegatedCgroup, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, cfg.SELinux, parallelismSem, common.traceSocket, cfg.DefaultCgroupParent, cdiManager, common.compaction...)
 	if err != nil {
 		return nil, err
 	}
