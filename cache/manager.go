@@ -208,7 +208,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			return nil, err
 		}
 
-		if p.getChainID() == "" || p.getBlobChainID() == "" || hasLegacyLayerSnapshotID(p) {
+		if p.getChainID() == "" || p.getBlobChainID() == "" || hasLegacyLayerSnapshotID(p) || !p.chainMetadataMatchesLayers() {
 			_ = p.Release(context.WithoutCancel(ctx))
 			return nil, errors.Errorf("failed to get ref by blob on non-addressable parent")
 		}
@@ -250,6 +250,12 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 			go ref.Release(context.WithoutCancel(ctx))
 			continue
 		}
+		// Ignore old records whose saved IDs include layers absent from
+		// their effective chain, including descendants of a reused Diff.
+		if !ref.chainMetadataMatchesLayers() {
+			go ref.Release(context.WithoutCancel(ctx))
+			continue
+		}
 		// Blob-chain inputs are not necessarily verified by lazy snapshotters.
 		// Only reuse a record with the same snapshot-sharing identity.
 		if ref.getChainID() != chainID {
@@ -279,6 +285,11 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		}
 		if ref != nil {
 			if hasLegacyLayerSnapshotID(ref) {
+				go ref.Release(context.WithoutCancel(ctx))
+				continue
+			}
+			// Validate old records before reusing their snapshot by chain too.
+			if !ref.chainMetadataMatchesLayers() {
 				go ref.Release(context.WithoutCancel(ctx))
 				continue
 			}

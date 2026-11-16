@@ -377,6 +377,32 @@ func (sr *immutableRef) layerIdentity() digest.Digest {
 	return sr.getDiffID()
 }
 
+// chainMetadataMatchesLayers checks the saved IDs against the effective layer
+// chain. Old blob-reusing Diff records, and layers imported on top of them,
+// can otherwise advertise a prefix that is absent from their exported layers.
+func (sr *immutableRef) chainMetadataMatchesLayers() bool {
+	var chainID, blobChainID digest.Digest
+	valid := true
+	sr.layerWalk(func(layer *immutableRef) {
+		if !valid {
+			return
+		}
+		identity, blob, diffID := layer.layerIdentity(), layer.getBlob(), layer.getDiffID()
+		if identity == "" || diffID == "" {
+			valid = false
+			return
+		}
+		blobID := imagespecidentity.ChainID([]digest.Digest{blob, diffID})
+		if chainID == "" {
+			chainID, blobChainID = identity, blobID
+		} else {
+			chainID = imagespecidentity.ChainID([]digest.Digest{chainID, identity})
+			blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
+		}
+	})
+	return valid && chainID != "" && chainID == sr.getChainID() && blobChainID == sr.getBlobChainID()
+}
+
 func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[string]struct{}) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeChainMetadata")
@@ -466,9 +492,13 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[str
 			}
 			blobChainID = imagespecidentity.ChainID([]digest.Digest{sr.getBlob(), diffID})
 		} else {
-			// re-using upper blob
-			chainID = sr.diffParents.upper.getChainID()
-			blobChainID = sr.diffParents.upper.getBlobChainID()
+			// The diff reuses upper's blob, but not the layers below it.
+			upper := sr.diffParents.upper
+			chainID = upper.layerIdentity()
+			if chainID == "" {
+				return nil
+			}
+			blobChainID = imagespecidentity.ChainID([]digest.Digest{upper.getBlob(), upper.getDiffID()})
 		}
 	}
 
