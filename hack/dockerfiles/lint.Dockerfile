@@ -6,9 +6,7 @@ ARG XX_VERSION=1.10.0
 ARG PROTOLINT_VERSION=0.56.4
 ARG GOLANGCI_LINT_VERSION=v2.14.0
 ARG GOLANGCI_FROM_SOURCE=false
-ARG GOPLS_VERSION=v0.38.0
-# GOPLS_ANALYZERS defines gopls analyzers to be run. disabled by default: deprecated simplifyrange unusedfunc unusedvariable
-ARG GOPLS_ANALYZERS="embeddirective fillreturns infertypeargs maprange modernize nonewvars noresultvalues simplifycompositelit simplifyslice unusedparams yield"
+ARG GOPLS_ANALYZERS_VERSION=v0.3.0
 
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS golang-base
 FROM --platform=$BUILDPLATFORM yoheimuta/protolint:${PROTOLINT_VERSION} AS protolint-base
@@ -27,6 +25,12 @@ FROM scratch AS golangci-binary-false
 FROM scratch AS golangci-binary-true
 COPY --from=golangci-build /out/golangci-lint golangci-lint
 FROM golangci-binary-${GOLANGCI_FROM_SOURCE} AS golangci-binary
+
+FROM golang-base AS gopls-analyzers
+ARG GOPLS_ANALYZERS_VERSION
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/ \
+  GOBIN=/out go install github.com/crazy-max/gopls-analyzers/cmd/gopls-analyzers@${GOPLS_ANALYZERS_VERSION}
 
 FROM golang-base AS base
 ENV GOFLAGS="-buildvcs=false"
@@ -71,65 +75,22 @@ RUN --mount=target=/go/src/github.com/moby/buildkit \
   protolint lint . && \
   touch /protolint.done
 
-FROM golang-base AS gopls
-RUN apk add --no-cache git
-ARG GOPLS_VERSION
-WORKDIR /src
-RUN git clone https://github.com/golang/tools.git && \
-  cd tools && git checkout ${GOPLS_VERSION}
-WORKDIR tools/gopls
-ARG GOPLS_ANALYZERS
-RUN <<'EOF'
-  set -ex
-  mkdir -p /out
-  for analyzer in ${GOPLS_ANALYZERS}; do
-    mkdir -p internal/cmd/$analyzer
-    if [ "$analyzer" = "modernize" ]; then
-      cat <<'eot' > internal/cmd/$analyzer/main.go
-package main
-
-import (
-	"golang.org/x/tools/go/analysis/multichecker"
-	"golang.org/x/tools/go/analysis/passes/modernize"
-)
-
-func main() { multichecker.Main(modernize.Suite...) }
-eot
-    else
-      pkg="golang.org/x/tools/gopls/internal/analysis/$analyzer"
-      cat <<eot > internal/cmd/$analyzer/main.go
-package main
-
-import (
-	"golang.org/x/tools/go/analysis/singlechecker"
-	analyzer "${pkg}"
-)
-
-func main() { singlechecker.Main(analyzer.Analyzer) }
-eot
-    fi
-    echo "Analyzing with ${analyzer}..."
-    go build -o /out/$analyzer ./internal/cmd/$analyzer
-  done
-EOF
-
 FROM golang-base AS gopls-analyze
 COPY --link --from=xx / /
-ARG GOPLS_ANALYZERS
 ARG TARGETNAME
 ARG TARGETPLATFORM
 WORKDIR /go/src/github.com/moby/buildkit
 RUN --mount=target=. \
   --mount=target=/root/.cache,type=cache,id=lint-cache-${TARGETNAME}-${TARGETPLATFORM} \
-  --mount=target=/gopls-analyzers,from=gopls,source=/out <<EOF
+  --mount=target=/usr/bin/gopls-analyzers,from=gopls-analyzers,source=/out/gopls-analyzers <<EOF
   set -ex
   xx-go --wrap
-  for analyzer in ${GOPLS_ANALYZERS}; do
-    go vet -vettool=/gopls-analyzers/$analyzer ./...
-  done
+  gopls-analyzers -list-analyzers
+  # The flate sources are copied from Go and use a nonstandard generated marker.
+  go vet -vettool=/usr/bin/gopls-analyzers -verbose -exclude-generated -exclude='/util/compression/go126flate/' ./...
 EOF
 
-FROM golang-base AS modernize-fix-run
+FROM golang-base AS gopls-fix-run
 RUN apk add --no-cache git
 COPY --link --from=xx / /
 ARG TARGETNAME
@@ -137,19 +98,19 @@ ARG TARGETPLATFORM
 WORKDIR /go/src/github.com/moby/buildkit
 RUN --mount=target=.,rw \
   --mount=target=/root/.cache,type=cache,id=lint-cache-${TARGETNAME}-${TARGETPLATFORM} \
-  --mount=target=/gopls-analyzers,from=gopls,source=/out <<EOF
+  --mount=target=/usr/bin/gopls-analyzers,from=gopls-analyzers,source=/out/gopls-analyzers <<EOF
   set -ex
   xx-go --wrap
   mkdir /out
-  /gopls-analyzers/modernize -fix ./...
+  /usr/bin/gopls-analyzers -verbose -fix -exclude-generated -exclude='/util/compression/go126flate/' ./...
   for file in $(git status --porcelain | awk '/^ M/ {print $2}'); do
     mkdir -p /out/$(dirname $file)
     cp $file /out/$file
   done
 EOF
 
-FROM scratch AS modernize-fix
-COPY --link --from=modernize-fix-run /out /
+FROM scratch AS gopls-fix
+COPY --link --from=gopls-fix-run /out /
 
 FROM scratch
 COPY --link --from=golangci-lint /golangci-lint.done /

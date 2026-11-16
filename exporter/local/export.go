@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -209,8 +210,8 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 			var cleanups []func() error
 			split := e.opts.UsePlatformSplit(isMap)
 			defer func() {
-				for i := len(cleanups) - 1; i >= 0; i-- {
-					_ = cleanups[i]()
+				for _, cleanup := range slices.Backward(cleanups) {
+					_ = cleanup()
 				}
 			}()
 
