@@ -19,8 +19,11 @@ RUN --mount=target=/context \
   cp -r go.mod go.sum vendor /out
 EOT
 
-FROM scratch AS update
-COPY --from=vendored /out /out
+FROM scratch AS update-modules
+COPY --from=vendored /out/go.mod /out/go.sum /
+
+FROM scratch AS update-vendor
+COPY --from=vendored /out/vendor /
 
 FROM vendored AS validate
 RUN --mount=target=/context \
