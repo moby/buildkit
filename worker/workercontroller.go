@@ -6,6 +6,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/filters"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/pkg/errors"
 )
 
@@ -102,6 +103,31 @@ func (c *infosController) DefaultCacheManager() (cache.Manager, error) {
 	return w.CacheManager(), nil
 }
 
+func (c *infosController) DefaultHostCacheMounts() (*mounts.HostCacheMounts, error) {
+	w, err := c.c.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+	if hw, ok := w.(interface {
+		HostCacheMounts() *mounts.HostCacheMounts
+	}); ok {
+		return hw.HostCacheMounts(), nil
+	}
+	return nil, nil
+}
+
 func (c *infosController) WorkerInfos() []client.WorkerInfo {
 	return c.c.WorkerInfos()
+}
+
+// DefaultHostCacheMounts returns the host cache mounts of the default worker
+// when infos can report them; it is an optional capability so that other
+// implementations of Infos keep compiling.
+func DefaultHostCacheMounts(infos Infos) (*mounts.HostCacheMounts, error) {
+	if hi, ok := infos.(interface {
+		DefaultHostCacheMounts() (*mounts.HostCacheMounts, error)
+	}); ok {
+		return hi.DefaultHostCacheMounts()
+	}
+	return nil, nil
 }

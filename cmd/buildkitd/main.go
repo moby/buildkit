@@ -44,6 +44,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/solver/llbsolver/cdidevices"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -1197,6 +1198,18 @@ func buildDurationView() sdkmetric.View {
 			AttributeFilter: attribute.NewAllowKeysFilter("status"),
 		},
 	)
+}
+
+func getHostCacheMounts(cfg map[string]config.CacheMountConfig) (*mounts.HostCacheMounts, error) {
+	paths := make(map[string]string, len(cfg))
+	for id, cm := range cfg {
+		paths[id] = cm.Path
+	}
+	hcm, err := mounts.NewHostCacheMounts(paths)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid cacheMounts configuration")
+	}
+	return hcm, nil
 }
 
 func getCDIManager(cfg config.CDIConfig) (*cdidevices.Manager, error) {

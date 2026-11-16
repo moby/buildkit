@@ -334,6 +334,9 @@ func ociWorkerInitializer(c *cli.Command, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
+	if opt.HostCacheMounts, err = getHostCacheMounts(common.config.CacheMounts); err != nil {
+		return nil, err
+	}
 	opt.BuildkitVersion = getBuildkitVersion()
 	opt.RegistryHosts = hosts
 
