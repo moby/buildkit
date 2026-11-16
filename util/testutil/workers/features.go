@@ -32,6 +32,7 @@ const (
 	FeatureCNINetwork           = "cni_network"
 	FeatureContentCheck         = "content_check"
 	FeatureCDI                  = "cdi"
+	FeatureHostCacheMounts      = "host_cache_mounts"
 )
 
 var features = map[string]struct{}{
@@ -60,6 +61,7 @@ var features = map[string]struct{}{
 	FeatureCNINetwork:           {},
 	FeatureContentCheck:         {},
 	FeatureCDI:                  {},
+	FeatureHostCacheMounts:      {},
 }
 
 func CheckFeatureCompat(t *testing.T, sb integration.Sandbox, reason ...string) {

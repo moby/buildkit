@@ -94,6 +94,7 @@ type WorkerOpt struct {
 	MountPoolRoot    string
 	ResourceMonitor  *resources.Monitor
 	CDIManager       *cdidevices.Manager
+	HostCacheMounts  *mounts.HostCacheMounts
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -289,6 +290,10 @@ func (w *Worker) CDIManager() *cdidevices.Manager {
 	return w.WorkerOpt.CDIManager
 }
 
+func (w *Worker) HostCacheMounts() *mounts.HostCacheMounts {
+	return w.WorkerOpt.HostCacheMounts
+}
+
 func (w *Worker) ID() string {
 	return w.WorkerOpt.ID
 }
@@ -470,7 +475,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids map[string]bool) erro
 	}
 
 	mounts.ClearActiveCacheMounts()
-	return nil
+	return w.WorkerOpt.HostCacheMounts.Prune(ctx, ids)
 }
 
 func (w *Worker) ParseSource(op *pb.SourceOp, platform *pb.Platform) (source.Identifier, error) {
