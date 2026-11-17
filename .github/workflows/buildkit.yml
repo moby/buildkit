@@ -292,6 +292,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/master' && github.repository == 'moby/buildkit' }}
     permissions:
       contents: read # same as global permission
+      id-token: write # for logging in to Docker Hub with GitHub OIDC
       security-events: write # required to write sarif report
     needs:
       - image
@@ -306,12 +307,12 @@ jobs:
         name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       -
-        # FIXME: switch to OIDC once Scout supports it
         name: Login to DockerHub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        env:
+          DOCKERHUB_OIDC_CONNECTIONID: ${{ vars.BUILDKIT_OIDC_CONNECTIONID }}
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: moby
       -
         name: Scout
         id: scout
