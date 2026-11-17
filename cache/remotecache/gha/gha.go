@@ -17,6 +17,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/cache/remotecache/signing"
+	signingconfig "github.com/moby/buildkit/cache/remotecache/signing/config"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	cacheimporttypes "github.com/moby/buildkit/cache/remotecache/v1/types"
 	"github.com/moby/buildkit/session"
@@ -61,11 +62,11 @@ type Config struct {
 	Version    int
 	Timeout    time.Duration
 
-	*signing.Config
+	*signingconfig.Config
 	verifier signing.Verifier
 }
 
-func getConfig(conf *signing.Config, v signing.VerifierProvider, attrs map[string]string) (*Config, error) {
+func getConfig(conf *signingconfig.Config, v signing.VerifierProvider, attrs map[string]string) (*Config, error) {
 	scope, ok := attrs[attrScope]
 	if !ok {
 		scope = "buildkit"
@@ -115,7 +116,7 @@ func getConfig(conf *signing.Config, v signing.VerifierProvider, attrs map[strin
 	}
 
 	if conf == nil {
-		conf = &signing.Config{}
+		conf = &signingconfig.Config{}
 	}
 
 	return &Config{
@@ -132,7 +133,7 @@ func getConfig(conf *signing.Config, v signing.VerifierProvider, attrs map[strin
 }
 
 // ResolveCacheExporterFunc for Github actions cache exporter.
-func ResolveCacheExporterFunc(conf *signing.Config, v signing.VerifierProvider) remotecache.ResolveCacheExporterFunc {
+func ResolveCacheExporterFunc(conf *signingconfig.Config, v signing.VerifierProvider) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
 		cfg, err := getConfig(conf, v, attrs)
 		if err != nil {
@@ -352,7 +353,7 @@ func (ce *exporter) Finalize(ctx context.Context) (_ map[string]string, err erro
 }
 
 // ResolveCacheImporterFunc for Github actions cache importer.
-func ResolveCacheImporterFunc(conf *signing.Config, v signing.VerifierProvider) remotecache.ResolveCacheImporterFunc {
+func ResolveCacheImporterFunc(conf *signingconfig.Config, v signing.VerifierProvider) remotecache.ResolveCacheImporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		cfg, err := getConfig(conf, v, attrs)
 		if err != nil {

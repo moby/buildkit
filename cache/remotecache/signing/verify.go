@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/moby/buildkit/cache/remotecache/signing/config"
 	"github.com/moby/buildkit/util/bklog"
 	policy "github.com/moby/policy-helpers"
 	"github.com/moby/policy-helpers/types"
@@ -22,12 +23,12 @@ type Verifier interface {
 type VerifierProvider func() (*policy.Verifier, error)
 
 // NewVerifier returns a verifier applying the given policy to cache signatures.
-func NewVerifier(rules VerifyPolicy, provider VerifierProvider) Verifier {
+func NewVerifier(rules config.VerifyPolicy, provider VerifierProvider) Verifier {
 	return &verifier{rules: rules, provider: provider}
 }
 
 type verifier struct {
-	rules    VerifyPolicy
+	rules    config.VerifyPolicy
 	provider VerifierProvider
 }
 
@@ -54,7 +55,7 @@ func (v *verifier) Verify(ctx context.Context, dgst digest.Digest, bundle []byte
 }
 
 // verifyPolicy checks the authenticated certificate and timestamps.
-func verifyPolicy(ctx context.Context, sig *types.SignatureInfo, policyRules VerifyPolicy) error {
+func verifyPolicy(ctx context.Context, sig *types.SignatureInfo, policyRules config.VerifyPolicy) error {
 	if sig.Signer == nil {
 		return errors.New("signature verification failed: no signer found")
 	}
