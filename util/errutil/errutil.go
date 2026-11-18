@@ -18,8 +18,7 @@ func WithDetails(err error) error {
 	if err == nil {
 		return nil
 	}
-	var errStatus remoteserrors.ErrUnexpectedStatus
-	if errors.As(err, &errStatus) {
+	if errStatus, ok := errors.AsType[remoteserrors.ErrUnexpectedStatus](err); ok {
 		var dErr docker.Errors
 		if err1 := json.Unmarshal(errStatus.Body, &dErr); err1 == nil && len(dErr) > 0 {
 			return &formattedDockerError{dErr: dErr}
@@ -68,8 +67,7 @@ type formattedDockerError struct {
 func (e *formattedDockerError) Error() string {
 	format := func(err error) string {
 		out := err.Error()
-		var dErr docker.Error
-		if errors.As(err, &dErr) {
+		if dErr, ok := errors.AsType[docker.Error](err); ok {
 			if v, ok := dErr.Detail.(string); ok && v != "" {
 				out += " - " + v
 			}

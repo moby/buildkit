@@ -749,9 +749,8 @@ func assertCompatibilityCaseResult(t *testing.T, exporterType string, tc compati
 	if compatibilityCaseExpectedUnsupported(tc, version, expectedSet) {
 		require.Error(t, err)
 		err = grpcerrors.FromGRPC(err)
-		var unsupported *solvererrdefs.UnsupportedCompatibilityFeatureError
 		expectedFeature := fmt.Sprintf("%s exporter compression=zstd", exporterType)
-		if stderrors.As(err, &unsupported) {
+		if unsupported, ok := stderrors.AsType[*solvererrdefs.UnsupportedCompatibilityFeatureError](err); ok {
 			require.Equal(t, int64(version), unsupported.Version)
 			require.Equal(t, expectedFeature, unsupported.Feature)
 			return

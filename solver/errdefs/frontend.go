@@ -41,8 +41,7 @@ func (v *Frontend) WrapError(err error) error {
 
 func Frontends(err error) []*Frontend {
 	var out []*Frontend
-	var es *FrontendError
-	if errors.As(err, &es) {
+	if es, ok := errors.AsType[*FrontendError](err); ok {
 		out = Frontends(es.Unwrap())
 		out = append(out, es.CloneVT())
 	}
