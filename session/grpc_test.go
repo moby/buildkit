@@ -2,11 +2,13 @@ package session
 
 import (
 	"context"
+	"io"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -78,15 +80,15 @@ func TestSessionDisconnectCleanup(t *testing.T) {
 func TestServeAppliesFlowControl(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancelCause(t.Context())
-	defer cancel(context.Canceled)
+	ctx, cancel := context.WithTimeoutCause(t.Context(), 30*time.Second, errors.WithStack(context.DeadlineExceeded))
+	defer cancel()
 
 	clientConn, serverConn := net.Pipe()
 	defer clientConn.Close()
 	defer serverConn.Close()
 
-	release := make(chan struct{})
-	defer close(release)
+	releaseCtx, release := context.WithCancelCause(ctx)
+	defer release(errors.WithStack(context.Canceled))
 	server := grpc.NewServer()
 	defer server.Stop()
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
@@ -98,10 +100,21 @@ func TestServeAppliesFlowControl(t *testing.T) {
 			ClientStreams: true,
 			Handler: func(_ any, stream grpc.ServerStream) error {
 				select {
-				case <-release:
+				case <-releaseCtx.Done():
 				case <-stream.Context().Done():
+					return errors.WithStack(context.Cause(stream.Context()))
 				}
-				return nil
+				var received int64
+				for {
+					var msg wrapperspb.BytesValue
+					if err := stream.RecvMsg(&msg); err != nil {
+						if errors.Is(err, io.EOF) {
+							return errors.WithStack(stream.SendMsg(wrapperspb.Int64(received)))
+						}
+						return errors.WithStack(err)
+					}
+					received += int64(len(msg.Value))
+				}
 			},
 		}},
 	}, struct{}{})
@@ -114,19 +127,37 @@ func TestServeAppliesFlowControl(t *testing.T) {
 	stream, err := cc.NewStream(ctx, &grpc.StreamDesc{StreamName: "Push", ClientStreams: true}, "/test.Sink/Push")
 	require.NoError(t, err)
 
-	const limit = 32 << 20
+	const (
+		limit = 32 << 20
+		total = 2 * limit
+	)
 	msg := wrapperspb.Bytes(make([]byte, 1<<20))
 	var sent atomic.Int64
+	sendDone := make(chan error, 1)
 	go func() {
-		for sent.Load() < 8*limit {
+		for sent.Load() < total {
 			if err := stream.SendMsg(msg); err != nil {
+				sendDone <- err
 				return
 			}
 			sent.Add(int64(len(msg.Value)))
 		}
+		sendDone <- stream.CloseSend()
 	}()
 
 	require.Eventually(t, func() bool { return sent.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
 	require.Never(t, func() bool { return sent.Load() >= limit }, 2*time.Second, 20*time.Millisecond,
 		"the sender was not throttled: the session buffered a stream its handler does not read")
+
+	release(errors.WithStack(context.Canceled))
+	select {
+	case err := <-sendDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("sender did not finish after the handler resumed reading")
+	}
+	var received wrapperspb.Int64Value
+	require.NoError(t, stream.RecvMsg(&received))
+	require.EqualValues(t, total, received.Value)
+	require.ErrorIs(t, stream.RecvMsg(&received), io.EOF)
 }
