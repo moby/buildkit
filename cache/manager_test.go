@@ -61,9 +61,10 @@ import (
 )
 
 type cmOpt struct {
-	snapshotterName string
-	snapshotter     snapshots.Snapshotter
-	tmpdir          string
+	useCommonSnapshotIDs bool
+	snapshotterName      string
+	snapshotter          snapshots.Snapshotter
+	tmpdir               string
 	// pruneRefChecker is passed to the cache manager to report which records
 	// are shared with external images.
 	pruneRefChecker ExternalRefCheckerFunc
@@ -180,16 +181,17 @@ func newCacheManager(ctx context.Context, t testing.TB, opt cmOpt) (co *cmOut, c
 
 	metadataSnapshotter := mdb.Snapshotter(opt.snapshotterName)
 	cm, err := NewManager(ManagerOpt{
-		Snapshotter:     snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, metadataSnapshotter), nil),
-		MetadataStore:   md,
-		ContentStore:    store,
-		LeaseManager:    lm,
-		GarbageCollect:  mdb.GarbageCollect,
-		Applier:         applier,
-		Differ:          differ,
-		Root:            tmpdir,
-		MountPoolRoot:   filepath.Join(tmpdir, "cachemounts"),
-		PruneRefChecker: opt.pruneRefChecker,
+		UseCommonSnapshotIDs: opt.useCommonSnapshotIDs,
+		Snapshotter:          snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, metadataSnapshotter), nil),
+		MetadataStore:        md,
+		ContentStore:         store,
+		LeaseManager:         lm,
+		GarbageCollect:       mdb.GarbageCollect,
+		Applier:              applier,
+		Differ:               differ,
+		Root:                 tmpdir,
+		MountPoolRoot:        filepath.Join(tmpdir, "cachemounts"),
+		PruneRefChecker:      opt.pruneRefChecker,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -366,79 +368,89 @@ func TestManager(t *testing.T) {
 }
 
 func TestLazyGetByBlob(t *testing.T) {
-	t.Parallel()
-	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+	for _, common := range []bool{false, true} {
+		t.Run(fmt.Sprintf("common=%t", common), func(t *testing.T) {
+			t.Parallel()
+			ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
 
-	tmpdir := t.TempDir()
+			tmpdir := t.TempDir()
 
-	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
-	require.NoError(t, err)
+			snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+			require.NoError(t, err)
 
-	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
-		snapshotter:     snapshotter,
-		snapshotterName: "native",
-	})
-	require.NoError(t, err)
-	t.Cleanup(cleanup)
-	cm := co.manager
+			co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+				useCommonSnapshotIDs: common,
+				snapshotter:          snapshotter,
+				snapshotterName:      "native",
+			})
+			require.NoError(t, err)
+			t.Cleanup(cleanup)
+			cm := co.manager
 
-	// Test for #2226 https://github.com/moby/buildkit/issues/2226, create lazy blobs with the same diff ID but
-	// different digests (due to different compression) and make sure GetByBlob still works
-	_, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
-	require.NoError(t, err)
-	tocDigest := digest.FromBytes([]byte("toc"))
-	desc.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest.String()
-	descHandlers := DescHandlers(make(map[digest.Digest]*DescHandler))
-	descHandlers[desc.Digest] = &DescHandler{}
-	diffID, err := diffIDFromDescriptor(desc)
-	require.NoError(t, err)
+			// Test for #2226 https://github.com/moby/buildkit/issues/2226, create lazy blobs with the same diff ID but
+			// different digests (due to different compression) and make sure GetByBlob still works
+			_, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
+			require.NoError(t, err)
+			tocDigest := digest.FromBytes([]byte("toc"))
+			desc.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest.String()
+			descHandlers := DescHandlers(make(map[digest.Digest]*DescHandler))
+			descHandlers[desc.Digest] = &DescHandler{}
+			diffID, err := diffIDFromDescriptor(desc)
+			require.NoError(t, err)
 
-	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
-	require.NoError(t, err)
+			ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
+			require.NoError(t, err)
 
-	_, desc2, err := mapToBlob(map[string]string{"foo": "bar"}, false)
-	require.NoError(t, err)
-	tocDigest2 := digest.FromBytes([]byte("toc2"))
-	desc2.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest2.String()
-	descHandlers2 := DescHandlers(make(map[digest.Digest]*DescHandler))
-	descHandlers2[desc2.Digest] = &DescHandler{}
-	diffID2, err := diffIDFromDescriptor(desc2)
-	require.NoError(t, err)
+			_, desc2, err := mapToBlob(map[string]string{"foo": "bar"}, false)
+			require.NoError(t, err)
+			tocDigest2 := digest.FromBytes([]byte("toc2"))
+			desc2.Annotations[estargz.TOCJSONDigestAnnotation] = tocDigest2.String()
+			descHandlers2 := DescHandlers(make(map[digest.Digest]*DescHandler))
+			descHandlers2[desc2.Digest] = &DescHandler{}
+			diffID2, err := diffIDFromDescriptor(desc2)
+			require.NoError(t, err)
 
-	require.NotEqual(t, desc.Digest, desc2.Digest)
-	require.Equal(t, diffID, diffID2)
+			require.NotEqual(t, desc.Digest, desc2.Digest)
+			require.Equal(t, diffID, diffID2)
 
-	ref2, err := cm.GetByBlob(ctx, desc2, nil, descHandlers2)
-	require.NoError(t, err)
+			ref2, err := cm.GetByBlob(ctx, desc2, nil, descHandlers2)
+			require.NoError(t, err)
 
-	nativeRef := ref.(*immutableRef)
-	nativeRef2 := ref2.(*immutableRef)
-	require.Equal(t, nativeRef.getChainID(), nativeRef2.getChainID())
-	require.Equal(t, nativeRef.getSnapshotID(), nativeRef2.getSnapshotID())
-	require.Equal(t, snapshot.LayerSnapshotID(diffID), nativeRef.getSnapshotID())
+			nativeRef := ref.(*immutableRef)
+			nativeRef2 := ref2.(*immutableRef)
+			require.Equal(t, nativeRef.getChainID(), nativeRef2.getChainID())
+			require.Equal(t, nativeRef.getSnapshotID(), nativeRef2.getSnapshotID())
+			wantID := snapshot.LayerSnapshotID
+			if common {
+				wantID = func(d digest.Digest) string { return d.String() }
+			}
+			require.Equal(t, wantID(diffID), nativeRef.getSnapshotID())
 
-	stargzCO, stargzCleanup, err := newCacheManager(ctx, t, cmOpt{
-		snapshotterName: "stargz",
-	})
-	require.NoError(t, err)
-	t.Cleanup(stargzCleanup)
-	stargzCM := stargzCO.manager
+			stargzCO, stargzCleanup, err := newCacheManager(ctx, t, cmOpt{
+				useCommonSnapshotIDs: common,
+				snapshotterName:      "stargz",
+			})
+			require.NoError(t, err)
+			t.Cleanup(stargzCleanup)
+			stargzCM := stargzCO.manager
 
-	ref, err = stargzCM.GetByBlob(ctx, desc, nil, descHandlers)
-	require.NoError(t, err)
-	ref2, err = stargzCM.GetByBlob(ctx, desc2, nil, descHandlers2)
-	require.NoError(t, err)
+			ref, err = stargzCM.GetByBlob(ctx, desc, nil, descHandlers)
+			require.NoError(t, err)
+			ref2, err = stargzCM.GetByBlob(ctx, desc2, nil, descHandlers2)
+			require.NoError(t, err)
 
-	stargzRef := ref.(*immutableRef)
-	stargzRef2 := ref2.(*immutableRef)
-	require.Equal(t, diffID, stargzRef.getDiffID())
-	require.Equal(t, diffID2, stargzRef2.getDiffID())
-	require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID, tocDigest}), stargzRef.getChainID())
-	require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID2, tocDigest2}), stargzRef2.getChainID())
-	require.NotEqual(t, stargzRef.getChainID(), stargzRef2.getChainID())
-	require.Equal(t, snapshot.LayerSnapshotID(stargzRef.getChainID()), stargzRef.getSnapshotID())
-	require.Equal(t, snapshot.LayerSnapshotID(stargzRef2.getChainID()), stargzRef2.getSnapshotID())
-	require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
+			stargzRef := ref.(*immutableRef)
+			stargzRef2 := ref2.(*immutableRef)
+			require.Equal(t, diffID, stargzRef.getDiffID())
+			require.Equal(t, diffID2, stargzRef2.getDiffID())
+			require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID, tocDigest}), stargzRef.getChainID())
+			require.Equal(t, imagespecidentity.ChainID([]digest.Digest{diffID2, tocDigest2}), stargzRef2.getChainID())
+			require.NotEqual(t, stargzRef.getChainID(), stargzRef2.getChainID())
+			require.Equal(t, wantID(stargzRef.getChainID()), stargzRef.getSnapshotID())
+			require.Equal(t, wantID(stargzRef2.getChainID()), stargzRef2.getSnapshotID())
+			require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
+		})
+	}
 }
 
 func TestGetByBlobRejectsBlobChainWithDifferentTOC(t *testing.T) {
@@ -484,6 +496,66 @@ func TestGetByBlobRejectsBlobChainWithDifferentTOC(t *testing.T) {
 	require.NotEqual(t, stargzRef.ID(), stargzRef2.ID())
 	require.NotEqual(t, stargzRef.getChainID(), stargzRef2.getChainID())
 	require.NotEqual(t, stargzRef.getSnapshotID(), stargzRef2.getSnapshotID())
+}
+
+func TestGetByBlobReusesSnapshotIDs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+	for _, versioned := range []bool{false, true} {
+		t.Run(fmt.Sprintf("versioned=%t", versioned), func(t *testing.T) {
+			t.Parallel()
+			ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+			sn, err := native.NewSnapshotter(filepath.Join(t.TempDir(), "snapshots"))
+			require.NoError(t, err)
+			co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+				useCommonSnapshotIDs: true,
+				snapshotter:          sn,
+				snapshotterName:      "native",
+			})
+			require.NoError(t, err)
+			t.Cleanup(cleanup)
+			blob, desc, err := mapToBlob(map[string]string{"data": "verified"}, true)
+			require.NoError(t, err)
+			require.NoError(t, content.WriteBlob(ctx, co.cs, "layer", bytes.NewReader(blob), desc))
+			ref, err := co.manager.GetByBlob(ctx, desc, nil)
+			require.NoError(t, err)
+			ir := ref.(*immutableRef)
+			require.Equal(t, ir.getChainID().String(), ir.getSnapshotID())
+			if versioned {
+				// Emulate a cache record persisted by a version that used prefixed keys.
+				key := snapshot.LayerSnapshotID(ir.getChainID())
+				ir.queueSnapshotID(key)
+				require.NoError(t, ir.commitMetadata())
+				require.NoError(t, ir.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: ir.ID()}, leases.Resource{
+					ID:   key,
+					Type: "snapshots/native",
+				}))
+			}
+			require.NoError(t, ref.Extract(ctx, nil))
+			childBlob, childDesc, err := mapToBlob(map[string]string{"child": "verified"}, true)
+			require.NoError(t, err)
+			require.NoError(t, content.WriteBlob(ctx, co.cs, "child", bytes.NewReader(childBlob), childDesc))
+			child, err := co.manager.GetByBlob(ctx, childDesc, ref)
+			require.NoError(t, err)
+			childRef := child.(*immutableRef)
+			require.Equal(t, childRef.getChainID().String(), childRef.getSnapshotID())
+			require.NoError(t, child.Extract(ctx, nil))
+			info, err := co.manager.(*cacheManager).Snapshotter.Stat(ctx, childRef.getSnapshotID())
+			require.NoError(t, err)
+			require.Equal(t, ir.getSnapshotID(), info.Parent)
+			require.NoError(t, child.Release(ctx))
+			id, snapshotID := ref.ID(), ir.getSnapshotID()
+			require.NoError(t, ref.Release(ctx))
+			co.manager.(*cacheManager).Applier = nil
+			reused, err := co.manager.GetByBlob(ctx, desc, nil)
+			require.NoError(t, err)
+			require.Equal(t, id, reused.ID())
+			require.Equal(t, snapshotID, reused.(*immutableRef).getSnapshotID())
+			require.NoError(t, reused.Extract(ctx, nil))
+			require.NoError(t, reused.Release(ctx))
+		})
+	}
 }
 
 func TestGetByBlobIgnoresLegacyChainIDSnapshot(t *testing.T) {
