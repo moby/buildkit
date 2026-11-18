@@ -4,6 +4,7 @@ package cniprovider
 
 import (
 	"github.com/Microsoft/hcsshim/hcn"
+	"github.com/containerd/containerd/v2/pkg/oci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -19,18 +20,7 @@ func createNetNS(_ *cniProvider, _ string) (string, error) {
 }
 
 func setNetNS(s *specs.Spec, nativeID string) error {
-	// Containerd doesn't have a wrapper for this. Code based on oci.WithLinuxNamespace and
-	// https://github.com/opencontainers/runtime-tools/blob/07406c5828aaf93f60d2aad770312d736811a276/generate/generate.go#L1810-L1814
-	if s.Windows == nil {
-		s.Windows = &specs.Windows{}
-	}
-	if s.Windows.Network == nil {
-		s.Windows.Network = &specs.WindowsNetwork{}
-	}
-
-	s.Windows.Network.NetworkNamespace = nativeID
-
-	return nil
+	return oci.WithWindowsNetworkNamespace(nativeID)(nil, nil, nil, s)
 }
 
 func unmountNetNS(_ string) error {
