@@ -47,8 +47,8 @@ be UPPERCASE to distinguish them from arguments more easily.
 Docker runs instructions in a Dockerfile in order. A Dockerfile **must
 begin with a `FROM` instruction**. This may be after [parser
 directives](#parser-directives), [comments](#format), and globally scoped
-[ARGs](#arg). The `FROM` instruction specifies the [base
-image](https://docs.docker.com/glossary/#base-image) from which you are
+[ARGs](#arg). The `FROM` instruction specifies the base
+image from which you are
 building. `FROM` may only be preceded by one or more `ARG` instructions, which
 declare arguments that are used in `FROM` lines in the Dockerfile.
 
@@ -611,7 +611,7 @@ FROM [--platform=<platform>] <image>[@<digest>] [AS <name>]
 ```
 
 The `FROM` instruction initializes a new build stage and sets the
-[base image](https://docs.docker.com/glossary/#base-image) for subsequent
+base image for subsequent
 instructions. As such, a valid Dockerfile must start with a `FROM` instruction.
 The image can be any valid image.
 
