@@ -161,6 +161,7 @@ This section is for some guidelines about what BuildKit considers a security iss
 
 - Credentials should not be logged or written to OpenTelemetry trace or progress stream. Note that this applies to registry credentials and URL sources, if user writes credentials into the arguments of their application containers, there is nothing BuildKit can do about it.
 - Values of the build secrets should never be stored anywhere on the disk or included in the cache checksums.
+- Untrusted build inputs must not poison trusted cache state so that later builds use attacker-controlled data in place of the expected contents. New cache poisoning is a security issue even when the cache is created and consumed by different BuildKit versions.
 
 ### Examples of issues not (currently) considered security
 
