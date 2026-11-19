@@ -198,6 +198,46 @@ func TestAsGRPCStatus(t *testing.T) {
 
 func TestToGRPCMessage(t *testing.T) {
 	t.Parallel()
+	t.Run("decoded status", func(t *testing.T) {
+		t.Parallel()
+		decoded := grpcerrors.FromGRPC(status.Error(codes.DeadlineExceeded, "context deadline exceeded"))
+		for _, tc := range []struct {
+			name string
+			err  error
+			want string
+		}{
+			{
+				name: "unwrapped",
+				err:  decoded,
+				want: "context deadline exceeded",
+			},
+			{
+				name: "stack only",
+				err:  errors.WithStack(decoded),
+				want: "context deadline exceeded",
+			},
+			{
+				name: "wrapped",
+				err:  errors.Wrap(decoded, "extra context"),
+				want: "extra context: DeadlineExceeded: context deadline exceeded",
+			},
+			{
+				name: "joined",
+				err:  stderrors.Join(decoded, errors.New("another error")),
+				want: "DeadlineExceeded: context deadline exceeded\nanother error",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				encoded := grpcerrors.ToGRPC(t.Context(), tc.err)
+				assert.Equal(t, codes.DeadlineExceeded, status.Code(encoded))
+				assert.Equal(t, tc.want, status.Convert(encoded).Message())
+				roundTrip := grpcerrors.ToGRPC(t.Context(), grpcerrors.FromGRPC(encoded))
+				assert.Equal(t, codes.DeadlineExceeded, status.Code(roundTrip))
+				assert.Equal(t, tc.want, status.Convert(roundTrip).Message())
+			})
+		}
+	})
 	t.Run("avoid prepending grpc status code", func(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
@@ -219,4 +259,61 @@ func TestToGRPCMessage(t *testing.T) {
 		assert.ErrorContains(t, decoded, wrapped.Error()) //nolint:testifylint // error is not critical
 		assert.ErrorContains(t, decoded, anotherErr.Error())
 	})
+}
+
+func TestTypedErrorRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "frontend capability",
+			err:  errdefs.NewUnsupportedFrontendCapError("foo"),
+		},
+		{
+			name: "subrequest",
+			err:  errdefs.NewUnsupportedSubrequestError("foo"),
+		},
+		{
+			name: "compatibility feature",
+			err:  errdefs.NewUnsupportedCompatibilityFeatureError(1, "foo"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			initial := status.Convert(grpcerrors.ToGRPC(t.Context(), grpcerrors.WrapCode(tc.err, codes.Unimplemented)))
+			for _, wrap := range []bool{false, true} {
+				t.Run(fmt.Sprintf("wrapped=%v", wrap), func(t *testing.T) {
+					decoded := grpcerrors.FromGRPC(initial.Err())
+					wantMessage := initial.Message()
+					if wrap {
+						decoded = errors.Wrap(decoded, "extra context")
+						wantMessage = decoded.Error()
+					}
+					var wantDecoded string
+					for hop := range 4 {
+						encoded := status.Convert(grpcerrors.ToGRPC(t.Context(), decoded))
+						require.Equal(t, codes.Unimplemented, encoded.Code())
+						require.Equal(t, wantMessage, encoded.Message(), "hop %d", hop)
+						// Stack details may be added by decoding; typed details must remain intact.
+						var typedDetails []*anypb.Any
+						for _, detail := range encoded.Proto().Details {
+							for _, original := range initial.Proto().Details {
+								if detail.TypeUrl == original.TypeUrl {
+									typedDetails = append(typedDetails, detail)
+								}
+							}
+						}
+						require.Equal(t, initial.Proto().Details, typedDetails)
+						decoded = grpcerrors.FromGRPC(encoded.Err())
+						if hop == 0 {
+							wantDecoded = decoded.Error()
+						}
+						require.Equal(t, wantDecoded, decoded.Error(), "hop %d", hop)
+					}
+				})
+			}
+		})
+	}
 }
