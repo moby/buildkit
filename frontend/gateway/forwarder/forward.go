@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/result"
 	"github.com/moby/buildkit/util/apicaps"
@@ -422,7 +423,11 @@ func (c *BridgeClient) createContainer(ctx context.Context, req container.NewCon
 	if err != nil {
 		return nil, err
 	}
-	return container.NewContainer(ctx, cm, c.executor, c.sm, session.NewGroup(c.sid), req)
+	hcm, err := worker.DefaultHostCacheMounts(c.workers)
+	if err != nil {
+		return nil, err
+	}
+	return container.NewContainer(ctx, cm, c.executor, c.sm, session.NewGroup(c.sid), req, mounts.WithHostCacheMounts(hcm))
 }
 
 func (c *BridgeClient) beginContainerCreation() error {

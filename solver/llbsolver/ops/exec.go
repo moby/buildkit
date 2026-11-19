@@ -64,7 +64,7 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 	name := fmt.Sprintf("exec %s", strings.Join(op.Exec.Meta.Args, " "))
 	return &ExecOp{
 		op:             op.Exec,
-		mm:             mounts.NewMountManager(name, cm, sm),
+		mm:             mounts.NewMountManager(name, cm, sm, mounts.WithHostCacheMounts(hostCacheMountsOf(w))),
 		cm:             cm,
 		sm:             sm,
 		exec:           exec,
@@ -84,6 +84,17 @@ func (e *ExecOp) Digest() digest.Digest {
 
 func (e *ExecOp) Proto() *pb.ExecOp {
 	return e.op
+}
+
+// hostCacheMountsOf is an optional worker capability rather than part of
+// worker.Worker, so workers implemented outside BuildKit keep compiling.
+func hostCacheMountsOf(w worker.Worker) *mounts.HostCacheMounts {
+	if hw, ok := w.(interface {
+		HostCacheMounts() *mounts.HostCacheMounts
+	}); ok {
+		return hw.HostCacheMounts()
+	}
+	return nil
 }
 
 func cloneExecOp(old *pb.ExecOp) *pb.ExecOp {

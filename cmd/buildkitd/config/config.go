@@ -33,6 +33,11 @@ type Config struct {
 
 	CDI CDIConfig `toml:"cdi"`
 
+	// CacheMounts serves cache mounts with these IDs from directories on the
+	// host instead of from the snapshotter. Keys are cache mount IDs as used
+	// in builds, e.g. "gocache" for RUN --mount=type=cache,id=gocache.
+	CacheMounts map[string]CacheMountConfig `toml:"cacheMounts"`
+
 	Workers struct {
 		OCI        OCIConfig        `toml:"oci"`
 		Containerd ContainerdConfig `toml:"containerd"`
@@ -286,4 +291,9 @@ type DockerfileFrontendConfig struct {
 type GatewayFrontendConfig struct {
 	Enabled             *bool    `toml:"enabled"`
 	AllowedRepositories []string `toml:"allowedRepositories"`
+}
+
+type CacheMountConfig struct {
+	// Path is an absolute directory on the host that holds the cache contents.
+	Path string `toml:"path"`
 }

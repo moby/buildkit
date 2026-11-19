@@ -61,6 +61,11 @@ provenanceEnvDir = "/etc/buildkit/provenance.d"
   # specification, please refer to https://github.com/cncf-tags/container-device-interface/blob/main/SPEC.md#cdi-json-specification
   specDirs = ["/etc/cdi", "/var/run/cdi", "/etc/buildkit/cdi"]
 
+# cacheMounts serves cache mounts with these IDs from host directories instead
+# of the snapshotter. For details, please refer to https://github.com/moby/buildkit/blob/master/docs/host-cache-mounts.md
+[cacheMounts."gocache"]
+  path = "/var/cache/buildkit/gocache"
+
 # config for build history API that stores information about completed build commands
 [history]
   # maxAge is the maximum age of history entries to keep, in seconds.
