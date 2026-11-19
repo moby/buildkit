@@ -83,6 +83,7 @@ const (
 	UsageRecordTypeFrontend    UsageRecordType = "frontend"
 	UsageRecordTypeLocalSource UsageRecordType = "source.local"
 	UsageRecordTypeGitCheckout UsageRecordType = "source.git.checkout"
+	UsageRecordTypeHTTP        UsageRecordType = "source.http"
 	UsageRecordTypeCacheMount  UsageRecordType = "exec.cachemount"
 	UsageRecordTypeRegular     UsageRecordType = "regular"
 )
