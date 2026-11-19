@@ -99,6 +99,18 @@ func FromSlash(inputPath, inputOS string) string {
 	return strings.ReplaceAll(inputPath, "/", separator)
 }
 
+// IsNamedPipePath reports whether pth references a Windows named pipe
+// (e.g. \\.\pipe\openssh-ssh-agent). Such paths are device paths, not
+// filesystem paths, so they must be used verbatim and never joined to a
+// working directory or run through IsAbs (which rejects them as UNC paths).
+// Always false for non-Windows.
+func IsNamedPipePath(pth, inputOS string) bool {
+	if inputOS != "windows" {
+		return false
+	}
+	return strings.HasPrefix(strings.ToLower(ToSlash(pth, inputOS)), "//./pipe/")
+}
+
 // NormalizeWorkdir will return a normalized version of the new workdir, given
 // the currently configured workdir and the desired new workdir. When setting a
 // new relative workdir, it will be joined to the previous workdir or default to
