@@ -29,6 +29,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		product = apicaps.ExportedProduct
 	}
 
+	// Unfiltered ListWorkers is cached until this client's connection is replaced.
 	workers, err := c.ListWorkers(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "listing workers for Build")
