@@ -116,6 +116,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 
 	// client_export_metadata_test.go
 	testAttestationBundle,
+	testAttestationEmptyBundle,
 	testAttestationDefaultSubject,
 	testExportAnnotations,
 	testExportAnnotationsMediaTypes,
@@ -192,6 +193,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testLocalSymlinkEscape,
 	testMetadataOnlyLocal,
 	testParallelLocalBuilds,
+	testLocalSourceManyPatterns,
 
 	// client_mergeop_test.go
 	testMergeOp,

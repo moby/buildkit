@@ -433,3 +433,62 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	err = eg.Wait()
 	require.NoError(t, err)
 }
+
+// testLocalSourceManyPatterns checks that filesync patterns are not limited by
+// the HTTP/2 header value count. Every pattern is sent as a separate gRPC
+// metadata value and Go 1.27 net/http rejects requests with more than 500 of
+// them by default.
+func testLocalSourceManyPatterns(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("foo", []byte("foo"), 0600),
+		fstest.CreateFile("ignored-1", []byte("ignored"), 0600),
+	)
+
+	const n = 1000
+	excludes := make([]string, 0, n)
+	includes := make([]string, 0, n+1)
+	for i := 1; i <= n; i++ {
+		excludes = append(excludes, fmt.Sprintf("ignored-%d", i))
+		includes = append(includes, fmt.Sprintf("included-%d", i))
+	}
+	includes = append(includes, "foo")
+
+	for _, tc := range []struct {
+		name string
+		opt  llb.LocalOption
+	}{
+		{name: "exclude", opt: llb.ExcludePatterns(excludes)},
+		{name: "include", opt: llb.IncludePatterns(includes)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			def, err := llb.Local("mylocal", tc.opt).Marshal(sb.Context())
+			require.NoError(t, err)
+
+			destDir := t.TempDir()
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type:      ExporterLocal,
+						OutputDir: destDir,
+					},
+				},
+				LocalMounts: map[string]fsutil.FS{
+					"mylocal": dir,
+				},
+			}, nil)
+			require.NoError(t, err)
+
+			dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
+			require.NoError(t, err)
+			require.Equal(t, "foo", string(dt))
+
+			_, err = os.Stat(filepath.Join(destDir, "ignored-1"))
+			require.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+}
