@@ -67,14 +67,42 @@ type GitRef struct {
 	FetchByCommit bool
 }
 
+// cutGitSchemePrefix strips the "git+" scheme prefix from ref,
+// which explicitly marks an HTTP(S) URL as a git repository URL,
+// e.g., "git+https://git.sr.ht/~foo/bar".
+// It reports whether ref had the prefix, and returns an error when the prefixed
+// scheme is neither HTTP nor HTTPS.
+func cutGitSchemePrefix(ref string) (string, bool, error) {
+	if len(ref) < len("git+") || !strings.EqualFold(ref[:len("git+")], "git+") {
+		return ref, false, nil
+	}
+	after := ref[len("git+"):]
+	scheme, _, ok := strings.Cut(after, "://")
+	if !ok {
+		// Not a URL, e.g., a local path such as "git+foo"
+		return ref, false, nil
+	}
+	switch strings.ToLower(scheme) {
+	case gitutil.HTTPProtocol, gitutil.HTTPSProtocol:
+		return after, true, nil
+	}
+	return "", true, errors.Wrapf(gitutil.ErrInvalidProtocol, "git+%s (only git+http and git+https are supported)", scheme)
+}
+
 // ParseGitRef parses a git ref.
+//
+// An HTTP(S) URL is considered to be a git ref when its path has the ".git" suffix,
+// or when its scheme has the "git+" prefix, e.g., "git+https://git.sr.ht/~foo/bar".
+// The "git+" prefix is meant for git forges that do not support the ".git" suffix.
 func ParseGitRef(ref string) (*GitRef, bool, error) {
 	res := &GitRef{}
 
-	var (
-		remote *gitutil.GitURL
-		err    error
-	)
+	ref, explicitGit, err := cutGitSchemePrefix(ref)
+	if err != nil {
+		return nil, true, err
+	}
+
+	var remote *gitutil.GitURL
 
 	if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "../") {
 		return nil, false, errors.WithStack(cerrdefs.ErrInvalidArgument)
@@ -91,11 +119,9 @@ func ParseGitRef(ref string) (*GitRef, bool, error) {
 		}
 	} else {
 		remote, err = gitutil.ParseURL(ref)
-		if errors.Is(err, gitutil.ErrUnknownProtocol) {
-			return nil, false, err
-		}
 		if err != nil {
-			return nil, false, err
+			// A "git+" prefixed URL is a git ref, even when it is malformed
+			return nil, explicitGit, err
 		}
 
 		switch remote.Scheme {
@@ -104,9 +130,10 @@ func ParseGitRef(ref string) (*GitRef, bool, error) {
 		}
 
 		switch remote.Scheme {
-		// An HTTP(S) URL is considered to be a valid git ref only when it has the ".git[...]" suffix.
+		// An HTTP(S) URL is considered to be a valid git ref only when it has the ".git[...]" suffix,
+		// or when it is explicitly marked as such with the "git+" scheme prefix.
 		case gitutil.HTTPProtocol, gitutil.HTTPSProtocol:
-			if !strings.HasSuffix(remote.Path, ".git") {
+			if !explicitGit && !strings.HasSuffix(remote.Path, ".git") {
 				return nil, false, errors.WithStack(cerrdefs.ErrInvalidArgument)
 			}
 		}
