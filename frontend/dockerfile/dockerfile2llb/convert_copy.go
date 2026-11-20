@@ -179,6 +179,12 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			if gitRef.FetchByCommit {
 				gitOptions = append(gitOptions, llb.GitFetchByCommit())
 			}
+			if gitRef.MTime != "" {
+				gitOptions = append(gitOptions, llb.GitMTime(gitRef.MTime))
+			} else if d.epoch != nil && cfg.opt.llbCaps != nil && cfg.opt.llbCaps.Supports(pb.CapSourceGitMTime) == nil {
+				// like for git build contexts, use the commit time with SOURCE_DATE_EPOCH
+				gitOptions = append(gitOptions, llb.GitMTimeCommit())
+			}
 
 			st := llb.Git(gitRef.Remote, "", gitOptions...)
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
