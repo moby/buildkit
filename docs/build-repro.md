@@ -69,6 +69,12 @@ The build arg value is used for:
 - the `org.opencontainers.image.created` annotation in the [OCI Image Index](https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys)
 - the timestamp of the files exported with the `local` exporter
 - the timestamp of the files exported with the `tar` exporter
+- the `createdAt` timestamps of the cache records and the `buildkit/createdat`
+  annotation of the layers in exported caches (including the inline cache),
+  clamped so that timestamps older than `SOURCE_DATE_EPOCH` are kept. Use the
+  `source-date-epoch` cache exporter option to override the value
+  (`--cache-to type=registry,ref=...,source-date-epoch=1704067200`), or set it
+  to an empty value to keep the original timestamps.
 
 To apply the build arg value to the timestamps of the files inside the image, specify `rewrite-timestamp=true` as an image exporter option:
 ```
@@ -76,6 +82,15 @@ To apply the build arg value to the timestamps of the files inside the image, sp
 ```
 
 The `rewrite-timestamp` option is available since BuildKit v0.13.
+
+The cache exporters (except `inline`, which follows the image exporter) also
+support `rewrite-timestamp=true`, to apply the build arg value to the timestamps
+of the files inside the exported cache layers:
+```
+--cache-to type=registry,ref=docker.io/username/image:cache,mode=max,rewrite-timestamp=true
+```
+Only the layers created by the build are rewritten: layers pulled from a
+registry (base images, imported cache) are exported as is.
 See [v0.12 documentation](https://github.com/moby/buildkit/blob/v0.12/docs/build-repro.md#caveats) for dealing with timestamps
 in BuildKit v0.12 and v0.11.
 
