@@ -110,13 +110,13 @@ func runBuildkitd(
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = getSysProcAttr()
 
-	stop, err := integration.StartCmd(cmd, logs)
+	stop, stopped, err := integration.StartCmd(cmd, logs)
 	if err != nil {
 		return "", "", nil, err
 	}
 	deferF.Append(stop)
 
-	if err := integration.WaitSocket(address, 15*time.Second, cmd); err != nil {
+	if err := integration.WaitSocket(address, 15*time.Second, cmd, stopped); err != nil {
 		return "", "", nil, err
 	}
 
