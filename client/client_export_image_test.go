@@ -2,6 +2,7 @@ package client
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"github.com/containerd/containerd/v2/plugins/content/local"
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
+	"github.com/klauspost/compress/zstd"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
@@ -30,6 +32,7 @@ import (
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/compression/zstdchunked"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -679,6 +682,106 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, images.MediaTypeDockerSchema2LayerZstd, lastLayer.MediaType)
 
 	require.Equal(t, lastLayer.Digest.Hex(), zstdLayerDigest)
+}
+
+func testBuildExportZstdChunked(t *testing.T, sb integration.Sandbox) {
+	// Skipped on Windows for the same reasons as testBuildExportZstd.
+	integration.SkipOnPlatform(t, "windows", "Windows container support incomplete: AddMount() fails with 'number of mounts should always be 1 for Windows layers', OCI export fails with 'windowsLcowDiff does not implement Compare method'")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd-chunked > data && mkdir dir && echo -n foo > dir/foo"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression": "zstd:chunked",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m[ocispecs.ImageIndexFile].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m[ocispecs.ImageBlobsDir+"/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+	require.Equal(t, ocispecs.MediaTypeImageLayerZstd, lastLayer.MediaType)
+	for _, k := range zstdchunked.Annotations {
+		require.Contains(t, lastLayer.Annotations, k)
+	}
+
+	blob := m[ocispecs.ImageBlobsDir+"/sha256/"+lastLayer.Digest.Hex()].Data
+	require.Equal(t, []byte{0x28, 0xb5, 0x2f, 0xfd}, blob[:4])
+	require.True(t, zstdchunked.HasFooter(bytes.NewReader(blob), int64(len(blob))))
+	// <offset>:<length>:<uncompressed length>:<type>
+	pos := strings.Split(lastLayer.Annotations[zstdchunked.ManifestPositionAnnotation], ":")
+	require.Len(t, pos, 4)
+	tocOffset, err := strconv.Atoi(pos[0])
+	require.NoError(t, err)
+	tocLength, err := strconv.Atoi(pos[1])
+	require.NoError(t, err)
+	require.LessOrEqual(t, tocOffset+tocLength, len(blob))
+	require.Equal(t, digest.FromBytes(blob[tocOffset:tocOffset+tocLength]).String(), lastLayer.Annotations[zstdchunked.ManifestChecksumAnnotation])
+
+	// the layer must still be readable as a regular zstd layer
+	zr, err := zstd.NewReader(bytes.NewReader(blob))
+	require.NoError(t, err)
+	defer zr.Close()
+	layerTar, err := io.ReadAll(zr)
+	require.NoError(t, err)
+	files, err := testutil.ReadTarToMap(layerTar, false)
+	require.NoError(t, err)
+	require.Contains(t, files, "data")
+	require.Equal(t, "zstd-chunked", string(files["data"].Data))
+	require.Contains(t, files, "dir/foo")
+	require.Equal(t, "foo", string(files["dir/foo"].Data))
+
+	// zstd:chunked requires OCI media types
+	outW, err = os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression":    "zstd:chunked",
+					"oci-mediatypes": "false",
+				},
+			},
+		},
+	}, nil)
+	require.ErrorContains(t, err, `conflicts with "oci-mediatypes=false"`)
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {

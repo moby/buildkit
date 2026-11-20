@@ -76,7 +76,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp *exporter.Source, session
 	if err := opts.Validate(); err != nil {
 		return nil, nil, err
 	}
-	if compatibilityVersion == compat.CompatibilityVersion013 && opts.RefCfg.Compression.Type == compression.Zstd {
+	if compatibilityVersion == compat.CompatibilityVersion013 && (opts.RefCfg.Compression.Type == compression.Zstd || opts.RefCfg.Compression.Type == compression.ZstdChunked) {
 		feature := fmt.Sprintf("%s exporter compression=%s", exporterType, opts.RefCfg.Compression.Type.String())
 		return nil, nil, solvererrdefs.NewUnsupportedCompatibilityFeatureError(compatibilityVersion, feature)
 	}

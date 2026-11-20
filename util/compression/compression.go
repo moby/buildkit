@@ -37,6 +37,7 @@ type (
 	gzipType         struct{}
 	estargzType      struct{}
 	zstdType         struct{}
+	zstdChunkedType  struct{}
 )
 
 var (
@@ -51,6 +52,13 @@ var (
 
 	// Zstd is used for Zstandard data.
 	Zstd = zstdType{}
+
+	// ZstdChunked is used for zstd:chunked data. It is a zstd stream where
+	// files are compressed independently and indexed by a table of contents,
+	// allowing partial pulls by consumers that support it (e.g.
+	// containers/storage). It shares the media type of Zstd and can be
+	// decompressed as a regular zstd stream.
+	ZstdChunked = zstdChunkedType{}
 )
 
 type Config struct {
@@ -87,6 +95,8 @@ func parse(t string) (Type, error) {
 		return EStargz, nil
 	case Zstd.String():
 		return Zstd, nil
+	case ZstdChunked.String():
+		return ZstdChunked, nil
 	default:
 		return nil, errors.Errorf("unsupported compression type %s", t)
 	}
