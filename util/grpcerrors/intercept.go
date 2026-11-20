@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 func UnaryServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
@@ -38,7 +39,17 @@ func StreamServerInterceptor(srv any, ss grpc.ServerStream, info *grpc.StreamSer
 }
 
 func UnaryClientInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	err := FromGRPC(invoker(ctx, method, req, reply, cc, opts...))
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	if err != nil {
+		ctxErr := ctx.Err() //nolint:forbidigo // Match gRPC's status before restoring a custom cancellation cause.
+		if ctxErr != nil {
+			st, ok := status.FromError(err)
+			if ok && st.Code() == Code(ctxErr) && st.Message() == ctxErr.Error() && len(st.Details()) == 0 {
+				return errors.WithStack(WrapCode(context.Cause(ctx), st.Code()))
+			}
+		}
+	}
+	err = FromGRPC(err)
 	if err != nil {
 		stack.Helper()
 	}
