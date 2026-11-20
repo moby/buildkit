@@ -31,21 +31,22 @@ import (
 )
 
 type containerdExecutor struct {
-	client           *ctd.Client
-	root             string
-	networkProviders map[pb.NetMode]network.Provider
-	proxyProvider    network.ProxyProvider
-	cgroupParent     string
-	dnsConfig        *oci.DNSConfig
-	running          map[string]*containerState
-	mu               sync.Mutex
-	apparmorProfile  string
-	selinux          bool
-	traceSocket      string
-	rootless         bool
-	hypervIsolation  bool
-	runtime          *RuntimeInfo
-	cdiManager       *cdidevices.Manager
+	client                    *ctd.Client
+	root                      string
+	networkProviders          map[pb.NetMode]network.Provider
+	proxyProvider             network.ProxyProvider
+	cgroupParent              string
+	dnsConfig                 *oci.DNSConfig
+	running                   map[string]*containerState
+	mu                        sync.Mutex
+	apparmorProfile           string
+	selinux                   bool
+	traceSocket               string
+	rootless                  bool
+	rootlessCgroupControllers []string
+	hypervIsolation           bool
+	runtime                   *RuntimeInfo
+	cdiManager                *cdidevices.Manager
 }
 
 // OnCreateRuntimer provides an alternative to OCI hooks for applying network
@@ -78,9 +79,14 @@ type ExecutorOptions struct {
 	Selinux          bool
 	TraceSocket      string
 	Rootless         bool
-	HyperVIsolation  bool
-	Runtime          *RuntimeInfo
-	CDIManager       *cdidevices.Manager
+	// RootlessCgroupControllers lists the cgroup controllers available to
+	// rootless steps when CgroupParent is a systemd slice that runc creates
+	// through the user's systemd. When it is nil, rootless steps run without
+	// a cgroup and their resource limits are ignored.
+	RootlessCgroupControllers []string
+	HyperVIsolation           bool
+	Runtime                   *RuntimeInfo
+	CDIManager                *cdidevices.Manager
 }
 
 // New creates a new executor backed by connection to containerd API
@@ -90,20 +96,21 @@ func New(executorOpts ExecutorOptions) executor.Executor {
 	os.RemoveAll(filepath.Join(executorOpts.Root, "resolv.conf"))
 
 	return &containerdExecutor{
-		client:           executorOpts.Client,
-		root:             executorOpts.Root,
-		networkProviders: executorOpts.NetworkProviders,
-		proxyProvider:    executorOpts.ProxyProvider,
-		cgroupParent:     executorOpts.CgroupParent,
-		dnsConfig:        executorOpts.DNSConfig,
-		running:          make(map[string]*containerState),
-		apparmorProfile:  executorOpts.ApparmorProfile,
-		selinux:          executorOpts.Selinux,
-		traceSocket:      executorOpts.TraceSocket,
-		rootless:         executorOpts.Rootless,
-		hypervIsolation:  executorOpts.HyperVIsolation,
-		runtime:          executorOpts.Runtime,
-		cdiManager:       executorOpts.CDIManager,
+		client:                    executorOpts.Client,
+		root:                      executorOpts.Root,
+		networkProviders:          executorOpts.NetworkProviders,
+		proxyProvider:             executorOpts.ProxyProvider,
+		cgroupParent:              executorOpts.CgroupParent,
+		dnsConfig:                 executorOpts.DNSConfig,
+		running:                   make(map[string]*containerState),
+		apparmorProfile:           executorOpts.ApparmorProfile,
+		selinux:                   executorOpts.Selinux,
+		traceSocket:               executorOpts.TraceSocket,
+		rootless:                  executorOpts.Rootless,
+		rootlessCgroupControllers: executorOpts.RootlessCgroupControllers,
+		hypervIsolation:           executorOpts.HyperVIsolation,
+		runtime:                   executorOpts.Runtime,
+		cdiManager:                executorOpts.CDIManager,
 	}
 }
 
