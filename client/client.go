@@ -34,6 +34,10 @@ import (
 type Client struct {
 	conn          *grpc.ClientConn
 	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
+
+	// workerCache reuses an unfiltered ListWorkers result until the connection
+	// is replaced. See workers_cache.go.
+	workerCache workerCache
 }
 
 type ClientOpt interface {
@@ -151,17 +155,19 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	gopts = append(gopts, grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	gopts = append(gopts, customDialOptions...)
 
+	c := &Client{
+		sessionDialer: sessionDialer,
+	}
+	// The handler must be registered before dial so the first connection is observed.
+	gopts = append(gopts, grpc.WithStatsHandler(c.connStatsHandler()))
+
 	// ignore SA1019 NewClient has different behavior and needs to be tested
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
-
-	c := &Client{
-		conn:          conn,
-		sessionDialer: sessionDialer,
-	}
+	c.conn = conn
 
 	if tracerDelegate != nil {
 		_ = c.setupDelegatedTracing(ctx, tracerDelegate) // ignore error

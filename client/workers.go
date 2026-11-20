@@ -21,21 +21,43 @@ type WorkerInfo struct {
 	CDIDevices      []CDIDevice         `json:"cdiDevices"`
 }
 
-// ListWorkers lists all active workers
+// ListWorkers lists all active workers.
+//
+// The unfiltered list is reused for the lifetime of the current connection.
+// It is fetched again after the connection ends or is replaced. Queries that
+// set a filter always reach the server.
 func (c *Client) ListWorkers(ctx context.Context, opts ...ListWorkersOption) ([]*WorkerInfo, error) {
 	info := &ListWorkersInfo{}
 	for _, o := range opts {
 		o.SetListWorkersOption(info)
 	}
+	if len(info.Filter) == 0 {
+		return c.listWorkersCached(ctx)
+	}
+	return c.fetchWorkers(ctx, info.Filter)
+}
 
-	req := &controlapi.ListWorkersRequest{Filter: info.Filter}
+func (c *Client) listWorkersCached(ctx context.Context) ([]*WorkerInfo, error) {
+	if workers, ok := c.workerCache.load(c.conn); ok {
+		return workers, nil
+	}
+	ends := c.workerCache.endsSnapshot()
+	workers, err := c.fetchWorkers(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.workerCache.store(c.conn, workers, ends)
+	return workers, nil
+}
+
+func (c *Client) fetchWorkers(ctx context.Context, filter []string) ([]*WorkerInfo, error) {
+	req := &controlapi.ListWorkersRequest{Filter: filter}
 	resp, err := c.ControlClient().ListWorkers(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list workers")
 	}
 
 	var wi []*WorkerInfo
-
 	for _, w := range resp.Record {
 		wi = append(wi, &WorkerInfo{
 			ID:              w.ID,
