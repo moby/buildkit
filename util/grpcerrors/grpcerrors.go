@@ -79,7 +79,7 @@ func errorHasMoreContext(err error, st *status.Status) bool {
 		// check if the longer message in errMessage is only due to
 		// prepending with the status code
 		if grpcStatusError, ok := errors.AsType[*grpcStatusError](err); ok {
-			return st.Code() != grpcStatusError.st.Code() || st.Message() != grpcStatusError.st.Message()
+			return errMessage != grpcStatusError.Error() || st.Code() != grpcStatusError.st.Code() || st.Message() != grpcStatusError.st.Message()
 		}
 		return true
 	}

@@ -198,6 +198,46 @@ func TestAsGRPCStatus(t *testing.T) {
 
 func TestToGRPCMessage(t *testing.T) {
 	t.Parallel()
+	t.Run("decoded status", func(t *testing.T) {
+		t.Parallel()
+		decoded := grpcerrors.FromGRPC(status.Error(codes.DeadlineExceeded, "context deadline exceeded"))
+		for _, tc := range []struct {
+			name string
+			err  error
+			want string
+		}{
+			{
+				name: "unwrapped",
+				err:  decoded,
+				want: "context deadline exceeded",
+			},
+			{
+				name: "stack only",
+				err:  errors.WithStack(decoded),
+				want: "context deadline exceeded",
+			},
+			{
+				name: "wrapped",
+				err:  errors.Wrap(decoded, "extra context"),
+				want: "extra context: DeadlineExceeded: context deadline exceeded",
+			},
+			{
+				name: "joined",
+				err:  stderrors.Join(decoded, errors.New("another error")),
+				want: "DeadlineExceeded: context deadline exceeded\nanother error",
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				encoded := grpcerrors.ToGRPC(t.Context(), tc.err)
+				assert.Equal(t, codes.DeadlineExceeded, status.Code(encoded))
+				assert.Equal(t, tc.want, status.Convert(encoded).Message())
+				roundTrip := grpcerrors.ToGRPC(t.Context(), grpcerrors.FromGRPC(encoded))
+				assert.Equal(t, codes.DeadlineExceeded, status.Code(roundTrip))
+				assert.Equal(t, tc.want, status.Convert(roundTrip).Message())
+			})
+		}
+	})
 	t.Run("avoid prepending grpc status code", func(t *testing.T) {
 		t.Parallel()
 		err := errors.New("something")
