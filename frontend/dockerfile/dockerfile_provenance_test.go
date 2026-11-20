@@ -1217,7 +1217,6 @@ func testClientLLBProvenance(t *testing.T, sb integration.Sandbox) {
 // user-facing root build request separate from the frontend solve that produced
 // the exported result.
 func testGatewayProvenanceRootRequest(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1232,11 +1231,23 @@ func testGatewayProvenanceRootRequest(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	target := registry + "/buildkit/provenance-rootrequest:latest"
 
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM busybox AS final
 RUN echo root > /foo
-`)
-	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
+`,
+		`
+FROM nanoserver AS final
+COPY foo C:\foo
+`,
+	))
+	files := integration.UnixOrWindows(
+		[]fstest.Applier{fstest.CreateFile("Dockerfile", dockerfile, 0600)},
+		[]fstest.Applier{
+			fstest.CreateFile("Dockerfile", dockerfile, 0600),
+			fstest.CreateFile("foo", []byte("root"), 0600),
+		},
+	)
+	dir := integration.Tmpdir(t, files...)
 	f := getFrontend(t, sb)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
@@ -1280,7 +1291,6 @@ RUN echo root > /foo
 // by one solve and consumed by another solve in the same Build callback carries
 // the original producer request into the consumer's provenance.
 func testGatewayProvenanceSameCallbackInputProducer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1351,7 +1361,6 @@ func testGatewayProvenanceSameCallbackInputProducer(t *testing.T, sb integration
 // request provenance is available to a different Build callback while the
 // producer build remains open.
 func testGatewayProvenanceDifferentCallbackInputProducer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1435,7 +1444,6 @@ func testGatewayProvenanceDifferentCallbackInputProducer(t *testing.T, sb integr
 // testGatewayProvenancePlainLLBInputFallback verifies that plain client-created
 // LLB inputs do not get attributed to a frontend request they did not come from.
 func testGatewayProvenancePlainLLBInputFallback(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1451,12 +1459,20 @@ func testGatewayProvenancePlainLLBInputFallback(t *testing.T, sb integration.San
 	target := registry + "/buildkit/provenance-input-plain:latest"
 
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM scratch
 COPY --from=linked /foo /foo
-`)
+`,
+		`
+FROM nanoserver
+COPY --from=linked C:\foo C:\foo
+`,
+	))
 	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
-	st := llb.Scratch().File(llb.Mkfile("/foo", 0600, []byte("plain")))
+	st := integration.UnixOrWindows(
+		llb.Scratch().File(llb.Mkfile("/foo", 0600, []byte("plain"))),
+		llb.Image("nanoserver").File(llb.Mkfile("foo", 0600, []byte("plain"))),
+	)
 
 	_, err = c.Build(ctx, client.SolveOpt{
 		FrontendAttrs: map[string]string{
@@ -1500,7 +1516,6 @@ COPY --from=linked /foo /foo
 // requests each keep their own input provenance, including nested input
 // producer requests.
 func testGatewayProvenanceNestedInputProducer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1516,7 +1531,7 @@ func testGatewayProvenanceNestedInputProducer(t *testing.T, sb integration.Sandb
 	target := registry + "/buildkit/provenance-input-nested:latest"
 
 	f := getFrontend(t, sb)
-	dockerfile := []byte(`
+	dockerfile := []byte(integration.UnixOrWindows(`
 FROM busybox AS seed
 RUN echo -n seed > /seed
 
@@ -1528,7 +1543,21 @@ RUN echo -n "$BASE_TEXT" > /foo
 FROM scratch
 COPY --from=linked /foo /foo
 COPY --from=linked /innerseed /innerseed
-`)
+`,
+		`
+FROM nanoserver AS seed
+RUN echo seed> C:\Windows\Temp\seed
+
+FROM nanoserver AS base
+ARG BASE_TEXT
+COPY --from=inner C:/Windows/Temp/seed C:/Windows/Temp/innerseed
+RUN echo %BASE_TEXT%> C:\Windows\Temp\foo
+
+FROM nanoserver
+COPY --from=linked C:/Windows/Temp/foo C:/Windows/Temp/foo
+COPY --from=linked C:/Windows/Temp/innerseed C:/Windows/Temp/innerseed
+`,
+	))
 	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
 
 	var rootSt llb.State
@@ -1627,7 +1656,6 @@ COPY --from=linked /innerseed /innerseed
 // frontend solves consume stored input request provenance without going through
 // the gateway return path.
 func testDockerfileProvenanceInputProducer(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush, workers.FeatureProvenance)
 	ctx := sb.Context()
 
@@ -1716,14 +1744,23 @@ func testDockerfileProvenanceInputProducer(t *testing.T, sb integration.Sandbox)
 }
 
 func provenanceInputDockerfile() []byte {
-	return []byte(`
+	return []byte(integration.UnixOrWindows(`
 FROM busybox AS base
 ARG BASE_TEXT
 RUN echo -n "$BASE_TEXT" > /foo
 
 FROM scratch
 COPY --from=linked /foo /foo
-`)
+`,
+		`
+FROM nanoserver AS base
+ARG BASE_TEXT
+RUN echo %BASE_TEXT%> C:\Windows\Temp\foo
+
+FROM nanoserver
+COPY --from=linked C:/Windows/Temp/foo C:/Windows/Temp/foo
+`,
+	))
 }
 
 func solveProvenanceInputProducer(ctx context.Context, c gateway.Client, f frontendGateway) (llb.State, string, error) {
