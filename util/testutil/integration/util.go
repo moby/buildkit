@@ -63,7 +63,8 @@ func RunCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) error {
 	return cmd.Run()
 }
 
-func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error) {
+// StartCmd returns a stop function and a channel closed after the command exits.
+func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, <-chan struct{}, error) {
 	if logs != nil {
 		setCmdLogs(cmd, logs)
 	}
@@ -72,7 +73,7 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	fmt.Fprintf(cmd.Stderr, "> StartCmd %v %+v\n", started, cmd.String())
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	fmt.Fprintf(cmd.Stderr, "> started pid=%d %v %+v\n", cmd.Process.Pid, time.Now(), cmd.String())
 	eg, ctx := errgroup.WithContext(context.TODO())
@@ -118,13 +119,15 @@ func StartCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	return func() error {
 		close(stop)
 		return eg.Wait()
-	}, nil
+	}, stopped, nil
 }
 
 // WaitSocket will dial a socket opened by a command passed in as cmd.
+// stopped is the channel returned by StartCmd for cmd.
+// Pass nil for both cmd and stopped for a socket-only wait.
 // On Linux this socket is typically a Unix socket,
 // while on Windows this will be a named pipe.
-func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
+func WaitSocket(address string, d time.Duration, cmd *exec.Cmd, stopped <-chan struct{}) error {
 	address = strings.TrimPrefix(address, socketScheme)
 	step := 50 * time.Millisecond
 	started := time.Now()
@@ -134,8 +137,10 @@ func WaitSocket(address string, d time.Duration, cmd *exec.Cmd) error {
 	i := 0
 	var lastErr error
 	for {
-		if cmd != nil && cmd.ProcessState != nil {
+		select {
+		case <-stopped:
 			return errors.Errorf("process exited while waiting for socket %s after %s: %s", address, time.Since(started), cmd.String())
+		default:
 		}
 
 		if conn, err := dialPipe(address); err == nil {

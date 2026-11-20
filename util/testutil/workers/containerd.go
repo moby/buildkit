@@ -196,11 +196,11 @@ disabled_plugins = ["io.containerd.grpc.v1.cri"]
 	cmd := exec.CommandContext(context.TODO(), containerdArgs[0], containerdArgs[1:]...) //nolint:gosec // test utility
 	cmd.Env = append(os.Environ(), extraEnv...)
 
-	ctdStop, err := integration.StartCmd(cmd, cfg.Logs)
+	ctdStop, ctdStopped, err := integration.StartCmd(cmd, cfg.Logs)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
+	if err := integration.WaitSocket(address, 10*time.Second, cmd, ctdStopped); err != nil {
 		ctdStop()
 		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}
@@ -284,11 +284,11 @@ func runStargzSnapshotter(cfg *integration.BackendConfig) (address string, cl fu
 		"--log-level", "debug",
 		"--address", address,
 		"--root", stargzRootDir)
-	snStop, err := integration.StartCmd(cmd, cfg.Logs)
+	snStop, snStopped, err := integration.StartCmd(cmd, cfg.Logs)
 	if err != nil {
 		return "", nil, err
 	}
-	if err = integration.WaitSocket(address, 10*time.Second, cmd); err != nil {
+	if err = integration.WaitSocket(address, 10*time.Second, cmd, snStopped); err != nil {
 		snStop()
 		return "", nil, errors.Wrapf(err, "containerd-stargz-grpc did not start up: %s", integration.FormatLogs(cfg.Logs))
 	}

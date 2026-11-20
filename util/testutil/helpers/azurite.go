@@ -61,7 +61,7 @@ func NewAzuriteServer(t *testing.T, sb integration.Sandbox, opts AzuriteOpts) (a
 	cmd.Env = append(os.Environ(), []string{
 		"AZURITE_ACCOUNTS=" + opts.AccountName + ":" + opts.AccountKey,
 	}...)
-	azuriteStop, err := integration.StartCmd(cmd, sb.Logs())
+	azuriteStop, _, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", nil, err
 	}

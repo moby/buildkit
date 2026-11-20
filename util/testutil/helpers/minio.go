@@ -77,7 +77,7 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 		"MINIO_ROOT_USER=" + opts.AccessKeyID,
 		"MINIO_ROOT_PASSWORD=" + opts.SecretAccessKey,
 	}...)
-	minioStop, err := integration.StartCmd(cmd, sb.Logs())
+	minioStop, _, err := integration.StartCmd(cmd, sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -120,7 +120,7 @@ func NewMinioServer(t *testing.T, sb integration.Sandbox, opts MinioOpts) (addre
 	}
 
 	// trace
-	traceStop, err := integration.StartCmd(mcCmd(t.Context(), "admin", "trace", "--json", mcAlias), sb.Logs())
+	traceStop, _, err := integration.StartCmd(mcCmd(t.Context(), "admin", "trace", "--json", mcAlias), sb.Logs())
 	if err != nil {
 		return "", "", nil, err
 	}
