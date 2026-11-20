@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/moby/buildkit/util/db"
@@ -61,6 +62,15 @@ func handleCompactionRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
+	var checkFragmentation bool
+	if r.URL.Query().Has("check-fragmentation") {
+		var err error
+		checkFragmentation, err = strconv.ParseBool(r.URL.Query().Get("check-fragmentation"))
+		if err != nil {
+			http.Error(w, "invalid check-fragmentation value", http.StatusBadRequest)
+			return
+		}
+	}
 	scheduler, ok := compaction.Files()[r.URL.Query().Get("database")]
 	if !ok {
 		http.Error(w, "unknown database; GET /debug/compaction lists available databases", http.StatusNotFound)
@@ -68,7 +78,7 @@ func handleCompactionRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(context.Canceled)
-	req, err := scheduler.Request(ctx)
+	req, err := scheduler.Request(ctx, checkFragmentation)
 	if err != nil {
 		code := http.StatusServiceUnavailable
 		if errors.Is(err, compaction.ErrBusy) {

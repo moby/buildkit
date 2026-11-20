@@ -15,6 +15,9 @@ type CompactOptions struct {
 	MinReclaimBytes        int64
 	MinReclaimPercent      int64
 	MinReclaimPercentFloor int64
+	// CheckFragmentation inspects occupied pages before copying to estimate
+	// additional reclaimable space. The actual reduction is checked before replacement.
+	CheckFragmentation bool
 	// MinInterval also throttles failed attempts.
 	MinInterval time.Duration
 	// PauseTimeout bounds draining transactions. Zero selects the default.
@@ -54,7 +57,8 @@ type CompactResult struct {
 	Reason     string
 	SizeBefore int64
 	SizeAfter  int64
-	// Reclaimable includes both free and pending pages.
+	// Reclaimable includes free and pending pages, plus estimated page slack
+	// when CheckFragmentation is enabled.
 	Reclaimable int64
 	Duration    time.Duration
 }

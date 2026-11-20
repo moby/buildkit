@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +14,10 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/db"
+	"github.com/moby/buildkit/util/db/boltutil"
 	"github.com/moby/buildkit/util/db/compaction"
 	"github.com/stretchr/testify/require"
+	bolt "go.etcd.io/bbolt"
 )
 
 type debugCompactor struct {
@@ -57,11 +61,125 @@ func TestDebugCompactionStatusBelowPercentFloor(t *testing.T) {
 	require.Contains(t, w.Body.String(), "reclaimable space below threshold")
 }
 
+func TestDebugCompactionFragmentation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := &debugCompactor{compact: func(_ context.Context, opt db.CompactOptions) (db.CompactResult, error) {
+		if !opt.CheckFragmentation || opt.MinReclaimPercentFloor != 10 {
+			t.Error("fragmentation check lost its option or policy thresholds")
+		}
+		return db.CompactResult{Reason: "trial copy below threshold"}, nil
+	}}
+	cfg := compaction.DefaultConfig()
+	cfg.ManualOnly = true
+	cfg.IdleTimeout = time.Millisecond
+	s, err := compaction.NewFile(cfg, path, true, d)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+	endpoint := "/debug/compaction?database=" + url.QueryEscape(path) + "&check-fragmentation="
+	w := httptest.NewRecorder()
+	handleCompactionRequest(w, httptest.NewRequestWithContext(t.Context(), http.MethodPost, endpoint+"invalid", nil))
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Zero(t, d.calls.Load())
+	server := httptest.NewServer(http.HandlerFunc(handleCompactionRequest))
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 5 * time.Second
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, server.URL+endpoint+"true", nil)
+	require.NoError(t, err)
+	resp, err := client.Do(r)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, string(data), "trial copy below threshold")
+	require.Equal(t, int64(1), d.calls.Load())
+}
+
+func TestDebugCompactionFragmentationDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	cfg := compaction.DefaultConfig()
+	cfg.ManualOnly = true
+	cfg.MinReclaimBytes = 1 << 20
+	cfg.IdleTimeout = time.Millisecond
+	d, err := boltutil.Open(path, 0600, &bolt.Options{PageSize: 4096, NoFreelistSync: true}, cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, d.Close()) })
+	value := bytes.Repeat([]byte("x"), 256)
+	const count = 6000
+	require.NoError(t, d.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte("records"))
+		if err != nil {
+			return err
+		}
+		b.FillPercent = 0.3
+		for i := range count {
+			if err := b.Put(fmt.Appendf(nil, "%08d", i), value); err != nil {
+				return err
+			}
+		}
+		return b.SetSequence(42)
+	}))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /debug/compaction", handleCompactionStatus)
+	mux.HandleFunc("POST /debug/compaction", handleCompactionRequest)
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 10 * time.Second
+	endpoint := server.URL + "/debug/compaction?database=" + url.QueryEscape(path)
+	request := func(method, endpoint string) string {
+		t.Helper()
+		r, err := http.NewRequestWithContext(t.Context(), method, endpoint, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(r)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		return string(body)
+	}
+	require.Contains(t, request(http.MethodGet, endpoint), "reclaimable space below threshold")
+	body := request(http.MethodPost, endpoint)
+	require.Contains(t, body, "compacted=false")
+	require.NotContains(t, body, "inspecting page fragmentation")
+	body = request(http.MethodPost, endpoint+"&check-fragmentation=true")
+	require.Contains(t, body, "inspecting page fragmentation")
+	require.Contains(t, body, "fragmentation inspection complete")
+	require.Contains(t, body, "compacted=true")
+	require.Contains(t, body, `error=""`)
+	require.NoFileExists(t, path+".compact")
+	body = request(http.MethodPost, endpoint+"&check-fragmentation=true")
+	require.Contains(t, body, "compacted=false")
+	require.NotContains(t, body, "copying and replacing database")
+	require.NoError(t, d.Close())
+	reopened, err := boltutil.Open(path, 0600, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
+	require.NoError(t, reopened.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("records"))
+		require.NotNil(t, b)
+		require.Equal(t, uint64(42), b.Sequence())
+		require.Equal(t, count, b.Stats().KeyN)
+		for i := range count {
+			require.Equal(t, value, b.Get(fmt.Appendf(nil, "%08d", i)))
+		}
+		for err := range tx.Check() {
+			require.NoError(t, err)
+		}
+		return nil
+	}))
+	require.NoError(t, reopened.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte("records")).Put([]byte("after-reopen"), value)
+	}))
+}
+
 func testDebugCompaction(t *testing.T, manualOnly bool) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
 	d := &debugCompactor{compact: func(_ context.Context, opt db.CompactOptions) (db.CompactResult, error) {
-		if opt.MinReclaimBytes != 1 || opt.MinReclaimPercent != 30 || opt.MinReclaimPercentFloor != 10 {
+		if opt.MinReclaimBytes != 1 || opt.MinReclaimPercent != 30 || opt.MinReclaimPercentFloor != 10 || opt.CheckFragmentation {
 			t.Error("manual attempt lost policy thresholds")
 		}
 		select {

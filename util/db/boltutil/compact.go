@@ -3,6 +3,7 @@ package boltutil
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -77,8 +78,10 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 		SizeAfter:   before.file,
 		Reclaimable: before.free,
 	}
-	if res.Reason = reclaimBelowThreshold(before, opt); res.Reason != "" {
-		return res, nil
+	if !opt.CheckFragmentation {
+		if res.Reason = reclaimBelowThreshold(before, opt); res.Reason != "" {
+			return res, nil
+		}
 	}
 	res.Reason, err = checkDiskSpace(d.path, before)
 	if err != nil {
@@ -116,7 +119,23 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 		return res, err
 	}
 	res.SizeBefore, res.SizeAfter, res.Reclaimable = before.file, before.file, before.free
-	if res.Reason = reclaimBelowThreshold(before, opt); res.Reason != "" {
+	if opt.CheckFragmentation {
+		select {
+		case opt.Progress <- "inspecting page fragmentation":
+		default:
+		}
+		start := time.Now()
+		fragmented, err := d.inspectFragmentation(ctx)
+		if err != nil {
+			return res, errors.Wrap(err, "failed to inspect fragmentation")
+		}
+		res.Reclaimable += fragmented
+		select {
+		case opt.Progress <- fmt.Sprintf("fragmentation inspection complete: estimated_reclaimable=%d duration=%s", res.Reclaimable, time.Since(start)):
+		default:
+		}
+	}
+	if res.Reason = reclaimBelowThreshold(dbSize{file: before.file, free: res.Reclaimable}, opt); res.Reason != "" {
 		return res, nil
 	}
 	if res.Reason, err = checkDiskSpace(d.path, before); err != nil || res.Reason != "" {
@@ -132,7 +151,7 @@ func (d *DB) Compact(ctx context.Context, opt db.CompactOptions) (db.CompactResu
 		ctx, cancelCopy = context.WithTimeoutCause(ctx, opt.CopyTimeout, errors.WithStack(context.DeadlineExceeded))
 		defer cancelCopy()
 	}
-	res.Compacted, err = d.replaceWithCompacted(ctx)
+	res.Compacted, res.Reason, err = d.replaceWithCompacted(ctx, before.file, opt)
 	res.Duration = time.Since(start)
 	if res.Compacted {
 		d.lastCompact = time.Now()
@@ -180,15 +199,15 @@ func checkDiskSpace(p string, sz dbSize) (string, error) {
 }
 
 // The caller holds hmu and has drained the transaction gate.
-func (d *DB) replaceWithCompacted(ctx context.Context) (bool, error) {
+func (d *DB) replaceWithCompacted(ctx context.Context, sizeBefore int64, opt db.CompactOptions) (bool, string, error) {
 	tmp := compactPath(d.path)
 	if err := os.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, errors.Wrapf(err, "failed to remove stale compaction file %s", tmp)
+		return false, "", errors.Wrapf(err, "failed to remove stale compaction file %s", tmp)
 	}
 	dst, err := d.writeCompactedCopy(ctx, tmp)
 	if err != nil {
 		_ = os.Remove(tmp)
-		return false, err
+		return false, "", err
 	}
 	defer func() {
 		if d.bdb != dst {
@@ -197,9 +216,21 @@ func (d *DB) replaceWithCompacted(ctx context.Context) (bool, error) {
 		_ = os.Remove(tmp)
 	}()
 	if err := context.Cause(ctx); err != nil {
-		return false, err
+		return false, "", err
 	}
-	return d.installCompacted(dst)
+	if opt.CheckFragmentation {
+		// A lower high-water mark need not return disk space when allocation is rounded.
+		fi, err := os.Stat(tmp)
+		if err != nil {
+			return false, "", errors.WithStack(err)
+		}
+		reclaimable := max(sizeBefore-fi.Size(), 0)
+		if !opt.MeetsReclaimThreshold(sizeBefore, reclaimable) {
+			return false, fmt.Sprintf("compacted copy would reclaim %d bytes, below threshold", reclaimable), nil
+		}
+	}
+	replaced, err := d.installCompacted(dst)
+	return replaced, "", err
 }
 
 func (d *DB) writeCompactedCopy(ctx context.Context, tmp string) (*bolt.DB, error) {
