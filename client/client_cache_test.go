@@ -900,6 +900,55 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o}, []CacheOptionsEntry{o})
 }
 
+func testRegistryCacheReexport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+	)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "echo cached > /cached"`)).Root().Marshal(sb.Context())
+	require.NoError(t, err)
+
+	source := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":  registry + "/buildkit/cache-source:latest",
+			"mode": "max",
+		},
+	}
+	target := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":  registry + "/buildkit/cache-target:latest",
+			"mode": "max",
+		},
+	}
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{CacheExports: []CacheOptionsEntry{source}}, nil)
+	require.NoError(t, err)
+	ensurePruneAll(t, c, sb)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		CacheImports: []CacheOptionsEntry{source},
+		CacheExports: []CacheOptionsEntry{target},
+	}, nil)
+	require.NoError(t, err)
+	ensurePruneAll(t, c, sb)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{CacheImports: []CacheOptionsEntry{target}}, nil)
+	require.NoError(t, err)
+}
+
 func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb,

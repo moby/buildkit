@@ -7,6 +7,7 @@ import (
 
 	cerrdefs "github.com/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
+	"golang.org/x/sync/errgroup"
 )
 
 type exporter struct {
@@ -187,7 +188,25 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 			}
 		}
 
-		if (remote == nil || opt.CompressionOpt != nil) && opt.Mode != CacheExportModeRemoteOnly {
+		remoteMissing := false
+		if remote != nil && opt.CompressionOpt != nil && opt.Mode != CacheExportModeRemoteOnly {
+			var eg errgroup.Group
+			for _, desc := range remote.Descriptors {
+				eg.Go(func() error {
+					_, err := remote.Provider.Info(ctx, desc.Digest)
+					return err
+				})
+			}
+			if err := eg.Wait(); err != nil {
+				if !errors.Is(err, cerrdefs.ErrNotFound) {
+					return nil, err
+				}
+				remote = nil
+				remoteMissing = true
+			}
+		}
+
+		if (remote == nil && !remoteMissing) && opt.Mode != CacheExportModeRemoteOnly {
 			res, err := cm.results.Load(ctx, res)
 			if err != nil {
 				if !errors.Is(err, cerrdefs.ErrNotFound) {
