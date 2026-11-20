@@ -34,12 +34,30 @@ func TestCompactDiskFull(t *testing.T) {
 	require.NotEqual(t, parentStat.Dev, dirStat.Dev, "scratch directory must be a mountpoint")
 	t.Setenv("TMPDIR", root)
 
-	for _, duringCopy := range []bool{false, true} {
-		name := "precheck"
-		if duringCopy {
-			name = "copy"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		duringCopy         bool
+		checkFragmentation bool
+	}{
+		{
+			name: "precheck",
+		},
+		{
+			name:       "copy",
+			duringCopy: true,
+		},
+		{
+			name:               "fragmentation precheck",
+			checkFragmentation: true,
+		},
+		{
+			name:               "fragmentation copy",
+			duringCopy:         true,
+			checkFragmentation: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opt := db.CompactOptions{CheckFragmentation: tc.checkFragmentation}
 			dir := t.TempDir()
 			d := openTestDB(t, filepath.Join(dir, "test.db"))
 			fillTestDB(t, d, 1000)
@@ -62,7 +80,7 @@ func TestCompactDiskFull(t *testing.T) {
 			var res db.CompactResult
 			var err error
 			var filler string
-			if duringCopy {
+			if tc.duringCopy {
 				ctx := &pauseCopyContext{
 					Context: context.WithoutCancel(t.Context()),
 					path:    compactPath(d.path), ready: make(chan struct{}), release: make(chan struct{}),
@@ -71,7 +89,7 @@ func TestCompactDiskFull(t *testing.T) {
 				unblock := func() { once.Do(func() { close(ctx.release) }) }
 				done := make(chan struct{})
 				go func() {
-					res, err = d.Compact(ctx, db.CompactOptions{})
+					res, err = d.Compact(ctx, opt)
 					close(done)
 				}()
 				t.Cleanup(func() { unblock(); <-done })
@@ -88,7 +106,7 @@ func TestCompactDiskFull(t *testing.T) {
 				require.ErrorIs(t, err, unix.ENOSPC)
 			} else {
 				filler = fill()
-				res, err = d.Compact(t.Context(), db.CompactOptions{})
+				res, err = d.Compact(t.Context(), opt)
 				require.NoError(t, err)
 				require.Equal(t, "insufficient free disk space for compacted copy", res.Reason)
 			}
@@ -100,7 +118,7 @@ func TestCompactDiskFull(t *testing.T) {
 			require.NoError(t, d.Update(func(tx *bolt.Tx) error {
 				return tx.Bucket([]byte(testBucket)).Put(testKey(0), testValue(0))
 			}))
-			res, err = d.Compact(t.Context(), db.CompactOptions{})
+			res, err = d.Compact(t.Context(), opt)
 			require.NoError(t, err)
 			require.True(t, res.Compacted, res.Reason)
 			checkTestDB(t, d, 0, 100, 1000)

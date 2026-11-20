@@ -854,11 +854,175 @@ func TestCompactCancellationPreservesDatabase(t *testing.T) {
 	d := openTestDB(t, path)
 	fillTestDB(t, d, 1000)
 	ctx := &cancelDuringCopy{Context: context.WithoutCancel(t.Context()), remaining: 500}
-	replaced, err := d.replaceWithCompacted(ctx)
+	replaced, _, err := d.replaceWithCompacted(ctx, 0, db.CompactOptions{})
 	require.False(t, replaced)
 	require.ErrorIs(t, err, context.Canceled)
 	require.NoFileExists(t, compactPath(path))
 	checkTestDB(t, d, 0, 1000, 1000)
+	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
+}
+
+func TestCompactFragmentation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := openTestDB(t, path)
+	value := bytes.Repeat([]byte("x"), 256)
+	const count = 6000
+	require.NoError(t, d.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte(testBucket))
+		if err != nil {
+			return err
+		}
+		b.FillPercent = 0.3
+		for i := range count {
+			if err := b.Put(testKey(i), value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	opt := db.CompactOptions{MinReclaimBytes: 1 << 20, MinReclaimPercent: 30, MinReclaimPercentFloor: 10}
+	stats, err := d.CompactionStats()
+	require.NoError(t, err)
+	require.False(t, opt.MeetsReclaimThreshold(stats.Size, stats.Reclaimable))
+	res, err := d.Compact(t.Context(), opt)
+	require.NoError(t, err)
+	require.False(t, res.Compacted)
+	opt.CheckFragmentation = true
+	res, err = d.Compact(t.Context(), opt)
+	require.NoError(t, err)
+	require.True(t, res.Compacted)
+	require.True(t, opt.MeetsReclaimThreshold(res.SizeBefore, res.SizeBefore-res.SizeAfter))
+	require.NoFileExists(t, compactPath(path))
+	require.NoError(t, d.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(testBucket))
+		for i := range count {
+			require.Equal(t, value, b.Get(testKey(i)))
+		}
+		for err := range tx.Check() {
+			require.NoError(t, err)
+		}
+		return nil
+	}))
+}
+
+func TestCompactFragmentationBelowThreshold(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := openTestDB(t, path)
+	fillTestDB(t, d, 100)
+	original, err := os.ReadFile(path)
+	require.NoError(t, err)
+	progress := make(chan string, 8)
+	res, err := d.Compact(t.Context(), db.CompactOptions{CheckFragmentation: true, MinReclaimPercent: 100, Progress: progress})
+	require.NoError(t, err)
+	require.False(t, res.Compacted)
+	require.Equal(t, "reclaimable space below threshold", res.Reason)
+	require.Zero(t, res.Duration)
+	close(progress)
+	var phases []string
+	for phase := range progress {
+		phases = append(phases, phase)
+	}
+	require.Contains(t, phases, "inspecting page fragmentation")
+	require.NotContains(t, phases, "copying and replacing database")
+	require.Equal(t, res.SizeBefore, res.SizeAfter)
+	unchanged, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, original, unchanged)
+	require.NoFileExists(t, compactPath(path))
+	checkTestDB(t, d, 0, 100, 100)
+	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
+}
+
+func TestCompactCanceledDuringFragmentation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d := openTestDB(t, path)
+	fillTestDB(t, d, 100)
+	ctx := &cancelDuringCopy{Context: context.WithoutCancel(t.Context()), remaining: 10}
+	progress := make(chan string, 8)
+	res, err := d.Compact(ctx, db.CompactOptions{CheckFragmentation: true, Progress: progress})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Contains(t, err.Error(), "failed to inspect fragmentation")
+	require.False(t, res.Compacted)
+	require.Zero(t, res.Duration)
+	close(progress)
+	var phases []string
+	for phase := range progress {
+		phases = append(phases, phase)
+	}
+	require.Contains(t, phases, "inspecting page fragmentation")
+	require.NotContains(t, phases, "copying and replacing database")
+	require.NoFileExists(t, compactPath(path))
+	checkTestDB(t, d, 0, 100, 100)
+	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
+}
+
+func TestCompactFragmentationInvalidPage(t *testing.T) {
+	d := openTestDB(t, filepath.Join(t.TempDir(), "test.db"))
+	fillTestDB(t, d, 100)
+	var offset int64
+	require.NoError(t, d.View(func(tx *bolt.Tx) error {
+		offset = int64(tx.Bucket([]byte(testBucket)).Root())*int64(d.pageSize) + 8
+		return nil
+	}))
+	f, err := os.OpenFile(d.path, os.O_RDWR, 0)
+	require.NoError(t, err)
+	defer f.Close()
+	var flags [2]byte
+	_, err = f.ReadAt(flags[:], offset)
+	require.NoError(t, err)
+	restored := false
+	defer func() {
+		if !restored {
+			_, err := f.WriteAt(flags[:], offset)
+			require.NoError(t, err)
+		}
+	}()
+	_, err = f.WriteAt([]byte{0xff, 0xff}, offset)
+	require.NoError(t, err)
+	res, err := d.Compact(t.Context(), db.CompactOptions{CheckFragmentation: true})
+	require.ErrorContains(t, err, "failed to inspect fragmentation: fragmentation scan: invalid page")
+	require.False(t, res.Compacted)
+	require.Zero(t, res.Duration)
+	require.NoFileExists(t, compactPath(d.path))
+	_, err = f.WriteAt(flags[:], offset)
+	require.NoError(t, err)
+	restored = true
+	checkTestDB(t, d, 0, 100, 100)
+	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
+}
+
+func TestCompactFragmentationRejectsUnproductiveCopy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	d, err := Open(path, 0600, &bolt.Options{PageSize: 4096, FreelistType: bolt.FreelistMapType})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, d.Close()) })
+	// Two records fit per 4 KiB page, leaving slack that repacking cannot remove.
+	require.NoError(t, d.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucket([]byte(testBucket))
+		if err != nil {
+			return err
+		}
+		for i := range 10000 {
+			if err := b.Put(testKey(i), bytes.Repeat([]byte("x"), 1400)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	res, err := d.Compact(t.Context(), db.CompactOptions{})
+	require.NoError(t, err)
+	require.True(t, res.Compacted)
+	original, err := os.ReadFile(path)
+	require.NoError(t, err)
+	res, err = d.Compact(t.Context(), db.CompactOptions{CheckFragmentation: true, MinReclaimBytes: 1, MinReclaimPercentFloor: 10})
+	require.NoError(t, err)
+	require.False(t, res.Compacted)
+	require.Contains(t, res.Reason, "compacted copy would reclaim")
+	require.Positive(t, res.Duration)
+	unchanged, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, original, unchanged)
+	require.NoFileExists(t, compactPath(path))
 	require.NoError(t, d.Update(func(*bolt.Tx) error { return nil }))
 }
 

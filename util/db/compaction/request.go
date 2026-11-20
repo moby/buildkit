@@ -22,7 +22,13 @@ type Status struct {
 // Inspect observes policy state without advancing watermarks or requesting maintenance.
 func (s *Scheduler) Inspect() (Status, error) {
 	s.mu.Lock()
-	status := Status{Config: s.config, State: s.state, Active: s.active, Pending: s.pending, Manual: s.manual}
+	status := Status{
+		Config:  s.config,
+		State:   s.state,
+		Active:  s.active,
+		Pending: s.pending,
+		Manual:  s.manual,
+	}
 	s.mu.Unlock()
 	var err error
 	status.Stats, err = s.stats()
@@ -35,9 +41,10 @@ type Outcome struct {
 }
 
 type Request struct {
-	ctx    context.Context
-	events chan string
-	done   chan Outcome
+	ctx                context.Context
+	events             chan string
+	done               chan Outcome
+	checkFragmentation bool
 }
 
 func (r *Request) Events() <-chan string {
@@ -51,7 +58,8 @@ func (r *Request) Done() <-chan Outcome {
 // Request bypasses the automatic write interval and size watermark for one
 // cancellable attempt after an idle period.
 // It never consumes automatic retries or forces writers to wait for completion.
-func (s *Scheduler) Request(ctx context.Context) (*Request, error) {
+// checkFragmentation inspects occupied pages before deciding whether to copy.
+func (s *Scheduler) Request(ctx context.Context, checkFragmentation bool) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := context.Cause(ctx); err != nil {
@@ -63,7 +71,12 @@ func (s *Scheduler) Request(ctx context.Context) (*Request, error) {
 	if s.manual || s.attempt != nil {
 		return nil, ErrBusy
 	}
-	r := &Request{ctx: ctx, events: make(chan string, 8), done: make(chan Outcome, 1)}
+	r := &Request{
+		ctx:                ctx,
+		events:             make(chan string, 8),
+		done:               make(chan Outcome, 1),
+		checkFragmentation: checkFragmentation,
+	}
 	s.manual = true
 	s.metrics.wait(true, true)
 	s.requests <- r
@@ -101,7 +114,13 @@ func (s *Scheduler) runRequest(r *Request, checkpoint <-chan time.Time) {
 				s.metrics.wait(true, false)
 				writes := s.state.Writes
 				s.mu.Unlock()
-				result, err := s.backend.Compact(ctx, db.CompactOptions{MinReclaimBytes: s.config.MinReclaimBytes, MinReclaimPercent: s.config.MinReclaimPercent, MinReclaimPercentFloor: s.config.MinReclaimPercentFloor, Progress: r.events})
+				result, err := s.backend.Compact(ctx, db.CompactOptions{
+					MinReclaimBytes:        s.config.MinReclaimBytes,
+					MinReclaimPercent:      s.config.MinReclaimPercent,
+					MinReclaimPercentFloor: s.config.MinReclaimPercentFloor,
+					CheckFragmentation:     r.checkFragmentation,
+					Progress:               r.events,
+				})
 				cause := context.Cause(ctx)
 				<-capacity
 				outcome.Result = result
