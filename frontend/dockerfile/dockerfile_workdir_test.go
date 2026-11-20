@@ -247,3 +247,52 @@ RUN (icacls \mydir | findstr "testuser" >nul) || exit /b 1
 	}, nil)
 	require.NoError(t, err)
 }
+
+func testWorkdirSourceDateEpochExistingParent(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=42
+FROM scratch AS base
+WORKDIR /monorepo
+WORKDIR /monorepo/app
+FROM scratch
+COPY --from=base /monorepo /monorepo
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Output: fixedWriteCloser(outW),
+		}},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 1)
+	layer := readOCILayerMap(t, dt, mfst.Layers[0])
+	for _, p := range []string{"monorepo/", "monorepo/app/"} {
+		item, ok := layer[p]
+		require.True(t, ok, "%s not found in %v", p, layer)
+		require.Equal(t, int64(42), item.Header.ModTime.Unix(), "mtime of %s", p)
+	}
+}

@@ -26,6 +26,49 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
+// existingParentModTime returns the deepest directory inside root at (when
+// includeSelf is true) or above p that already exists before a file action
+// runs, along with its modification time. Creating or replacing a child entry
+// updates the directory's mtime to wall-clock time; actions with an explicit
+// timestamp restore it afterwards so pre-existing parents stay deterministic.
+func existingParentRel(root, p string, includeSelf bool) (string, os.FileInfo, error) {
+	root = filepath.Clean(root)
+	cur := filepath.Clean(p)
+	if !includeSelf {
+		cur = filepath.Dir(cur)
+	}
+	for {
+		rel, relErr := filepath.Rel(root, cur)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			break
+		}
+		fi, err := snapshotDirInfo(cur)
+		if err != nil {
+			return "", nil, err
+		}
+		if fi != nil {
+			return rel, fi, nil
+		}
+		next := filepath.Dir(cur)
+		if next == cur {
+			break
+		}
+		cur = next
+	}
+	return "", nil, nil
+}
+
+func restoreDirModTime(root, rel string, prevFi os.FileInfo) error {
+	if rel == "" || prevFi == nil {
+		return nil
+	}
+	p, err := fs.RootPath(root, filepath.Join("/", rel))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(restoreModTimeOnly(p, prevFi))
+}
+
 func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
@@ -44,8 +87,23 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 		return err
 	}
 
+	tm := timestampToTime(action.Timestamp)
+	var parentRel string
+	var parentFi os.FileInfo
+	if tm != nil {
+		if _, statErr := os.Lstat(p); statErr != nil {
+			if !errors.Is(statErr, os.ErrNotExist) && !errors.Is(statErr, syscall.ENOTDIR) {
+				return errors.WithStack(statErr)
+			}
+			parentRel, parentFi, err = existingParentRel(d, p, false)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if action.MakeParents {
-		if _, err := copy.MkdirAll(p, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp)); err != nil {
+		if _, err := copy.MkdirAll(p, os.FileMode(action.Mode)&0777, ch, tm); err != nil {
 			return err
 		}
 	} else {
@@ -58,12 +116,12 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 		if err := copy.Chown(p, nil, ch); err != nil {
 			return errors.WithStack(err)
 		}
-		if err := copy.Utimes(p, timestampToTime(action.Timestamp)); err != nil {
+		if err := copy.Utimes(p, tm); err != nil {
 			return errors.WithStack(err)
 		}
 	}
 
-	return nil
+	return restoreDirModTime(d, parentRel, parentFi)
 }
 
 func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *user.IdentityMapping) (err error) {
@@ -85,6 +143,16 @@ func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *use
 		return err
 	}
 
+	tm := timestampToTime(action.Timestamp)
+	var parentRel string
+	var parentFi os.FileInfo
+	if tm != nil {
+		parentRel, parentFi, err = existingParentRel(d, newpath, false)
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := os.Symlink(action.Oldpath, newpath); err != nil {
 		return errors.WithStack(err)
 	}
@@ -93,11 +161,11 @@ func symlink(d string, action *pb.FileActionSymlink, user *copy.User, idmap *use
 		return errors.WithStack(err)
 	}
 
-	if err := copy.Utimes(newpath, timestampToTime(action.Timestamp)); err != nil {
+	if err := copy.Utimes(newpath, tm); err != nil {
 		return errors.WithStack(err)
 	}
 
-	return nil
+	return restoreDirModTime(d, parentRel, parentFi)
 }
 
 func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *user.IdentityMapping) (err error) {
@@ -124,7 +192,20 @@ func mkfile(d string, action *pb.FileActionMkFile, user *copy.User, idmap *user.
 		return err
 	}
 
-	return replaceWithFile(p, action.Data, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp))
+	tm := timestampToTime(action.Timestamp)
+	var parentRel string
+	var parentFi os.FileInfo
+	if tm != nil {
+		parentRel, parentFi, err = existingParentRel(d, p, false)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := replaceWithFile(p, action.Data, os.FileMode(action.Mode)&0777, ch, tm); err != nil {
+		return err
+	}
+	return restoreDirModTime(d, parentRel, parentFi)
 }
 
 // replaceWithFile writes dt to a new file next to p and renames it into place.
@@ -314,16 +395,52 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 		}
 	}
 
+	tm := timestampToTime(action.Timestamp)
+
 	for _, s := range m {
+		var targetRel, containerRel string
+		var targetFi, containerFi os.FileInfo
+		if tm != nil {
+			dstFull, rootErr := fs.RootPath(dest, filepath.Join("/", destPath))
+			if rootErr != nil {
+				return errors.WithStack(rootErr)
+			}
+			fi, statErr := snapshotDirInfo(dstFull)
+			if statErr != nil {
+				return statErr
+			}
+			if fi != nil {
+				rel, relErr := filepath.Rel(filepath.Clean(dest), filepath.Clean(dstFull))
+				if relErr == nil {
+					targetRel, targetFi = rel, fi
+				}
+			}
+			containerRel, containerFi, err = existingParentRel(dest, dstFull, false)
+			if err != nil {
+				return err
+			}
+		}
+
 		if action.AttemptUnpackDockerCompatibility {
-			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), idmap); err != nil {
+			if ok, err := unpack(src, s, dest, destPath, ch, u, tm, idmap); err != nil {
 				return errors.WithStack(err)
 			} else if ok {
+				if targetFi == nil {
+					if err := restoreDirModTime(dest, containerRel, containerFi); err != nil {
+						return err
+					}
+				}
 				continue
 			}
 		}
 		if err := platformCopy(ctx, src, s, dest, destPath, opt...); err != nil {
 			return errors.WithStack(err)
+		}
+		if err := restoreDirModTime(dest, targetRel, targetFi); err != nil {
+			return err
+		}
+		if err := restoreDirModTime(dest, containerRel, containerFi); err != nil {
+			return err
 		}
 	}
 
