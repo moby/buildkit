@@ -366,3 +366,11 @@ func testResult(v string) Result {
 		value: v,
 	}
 }
+
+func unwrap(res Result) string {
+	r, ok := res.Sys().(*dummyResult)
+	if !ok {
+		return "unwrap-error"
+	}
+	return r.value
+}
