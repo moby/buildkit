@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	digest "github.com/opencontainers/go-digest"
@@ -567,6 +568,53 @@ func TestCopyLinkChownByName(t *testing.T) {
 			}
 			require.ErrorContains(t, err, tc.err)
 			require.ErrorContains(t, err, "--link")
+		})
+	}
+}
+
+func TestCopyCreatedDirsSourceDateEpoch(t *testing.T) {
+	t.Parallel()
+
+	caps := pb.Caps.CapSet(pb.Caps.All())
+	for _, tc := range []struct {
+		name     string
+		df       string
+		caps     *apicaps.CapSet
+		expected int64
+		onlyDirs bool
+	}{
+		{name: "no epoch", df: "FROM scratch\nCOPY a /b/c/\n", caps: &caps, expected: -1},
+		{name: "global arg", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nCOPY a /b/c/\n", caps: &caps, expected: 42e9, onlyDirs: true},
+		{name: "add url", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nADD --unpack https://example.com/a.tar.gz /b/\n", caps: &caps, expected: 42e9, onlyDirs: true},
+		{name: "link", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nCOPY --link a /b/c/\n", caps: &caps, expected: 42e9, onlyDirs: true},
+		{name: "unsupported", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nCOPY a /b/c/\n", expected: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			res, err := Dockerfile2LLB(appcontext.Context(), []byte(tc.df), ConvertOpt{LLBCaps: tc.caps})
+			require.NoError(t, err)
+			def, err := res.State.Marshal(t.Context())
+			require.NoError(t, err)
+
+			var found bool
+			for _, dt := range def.Def {
+				var op pb.Op
+				require.NoError(t, op.UnmarshalVT(dt))
+				f, ok := op.Op.(*pb.Op_File)
+				if !ok {
+					continue
+				}
+				for _, a := range f.File.Actions {
+					c, ok := a.Action.(*pb.FileAction_Copy)
+					if !ok {
+						continue
+					}
+					found = true
+					require.Equal(t, tc.expected, c.Copy.Timestamp)
+					require.Equal(t, tc.onlyDirs, c.Copy.TimestampOnlyCreatedDirs)
+				}
+			}
+			require.True(t, found)
 		})
 	}
 }

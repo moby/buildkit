@@ -3,9 +3,11 @@ package dockerfile
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1084,4 +1086,83 @@ func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descript
 	var img ocispecs.Image
 	require.NoError(t, json.Unmarshal(imgDt, &img))
 	return desc, manifest, img
+}
+
+// testSourceDateEpochCopyCreatedDirs checks that the directories created
+// implicitly by COPY and ADD get SOURCE_DATE_EPOCH as their timestamps, while
+// copied and unpacked files keep their own.
+func testSourceDateEpochCopyCreatedDirs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	srcTime := time.Unix(1000, 0)
+
+	// like a .crate: a tarball without directory entries
+	buf := &bytes.Buffer{}
+	gw := gzip.NewWriter(buf)
+	tw := tar.NewWriter(gw)
+	for _, name := range []string{"c-1.0/Cargo.toml", "c-1.0/src/lib.rs"} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0644, Typeflag: tar.TypeReg, ModTime: srcTime}))
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gw.Close())
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=42
+FROM scratch
+ADD c-1.0.tar.gz /deps/
+COPY foo /x/y/
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("c-1.0.tar.gz", buf.Bytes(), 0600),
+		fstest.CreateFile("foo", []byte("foo"), 0600),
+		fstest.Chtimes("foo", srcTime, srcTime),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := filepath.Join(t.TempDir(), "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Output: fixedWriteCloser(outW),
+		}},
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(out)
+	require.NoError(t, err)
+	mfst := readOCIManifest(t, dt)
+	require.Len(t, mfst.Layers, 2)
+	entries := map[string]*testutil.TarItem{}
+	for _, l := range mfst.Layers {
+		maps.Copy(entries, readOCILayerMap(t, dt, l))
+	}
+
+	expected := map[string]int64{
+		"deps/":                 42,
+		"deps/c-1.0/":           42,
+		"deps/c-1.0/src/":       42,
+		"deps/c-1.0/Cargo.toml": srcTime.Unix(),
+		"deps/c-1.0/src/lib.rs": srcTime.Unix(),
+		"x/":                    42,
+		"x/y/":                  42,
+		"x/y/foo":               srcTime.Unix(),
+	}
+	for p, tm := range expected {
+		item, ok := entries[p]
+		require.True(t, ok, "%s not found", p)
+		require.Equal(t, tm, item.Header.ModTime.Unix(), "mtime of %s", p)
+	}
 }

@@ -26,6 +26,24 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
+// mkdirAll is copy.MkdirAll making sure that all the directories it creates
+// get tm as their timestamps. copy.MkdirAll sets tm on each directory right
+// after creating it, but creating the next directory updates the
+// modification time of its parent again.
+func mkdirAll(p string, mode os.FileMode, ch copy.Chowner, tm *time.Time) ([]string, error) {
+	createdDirs, err := copy.MkdirAll(p, mode, ch, tm)
+	if err != nil || tm == nil {
+		return createdDirs, err
+	}
+	// setting the timestamps of a directory doesn't change its parent's
+	for _, d := range createdDirs {
+		if err := copy.Utimes(d, tm); err != nil {
+			return nil, errors.WithStack(err)
+		}
+	}
+	return createdDirs, nil
+}
+
 func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
@@ -45,7 +63,7 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 	}
 
 	if action.MakeParents {
-		if _, err := copy.MkdirAll(p, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp)); err != nil {
+		if _, err := mkdirAll(p, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp)); err != nil {
 			return err
 		}
 	} else {
@@ -274,7 +292,11 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 			ci.IncludePatterns = action.IncludePatterns
 			ci.ExcludePatterns = action.ExcludePatterns
 			ci.Chown = ch
-			ci.Utime = timestampToTime(action.Timestamp)
+			if action.TimestampOnlyCreatedDirs {
+				ci.CreatedDirsUtime = timestampToTime(action.Timestamp)
+			} else {
+				ci.Utime = timestampToTime(action.Timestamp)
+			}
 			if action.ModeStr != "" {
 				ci.ModeStr = action.ModeStr
 			} else if m := int(action.Mode); m != -1 {
@@ -316,7 +338,7 @@ func docopy(ctx context.Context, src, dest string, action *pb.FileActionCopy, u 
 
 	for _, s := range m {
 		if action.AttemptUnpackDockerCompatibility {
-			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), idmap); err != nil {
+			if ok, err := unpack(src, s, dest, destPath, ch, u, timestampToTime(action.Timestamp), action.TimestampOnlyCreatedDirs, idmap); err != nil {
 				return errors.WithStack(err)
 			} else if ok {
 				continue

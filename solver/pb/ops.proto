@@ -374,6 +374,11 @@ message FileActionCopy {
 	// required paths that must be included in the copy. This is only used when
 	// include_patterns has at least one pattern.
 	repeated string required_paths = 16;
+	// timestampOnlyCreatedDirs makes timestamp only apply to the directories
+	// created implicitly by the copy: the missing parents of dest and the
+	// directories of an unpacked archive that have no entry in it. Copied
+	// files and directories keep their own timestamps.
+	bool timestampOnlyCreatedDirs = 17;
 }
 
 message FileActionMkFile {
