@@ -88,14 +88,16 @@ mkdir -p "$testReportsDir"
 testReportsVol="-v $testReportsDir:/testreports"
 gotestsumArgs="--format=standard-verbose --jsonfile=/testreports/go-test-report$TEST_REPORT_SUFFIX.json --junitfile=/testreports/junit-report$TEST_REPORT_SUFFIX.xml"
 gotestArgs="-mod=vendor"
+frontendBuildFlags="$GOBUILDFLAGS"
+frontendTarget="release"
 
 if [[ "$GOBUILDFLAGS" == *"-race"* ]]; then
   if [ "$CGO_ENABLED" != "1" ]; then
     echo >&2 "go race detector requires CGO_ENABLED=1"
     exit 1
   fi
-  # force buildkitd to halt on detected race conditions, which will cause the tests to fail
-  export GORACE="halt_on_error=1"
+  gotestArgs="$gotestArgs -race"
+  frontendTarget="release-race"
   export VERIFYFLAGS="" # prevent -static verification
 fi
 
@@ -196,6 +198,8 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     buildxCmd build $cacheFromFlags \
       --build-arg "CHANNEL=$release" --build-arg "BUILDKIT_CONTEXT_KEEP_GIT_DIR=1" \
+      --build-arg "CGO_ENABLED=${CGO_ENABLED:-0}" --build-arg "GOBUILDFLAGS=$frontendBuildFlags" \
+      --target "$frontendTarget" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
       --output "type=oci,dest=$tarout" \
       $currentcontext

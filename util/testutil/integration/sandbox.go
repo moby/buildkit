@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/util/bklog"
@@ -21,8 +20,6 @@ import (
 )
 
 const buildkitdConfigFile = "buildkitd.toml"
-
-const maxSandboxTimeout = 5 * time.Minute
 
 type sandbox struct {
 	Backend
