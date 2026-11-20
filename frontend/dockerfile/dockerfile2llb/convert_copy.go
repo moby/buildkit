@@ -3,6 +3,7 @@ package dockerfile2llb
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path"
@@ -10,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dfgitutil"
@@ -33,6 +35,7 @@ type copyConfig struct {
 	cmdToPrint      fmt.Stringer
 	chown           string
 	chmod           string
+	mtime           string
 	link            bool
 	keepGitDir      *bool
 	checksum        string
@@ -87,6 +90,23 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 		}
 	}
 
+	var mkfileOpt []llb.MkfileOption
+	if cfg.mtime != "" {
+		targetOS := cfg.opt.targetPlatform.OS
+		if d.platform != nil {
+			targetOS = d.platform.OS
+		}
+		if targetOS == "windows" {
+			return errors.New("--mtime is not supported on Windows")
+		}
+		tm, err := parseMtime(cfg.mtime)
+		if err != nil {
+			return err
+		}
+		copyOpt = append(copyOpt, llb.WithCreatedTime(tm))
+		mkfileOpt = append(mkfileOpt, llb.WithCreatedTime(tm))
+	}
+
 	if cfg.checksum != "" {
 		if !cfg.isAddCommand {
 			return errors.New("checksum can't be specified for COPY")
@@ -114,6 +134,9 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 	}
 	if cfg.chmod != "" {
 		commitMessage.WriteString(" " + "--chmod=" + cfg.chmod)
+	}
+	if cfg.mtime != "" {
+		commitMessage.WriteString(" " + "--mtime=" + cfg.mtime)
 	}
 
 	platform := cfg.opt.targetPlatform
@@ -309,7 +332,7 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 			return errors.Wrap(err, "removing drive letter")
 		}
 		st := llb.Scratch().File(
-			llb.Mkfile(f, 0644, []byte(data)),
+			llb.Mkfile(f, 0644, []byte(data), mkfileOpt...),
 			dockerui.WithInternalName("preparing inline document"),
 			llb.Platform(*d.platform),
 		)
@@ -385,6 +408,38 @@ func chownByName(chown string) bool {
 		return false
 	}
 	return (co.User != nil && co.User.Name != "") || (co.Group != nil && co.Group.Name != "")
+}
+
+var (
+	minUnixNanoTime = time.Unix(0, math.MinInt64).UTC()
+	maxUnixNanoTime = time.Unix(0, math.MaxInt64).UTC()
+)
+
+func parseMtime(v string) (time.Time, error) {
+	if rawSec, ok := strings.CutPrefix(v, "@"); ok {
+		sec, err := strconv.ParseInt(rawSec, 10, 64)
+		if err != nil {
+			return time.Time{}, errors.Errorf("invalid mtime parameter: %q, expected Unix timestamp or RFC3339 timestamp", v)
+		}
+		return validateMtimeRange(v, time.Unix(sec, 0).UTC())
+	}
+	if sec, err := strconv.ParseInt(v, 10, 64); err == nil {
+		return validateMtimeRange(v, time.Unix(sec, 0).UTC())
+	}
+	if tm, err := time.Parse(time.RFC3339Nano, v); err == nil {
+		return validateMtimeRange(v, tm.UTC())
+	}
+	return time.Time{}, errors.Errorf("invalid mtime parameter: %q, expected Unix timestamp or RFC3339 timestamp", v)
+}
+
+func validateMtimeRange(raw string, tm time.Time) (time.Time, error) {
+	if tm.Before(minUnixNanoTime) || tm.After(maxUnixNanoTime) {
+		return time.Time{}, errors.Errorf("invalid mtime parameter: %q out of supported range [%s, %s]", raw, minUnixNanoTime.Format(time.RFC3339Nano), maxUnixNanoTime.Format(time.RFC3339Nano))
+	}
+	if tm.UnixNano() == -1 {
+		return time.Time{}, errors.Errorf("invalid mtime parameter: %q (-1ns before Unix epoch is reserved)", raw)
+	}
+	return tm, nil
 }
 
 func containsWildcards(name string) bool {

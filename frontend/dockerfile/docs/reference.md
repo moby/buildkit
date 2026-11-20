@@ -1796,6 +1796,7 @@ The available `[OPTIONS]` are:
 | [`--link`](#copy---link)           | 1.4                        |
 | [`--parents`](#copy---parents)     | 1.20                       |
 | [`--exclude`](#copy---exclude)     | 1.19                       |
+| [`--mtime`](#copy---mtime)         | labs                       |
 
 The `COPY` instruction copies new files or directories from `<src>` and adds
 them to the filesystem of the image at the path `<dest>`. Files and directories
@@ -2211,6 +2212,36 @@ To add all files starting with "hom", excluding files with either `.txt` or `.md
 FROM scratch
 
 COPY --exclude=*.txt --exclude=*.md hom* /mydir/
+```
+
+### COPY --mtime
+
+> [!NOTE]
+> Not yet available in stable syntax, use [`docker/dockerfile:1-labs`](#syntax)
+> version.
+
+```dockerfile
+COPY [--mtime=<timestamp>] <src> ... <dest>
+```
+
+The `--mtime` flag sets the modification timestamp of copied files, symlinks,
+and any destination directories created by the instruction (not supported on
+Windows targets).
+
+`<timestamp>` accepts:
+
+- Unix seconds since the epoch (`1704067200` or `@1704067200`)
+- An RFC 3339 timestamp (`2024-01-01T00:00:00Z`)
+- An empty value after build-argument expansion, which leaves source timestamps unchanged
+
+Passing `$SOURCE_DATE_EPOCH` pins copied tree timestamps in the intermediate
+layer itself, before export:
+
+```dockerfile
+# syntax=docker/dockerfile:1-labs
+FROM scratch
+ARG SOURCE_DATE_EPOCH
+COPY --parents --mtime=$SOURCE_DATE_EPOCH src/ /monorepo/
 ```
 
 ## ENTRYPOINT

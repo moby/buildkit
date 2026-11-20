@@ -297,6 +297,7 @@ type CopyCommand struct {
 	From            string
 	Chown           string
 	Chmod           string
+	Mtime           string
 	Link            bool
 	ExcludePatterns []string
 	Parents         bool // parents preserves directory structure
@@ -314,6 +315,12 @@ func (c *CopyCommand) Expand(expander SingleWordExpander) error {
 		return err
 	}
 	c.Chmod = expandedChmod
+
+	expandedMtime, err := expander(c.Mtime)
+	if err != nil {
+		return err
+	}
+	c.Mtime = expandedMtime
 
 	return c.SourcesAndDest.Expand(expander)
 }
