@@ -16,6 +16,15 @@ func (c zstdType) Compress(ctx context.Context, comp Config) (compressorFunc Com
 		if comp.Level != nil {
 			opts = append(opts, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(*comp.Level)))
 		}
+		if comp.Threads != nil {
+			// Split the stream into independently compressed jobs that are
+			// encoded in parallel, like `zstd -T<n>`. The encoder falls back
+			// to sequential encoding when the concurrency resolves to 1.
+			opts = append(opts,
+				zstd.WithEncoderConcurrency(*comp.Threads),
+				zstd.WithConcurrentBlocks(true),
+			)
+		}
 		return zstd.NewWriter(dest, opts...)
 	}, nil
 }
