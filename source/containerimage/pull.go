@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/remotes"
@@ -156,6 +157,18 @@ func (p *puller) CacheKey(ctx context.Context, jobCtx solver.JobContext, index i
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for i, desc := range p.manifest.Descriptors {
+				// Remote snapshotters can fetch layers independently of the resolver.
+				// Require local blobs and omit remote snapshot hints in never mode.
+				if p.Mode == resolver.ResolveModeNever {
+					if _, err := p.ContentStore.Info(ctx, desc.Digest); err != nil {
+						return struct{}{}, errors.Wrapf(err, "content %s is not available locally (pulling is disabled)", desc.Digest)
+					}
+					p.descHandlers[desc.Digest] = &cache.DescHandler{
+						Provider: func(session.Group) content.Provider { return p.ContentStore },
+						Progress: progressController,
+					}
+					continue
+				}
 				labels := snapshots.FilterInheritedLabels(desc.Annotations)
 				if labels == nil {
 					labels = make(map[string]string)

@@ -13,6 +13,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestImageResolveModeNever(t *testing.T) {
+	def, err := Image("alpine", ResolveModeNever).Marshal(t.Context())
+	require.NoError(t, err)
+	op := &pb.Op{}
+	require.NoError(t, op.UnmarshalVT(def.Def[0]))
+	require.Equal(t, pb.AttrImageResolveModeNever, op.GetSource().Attrs[pb.AttrImageResolveMode])
+	md := def.Metadata[digest.FromBytes(def.Def[0])]
+	require.True(t, md.Caps[pb.CapSourceImageResolveModeNever])
+
+	caps := pb.Caps.All()
+	for _, cap := range caps {
+		if cap.ID == string(pb.CapSourceImageResolveModeNever) {
+			cap.Enabled = false
+		}
+	}
+	unsupported := pb.Caps.CapSet(caps)
+	err = unsupported.Supports(pb.CapSourceImageResolveModeNever)
+	require.ErrorContains(t, err, string(pb.CapSourceImageResolveModeNever))
+}
+
 func TestImageMetaResolver(t *testing.T) {
 	t.Parallel()
 	tr := &testResolver{

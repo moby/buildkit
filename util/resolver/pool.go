@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -244,6 +245,11 @@ func (r *Resolver) ResolveLocal(ctx context.Context, ref string) (string, ocispe
 
 // Fetcher returns a new fetcher for the provided reference.
 func (r *Resolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, error) {
+	if r.mode == ResolveModeNever {
+		return remotes.FetcherFunc(func(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
+			return nil, errors.Wrapf(cerrdefs.ErrNotFound, "content %s for %s is not available locally (pulling is disabled)", desc.Digest, ref)
+		}), nil
+	}
 	if r.handler.counter.Load() == 0 {
 		r.Resolve(ctx, ref)
 	}
@@ -252,6 +258,10 @@ func (r *Resolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, er
 
 // Resolve attempts to resolve the reference into a name and descriptor.
 func (r *Resolver) Resolve(ctx context.Context, ref string) (string, ocispecs.Descriptor, error) {
+	if r.mode == ResolveModeNever {
+		name, desc, err := r.ResolveLocal(ctx, ref)
+		return name, desc, errors.Wrapf(err, "image %s is not available locally (pulling is disabled)", ref)
+	}
 	if r.mode == ResolveModePreferLocal && r.is != nil {
 		if ref, desc, err := r.ResolveLocal(ctx, ref); err == nil {
 			return ref, desc, nil
@@ -303,6 +313,7 @@ const (
 	ResolveModeDefault ResolveMode = iota
 	ResolveModeForcePull
 	ResolveModePreferLocal
+	ResolveModeNever
 )
 
 func (r ResolveMode) String() string {
@@ -313,6 +324,8 @@ func (r ResolveMode) String() string {
 		return pb.AttrImageResolveModeForcePull
 	case ResolveModePreferLocal:
 		return pb.AttrImageResolveModePreferLocal
+	case ResolveModeNever:
+		return pb.AttrImageResolveModeNever
 	default:
 		return ""
 	}
@@ -326,6 +339,8 @@ func ParseImageResolveMode(v string) (ResolveMode, error) {
 		return ResolveModeForcePull, nil
 	case pb.AttrImageResolveModePreferLocal:
 		return ResolveModePreferLocal, nil
+	case pb.AttrImageResolveModeNever:
+		return ResolveModeNever, nil
 	default:
 		return 0, errors.Errorf("invalid resolvemode: %s", v)
 	}

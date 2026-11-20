@@ -85,6 +85,9 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		imgOpt := []llb.ImageOption{
 			llb.WithCustomName("[context " + nc.nameWithPlatform + "] " + ref),
 		}
+		if opt.ResolveMode == pb.AttrImageResolveModeNever {
+			imgOpt = append(imgOpt, llb.ResolveModeNever)
+		}
 		if opt.Platform != nil {
 			imgOpt = append(imgOpt, llb.Platform(*opt.Platform))
 		}
