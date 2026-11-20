@@ -971,7 +971,7 @@ func newController(ctx context.Context, c *cli.Command, cfg *config.Config, mp m
 		Frontends:                 frontends,
 		ResolveCacheExporterFuncs: remoteCacheExporterFuncs,
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
-		CacheManager:              solver.NewCacheManager(context.TODO(), "local", cacheStorage, worker.NewCacheResultStorage(wc)),
+		CacheManager:              solver.NewKeyValueCacheManager(context.TODO(), "local", cacheStorage, worker.NewCacheResultStorage(wc)),
 		Entitlements:              cfg.Entitlements,
 		TraceCollector:            tc,
 		MeterProvider:             mp,
