@@ -49,6 +49,7 @@ var lintTests = integration.TestFuncs(
 	testFromPlatformFlagConstDisallowed,
 	testCopyIgnoredFiles,
 	testCopyIgnoredFileContextRoot,
+	testCopyIgnoredFileNegation,
 	testDefinitionDescription,
 	testExposeProtoCasing,
 	testExposeInvalidFormat,
@@ -275,6 +276,132 @@ COPY . .
 				},
 			},
 		})
+	})
+}
+
+func testCopyIgnoredFileNegation(t *testing.T, sb integration.Sandbox) {
+	contextFiles := []fstest.Applier{
+		fstest.CreateDir("sub", 0o755),
+		fstest.CreateFile("sub/a.txt", []byte("one"), 0o600),
+		fstest.CreateFile("sub/b.txt", []byte("two"), 0o600),
+		fstest.CreateFile("other.txt", []byte("three"), 0o600),
+		fstest.CreateDir("su.b", 0o755),
+		fstest.CreateFile("su.b/keep.txt", []byte("four"), 0o600),
+	}
+
+	// A negation that cannot re-include the copied path must not disable the
+	// rule for that path.
+	t.Run("unrelated", func(t *testing.T) {
+		dockerfile := []byte(`
+FROM scratch
+COPY sub/a.txt /
+`)
+		for _, tc := range []struct {
+			name         string
+			dockerignore []byte
+		}{
+			{
+				name:         "sibling file in the excluded directory",
+				dockerignore: []byte("sub\n!sub/b.txt\n"),
+			},
+			{
+				name:         "different directory",
+				dockerignore: []byte("sub\n!other.txt\n"),
+			},
+			{
+				name:         "nonexistent path",
+				dockerignore: []byte("sub\n!nope/missing.txt\n"),
+			},
+			{
+				name:         "negation before the exclusion",
+				dockerignore: []byte("!sub/b.txt\nsub\n"),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				files := append([]fstest.Applier{
+					fstest.CreateFile("Dockerfile", dockerfile, 0o600),
+					fstest.CreateFile(".dockerignore", tc.dockerignore, 0o600),
+				}, contextFiles...)
+				checkLinterWarnings(t, sb, &lintTestParams{
+					TmpDir:               integration.Tmpdir(t, files...),
+					Dockerfile:           dockerfile,
+					BuildErrLocation:     3,
+					StreamBuildErrRegexp: regexp.MustCompile(`failed to solve: failed to compute cache key: failed to calculate checksum of ref [^\s]+ "/sub/a.txt": not found`),
+					Warnings: []expectedLintWarning{
+						{
+							RuleName:    "CopyIgnoredFile",
+							Description: "Attempting to Copy file that is excluded by .dockerignore",
+							Detail:      `Attempting to Copy file "sub/a.txt" that is excluded by .dockerignore`,
+							URL:         "https://docs.docker.com/go/dockerfile/rule/copy-ignored-file/",
+							Level:       1,
+							Line:        3,
+						},
+					},
+				})
+			})
+		}
+	})
+
+	// A negation that re-includes a path below the copied path means the copy
+	// still has content, so the rule must stay silent.
+	t.Run("reincluded", func(t *testing.T) {
+		for _, tc := range []struct {
+			name         string
+			dockerfile   []byte
+			dockerignore []byte
+		}{
+			{
+				name: "copy of the excluded directory",
+				dockerfile: []byte(`
+FROM scratch
+COPY sub /sub
+`),
+			},
+			{
+				name: "copy of the context root",
+				dockerfile: []byte(`
+FROM scratch
+COPY . /ctx
+`),
+			},
+			{
+				name: "copy of the negated file",
+				dockerfile: []byte(`
+FROM scratch
+COPY sub/a.txt /
+`),
+			},
+			{
+				name: "wildcard copy from the excluded directory",
+				dockerfile: []byte(`
+FROM scratch
+COPY sub/*.txt /
+`),
+			},
+			{
+				name: "escaped negation",
+				dockerfile: []byte(`
+FROM scratch
+COPY su.b /sub
+`),
+				dockerignore: []byte("su.b\n!su\\.b/keep.txt\n"),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				dockerignore := tc.dockerignore
+				if dockerignore == nil {
+					dockerignore = []byte("sub\n!sub/a.txt\n")
+				}
+				files := append([]fstest.Applier{
+					fstest.CreateFile("Dockerfile", tc.dockerfile, 0o600),
+					fstest.CreateFile(".dockerignore", dockerignore, 0o600),
+				}, contextFiles...)
+				checkLinterWarnings(t, sb, &lintTestParams{
+					TmpDir:     integration.Tmpdir(t, files...),
+					Dockerfile: tc.dockerfile,
+				})
+			})
+		}
 	})
 }
 
