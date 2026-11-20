@@ -237,6 +237,9 @@ func Image(ref string, opts ...ImageOption) State {
 		if info.resolveMode == ResolveModeForcePull {
 			addCap(&info.Constraints, pb.CapSourceImageResolveMode) // only require cap for security enforced mode
 		}
+		if info.resolveMode == ResolveModeNever {
+			addCap(&info.Constraints, pb.CapSourceImageResolveModeNever)
+		}
 	}
 
 	if info.RecordType != "" {
@@ -331,6 +334,7 @@ const (
 	ResolveModeDefault ResolveMode = iota
 	ResolveModeForcePull
 	ResolveModePreferLocal
+	ResolveModeNever
 )
 
 func (r ResolveMode) SetImageOption(ii *ImageInfo) {
@@ -345,6 +349,8 @@ func (r ResolveMode) String() string {
 		return pb.AttrImageResolveModeForcePull
 	case ResolveModePreferLocal:
 		return pb.AttrImageResolveModePreferLocal
+	case ResolveModeNever:
+		return pb.AttrImageResolveModeNever
 	default:
 		return ""
 	}

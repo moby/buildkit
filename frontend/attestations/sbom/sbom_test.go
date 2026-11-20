@@ -76,6 +76,19 @@ type testMetaResolver struct {
 	config []byte
 }
 
+func TestScannerResolveModeNever(t *testing.T) {
+	scanner, err := CreateSBOMScanner(t.Context(), testMetaResolver{
+		config: []byte(`{"config":{"Cmd":["scan"]}}`),
+	}, "example.com/scanner:latest", ocispecs.Platform{OS: "linux", Architecture: "amd64"}, sourceresolver.Opt{
+		ImageOpt: &sourceresolver.ResolveImageOpt{ResolveMode: "never"},
+	}, nil)
+	require.NoError(t, err)
+	att, err := scanner(t.Context(), "test", llb.Scratch(), nil)
+	require.NoError(t, err)
+	op := scannerImageSourceOp(t, att.Ref)
+	require.Equal(t, "never", op.GetSource().Attrs[pb.AttrImageResolveMode])
+}
+
 func (r testMetaResolver) ResolveSourceMetadata(ctx context.Context, op *pb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
 	return &sourceresolver.MetaResponse{
 		Op: op,

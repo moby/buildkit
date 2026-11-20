@@ -83,7 +83,11 @@ func CreateSBOMScanner(ctx context.Context, resolver sourceresolver.MetaResolver
 			runOpts = append(runOpts, llb.AddEnv(k, v))
 		}
 
-		scannerImage := llb.Image(scanner, llb.Platform(scannerPlatform))
+		imageOpts := []llb.ImageOption{llb.Platform(scannerPlatform)}
+		if resolveOpt.ImageOpt != nil && resolveOpt.ImageOpt.ResolveMode == llb.ResolveModeNever.String() {
+			imageOpts = append(imageOpts, llb.ResolveModeNever)
+		}
+		scannerImage := llb.Image(scanner, imageOpts...)
 		runscan := scannerImage.Run(runOpts...)
 		tmpState, tmpMountOpt := scannerTmpMount(scannerImage, scannerPlatform)
 		runscan.AddMount("/tmp", tmpState, tmpMountOpt...)
