@@ -46,6 +46,10 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) base.WorkerOpt {
 	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", false, nil, "", "", nil)
 	require.NoError(t, err)
 
+	// Disable resource sampling so container deletion completes synchronously,
+	// before t.TempDir cleanup removes the executor's runc log directory.
+	require.NoError(t, workerOpt.ResourceMonitor.Close())
+
 	return workerOpt
 }
 
