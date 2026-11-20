@@ -205,6 +205,8 @@ func (rc *ResolvConf) AddOption(option string) {
 // use in a legacy network (one that has no internal resolver).
 //   - Remove loopback addresses inherited from the host's resolv.conf, because
 //     they'll only work in the host's namespace.
+//   - Remove IPv6 link-local addresses (e.g. "fe80::1%eth0"), for the same
+//     reason: the zone names a host interface.
 //   - Remove IPv6 addresses if !ipv6.
 //   - Add default nameservers if there are no addresses left.
 func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
@@ -214,7 +216,10 @@ func (rc *ResolvConf) TransformForLegacyNw(ipv6 bool) {
 	}
 	var filtered []netip.Addr
 	for _, addr := range rc.nameServers {
-		if !addr.IsLoopback() && (!addr.Is6() || ipv6) {
+		if addr.IsLoopback() || (addr.Is6() && addr.IsLinkLocalUnicast()) {
+			continue
+		}
+		if !addr.Is6() || ipv6 {
 			filtered = append(filtered, addr)
 		}
 	}
