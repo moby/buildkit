@@ -95,11 +95,7 @@ validate-all: test lint validate-vendor validate-generated-files validate-archut
 
 .PHONY: vendor
 vendor:
-	$(eval $@_TMP_OUT := $(shell mktemp -d -t buildkit-output.XXXXXXXXXX))
-	$(BUILDX_CMD) bake --set "*.output=type=local,dest=$($@_TMP_OUT)" vendor
-	rm -rf ./vendor
-	cp -R "$($@_TMP_OUT)"/out/* .
-	rm -rf "$($@_TMP_OUT)"/
+	$(BUILDX_CMD) bake --allow=buildx.local.delete vendor
 
 .PHONY: generated-files
 generated-files:
