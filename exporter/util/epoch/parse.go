@@ -3,6 +3,7 @@ package epoch
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/exporter"
@@ -71,6 +72,34 @@ func ParseSource(inp *exporter.Source, p *imageexptypes.Platform) (*time.Time, e
 		return epoch, nil
 	}
 	return nil, nil
+}
+
+// ParseMetadata returns the SOURCE_DATE_EPOCH set by the frontend in the
+// result metadata. If the frontend only set per-platform values, the earliest
+// one is returned, so the value is the same whatever the platforms' order.
+func ParseMetadata(meta map[string][]byte) (*time.Time, error) {
+	key := commonexptypes.ExporterEpochKey
+	if v, ok := meta[key]; ok {
+		epoch, err := parseTime("", string(v))
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH from frontend: %q", v)
+		}
+		return epoch, nil
+	}
+	var earliest *time.Time
+	for k, v := range meta {
+		if !strings.HasPrefix(k, key+"/") {
+			continue
+		}
+		epoch, err := parseTime("", string(v))
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid SOURCE_DATE_EPOCH from frontend: %q", v)
+		}
+		if epoch != nil && (earliest == nil || epoch.Before(*earliest)) {
+			earliest = epoch
+		}
+	}
+	return earliest, nil
 }
 
 func parseTime(key, value string) (*time.Time, error) {
