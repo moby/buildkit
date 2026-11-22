@@ -1002,9 +1002,9 @@ func validateDefinitionDescription(instruction string, argKeys []string, descCom
 	// A blank comment line only separates paragraphs; the description of the
 	// instruction is the last paragraph, which may sit above such a line.
 	descComment := ""
-	for i := len(descComments) - 1; i >= 0; i-- {
-		if descComments[i] != "" {
-			descComment = descComments[i]
+	for _, line := range slices.Backward(descComments) {
+		if line != "" {
+			descComment = line
 			break
 		}
 	}
