@@ -321,11 +321,11 @@ func Parse(rwc io.Reader) (*Result, error) {
 		}
 		if isComment(bytesRead) {
 			comment := strings.TrimSpace(string(bytesRead[1:]))
-			if comment == "" {
-				comments = nil
-			} else {
-				comments = append(comments, comment)
-			}
+			// A comment line with no text separates paragraphs of the doc comment
+			// above the next instruction instead of discarding what precedes it, so
+			// a description can be followed by an unrelated block such as a
+			// `renovate:` annotation.
+			comments = append(comments, comment)
 		}
 		var directiveOk bool
 		bytesRead, directiveOk, err = processLine(d, bytesRead, true)
