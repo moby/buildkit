@@ -87,7 +87,7 @@ RUN --mount=target=. \
   xx-go --wrap
   gopls-analyzers -list-analyzers
   # The flate sources are copied from Go and use a nonstandard generated marker.
-  go vet -vettool=/usr/bin/gopls-analyzers -verbose -exclude-generated -exclude='/util/compression/go126flate/' ./...
+  go vet -vettool=/usr/bin/gopls-analyzers -exclude-generated -exclude='/util/compression/go126flate/' ./...
 EOF
 
 FROM golang-base AS gopls-fix-run
@@ -102,7 +102,7 @@ RUN --mount=target=.,rw \
   set -ex
   xx-go --wrap
   mkdir /out
-  /usr/bin/gopls-analyzers -verbose -fix -exclude-generated -exclude='/util/compression/go126flate/' ./...
+  /usr/bin/gopls-analyzers -fix -exclude-generated -exclude='/util/compression/go126flate/' ./...
   for file in $(git status --porcelain | awk '/^ M/ {print $2}'); do
     mkdir -p /out/$(dirname $file)
     cp $file /out/$file
