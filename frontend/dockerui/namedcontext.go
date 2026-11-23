@@ -104,6 +104,7 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 			ImageOpt: &sourceresolver.ResolveImageOpt{
 				Platform:    opt.Platform,
 				ResolveMode: opt.ResolveMode,
+				Frontend:    opt.Frontend,
 			},
 		})
 		if err != nil {
@@ -134,6 +135,17 @@ func (nc *NamedContext) load(ctx context.Context, count int) (*llb.State, *docke
 		}
 		img.Created = nil
 
+		if opt.Frontend && dgst != "" {
+			named, err := reference.ParseNormalizedNamed(ref)
+			if err != nil {
+				return nil, nil, err
+			}
+			pinned, err := reference.WithDigest(named, dgst)
+			if err != nil {
+				return nil, nil, err
+			}
+			ref = pinned.String()
+		}
 		st := llb.Image(ref, imgOpt...)
 		st, err = st.WithImageConfig(data)
 		if err != nil {

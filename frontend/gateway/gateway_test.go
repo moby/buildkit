@@ -16,6 +16,7 @@ import (
 	spb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 )
@@ -41,16 +42,19 @@ func TestFrontendResolveMode(t *testing.T) {
 					expected = "never"
 				}
 				require.Equal(t, expected, bridge.mode)
+				require.True(t, bridge.frontend)
 				require.NotNil(t, bridge.definition)
 				op := &spb.Op{}
 				require.NoError(t, op.UnmarshalVT(bridge.definition.Def[0]))
+				ref := "example.com/frontend:latest"
+				if named {
+					ref = "example.com/override:latest"
+				}
+				require.Equal(t, "docker-image://"+ref+"@"+digest.FromString("frontend").String(), op.GetSource().Identifier)
 				if mode == "never" {
 					require.Equal(t, "never", op.GetSource().Attrs[spb.AttrImageResolveMode])
 				} else {
 					require.Empty(t, op.GetSource().Attrs[spb.AttrImageResolveMode])
-				}
-				if named {
-					require.Contains(t, op.GetSource().Identifier, "example.com/override")
 				}
 			})
 		}
@@ -62,14 +66,17 @@ var errFrontendModeSolved = errors.New("frontend image solve reached")
 type frontendModeBridge struct {
 	frontend.FrontendLLBBridge
 	mode       string
+	frontend   bool
 	definition *spb.Definition
 }
 
 func (b *frontendModeBridge) ResolveSourceMetadata(ctx context.Context, op *spb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
 	b.mode = opt.ImageOpt.ResolveMode
+	b.frontend = opt.ImageOpt.Frontend
 	return &sourceresolver.MetaResponse{
 		Op: op,
 		Image: &sourceresolver.ResolveImageResponse{
+			Digest: digest.FromString("frontend"),
 			Config: []byte(`{"architecture":"amd64","os":"linux","config":{}}`),
 		},
 	}, nil

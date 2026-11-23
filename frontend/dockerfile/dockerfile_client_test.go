@@ -3,6 +3,7 @@ package dockerfile
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,6 +195,86 @@ COPY badfile /
 			dockerui.DefaultLocalNameContext:    dir,
 		},
 	}, "", frontend, nil)
+	require.NoError(t, err)
+}
+
+func testFrontendResolveNever(t *testing.T, sb integration.Sandbox) {
+	f, ok := getFrontend(t, sb).(*gatewayFrontend)
+	if !ok {
+		t.Skip("requires an external Dockerfile frontend")
+	}
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte("FROM scratch\nCOPY data /data\n"), 0o600),
+		fstest.CreateFile("data", []byte("offline frontend"), 0o600),
+	)
+	opt := client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dir,
+			dockerui.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{"image-resolve-mode": "never"},
+	}
+	_, err = f.Solve(ctx, c, opt, nil)
+	require.ErrorContains(t, err, "pulling is disabled")
+	opt.FrontendAttrs = map[string]string{}
+	_, err = f.Solve(ctx, c, opt, nil)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name   string
+		syntax string
+		attrs  map[string]string
+	}{
+		{
+			name:   "syntax",
+			syntax: f.gw,
+		},
+		{
+			name:   "syntax-arg",
+			syntax: "example.com/unused:latest",
+			attrs:  map[string]string{"build-arg:BUILDKIT_SYNTAX": f.gw},
+		},
+		{
+			name:   "named-context",
+			syntax: "example.com/frontend:latest",
+			attrs:  map[string]string{"context:example.com/frontend": "docker-image://" + f.gw},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := integration.Tmpdir(t,
+				fstest.CreateFile("Dockerfile", []byte("#syntax="+tc.syntax+"\nFROM scratch\nCOPY data /data\n"), 0o600),
+				fstest.CreateFile("data", []byte("offline frontend"), 0o600),
+			)
+			attrs := map[string]string{"image-resolve-mode": "never"}
+			maps.Copy(attrs, tc.attrs)
+			dest := t.TempDir()
+			_, err := c.Solve(ctx, nil, client.SolveOpt{
+				Frontend:      "dockerfile.v0",
+				FrontendAttrs: attrs,
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
+				},
+				Exports: []client.ExportEntry{{Type: client.ExporterLocal, OutputDir: dest}},
+			}, nil)
+			require.NoError(t, err)
+			dt, err := os.ReadFile(filepath.Join(dest, "data"))
+			require.NoError(t, err)
+			require.Equal(t, "offline frontend", string(dt))
+		})
+	}
+	ensurePruneAll(t, c, sb)
+	opt.FrontendAttrs["image-resolve-mode"] = "never"
+	_, err = f.Solve(ctx, c, opt, nil)
+	require.ErrorContains(t, err, "pulling is disabled")
+	delete(opt.FrontendAttrs, "image-resolve-mode")
+	_, err = f.Solve(ctx, c, opt, nil)
 	require.NoError(t, err)
 }
 

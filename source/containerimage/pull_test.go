@@ -100,8 +100,9 @@ func TestNeverLayerContent(t *testing.T) {
 type neverImageStore struct {
 	images.Store
 	target ocispecs.Descriptor
+	err    error
 }
 
 func (s *neverImageStore) Get(context.Context, string) (images.Image, error) {
-	return images.Image{Target: s.target}, nil
+	return images.Image{Target: s.target}, s.err
 }

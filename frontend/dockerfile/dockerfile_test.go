@@ -75,6 +75,7 @@ var allTests = integration.TestFuncs(
 	testGatewayBuiltinSyntaxSourceDockerfileV0,
 	testFrontendUseForwardedSolveResults,
 	testFrontendEvaluate,
+	testFrontendResolveNever,
 	testFrontendInputs,
 	testFrontendSubrequests,
 	testNilContextInSolveGateway,

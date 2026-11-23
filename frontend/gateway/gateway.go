@@ -144,6 +144,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	nc, err := dc.NamedContext(source, dockerui.ContextOpt{
 		CaptureDigest: &mfstDigest,
 		ResolveMode:   resolveMode.String(),
+		Frontend:      true,
 	})
 	if err != nil {
 		return nil, err
@@ -167,7 +168,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 		imr := sourceresolver.NewImageMetaResolver(llbBridge)
 		ref, dgst, config, err := imr.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), sourceresolver.Opt{
-			ImageOpt: &sourceresolver.ResolveImageOpt{ResolveMode: resolveMode.String()},
+			ImageOpt: &sourceresolver.ResolveImageOpt{ResolveMode: resolveMode.String(), Frontend: true},
 		})
 		if err != nil {
 			return nil, err
