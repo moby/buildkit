@@ -90,7 +90,7 @@ ARG foo=baz bar=qux baz=quux
 		Warnings: []expectedLintWarning{
 			{
 				RuleName:    "InvalidDefinitionDescription",
-				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
 				Detail:      "Comment for ARG should follow the format: `# foo <description>`",
 				Level:       1,
@@ -98,7 +98,7 @@ ARG foo=baz bar=qux baz=quux
 			},
 			{
 				RuleName:    "InvalidDefinitionDescription",
-				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
 				Detail:      "Comment for FROM should follow the format: `# base <description>`",
 				Level:       1,
@@ -106,7 +106,7 @@ ARG foo=baz bar=qux baz=quux
 			},
 			{
 				RuleName:    "InvalidDefinitionDescription",
-				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
 				Detail:      "Comment for ARG should follow the format: `# version <description>`",
 				Level:       1,
@@ -114,7 +114,7 @@ ARG foo=baz bar=qux baz=quux
 			},
 			{
 				RuleName:    "InvalidDefinitionDescription",
-				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.",
+				Description: "Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.",
 				URL:         "https://docs.docker.com/go/dockerfile/rule/invalid-definition-description/",
 				Detail:      "Comment for ARG should follow the format: `# <arg_key> <description>`",
 				Level:       1,

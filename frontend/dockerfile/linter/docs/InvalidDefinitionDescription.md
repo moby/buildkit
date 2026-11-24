@@ -1,7 +1,7 @@
 ## Output
 
 ```text
-Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.
+Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.
 ```
 
 ## Description
@@ -21,8 +21,10 @@ FROM alpine AS build-cli
 ARG VERSION=1
 ```
 
-In cases where preceding comments are not meant to be descriptions,
-add an empty line or comment between the instruction and the preceding comment.
+Empty comment lines (`#`) separate paragraphs within the same comment block.
+They do not detach the block from the instruction. A description can appear
+before additional paragraphs or annotations in that block. Use a blank line
+to separate comments that are not intended to describe the instruction.
 
 ## Examples
 
@@ -36,15 +38,14 @@ FROM scratch AS base
 ARG VERSION=1
 ```
 
-✅ Good: An empty line separating non-descriptive comments.
+✅ Good: A description followed by additional paragraphs and annotations.
 
 ```dockerfile
-# a non-descriptive comment
-
-FROM scratch AS base
-
-# another non-descriptive comment
-
+# VERSION controls the version of the program
+#
+# Keep this version in sync with the release configuration.
+#
+# renovate: datasource=docker depName=example
 ARG VERSION=1
 ```
 

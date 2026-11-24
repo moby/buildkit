@@ -105,7 +105,7 @@ To learn more about how to use build checks, see
     </tr>
     <tr>
       <td><a href="./invalid-definition-description/">InvalidDefinitionDescription (experimental)</a></td>
-      <td>Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`. If this is not intended to be a description comment, add an empty line or comment between the instruction and the comment.</td>
+      <td>Comment for build stage or argument should follow the format: `# <arg/stage name> <description>`.</td>
     </tr>
     <tr>
       <td><a href="./expose-proto-casing/">ExposeProtoCasing</a></td>

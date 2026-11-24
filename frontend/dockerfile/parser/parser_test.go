@@ -17,6 +17,22 @@ const testDir = "testfiles"
 const negativeTestDir = "testfiles-negative"
 const testFileLineInfo = "testfile-line/Dockerfile"
 
+func TestCommentParagraphs(t *testing.T) {
+	result, err := Parse(strings.NewReader(`# syntax=docker/dockerfile:1
+#
+# base describes the stage
+#
+` + "#   \n" + `# More details.
+#
+FROM scratch AS base
+#
+ARG foo
+`))
+	require.NoError(t, err)
+	require.Equal(t, []string{"base describes the stage", "More details."}, result.AST.Children[0].PrevComment)
+	require.Empty(t, result.AST.Children[1].PrevComment)
+}
+
 func getDirs(t *testing.T, dir string) []string {
 	f, err := os.Open(dir)
 	require.NoError(t, err)

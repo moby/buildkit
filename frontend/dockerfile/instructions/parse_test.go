@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/command"
+	"github.com/moby/buildkit/frontend/dockerfile/linter"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/stretchr/testify/require"
 )
@@ -176,14 +177,23 @@ func TestNilLinter(t *testing.T) {
 
 func TestCommentsDetection(t *testing.T) {
 	dt := `# foo sets foo
+#
+# renovate: datasource=docker depName=golang
 ARG foo=bar
 
 # base defines first stage
+#
+# Additional details about the base stage.
+#
 FROM busybox AS base
 # this is irrelevant
 ARG foo
 # bar defines bar
+#
+# Additional details about bar.
+#
 # baz is something else
+#
 ARG bar baz=123
 `
 
@@ -316,5 +326,114 @@ func BenchmarkParseBuildStageName(b *testing.B) {
 		for _, s := range stageNames {
 			_, _ = parseBuildStageName([]string{"foo", "as", s})
 		}
+	}
+}
+
+func TestCommentParagraphLint(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		comments    string
+		warn        bool
+		description string
+	}{
+		{
+			name:        "paragraphs",
+			comments:    "# foo describes foo\n#\n# renovate: datasource=docker\n#\n",
+			description: "describes foo",
+		},
+		{
+			name:     "non-description",
+			comments: "# unrelated comment\n#\n",
+			warn:     true,
+		},
+		{
+			name:     "blank separator",
+			comments: "# unrelated comment\n\n",
+		},
+		{
+			name:     "whitespace separator",
+			comments: "# foo describes foo\n \t\n",
+		},
+		{
+			name:     "detached description",
+			comments: "# foo describes foo\n\n",
+		},
+		{
+			name:        "new comment block",
+			comments:    "# foo old description\n\n# foo new description\n#\n",
+			description: "new description",
+		},
+		{
+			name:     "bare name",
+			comments: "# foo\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, instruction := range []string{"ARG foo=1", "FROM scratch AS foo"} {
+				ast, err := parser.Parse(strings.NewReader(tc.comments + instruction))
+				require.NoError(t, err)
+				var warnings []string
+				lint := linter.New(&linter.Config{
+					ExperimentalRules: []string{"InvalidDefinitionDescription"},
+					Warn: func(name, _, _, _ string, _ []parser.Range) {
+						warnings = append(warnings, name)
+					},
+				})
+				stages, args, err := Parse(ast.AST, lint)
+				require.NoError(t, err)
+				if tc.warn {
+					require.Equal(t, []string{"InvalidDefinitionDescription"}, warnings)
+				} else {
+					require.Empty(t, warnings)
+				}
+				if len(stages) > 0 {
+					require.Equal(t, tc.description, stages[0].DocComment)
+				} else {
+					require.Equal(t, tc.description, args[0].Args[0].DocComment)
+				}
+			}
+		})
+	}
+}
+
+func TestCommentParagraphCheckScope(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		separator string
+		warnings  int
+	}{
+		{
+			name:      "paragraph",
+			separator: "#\n",
+			warnings:  1,
+		},
+		{
+			name:      "blank line",
+			separator: "\n",
+			warnings:  2,
+		},
+		{
+			name:      "whitespace line",
+			separator: " \t\n",
+			warnings:  2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The preceding instruction prevents this from being a file directive.
+			ast, err := parser.Parse(strings.NewReader("FROM scratch\n# check=skip=MaintainerDeprecated\n" + tc.separator + "MAINTAINER example\nMAINTAINER next"))
+			require.NoError(t, err)
+			var warnings []string
+			lint := linter.New(&linter.Config{
+				Warn: func(name, _, _, _ string, _ []parser.Range) {
+					warnings = append(warnings, name)
+				},
+			})
+			_, _, err = Parse(ast.AST, lint)
+			require.NoError(t, err)
+			require.Len(t, warnings, tc.warnings)
+			for _, warning := range warnings {
+				require.Equal(t, "MaintainerDeprecated", warning)
+			}
+		})
 	}
 }
