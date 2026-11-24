@@ -600,7 +600,7 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		}
 	}()
 	if parentID := md.getParent(); parentID != "" {
-		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
@@ -608,14 +608,14 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		return ps, nil
 	}
 	for _, parentID := range md.getMergeParents() {
-		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
 		ps.mergeParents = append(ps.mergeParents, p)
 	}
 	if lowerParentID := md.getLowerDiffParent(); lowerParentID != "" {
-		p, err := cm.get(ctx, lowerParentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, lowerParentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
@@ -625,7 +625,7 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		ps.diffParents.lower = p
 	}
 	if upperParentID := md.getUpperDiffParent(); upperParentID != "" {
-		p, err := cm.get(ctx, upperParentID, nil, append(opts, NoUpdateLastUsed))
+		p, err := cm.get(ctx, upperParentID, nil, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return ps, err
 		}
