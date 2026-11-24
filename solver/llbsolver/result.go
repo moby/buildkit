@@ -129,6 +129,20 @@ func (rp *resultProxy) loadResult(ctx context.Context) (solver.CachedResultWithP
 	return res, err
 }
 
+func (rp *resultProxy) Load(ctx context.Context) error {
+	rp.mu.Lock()
+	if rp.released {
+		rp.mu.Unlock()
+		return errors.New("loading released result")
+	}
+	if rp.v != nil {
+		rp.mu.Unlock()
+		return nil
+	}
+	rp.mu.Unlock()
+	return rp.wrapError(rp.b.loadDefinition(ctx, rp.req.Definition, rp.req.CacheImports, rp.req.SourcePolicies))
+}
+
 func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err error) {
 	defer func() {
 		err = rp.wrapError(err)

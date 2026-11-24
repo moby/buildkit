@@ -87,6 +87,7 @@ type CachedResultWithProvenance interface {
 type ResultProxy interface {
 	ID() string
 	Result(context.Context) (CachedResult, error)
+	Load(context.Context) error
 	Release(context.Context) error
 	Definition() *pb.Definition
 	Provenance() any

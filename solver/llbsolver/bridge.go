@@ -72,26 +72,47 @@ func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, op
 }
 
 func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry, pol []*spb.Policy) (solver.CachedResultWithProvenance, error) {
-	w, err := b.resolveWorker()
+	edge, err := b.loadEdge(ctx, def, cacheImports, pol)
 	if err != nil {
 		return nil, err
+	}
+
+	res, err := b.builder.Build(ctx, edge)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (b *llbBridge) loadDefinition(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry, pol []*spb.Policy) error {
+	edge, err := b.loadEdge(ctx, def, cacheImports, pol)
+	if err != nil {
+		return err
+	}
+	return b.builder.Load(ctx, edge)
+}
+
+func (b *llbBridge) loadEdge(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry, pol []*spb.Policy) (solver.Edge, error) {
+	w, err := b.resolveWorker()
+	if err != nil {
+		return solver.Edge{}, err
 	}
 	ent, err := loadEntitlements(b.builder)
 	if err != nil {
-		return nil, err
+		return solver.Edge{}, err
 	}
 	srcPol, err := loadSourcePolicy(b.builder)
 	if err != nil {
-		return nil, err
+		return solver.Edge{}, err
 	}
 	var polEngine *sourcepolicy.Engine
 	if srcPol != nil || len(pol) > 0 {
 		for _, p := range pol {
 			if p == nil {
-				return nil, errors.Errorf("invalid nil policy")
+				return solver.Edge{}, errors.Errorf("invalid nil policy")
 			}
 			if err := validateSourcePolicy(p); err != nil {
-				return nil, err
+				return solver.Edge{}, err
 			}
 		}
 		if srcPol != nil {
@@ -103,7 +124,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	for _, im := range cacheImports {
 		cmID, err := cmKey(im)
 		if err != nil {
-			return nil, err
+			return solver.Edge{}, err
 		}
 		b.cmsMu.Lock()
 		var cm solver.CacheManager
@@ -144,22 +165,17 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 
 	edge, err := loadWithProxyNetwork(ctx, def, b.policy(polEngine), b.proxyNetwork, dpc.Load, ValidateEntitlements(ent, w.CDIManager()), WithCacheSources(cms), NormalizeRuntimePlatforms(), WithValidateCaps(), WithLinuxResourcesMetadata())
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to load LLB")
+		return solver.Edge{}, errors.Wrap(err, "failed to load LLB")
 	}
 
 	if len(dpc.ids) > 0 {
 		if err := b.eachWorker(func(w worker.Worker) error {
 			return w.PruneCacheMounts(ctx, dpc.ids)
 		}); err != nil {
-			return nil, err
+			return solver.Edge{}, err
 		}
 	}
-
-	res, err := b.builder.Build(ctx, edge)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
+	return edge, nil
 }
 
 func (b *llbBridge) policy(engine *sourcepolicy.Engine) SourcePolicyEvaluator {

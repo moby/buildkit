@@ -944,7 +944,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	return resp, nil
 }
 
-func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (cache.ImmutableRef, error) {
+func (lbf *llbBridgeForwarder) getRef(id string) (solver.ResultProxy, error) {
 	lbf.mu.Lock()
 	ref, ok := lbf.refs[id]
 	if !ok {
@@ -961,6 +961,14 @@ func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (
 	lbf.mu.Unlock()
 	if ref == nil {
 		return nil, errors.Errorf("empty ref: %s", id)
+	}
+	return ref, nil
+}
+
+func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id string) (cache.ImmutableRef, error) {
+	ref, err := lbf.getRef(id)
+	if err != nil {
+		return nil, err
 	}
 
 	r, err := ref.Result(ctx)
@@ -1087,6 +1095,17 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 
 func (lbf *llbBridgeForwarder) Evaluate(ctx context.Context, req *pb.EvaluateRequest) (*pb.EvaluateResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+
+	if req.LoadOnly {
+		ref, err := lbf.getRef(req.Ref)
+		if err != nil {
+			return nil, err
+		}
+		if err := ref.Load(ctx); err != nil {
+			return nil, lbf.wrapSolveError(err)
+		}
+		return &pb.EvaluateResponse{}, nil
+	}
 
 	_, err := lbf.getImmutableRef(ctx, req.Ref)
 	if err != nil {

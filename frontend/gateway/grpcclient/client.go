@@ -1416,6 +1416,15 @@ func (r *reference) Evaluate(ctx context.Context) error {
 	return nil
 }
 
+func (r *reference) Load(ctx context.Context) error {
+	if err := r.c.caps.Supports(pb.CapGatewayEvaluateLoad); err != nil {
+		return err
+	}
+	req := &pb.EvaluateRequest{Ref: r.id, LoadOnly: true}
+	_, err := r.c.client.Evaluate(ctx, req)
+	return err
+}
+
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
 	rfr := &pb.ReadFileRequest{FilePath: req.Filename, Ref: r.id}
 	if r := req.Range; r != nil {
