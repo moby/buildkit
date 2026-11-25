@@ -165,6 +165,7 @@ var allTests = []func(t *testing.T, sb integration.Sandbox){
 	testGitResolveMutatedSource,
 	testGitResolveCacheAfterFailure,
 	testGitResolveSourceMetadata,
+	testGitResolveSourceMetadataAuth,
 
 	// client_http_source_test.go
 	testBuildHTTPSource,

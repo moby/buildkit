@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +22,8 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	provenancetypes "github.com/moby/buildkit/solver/llbsolver/provenance/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
@@ -764,6 +767,143 @@ func testGitResolveSourceMetadata(t *testing.T, sb integration.Sandbox) {
 		tagTime := tag.Tagger.When
 		require.NotNil(t, tagTime)
 		require.WithinDuration(t, time.Now(), *tagTime, 2*time.Minute)
+		return nil, nil
+	}, nil)
+	require.NoError(t, err)
+}
+
+// testGitResolveSourceMetadataAuth checks that fetching commit objects uses
+// session credentials when metadata resolution skips the remote ref lookup
+// (fetch-by-commit and commit SHA refs), both for returning the commit object
+// and for checkout.
+func testGitResolveSourceMetadataAuth(t *testing.T, sb integration.Sandbox) {
+	// TODO: remove once CI has Git for Windows >= 2.56.0.windows.2
+	// https://github.com/git-for-windows/git/issues/6449
+	integration.SkipOnPlatform(t, "windows")
+	ctx := sb.Context()
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	gitDir := t.TempDir()
+	err = runInDir(gitDir,
+		"git init",
+		"git config --local user.email test@example.com",
+		"git config --local user.name test",
+		"git checkout -B master",
+		"touch a",
+		"git add a",
+		"git commit -m a",
+		"git tag commit-a",
+		"touch b",
+		"git add b",
+		"git commit -m b",
+		"git tag commit-b",
+		"touch c",
+		"git add c",
+		"git commit -m c",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	revParse := func(rev string) string {
+		cmd := exec.CommandContext(t.Context(), "git", "rev-parse", rev)
+		cmd.Dir = gitDir
+		out, err := cmd.Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
+	commitA := revParse("commit-a^{commit}")
+	commitB := revParse("commit-b^{commit}")
+	commitC := revParse("HEAD")
+
+	const authHeader = "Bearer s3cr3t"
+	fileServer := http.FileServer(http.Dir(filepath.Clean(gitDir)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != authHeader {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+
+	so := SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"GIT_AUTH_HEADER": []byte(authHeader),
+		})},
+	}
+	_, err = c.Build(ctx, so, "test", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		baseID := "git://" + strings.TrimPrefix(server.URL, "http://") + "/.git"
+		for _, tc := range []struct {
+			name    string
+			ref     string
+			attrs   map[string]string
+			commit  string
+			message string
+		}{
+			{
+				name: "fetch-by-commit",
+				ref:  "master",
+				attrs: map[string]string{
+					pb.AttrGitChecksum:      commitA,
+					pb.AttrGitFetchByCommit: "true",
+				},
+				commit:  commitA,
+				message: "a",
+			},
+			{
+				name:    "commit sha ref",
+				ref:     commitB,
+				commit:  commitB,
+				message: "b",
+			},
+		} {
+			attrs := map[string]string{
+				pb.AttrFullRemoteURL:    server.URL + "/.git",
+				pb.AttrAuthHeaderSecret: "GIT_AUTH_HEADER",
+			}
+			maps.Copy(attrs, tc.attrs)
+			md, err := c.ResolveSourceMetadata(ctx, &pb.SourceOp{
+				Identifier: baseID + "#" + tc.ref,
+				Attrs:      attrs,
+			}, sourceresolver.Opt{
+				GitOpt: &sourceresolver.ResolveGitOpt{
+					ReturnObject: true,
+				},
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, tc.name)
+			}
+			require.NotNil(t, md.Git, tc.name)
+			require.Equal(t, tc.commit, md.Git.Checksum, tc.name)
+
+			commitObj, err := gitobject.Parse(md.Git.CommitObject)
+			require.NoError(t, err, tc.name)
+			require.NoError(t, commitObj.VerifyChecksum(tc.commit), tc.name)
+			commit, err := commitObj.ToCommit()
+			require.NoError(t, err, tc.name)
+			require.Equal(t, tc.message, commit.Message, tc.name)
+		}
+
+		// Checking out an uncached commit SHA ref skips the remote ref lookup
+		// too, so the snapshot fetch must load auth itself.
+		def, err := llb.Git(server.URL+"/.git", commitC).Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, gateway.SolveRequest{Definition: def.ToPB()})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		_, err = ref.StatFile(ctx, gateway.StatRequest{Path: "c"})
+		if err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}, nil)
 	require.NoError(t, err)
