@@ -814,6 +814,9 @@ func (gs *gitSourceHandler) remoteFetch(ctx context.Context, jobCtx solver.JobCo
 	if jobCtx != nil {
 		g = jobCtx.Session()
 	}
+	// resolveMetadata loads auth only for ls-remote, which commit SHA refs,
+	// fetch-by-commit and resolver cache hits skip.
+	gs.getAuthToken(ctx, g)
 
 	repo, err := gs.tryRemoteFetch(ctx, jobCtx, g, false)
 	if err != nil {
@@ -883,7 +886,6 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, jobCtx solver.JobConte
 	if jobCtx != nil {
 		g = jobCtx.Session()
 	}
-	gs.getAuthToken(ctx, g)
 	compatibilityVersion := 0
 	if jobCtx != nil {
 		var err error
