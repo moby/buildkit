@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"testing"
 
@@ -335,4 +336,29 @@ func TestInlineCacheIgnoresCompressionAttributes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, exporters, 1)
 	require.Equal(t, compression.Config{}, exporters[0].Compression)
+}
+
+type stubReleaseCacheManager struct {
+	solver.CacheManager
+	release func(context.Context) error
+}
+
+func (m *stubReleaseCacheManager) ReleaseUnreferenced(ctx context.Context) error {
+	return m.release(ctx)
+}
+
+func TestReleaseUnreferencedCache(t *testing.T) {
+	c := &Controller{}
+	require.NoError(t, c.releaseUnreferencedCache(t.Context()))
+
+	expectedErr := errors.New("release failed")
+	called := false
+	c.cache = &stubReleaseCacheManager{
+		release: func(ctx context.Context) error {
+			called = true
+			return expectedErr
+		},
+	}
+	require.ErrorIs(t, c.releaseUnreferencedCache(t.Context()), expectedErr)
+	require.True(t, called)
 }

@@ -1,11 +1,18 @@
 package solver
 
 import (
+	"context"
+	"errors"
+	"io"
+	"maps"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/bklog"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -373,4 +380,163 @@ func unwrap(res Result) string {
 		return "unwrap-error"
 	}
 	return r.value
+}
+
+type captureLogHook struct {
+	mu      sync.Mutex
+	entries []*logrus.Entry
+}
+
+func (h *captureLogHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+func (h *captureLogHook) Fire(e *logrus.Entry) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	cp := *e
+	cp.Data = maps.Clone(e.Data)
+	h.entries = append(h.entries, &cp)
+	return nil
+}
+
+type releaseLogTestStorage struct {
+	CacheKeyStorage
+	walk    func(func(string) error) error
+	release func(string) error
+}
+
+func (s *releaseLogTestStorage) Walk(fn func(string) error) error {
+	if s.walk != nil {
+		return s.walk(fn)
+	}
+	return s.CacheKeyStorage.Walk(fn)
+}
+
+func (s *releaseLogTestStorage) Release(id string) error {
+	if s.release != nil {
+		return s.release(id)
+	}
+	return s.CacheKeyStorage.Release(id)
+}
+
+type releaseLogTestResults struct {
+	CacheResultStorage
+	exists func(context.Context, string) bool
+}
+
+func (s *releaseLogTestResults) Exists(ctx context.Context, id string) bool {
+	return s.exists(ctx, id)
+}
+
+func TestReleaseUnreferencedLogging(t *testing.T) {
+	newLogCtx := func(t *testing.T) (context.Context, *captureLogHook) {
+		t.Helper()
+		logger := logrus.New()
+		logger.SetOutput(io.Discard)
+		logger.SetLevel(logrus.DebugLevel)
+		hook := &captureLogHook{}
+		logger.AddHook(hook)
+		return bklog.WithLogger(t.Context(), logrus.NewEntry(logger)), hook
+	}
+
+	t.Run("released and deduplicated", func(t *testing.T) {
+		ctx, hook := newLogCtx(t)
+		storage := NewInMemoryCacheStorage()
+		require.NoError(t, storage.AddResult("k1", CacheResult{ID: "live"}))
+		require.NoError(t, storage.AddResult("k2", CacheResult{ID: "missing"}))
+		require.NoError(t, storage.AddResult("k3", CacheResult{ID: "missing"}))
+
+		cm := &cacheManager{
+			id:      "test-cm",
+			backend: storage,
+			results: &releaseLogTestResults{exists: func(_ context.Context, id string) bool {
+				return id == "live"
+			}},
+		}
+		require.NoError(t, cm.ReleaseUnreferenced(ctx))
+
+		require.Len(t, hook.entries, 1)
+		entry := hook.entries[0]
+		require.Equal(t, logrus.DebugLevel, entry.Level)
+		require.Equal(t, "released unreferenced cache metadata", entry.Message)
+		require.Equal(t, "test-cm", entry.Data["cache_manager"])
+		require.Equal(t, 2, entry.Data["checked"])
+		require.Equal(t, 1, entry.Data["released"])
+		require.Contains(t, entry.Data, "duration")
+		require.Contains(t, entry.Data, "release_duration")
+		require.Contains(t, entry.Data, "max_release_duration")
+		require.NotContains(t, entry.Data, "failed")
+		require.NotContains(t, entry.Data, logrus.ErrorKey)
+	})
+
+	t.Run("not found ignored and release error warned", func(t *testing.T) {
+		ctx, hook := newLogCtx(t)
+		storage := NewInMemoryCacheStorage()
+		require.NoError(t, storage.AddResult("k1", CacheResult{ID: "gone"}))
+		require.NoError(t, storage.AddResult("k2", CacheResult{ID: "broken"}))
+		require.NoError(t, storage.AddResult("k3", CacheResult{ID: "ok"}))
+
+		boom := errors.New("storage failure")
+		cm := &cacheManager{
+			id: "test-cm",
+			backend: &releaseLogTestStorage{
+				CacheKeyStorage: storage,
+				release: func(id string) error {
+					switch id {
+					case "gone":
+						return ErrNotFound
+					case "broken":
+						return boom
+					default:
+						return storage.Release(id)
+					}
+				},
+			},
+			results: &releaseLogTestResults{exists: func(context.Context, string) bool {
+				return false
+			}},
+		}
+		require.NoError(t, cm.ReleaseUnreferenced(ctx))
+
+		require.Len(t, hook.entries, 2)
+		warnEntry, debugEntry := hook.entries[0], hook.entries[1]
+		require.Equal(t, logrus.WarnLevel, warnEntry.Level)
+		require.Contains(t, warnEntry.Message, "failed to release 1 unreferenced cache results")
+		warnErr, ok := warnEntry.Data[logrus.ErrorKey].(error)
+		require.True(t, ok)
+		require.ErrorIs(t, warnErr, boom)
+
+		require.Equal(t, logrus.DebugLevel, debugEntry.Level)
+		require.Equal(t, 3, debugEntry.Data["checked"])
+		require.Equal(t, 1, debugEntry.Data["released"])
+		require.Equal(t, 1, debugEntry.Data["failed"])
+		require.NotContains(t, debugEntry.Data, logrus.ErrorKey)
+	})
+
+	t.Run("walk error logged", func(t *testing.T) {
+		ctx, hook := newLogCtx(t)
+		walkErr := errors.New("walk failed")
+		cm := &cacheManager{
+			id: "test-cm",
+			backend: &releaseLogTestStorage{
+				CacheKeyStorage: NewInMemoryCacheStorage(),
+				walk: func(func(string) error) error {
+					return walkErr
+				},
+			},
+			results: &releaseLogTestResults{exists: func(context.Context, string) bool {
+				return true
+			}},
+		}
+		require.ErrorIs(t, cm.ReleaseUnreferenced(ctx), walkErr)
+
+		require.Len(t, hook.entries, 1)
+		entry := hook.entries[0]
+		require.Equal(t, logrus.DebugLevel, entry.Level)
+		entryErr, ok := entry.Data[logrus.ErrorKey].(error)
+		require.True(t, ok)
+		require.ErrorIs(t, entryErr, walkErr)
+		require.NotContains(t, entry.Data, "release_duration")
+	})
 }
