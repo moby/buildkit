@@ -8,18 +8,15 @@ import (
 	"path"
 	"syscall"
 
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/reference"
 	"github.com/gofrs/flock"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-const (
-	// lockFileSuffix is the suffix of the lock file
-	lockFileSuffix = ".lock"
-
-	annotationImageName = "io.containerd.image.name"
-)
+// lockFileSuffix is the suffix of the lock file
+const lockFileSuffix = ".lock"
 
 type StoreIndex struct {
 	indexPath  string
@@ -159,7 +156,7 @@ func (s StoreIndex) Get(tag string) (*ocispecs.Descriptor, error) {
 	}
 
 	for _, m := range idx.Manifests {
-		if t, ok := m.Annotations[annotationImageName]; ok && t == tag {
+		if t, ok := m.Annotations[images.AnnotationImageName]; ok && t == tag {
 			return &m, nil
 		}
 	}
@@ -220,13 +217,13 @@ func insertDesc(index *ocispecs.Index, in ocispecs.Descriptor, name *NameOrTag) 
 		}
 
 		if imgName != "" {
-			desc.Annotations[annotationImageName] = imgName
+			desc.Annotations[images.AnnotationImageName] = imgName
 		}
 		desc.Annotations[ocispecs.AnnotationRefName] = refName
 		// remove existing manifests with the same tag/name
 		var manifests []ocispecs.Descriptor
 		for _, m := range index.Manifests {
-			if m.Annotations[ocispecs.AnnotationRefName] != refName || m.Annotations[annotationImageName] != imgName {
+			if m.Annotations[ocispecs.AnnotationRefName] != refName || m.Annotations[images.AnnotationImageName] != imgName {
 				manifests = append(manifests, m)
 			}
 		}

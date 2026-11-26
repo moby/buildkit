@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/platforms"
@@ -276,11 +277,11 @@ EOF
 		require.Equal(t, idx.Manifests[0].MediaType, idx.Manifests[1].MediaType)
 		require.Equal(t, idx.Manifests[0].Size, idx.Manifests[1].Size)
 
-		require.Equal(t, "docker.io/org/repo:tag1", idx.Manifests[0].Annotations["io.containerd.image.name"])
-		require.Equal(t, "docker.io/org/repo:tag2", idx.Manifests[1].Annotations["io.containerd.image.name"])
+		require.Equal(t, "docker.io/org/repo:tag1", idx.Manifests[0].Annotations[images.AnnotationImageName])
+		require.Equal(t, "docker.io/org/repo:tag2", idx.Manifests[1].Annotations[images.AnnotationImageName])
 
-		require.Equal(t, "tag1", idx.Manifests[0].Annotations["org.opencontainers.image.ref.name"])
-		require.Equal(t, "tag2", idx.Manifests[1].Annotations["org.opencontainers.image.ref.name"])
+		require.Equal(t, "tag1", idx.Manifests[0].Annotations[ocispecs.AnnotationRefName])
+		require.Equal(t, "tag2", idx.Manifests[1].Annotations[ocispecs.AnnotationRefName])
 	}
 	validateIdx(idx)
 

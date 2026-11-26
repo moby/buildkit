@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/containerd/containerd/v2/core/images"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -48,13 +49,11 @@ func TestReadByTag(t *testing.T) {
 	two := randDescriptor("bar")
 	three := randDescriptor("baz")
 
-	const refName = "org.opencontainers.image.ref.name"
-
 	two.Annotations = map[string]string{
-		refName: "ver1",
+		ocispecs.AnnotationRefName: "ver1",
 	}
 	three.Annotations = map[string]string{
-		refName: "ver2",
+		ocispecs.AnnotationRefName: "ver2",
 	}
 
 	idx := ocispecs.Index{
@@ -159,7 +158,7 @@ func TestAddDescriptorWithTag(t *testing.T) {
 	assert.Equal(t, three.Size, desc.Size)
 	assert.Equal(t, three.MediaType, desc.MediaType)
 
-	assert.Equal(t, "ver1", desc.Annotations["org.opencontainers.image.ref.name"])
+	assert.Equal(t, "ver1", desc.Annotations[ocispecs.AnnotationRefName])
 
 	readIdx, err := store.Read()
 	require.NoError(t, err)
@@ -192,22 +191,22 @@ func TestAddMultipleNames(t *testing.T) {
 	require.Equal(t, one.Size, idx.Manifests[0].Size)
 	require.Equal(t, one.MediaType, idx.Manifests[0].MediaType)
 
-	require.Equal(t, "v1", idx.Manifests[0].Annotations["org.opencontainers.image.ref.name"])
-	require.Equal(t, "app/name:v1", idx.Manifests[0].Annotations["io.containerd.image.name"])
+	require.Equal(t, "v1", idx.Manifests[0].Annotations[ocispecs.AnnotationRefName])
+	require.Equal(t, "app/name:v1", idx.Manifests[0].Annotations[images.AnnotationImageName])
 
 	require.Equal(t, one.Digest, idx.Manifests[1].Digest)
 	require.Equal(t, one.Size, idx.Manifests[1].Size)
 	require.Equal(t, one.MediaType, idx.Manifests[1].MediaType)
 
-	require.Equal(t, "v1.0", idx.Manifests[1].Annotations["org.opencontainers.image.ref.name"])
-	require.Equal(t, "app/name:v1.0", idx.Manifests[1].Annotations["io.containerd.image.name"])
+	require.Equal(t, "v1.0", idx.Manifests[1].Annotations[ocispecs.AnnotationRefName])
+	require.Equal(t, "app/name:v1.0", idx.Manifests[1].Annotations[images.AnnotationImageName])
 
 	require.Equal(t, one.Digest, idx.Manifests[2].Digest)
 	require.Equal(t, one.Size, idx.Manifests[2].Size)
 	require.Equal(t, one.MediaType, idx.Manifests[1].MediaType)
 
-	require.Equal(t, "latest", idx.Manifests[2].Annotations["org.opencontainers.image.ref.name"])
-	require.Equal(t, "app/other:latest", idx.Manifests[2].Annotations["io.containerd.image.name"])
+	require.Equal(t, "latest", idx.Manifests[2].Annotations[ocispecs.AnnotationRefName])
+	require.Equal(t, "app/other:latest", idx.Manifests[2].Annotations[images.AnnotationImageName])
 
 	desc, err := store.Get("app/name:v1")
 	require.NoError(t, err)
@@ -217,8 +216,8 @@ func TestAddMultipleNames(t *testing.T) {
 	require.Equal(t, one.Size, desc.Size)
 	require.Equal(t, one.MediaType, desc.MediaType)
 
-	require.Equal(t, "v1", desc.Annotations["org.opencontainers.image.ref.name"])
-	require.Equal(t, "app/name:v1", desc.Annotations["io.containerd.image.name"])
+	require.Equal(t, "v1", desc.Annotations[ocispecs.AnnotationRefName])
+	require.Equal(t, "app/name:v1", desc.Annotations[images.AnnotationImageName])
 }
 
 func TestReplaceByImageName(t *testing.T) {
@@ -254,15 +253,15 @@ func TestReplaceByImageName(t *testing.T) {
 	assert.Equal(t, three.Size, readIdx.Manifests[1].Size)
 	assert.Equal(t, three.MediaType, readIdx.Manifests[1].MediaType)
 
-	assert.Equal(t, "v2", readIdx.Manifests[1].Annotations["org.opencontainers.image.ref.name"])
-	assert.Equal(t, "app/name:v2", readIdx.Manifests[1].Annotations["io.containerd.image.name"])
+	assert.Equal(t, "v2", readIdx.Manifests[1].Annotations[ocispecs.AnnotationRefName])
+	assert.Equal(t, "app/name:v2", readIdx.Manifests[1].Annotations[images.AnnotationImageName])
 
 	assert.Equal(t, four.Digest, readIdx.Manifests[2].Digest)
 	assert.Equal(t, four.Size, readIdx.Manifests[2].Size)
 	assert.Equal(t, four.MediaType, readIdx.Manifests[2].MediaType)
 
-	assert.Equal(t, "v1", readIdx.Manifests[2].Annotations["org.opencontainers.image.ref.name"])
-	assert.Equal(t, "app/name:v1", readIdx.Manifests[2].Annotations["io.containerd.image.name"])
+	assert.Equal(t, "v1", readIdx.Manifests[2].Annotations[ocispecs.AnnotationRefName])
+	assert.Equal(t, "app/name:v1", readIdx.Manifests[2].Annotations[images.AnnotationImageName])
 }
 
 func randDescriptor(seed string) ocispecs.Descriptor {
