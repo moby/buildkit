@@ -1,16 +1,22 @@
 package sshutil
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
 
 const defaultPort = 22
+
+// keyScanTimeout bounds connecting to the server and the handshake that follows.
+// The scan is best effort, so it must not hold up the caller for long.
+const keyScanTimeout = 10 * time.Second
 
 var errCallbackDone = errors.New("callback failed on purpose")
 
@@ -57,13 +63,26 @@ func SSHKeyScan(server string) (string, error) {
 	}
 
 	server = addDefaultPort(server, defaultPort)
-	conn, err := ssh.Dial("tcp", server, config)
+	dialer := net.Dialer{Timeout: keyScanTimeout}
+	conn, err := dialer.DialContext(context.Background(), "tcp", server)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	// The deadline also bounds the handshake, which ssh.ClientConfig.Timeout
+	// does not cover.
+	if err := conn.SetDeadline(time.Now().Add(keyScanTimeout)); err != nil {
+		return "", err
+	}
+
+	sshConn, _, _, err := ssh.NewClientConn(conn, server, config)
 	if key != "" {
 		// as long as we get the key, the function worked
 		err = nil
 	}
-	if conn != nil {
-		_ = conn.Close()
+	if sshConn != nil {
+		_ = sshConn.Close()
 	}
 	return key, err
 }
