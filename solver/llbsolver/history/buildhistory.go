@@ -296,30 +296,47 @@ func (h *Queue) clearOrphans() error {
 }
 
 func (h *Queue) delete(ref string) (bool, error) {
-	if _, ok := h.refs[ref]; ok {
+	_, pending := h.deleted[ref]
+	// A build deleted while it was running can outlive its last reader.
+	held := h.refs[ref] > 0 || (pending && h.active[ref] != nil)
+	if held {
+		if pending {
+			return false, nil
+		}
 		h.deleted[ref] = struct{}{}
-		return false, nil
+	} else {
+		if err := h.deleteRecord(ref); err != nil {
+			return false, err
+		}
+		delete(h.deleted, ref)
 	}
-	delete(h.deleted, ref)
-	h.ps.Send(&controlapi.BuildHistoryEvent{
-		Type:   controlapi.BuildHistoryEventType_DELETED,
-		Record: &controlapi.BuildHistoryRecord{Ref: ref},
-	})
-	if err := h.opt.DB.Update(func(tx *bolt.Tx) error {
+	if !pending {
+		// Notify listeners when the record disappears from history, even if
+		// a reader is still holding its lease.
+		h.ps.Send(&controlapi.BuildHistoryEvent{
+			Type:   controlapi.BuildHistoryEventType_DELETED,
+			Record: &controlapi.BuildHistoryRecord{Ref: ref},
+		})
+	}
+	return !held, nil
+}
+
+func (h *Queue) deleteRecord(ref string) error {
+	return h.opt.DB.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(recordsBucket))
 		if b == nil {
 			return errors.Wrapf(os.ErrNotExist, "failed to retrieve bucket %s", recordsBucket)
 		}
-		err1 := b.Delete([]byte(ref))
-		err2 := h.hLeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)})
-		if err1 != nil {
-			return err1
+		if err := b.Delete([]byte(ref)); err != nil {
+			return err
 		}
-		return err2
-	}); err != nil {
-		return false, err
-	}
-	return true, nil
+		err := h.hLeaseManager.Delete(context.TODO(), leases.Lease{ID: h.leaseID(ref)})
+		if _, pending := h.deleted[ref]; pending && cerrdefs.IsNotFound(err) {
+			// The lease may already be gone when retrying deferred cleanup.
+			return nil
+		}
+		return err
+	})
 }
 
 func (h *Queue) init() error {
@@ -398,7 +415,7 @@ func (h *Queue) UpdateRef(ctx context.Context, ref string, upt func(r *controlap
 	if err := h.update(ctx, &br); err != nil {
 		return err
 	}
-	h.ps.Send(&controlapi.BuildHistoryEvent{
+	h.sendUpdate(&controlapi.BuildHistoryEvent{
 		Type:   controlapi.BuildHistoryEventType_COMPLETE,
 		Record: &br,
 	})
@@ -594,15 +611,19 @@ func (h *Queue) Update(ctx context.Context, e *controlapi.BuildHistoryEvent) err
 
 	if e.Type == controlapi.BuildHistoryEventType_STARTED {
 		h.active[e.Record.Ref] = e.Record
-		h.ps.Send(e)
+		h.sendUpdate(e)
 	}
 
 	if e.Type == controlapi.BuildHistoryEventType_COMPLETE {
 		delete(h.active, e.Record.Ref)
+		if _, pending := h.deleted[e.Record.Ref]; pending && h.refs[e.Record.Ref] == 0 {
+			_, err := h.delete(e.Record.Ref)
+			return err
+		}
 		if err := h.update(ctx, e.Record); err != nil {
 			return err
 		}
-		h.ps.Send(e)
+		h.sendUpdate(e)
 	}
 	return nil
 }
@@ -647,6 +668,13 @@ func (h *Queue) OpenBlobWriter(ctx context.Context, mt string) (_ *Writer, err e
 		w:     w,
 		dgstr: digest.Canonical.Digester(),
 	}, nil
+}
+
+// sendUpdate must be called with h.mu held.
+func (h *Queue) sendUpdate(e *controlapi.BuildHistoryEvent) {
+	if _, deleted := h.deleted[e.Record.Ref]; !deleted {
+		h.ps.Send(e)
+	}
 }
 
 type Writer struct {
@@ -821,14 +849,17 @@ func (h *Queue) Listen(ctx context.Context, req *controlapi.BuildHistoryRequest,
 		h.refs[req.Ref]++
 		defer func() {
 			h.mu.Lock()
+			defer h.mu.Unlock()
 			h.refs[req.Ref]--
-			if _, ok := h.deleted[req.Ref]; ok {
-				if h.refs[req.Ref] == 0 {
-					delete(h.refs, req.Ref)
-					h.delete(req.Ref)
+			if h.refs[req.Ref] > 0 {
+				return
+			}
+			delete(h.refs, req.Ref)
+			if _, pending := h.deleted[req.Ref]; pending {
+				if _, err := h.delete(req.Ref); err != nil {
+					bklog.G(ctx).WithError(err).Warnf("failed to delete history record %s", req.Ref)
 				}
 			}
-			h.mu.Unlock()
 		}()
 	}
 
