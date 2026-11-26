@@ -28,7 +28,6 @@ import (
 
 	sn "github.com/containerd/accelerated-container-image/pkg/types"
 	"github.com/containerd/log"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -85,13 +84,24 @@ var defaultServiceTemplate = `
 func Create(ctx context.Context, dir string, opts ...string) error {
 	dataPath := path.Join(dir, dataFile)
 	indexPath := path.Join(dir, idxFile)
-	os.RemoveAll(dataPath)
-	os.RemoveAll(indexPath)
+	exists := true
+	for _, f := range []string{dataPath, indexPath} {
+		if _, err := os.Stat(f); os.IsNotExist(err) {
+			exists = false
+			break
+		}
+	}
+	if exists {
+		log.G(ctx).Infof("writable layer already exists")
+		return nil
+	}
+	// os.RemoveAll(dataPath)
+	// os.RemoveAll(indexPath)
 	args := append([]string{dataPath, indexPath}, opts...)
 	log.G(ctx).Debugf("%s %s", obdBinCreate, strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, obdBinCreate, args...).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to overlaybd-create: %s", out)
+		return fmt.Errorf("failed to overlaybd-create: %s: %w", out, err)
 	}
 	return nil
 }
@@ -105,10 +115,10 @@ func Seal(ctx context.Context, dir, toDir string, opts ...string) error {
 	log.G(ctx).Debugf("%s %s", obdBinCommit, strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, obdBinCommit, args...).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to seal writable overlaybd: %s", out)
+		return fmt.Errorf("failed to seal writable overlaybd: %s: %w", out, err)
 	}
 	if err := os.Rename(path.Join(dir, dataFile), path.Join(toDir, sealedFile)); err != nil {
-		return errors.Wrapf(err, "failed to rename sealed overlaybd file")
+		return fmt.Errorf("failed to rename sealed overlaybd file: %w", err)
 	}
 	os.RemoveAll(path.Join(dir, idxFile))
 	return nil
@@ -132,7 +142,7 @@ func Commit(ctx context.Context, dir, toDir string, sealed bool, opts ...string)
 	log.G(ctx).Debugf("%s %s", obdBinCommit, strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, obdBinCommit, args...).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to overlaybd-commit: %s", out)
+		return fmt.Errorf("failed to overlaybd-commit: %s: %w", out, err)
 	}
 	if sealed {
 		return os.Rename(path.Join(toDir, commitTempFile), path.Join(toDir, commitFile))
@@ -148,7 +158,7 @@ func ApplyOverlaybd(ctx context.Context, dir string, opts ...string) error {
 	log.G(ctx).Debugf("%s %s", obdBinApply, strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, obdBinApply, args...).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to overlaybd-apply[native]: %s", out)
+		return fmt.Errorf("failed to overlaybd-apply[native]: %s: %w", out, err)
 	}
 	return nil
 }
@@ -162,7 +172,7 @@ func ApplyTurboOCI(ctx context.Context, dir, gzipMetaFile string, opts ...string
 	log.G(ctx).Debugf("%s %s", obdBinApply, strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, obdBinTurboOCIApply, args...).CombinedOutput()
 	if err != nil {
-		return errors.Wrapf(err, "failed to overlaybd-apply[turboOCI]: %s", out)
+		return fmt.Errorf("failed to overlaybd-apply[turboOCI]: %s: %w", out, err)
 	}
 	return nil
 }
