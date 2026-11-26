@@ -338,6 +338,12 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		} else if !isLazy {
 			return struct{}{}, nil
 		}
+		// Shared by all readers of this blob, so take a lease of our own, as in unlazy.
+		l, ctx, err := leaseutil.NewLease(ctx, p.ref.cm.LeaseManager, leaseutil.MakeTemporary)
+		if err != nil {
+			return struct{}{}, err
+		}
+		defer l.Discard(ctx)
 		defer func() {
 			if rerr == nil {
 				rerr = p.ref.linkBlob(ctx, p.desc)
@@ -359,7 +365,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		// For now, just pull down the whole content and then return a ReaderAt from the local content
 		// store. If efficient partial reads are desired in the future, something more like a "tee"
 		// that caches remote partial reads to a local store may need to replace this.
-		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
+		err = contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
 		}, p.desc, p.dh.Ref, logs.LoggerFromContext(ctx))

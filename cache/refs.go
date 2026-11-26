@@ -1271,6 +1271,15 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progres
 			}
 		}
 
+		// This call is shared by all callers of this ref, but its context only has the first
+		// caller's lease, which ends when that caller returns. Take a lease of our own so that
+		// GC can't delete the snapshots this call is still creating.
+		l, ctx, err := leaseutil.NewLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
+		if err != nil {
+			return nil, err
+		}
+		defer l.Discard(ctx)
+
 		switch sr.kind() {
 		case Merge, Diff:
 			return nil, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel, ensureContentStore)
