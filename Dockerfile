@@ -92,15 +92,21 @@ EOT
 
 # buildctl builds test cli binary
 FROM buildkit-base AS buildctl
-ENV CGO_ENABLED=0
+ARG CGO_ENABLED=0
 ARG TARGETPLATFORM
 ARG GOBUILDFLAGS
+ARG VERIFYFLAGS="--static"
+RUN if [ "$CGO_ENABLED" = "1" ]; then xx-apk add --no-cache gcc musl-dev; fi
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
   set -ex
-  xx-go build ${GOBUILDFLAGS} -tags 'grpcnotrace' -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl
-  xx-verify --static /usr/bin/buildctl
+  ldflags=$(cat /tmp/.ldflags)
+  if [ "$CGO_ENABLED" = "1" ]; then
+    ldflags="$ldflags -linkmode external -extldflags '-static'"
+  fi
+  xx-go build ${GOBUILDFLAGS} -tags 'grpcnotrace' -ldflags "$ldflags" -o /usr/bin/buildctl ./cmd/buildctl
+  xx-verify ${VERIFYFLAGS} /usr/bin/buildctl
   if [ "$(xx-info os)" = "linux" ] && ! xx-info is-cross; then /usr/bin/buildctl --version; fi
 EOT
 
@@ -114,6 +120,7 @@ ARG VERIFYFLAGS="--static"
 ARG CGO_ENABLED=0
 ARG BUILDKIT_DEBUG
 ARG GOGCFLAGS=${BUILDKIT_DEBUG:+"all=-N -l"}
+RUN if [ "$CGO_ENABLED" = "1" ]; then xx-apk add --no-cache gcc musl-dev; fi
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version <<EOT
@@ -423,6 +430,8 @@ COPY --link --from=containerd /out /
 COPY --link --from=binaries / /
 
 FROM buildkit-base AS integration-tests-base
+ARG CGO_ENABLED=0
+RUN if [ "$CGO_ENABLED" = "1" ]; then apk add --no-cache gcc; fi
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables ip6tables dnsmasq fuse curl git-daemon openssh-client openssl iproute2 gpg gpg-agent \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \

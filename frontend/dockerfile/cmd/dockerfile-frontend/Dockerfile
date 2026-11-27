@@ -61,15 +61,23 @@ EOT
 FROM base AS build
 RUN apk add --no-cache file
 ARG TARGETPLATFORM
+ARG CGO_ENABLED=0
+ARG GOBUILDFLAGS
+RUN if [ "$CGO_ENABLED" = "1" ]; then xx-apk add --no-cache gcc musl-dev; fi
 RUN --mount=target=. --mount=type=cache,target=/root/.cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=version \
   --mount=source=/tmp/.buildtags,target=/tmp/.buildtags,from=version <<EOT
   set -e
   ldflags=$(cat /tmp/.ldflags)
+  if [ "$CGO_ENABLED" = "1" ]; then
+    ldflags="$ldflags -linkmode external -extldflags '-static'"
+  else
+    ldflags="-d $ldflags"
+  fi
   buildtags=$(cat /tmp/.buildtags)
   set -x
-  CGO_ENABLED=0 xx-go build -o /dockerfile-frontend -ldflags "-d $ldflags" -tags "$buildtags netgo static_build osusergo" ./frontend/dockerfile/cmd/dockerfile-frontend
+  xx-go build ${GOBUILDFLAGS} -o /dockerfile-frontend -ldflags "$ldflags" -tags "$buildtags netgo static_build osusergo" ./frontend/dockerfile/cmd/dockerfile-frontend
   xx-verify --static /dockerfile-frontend
 EOT
 
@@ -78,5 +86,8 @@ LABEL moby.buildkit.frontend.network.none="true"
 LABEL moby.buildkit.frontend.caps="moby.buildkit.frontend.inputs,moby.buildkit.frontend.subrequests,moby.buildkit.frontend.contexts,moby.buildkit.frontend.gitquerystring,moby.buildkit.frontend.contexts.zstd"
 COPY --from=build /dockerfile-frontend /bin/dockerfile-frontend
 ENTRYPOINT ["/bin/dockerfile-frontend"]
+
+FROM release AS release-race
+ENV GORACE=halt_on_error=1
 
 FROM release
