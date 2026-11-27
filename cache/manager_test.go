@@ -1557,6 +1557,71 @@ func TestPrune(t *testing.T) {
 	require.Equal(t, 0, len(dirs))
 }
 
+// TestPruneKeepDurationAfterRestart checks that removing a record loaded from
+// the metadata store does not update the last-used time of its parent, so a
+// keep-duration prune can remove the whole chain after a restart.
+func TestPruneKeepDurationAfterRestart(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(t.Context(), "buildkit-test")
+
+	tmpdir := t.TempDir()
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, snapshotter.Close())
+	})
+
+	co, cleanup, err := newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm := co.manager
+
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	parent, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	active, err = cm.New(ctx, parent, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	child, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, child.Release(ctx))
+	require.NoError(t, parent.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 2)
+
+	// restart, so that both records are loaded from the metadata store
+	require.NoError(t, cm.Close())
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, t, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	cm = co.manager
+	checkDiskUsage(ctx, t, cm, 0, 2)
+
+	time.Sleep(1500 * time.Millisecond)
+
+	// both records were last used more than a second ago, so the child and
+	// then its parent are removed
+	buf := pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{KeepDuration: time.Second})
+	buf.close()
+	require.NoError(t, err)
+
+	require.Len(t, buf.all, 2)
+	checkDiskUsage(ctx, t, cm, 0, 0)
+}
+
 func TestLazyCommit(t *testing.T) {
 	t.Parallel()
 
