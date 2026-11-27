@@ -35,6 +35,8 @@ func parseResolveMode(v string) (llb.ResolveMode, error) {
 		return llb.ResolveModeForcePull, nil
 	case pb.AttrImageResolveModePreferLocal:
 		return llb.ResolveModePreferLocal, nil
+	case pb.AttrImageResolveModeNever:
+		return llb.ResolveModeNever, nil
 	default:
 		return 0, errors.Errorf("invalid image-resolve-mode: %s", v)
 	}

@@ -12,6 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseResolveModeNever(t *testing.T) {
+	mode, err := parseResolveMode("never")
+	require.NoError(t, err)
+	require.Equal(t, llb.ResolveModeNever, mode)
+}
+
 func TestNormalizePlatform(t *testing.T) {
 	testCases := []struct {
 		p, imgP  ocispecs.Platform

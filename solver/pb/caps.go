@@ -9,10 +9,11 @@ var Caps apicaps.CapList
 // considered immutable. After a capability is marked stable it should not be disabled.
 
 const (
-	CapSourceImage            apicaps.CapID = "source.image"
-	CapSourceImageResolveMode apicaps.CapID = "source.image.resolvemode"
-	CapSourceImageLayerLimit  apicaps.CapID = "source.image.layerlimit"
-	CapSourceImageChecksum    apicaps.CapID = "source.image.checksum"
+	CapSourceImage                 apicaps.CapID = "source.image"
+	CapSourceImageResolveMode      apicaps.CapID = "source.image.resolvemode"
+	CapSourceImageResolveModeNever apicaps.CapID = "source.image.resolvemode.never"
+	CapSourceImageLayerLimit       apicaps.CapID = "source.image.layerlimit"
+	CapSourceImageChecksum         apicaps.CapID = "source.image.checksum"
 
 	CapSourceLocal                apicaps.CapID = "source.local"
 	CapSourceLocalUnique          apicaps.CapID = "source.local.unique"
@@ -132,6 +133,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceImageResolveMode,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceImageResolveModeNever,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
