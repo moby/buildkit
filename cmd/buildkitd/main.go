@@ -101,6 +101,8 @@ var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceCon
 
 const telemetryShutdownTimeout = 5 * time.Second
 
+const configMissingErrorEnv = "BUILDKITD_CONFIG_MISSING_ERROR"
+
 type workerInitializerOpt struct {
 	compaction     []compaction.Config
 	config         *config.Config
@@ -271,14 +273,15 @@ func main() {
 		ctx, cancel := context.WithCancelCause(appcontext.Context())
 		defer func() { cancel(errors.WithStack(context.Canceled)) }()
 
-		cfg, err := config.LoadFile(c.String("config"))
+		// Keep track of any warnings we need to print to the log and wait until after
+		// the logger is configured before we write them to the log file.
+		var warnings []string
+
+		configPath, cfg, err := loadConfigFile(c, &warnings)
 		if err != nil {
 			return err
 		}
 
-		// Keep track of any warnings we need to print to the log and wait until after
-		// the logger is configured before we write them to the log file.
-		var warnings []string
 		if cfg.Debug { //nolint:staticcheck
 			warnings = append(warnings, "'debug' configuration option is deprecated, use 'log.level = \"debug\"' instead")
 		}
@@ -314,6 +317,12 @@ func main() {
 				return errors.Wrap(err, "unsupported log level")
 			}
 			logrus.SetLevel(level)
+		}
+
+		if configPath != "" {
+			bklog.G(ctx).WithField("path", configPath).Info("using config file")
+		} else {
+			bklog.G(ctx).Info("using config defaults")
 		}
 
 		if logrus.IsLevelEnabled(logrus.WarnLevel) {
@@ -558,9 +567,38 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
+// loadConfigFile returns the path the config was read from, or "" if no file was found.
+func loadConfigFile(c *cli.Command, warnings *[]string) (string, config.Config, error) {
+	fp := c.String("config")
+	cfg, err := config.LoadFile(fp)
+	switch {
+	case err == nil:
+		return fp, cfg, nil
+	case !errors.Is(err, os.ErrNotExist):
+		return "", config.Config{}, err
+	case !c.IsSet("config"):
+		return "", config.Config{}, nil
+	}
+
+	v, ok := os.LookupEnv(configMissingErrorEnv)
+	if !ok {
+		*warnings = append(*warnings, fmt.Sprintf("%v; this will become an error in a future release, set %s=0 to keep ignoring it", err, configMissingErrorEnv))
+		return "", config.Config{}, nil
+	}
+	fail, perr := strconv.ParseBool(v)
+	if perr != nil {
+		return "", config.Config{}, errors.Wrapf(perr, "invalid %s", configMissingErrorEnv)
+	}
+	if fail {
+		return "", config.Config{}, err
+	}
+	*warnings = append(*warnings, err.Error())
+	return "", config.Config{}, nil
+}
+
 func defaultConf() (config.Config, error) {
 	cfg, err := config.LoadFile(defaultConfigPath())
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
 			return config.Config{}, err
