@@ -26,6 +26,24 @@ func timestampToTime(ts int64) *time.Time {
 	return &tm
 }
 
+// mkdirAll is copy.MkdirAll making sure that all the directories it creates
+// get tm as their timestamps. copy.MkdirAll sets tm on each directory right
+// after creating it, but creating the next directory updates the
+// modification time of its parent again.
+func mkdirAll(p string, mode os.FileMode, ch copy.Chowner, tm *time.Time) ([]string, error) {
+	createdDirs, err := copy.MkdirAll(p, mode, ch, tm)
+	if err != nil || tm == nil {
+		return createdDirs, err
+	}
+	// setting the timestamps of a directory doesn't change its parent's
+	for _, d := range createdDirs {
+		if err := copy.Utimes(d, tm); err != nil {
+			return nil, errors.WithStack(err)
+		}
+	}
+	return createdDirs, nil
+}
+
 func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.IdentityMapping) (err error) {
 	defer func() {
 		var osErr *os.PathError
@@ -45,7 +63,7 @@ func mkdir(d string, action *pb.FileActionMkDir, user *copy.User, idmap *user.Id
 	}
 
 	if action.MakeParents {
-		if _, err := copy.MkdirAll(p, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp)); err != nil {
+		if _, err := mkdirAll(p, os.FileMode(action.Mode)&0777, ch, timestampToTime(action.Timestamp)); err != nil {
 			return err
 		}
 	} else {
