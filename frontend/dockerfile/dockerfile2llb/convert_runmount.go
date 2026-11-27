@@ -138,6 +138,10 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 
 		out = append(out, llb.AddMount(target, st, mountOpts...))
 
+		if mount.Type == instructions.MountTypeTmpfs {
+			// a tmpfs mount is backed by scratch and reads nothing from the context
+			continue
+		}
 		if mount.From == "" {
 			d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
 		} else {
