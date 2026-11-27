@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -319,7 +320,11 @@ func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheR
 				if resultID != res.ID {
 					continue
 				}
-				return []*solver.Remote{r.Result}, nil
+				remote, err := remoteWithDistributionSources(r.Result)
+				if err != nil {
+					return nil, err
+				}
+				return []*solver.Remote{remote}, nil
 			}
 			// Any of blobs in the remote must meet the specified compression option.
 			match := false
@@ -332,12 +337,34 @@ func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheR
 				}
 			}
 			if match {
-				return []*solver.Remote{r.Result}, nil
+				remote, err := remoteWithDistributionSources(r.Result)
+				if err != nil {
+					return nil, err
+				}
+				return []*solver.Remote{remote}, nil
 			}
 		}
 		return nil, nil // return nil as it's best effort.
 	}
 	return nil, errors.WithStack(solver.ErrNotFound)
+}
+
+func remoteWithDistributionSources(remote *solver.Remote) (*solver.Remote, error) {
+	out := *remote
+	out.Descriptors = slices.Clone(remote.Descriptors)
+	for i, desc := range out.Descriptors {
+		ref, ok := desc.Annotations[contentutil.DistributionSourceRefAnnotation]
+		if !ok {
+			continue
+		}
+		desc, _, err := contentutil.AddDistributionSource(desc, ref)
+		if err != nil {
+			return nil, err
+		}
+		delete(desc.Annotations, contentutil.DistributionSourceRefAnnotation)
+		out.Descriptors[i] = desc
+	}
+	return &out, nil
 }
 
 func (cs *cacheResultStorage) Exists(ctx context.Context, id string) bool {
