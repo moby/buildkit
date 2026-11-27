@@ -792,7 +792,7 @@ github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/common
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.1
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v0.2
 github.com/in-toto/in-toto-golang/in_toto/slsa_provenance/v1
-# github.com/klauspost/compress v1.20.2
+# github.com/klauspost/compress v1.20.4
 ## explicit; go 1.25
 github.com/klauspost/compress
 github.com/klauspost/compress/flate
@@ -820,6 +820,17 @@ github.com/moby/go-archive/compression
 github.com/moby/go-archive/internal/mounttree
 github.com/moby/go-archive/internal/unshare
 github.com/moby/go-archive/tarheader
+# github.com/moby/klauspost-compress v1.20.4
+## explicit; go 1.25
+github.com/moby/klauspost-compress
+github.com/moby/klauspost-compress/fse
+github.com/moby/klauspost-compress/huff0
+github.com/moby/klauspost-compress/internal/cpuinfo
+github.com/moby/klauspost-compress/internal/le
+github.com/moby/klauspost-compress/internal/regmask
+github.com/moby/klauspost-compress/internal/snapref
+github.com/moby/klauspost-compress/zstd
+github.com/moby/klauspost-compress/zstd/internal/xxhash
 # github.com/moby/locker v1.0.1
 ## explicit; go 1.13
 github.com/moby/locker
