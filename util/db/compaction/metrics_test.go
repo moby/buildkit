@@ -161,7 +161,7 @@ func TestMetricsCollectionDuringCopy(t *testing.T) {
 		s.Begin(false)
 		ctx, cancel := context.WithCancelCause(t.Context())
 		defer cancel(context.Canceled)
-		r, err := s.Request(ctx)
+		r, err := s.Request(ctx, false)
 		require.NoError(t, err)
 		time.Sleep(2 * time.Second)
 		data := collectMetrics(t, reader)

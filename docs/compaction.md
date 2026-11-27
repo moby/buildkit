@@ -63,6 +63,12 @@ Enabling the listener is sufficient to make these operations available, even wit
 free-space checks. They remain cancellable by arriving writers and never escalate
 to forced copies.
 
+Manual requests can use `check-fragmentation=true` to inspect unused space inside
+occupied pages before copying. Inspection pauses transactions and is cancellable
+between reads. Both estimated and actual savings must meet the thresholds, since
+record packing and allocation rounding can reduce the space recovered. Automatic
+scheduling, metrics, and free-space checks still use the free-page estimate.
+
 ## Operational limits
 
 Automatic copies have no copy deadline after writer-cancellation retries are
@@ -95,9 +101,9 @@ Attempts and copy duration use labels for database path, trigger
 (`automatic` or `manual`), and outcome (`completed`, `skipped`, `canceled`, or
 `failed`). Reclaimed bytes use path and trigger. An attempt is counted when the
 backend is invoked; eligibility checks and requests canceled while waiting are not
-attempts. Copy duration includes replacement, canceled and failed copies, but
-excludes waiting and transaction draining. Reclaimed bytes are recorded only when replacement
-succeeded and the resulting size is known.
+attempts. Copy duration includes replacement, discarded, canceled and failed
+copies, but excludes waiting and transaction draining. Reclaimed bytes are
+recorded only when replacement succeeded and the resulting size is known.
 
 The `database.path` label is relative to the BuildKit state directory, for example
 `cache.db` or `runc-overlayfs/metadata_v2.db`, with forward slashes on all platforms.

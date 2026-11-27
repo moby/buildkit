@@ -49,3 +49,7 @@ curl -N -X POST 'http://127.0.0.1:6060/debug/compaction?database=/var/lib/buildk
 
 See the [compaction guide](../compaction.md) for scheduling, configuration, operational
 limits, and metrics.
+
+Add `&check-fragmentation=true` to the POST URL to inspect occupied-page slack
+before copying. Progress includes the estimate and inspection duration. GET does
+not scan occupied pages; see the compaction guide for costs and limits.
