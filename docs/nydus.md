@@ -31,12 +31,21 @@ buildctl build ... \
   --output type=image,name=docker.io/username/image,push=true,compression=nydus,force-compression=true,oci-mediatypes=true
 ```
 
+To reuse Nydus layers across builds, export a separate registry cache and import it on later builds:
+
+```
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true,compression=nydus,force-compression=true,oci-mediatypes=true \
+  --export-cache type=registry,ref=docker.io/username/image:buildcache,mode=max,compression=nydus,force-compression=true,oci-mediatypes=true \
+  --import-cache type=registry,ref=docker.io/username/image:buildcache
+```
+
 ### Known limitations
 
 - The export of Nydus image and runtime (e.g. [docker](https://github.com/nydusaccelerator/docker-nydus-graphdriver), [containerd](https://github.com/containerd/nydus-snapshotter), etc.) is currently only supported on linux platform.
 - Nydus image layers cannot be mixed with other compression types in the same image, so the `force-compression=true` option must be enabled when exporting both Nydus and other compression types.
 - Specifying a Nydus image as a base image in a Dockerfile is supported, but it does not currently support lazy pulling.
-- Since exported Nydus image will always have one more metadata layer than images in other compression types, Nydus image cannot be exported/imported as cache.
+- A final Nydus image has an extra bootstrap metadata layer, so import the separate registry cache rather than the final image as build cache.
 
 ### Other ways to create Nydus images
 

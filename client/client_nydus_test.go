@@ -3,11 +3,13 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/nydus-snapshotter/pkg/converter"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
@@ -23,7 +25,90 @@ func init() {
 	allTests = append(
 		allTests,
 		testBuildExportNydusWithHybrid,
+		testNydusRegistryCacheExportKeepsRemoteLayerLazy,
 	)
+}
+
+func testNydusRegistryCacheExportKeepsRemoteLayerLazy(t *testing.T, sb integration.Sandbox) {
+	workers.CheckFeatureCompat(t, sb,
+		workers.FeatureCacheExport,
+		workers.FeatureCacheImport,
+		workers.FeatureCacheBackendRegistry,
+		workers.FeatureDirectPush,
+	)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
+	}
+
+	ctd, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer ctd.Close()
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	cacheRef := registry + "/nydus/lazy-cache:" + identity.NewID()
+	imageRef := registry + "/nydus/lazy-image:" + identity.NewID()
+	cacheExport := []CacheOptionsEntry{{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":               cacheRef,
+			"mode":              "max",
+			"compression":       "nydus",
+			"force-compression": "true",
+			"oci-mediatypes":    "true",
+		},
+	}}
+	imageExport := []ExportEntry{{
+		Type: ExporterImage,
+		Attrs: map[string]string{
+			"name":              imageRef,
+			"push":              "true",
+			"compression":       "nydus",
+			"force-compression": "true",
+			"oci-mediatypes":    "true",
+		},
+	}}
+
+	base := llb.Scratch().File(llb.Mkfile("/dependency", 0644, bytes.Repeat([]byte("dependency"), 1<<16)))
+	build := func(source string, imports []CacheOptionsEntry) {
+		def, err := base.File(llb.Mkfile("/source", 0644, []byte(source))).Marshal(sb.Context())
+		require.NoError(t, err)
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports:      imageExport,
+			CacheExports: cacheExport,
+			CacheImports: imports,
+		}, nil)
+		require.NoError(t, err)
+	}
+
+	build("first", nil)
+	img, err := ctd.ImageService().Get(ctx, imageRef)
+	require.NoError(t, err)
+	manifest, err := images.Manifest(ctx, ctd.ContentStore(), img.Target, nil)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(manifest.Layers), 3)
+	remoteBlob := manifest.Layers[len(manifest.Layers)-3]
+	require.Equal(t, converter.MediaTypeNydusBlob, remoteBlob.MediaType)
+
+	require.NoError(t, ctd.ImageService().Delete(ctx, imageRef, images.SynchronousDelete()))
+	ensurePruneAll(t, c, sb)
+	_, err = ctd.ContentStore().Info(ctx, remoteBlob.Digest)
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
+
+	build("second", []CacheOptionsEntry{{Type: "registry", Attrs: map[string]string{"ref": cacheRef}}})
+	_, err = ctd.ContentStore().Info(ctx, remoteBlob.Digest)
+	require.ErrorIs(t, err, cerrdefs.ErrNotFound)
 }
 
 func testBuildExportNydusWithHybrid(t *testing.T, sb integration.Sandbox) {
