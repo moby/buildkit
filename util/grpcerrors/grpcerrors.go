@@ -115,6 +115,9 @@ func withDetails(ctx context.Context, s *status.Status, details ...proto.Message
 // contains a non-OK code is returned.
 // Finally, if the error is a context error, the corresponding code is returned.
 func Code(err error) codes.Code {
+	if cause, ok := errors.AsType[*contextCauseError](err); ok {
+		return cause.Code()
+	}
 	if errdefs.IsInternal(err) {
 		if errdefs.IsResourceExhausted(err) {
 			return codes.ResourceExhausted
