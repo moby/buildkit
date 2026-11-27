@@ -333,3 +333,17 @@ func TestLoadSessionAuthTimeout(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadCacheMounts(t *testing.T) {
+	cfg, err := Load(strings.NewReader(`
+[cacheMounts."gocache"]
+  path = "/var/cache/buildkit/gocache"
+[cacheMounts."ns/apt"]
+  path = "/var/cache/buildkit/apt"
+`))
+	require.NoError(t, err)
+	require.Equal(t, map[string]CacheMountConfig{
+		"gocache": {Path: "/var/cache/buildkit/gocache"},
+		"ns/apt":  {Path: "/var/cache/buildkit/apt"},
+	}, cfg.CacheMounts)
+}

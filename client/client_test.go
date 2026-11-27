@@ -363,6 +363,18 @@ func testIntegration(t *testing.T, funcs ...func(t *testing.T, sb integration.Sa
 	integration.SkipOnPlatform(t, "windows")
 
 	integration.Run(t, integration.TestFuncs(
+		// client_hostcache_test.go
+		testHostCacheMountSurvivesPrune,
+		testHostCacheMountNoCache,
+		testHostCacheMountBases,
+		testHostCacheMountRejectsSeededBase,
+		testHostCacheMountTwiceInOneExec,
+		testHostCacheMountGatewayContainer,
+	), mirrors, integration.WithMatrix("cachemounts", map[string]any{
+		"host": &hostCacheMounts{},
+	}))
+
+	integration.Run(t, integration.TestFuncs(
 		// client_exec_test.go
 		testSecurityMode,
 		testSecurityModeSysfs,

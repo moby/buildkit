@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
@@ -1297,7 +1298,11 @@ func (lbf *llbBridgeForwarder) createContainer(group session.Group, req containe
 	if err != nil {
 		return nil, stack.Enable(err)
 	}
-	return container.NewContainer(lbf.containerCtx, cm, lbf.executor, lbf.sm, group, req)
+	hcm, err := worker.DefaultHostCacheMounts(lbf.workers)
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+	return container.NewContainer(lbf.containerCtx, cm, lbf.executor, lbf.sm, group, req, mounts.WithHostCacheMounts(hcm))
 }
 
 func (lbf *llbBridgeForwarder) containerRequestContext(ctx context.Context) (context.Context, func()) {

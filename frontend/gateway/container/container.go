@@ -55,7 +55,7 @@ type Mount struct {
 	WorkerRef *worker.WorkerRef
 }
 
-func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor, sm *session.Manager, g session.Group, req NewContainerRequest) (client.Container, error) {
+func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor, sm *session.Manager, g session.Group, req NewContainerRequest, opts ...mounts.MountManagerOpt) (client.Container, error) {
 	hasRoot := false
 	for i, m := range req.Mounts {
 		if m.Mount == nil {
@@ -107,7 +107,7 @@ func NewContainer(ctx context.Context, cm cache.Manager, exec executor.Executor,
 	}
 
 	name := fmt.Sprintf("container %s", req.ContainerID)
-	mm := mounts.NewMountManager(name, cm, sm)
+	mm := mounts.NewMountManager(name, cm, sm, opts...)
 	p, err := PrepareMounts(ctx, mm, cm, g, "", mnts, refs, func(m *opspb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 		if m.Input != int64(opspb.Empty) {
 			cm = refs[m.Input].Worker.CacheManager()

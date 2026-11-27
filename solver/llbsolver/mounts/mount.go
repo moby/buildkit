@@ -23,21 +23,37 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-func NewMountManager(name string, cm cache.Manager, sm *session.Manager) *MountManager {
-	return &MountManager{
+type MountManagerOpt func(*MountManager)
+
+// WithHostCacheMounts serves cache mounts whose IDs are configured in h from
+// host directories instead of snapshots.
+func WithHostCacheMounts(h *HostCacheMounts) MountManagerOpt {
+	return func(mm *MountManager) {
+		mm.hostCacheMounts = h
+	}
+}
+
+func NewMountManager(name string, cm cache.Manager, sm *session.Manager, opts ...MountManagerOpt) *MountManager {
+	mm := &MountManager{
 		cm:          cm,
 		sm:          sm,
 		cacheMounts: map[string]*cacheRefShare{},
 		managerName: name,
 	}
+	for _, opt := range opts {
+		opt(mm)
+	}
+	return mm
 }
 
 type MountManager struct {
-	cm            cache.Manager
-	sm            *session.Manager
-	cacheMountsMu sync.Mutex
-	cacheMounts   map[string]*cacheRefShare
-	managerName   string
+	cm              cache.Manager
+	sm              *session.Manager
+	cacheMountsMu   sync.Mutex
+	cacheMounts     map[string]*cacheRefShare
+	hostCacheMounts *HostCacheMounts
+	hostShares      map[string]*hostCacheShare
+	managerName     string
 }
 
 func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount, sharing pb.CacheSharingOpt, s session.Group) (mref cache.MutableRef, err error) {
@@ -251,6 +267,9 @@ func (sm *secretMountInstance) IdentityMapping() *user.IdentityMapping {
 func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef, g session.Group) (cache.MutableRef, error) {
 	if m.CacheOpt == nil {
 		return nil, errors.Errorf("missing cache mount options")
+	}
+	if d := mm.hostCacheMounts.lookup(m.CacheOpt.ID); d != nil {
+		return mm.getHostCacheDir(ctx, d, ref, m.Selector, m.CacheOpt.Sharing, g)
 	}
 	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing, g)
 }
