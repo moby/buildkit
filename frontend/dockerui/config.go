@@ -115,6 +115,7 @@ type ContextOpt struct {
 	Platform       *ocispecs.Platform
 	ResolveMode    string
 	CaptureDigest  *digest.Digest
+	Frontend       bool
 }
 
 func validateMinCaps(c client.Client) error {

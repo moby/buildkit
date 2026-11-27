@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -13,9 +14,11 @@ import (
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/remotes/docker"
 	"github.com/containerd/containerd/v2/pkg/reference"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
 	distreference "github.com/distribution/reference"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/session"
@@ -48,6 +51,7 @@ const (
 )
 
 type SourceOpt struct {
+	MetadataStore *metadata.Store
 	Snapshotter   snapshot.Snapshotter
 	ContentStore  content.Store
 	Applier       diff.Applier
@@ -62,6 +66,7 @@ type Source struct {
 	SourceOpt
 	gImageRes    flightcontrol.Group[*resolveImageResult]
 	gAttestChain flightcontrol.Group[*sourceresolver.AttestationChain]
+	frontendMu   sync.Mutex
 }
 
 var _ source.Source = &Source{}
@@ -173,6 +178,11 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 	if platform := opt.Platform; platform != nil {
 		key += platforms.FormatAll(*platform)
 	}
+	frontendKey := ""
+	if opt.Frontend && id.Reference.Digest() == "" {
+		frontendKey = key
+		key += ":frontend"
+	}
 	rm, err := resolver.ParseImageResolveMode(opt.ResolveMode)
 	if err != nil {
 		return nil, err
@@ -187,7 +197,25 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 	ret := &sourceresolver.ResolveImageResponse{}
 	if !opt.NoConfig {
 		res, err := is.gImageRes.Do(ctx, key, func(ctx context.Context) (*resolveImageResult, error) {
-			dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
+			resolveRef := ref
+			// Frontend pulls cache content without adding a tagged image to the
+			// image store. If no local tag exists, reuse the last resolution when
+			// pulling is disabled.
+			if frontendKey != "" && rm == resolver.ResolveModeNever {
+				if _, _, err := rslvr.ResolveLocal(ctx, ref); err != nil {
+					if !errors.Is(err, cerrdefs.ErrNotFound) {
+						return nil, err
+					}
+					dgst, err := is.frontendDigest(frontendKey)
+					if err != nil {
+						return nil, err
+					}
+					if dgst != "" {
+						resolveRef += "@" + dgst.String()
+					}
+				}
+			}
+			dgst, dt, err := imageutil.Config(ctx, resolveRef, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
 			if err != nil {
 				if rm != resolver.ResolveModeDefault || is.ImageStore == nil {
 					return nil, err
@@ -201,6 +229,11 @@ func (is *Source) ResolveImageMetadata(ctx context.Context, id *ImageIdentifier,
 					return nil, err
 				}
 				dgst, dt = localDgst, localDt
+			}
+			if frontendKey != "" && rm != resolver.ResolveModeNever {
+				if err := is.setFrontendDigest(frontendKey, dgst); err != nil {
+					return nil, err
+				}
 			}
 			return &resolveImageResult{dgst: dgst, dt: dt}, nil
 		})

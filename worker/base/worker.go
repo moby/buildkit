@@ -141,6 +141,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	}
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
+		MetadataStore: opt.MetadataStore,
 		Snapshotter:   opt.Snapshotter,
 		ContentStore:  opt.ContentStore,
 		Applier:       opt.Applier,
@@ -244,11 +245,12 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 }
 
 func (w *Worker) GarbageCollect(ctx context.Context) error {
-	if w.WorkerOpt.GarbageCollect == nil {
-		return nil
+	if w.WorkerOpt.GarbageCollect != nil {
+		if _, err := w.WorkerOpt.GarbageCollect(ctx); err != nil {
+			return err
+		}
 	}
-	_, err := w.WorkerOpt.GarbageCollect(ctx)
-	return err
+	return w.ImageSource.PruneFrontendResolutions(ctx)
 }
 
 func (w *Worker) Close() error {
@@ -607,7 +609,10 @@ func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*cl
 }
 
 func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...client.PruneInfo) error {
-	return w.CacheMgr.Prune(ctx, ch, opt...)
+	if err := w.CacheMgr.Prune(ctx, ch, opt...); err != nil {
+		return err
+	}
+	return w.ImageSource.PruneFrontendResolutions(ctx)
 }
 
 func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {

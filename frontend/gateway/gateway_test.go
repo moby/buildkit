@@ -2,18 +2,90 @@ package gateway
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/client/llb/sourceresolver"
+	"github.com/moby/buildkit/frontend"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/gateway/container"
 	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 	spb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 )
+
+func TestFrontendResolveMode(t *testing.T) {
+	for _, mode := range []string{"", "default", "local", "pull", "never"} {
+		for _, named := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/named=%t", mode, named), func(t *testing.T) {
+				bridge := &frontendModeBridge{}
+				gw, err := NewGatewayFrontend((&worker.Controller{}).Infos(), nil)
+				require.NoError(t, err)
+				opts := map[string]string{
+					"source":             "example.com/frontend:latest",
+					"image-resolve-mode": mode,
+				}
+				if named {
+					opts["context:example.com/frontend"] = "docker-image://example.com/override:latest"
+				}
+				_, err = gw.Solve(t.Context(), bridge, nil, opts, nil, "", nil)
+				require.ErrorIs(t, err, errFrontendModeSolved)
+				expected := "default"
+				if mode == "never" {
+					expected = "never"
+				}
+				require.Equal(t, expected, bridge.mode)
+				require.True(t, bridge.frontend)
+				require.NotNil(t, bridge.definition)
+				op := &spb.Op{}
+				require.NoError(t, op.UnmarshalVT(bridge.definition.Def[0]))
+				ref := "example.com/frontend:latest"
+				if named {
+					ref = "example.com/override:latest"
+				}
+				require.Equal(t, "docker-image://"+ref+"@"+digest.FromString("frontend").String(), op.GetSource().Identifier)
+				if mode == "never" {
+					require.Equal(t, "never", op.GetSource().Attrs[spb.AttrImageResolveMode])
+				} else {
+					require.Empty(t, op.GetSource().Attrs[spb.AttrImageResolveMode])
+				}
+			})
+		}
+	}
+}
+
+var errFrontendModeSolved = errors.New("frontend image solve reached")
+
+type frontendModeBridge struct {
+	frontend.FrontendLLBBridge
+	mode       string
+	frontend   bool
+	definition *spb.Definition
+}
+
+func (b *frontendModeBridge) ResolveSourceMetadata(ctx context.Context, op *spb.SourceOp, opt sourceresolver.Opt) (*sourceresolver.MetaResponse, error) {
+	b.mode = opt.ImageOpt.ResolveMode
+	b.frontend = opt.ImageOpt.Frontend
+	return &sourceresolver.MetaResponse{
+		Op: op,
+		Image: &sourceresolver.ResolveImageResponse{
+			Digest: digest.FromString("frontend"),
+			Config: []byte(`{"architecture":"amd64","os":"linux","config":{}}`),
+		},
+	}, nil
+}
+
+func (b *frontendModeBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid string) (*frontend.Result, error) {
+	b.definition = req.Definition
+	return nil, errFrontendModeSolved
+}
 
 func TestCheckSourceIsAllowed(t *testing.T) {
 	makeGatewayFrontend := func(sources []string) (*gatewayFrontend, error) {
