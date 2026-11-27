@@ -475,6 +475,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, errors.Errorf("duplicate cache exports %s", types)
 	}
 	req.Cache.Exports = rest
+	// if SOURCE_DATE_EPOCH is set, enable it for the cache exporters too
+	if v, ok := epoch.ParseBuildArgs(req.FrontendAttrs); ok {
+		for _, e := range req.Cache.Exports {
+			if _, ok := e.Attrs[string(exptypes.OptKeySourceDateEpoch)]; !ok {
+				if e.Attrs == nil {
+					e.Attrs = make(map[string]string)
+				}
+				e.Attrs[string(exptypes.OptKeySourceDateEpoch)] = v
+			}
+		}
+	}
 	cacheExporters, err := c.resolveCacheExporters(ctx, session.NewGroup(req.Session), req.Cache.Exports)
 	if err != nil {
 		return nil, err
@@ -858,6 +869,19 @@ func (c *Controller) resolveCacheExporters(ctx context.Context, g session.Group,
 		if exp.Exporter == nil {
 			bklog.G(ctx).Debugf("cache exporter resolver for %v returned nil, skipping exporter", e.Type)
 			continue
+		}
+		exp.Epoch, _, err = epoch.ParseExporterAttrs(e.Attrs)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to configure %v cache exporter", e.Type)
+		}
+		if v, ok := e.Attrs["rewrite-timestamp"]; ok {
+			exp.RewriteTimestamp, err = strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to configure %v cache exporter: invalid rewrite-timestamp", e.Type)
+			}
+			if exp.RewriteTimestamp && e.Type == "inline" {
+				return nil, errors.New("rewrite-timestamp is not supported by the inline cache exporter, set it on the image exporter instead")
+			}
 		}
 		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
 			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
