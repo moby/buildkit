@@ -2922,31 +2922,19 @@ func TestGitCLIAdvice(t *testing.T) {
 }
 
 func TestFetchCommitForBundleUsesOptionTerminator(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Depends on shell script git stub")
-	}
-
 	t.Parallel()
 	ctx := t.Context()
 
-	dir := t.TempDir()
-	capture := filepath.Join(dir, "args")
-	fakeGit := filepath.Join(dir, "git")
-	require.NoError(t, os.WriteFile(fakeGit, fmt.Appendf(nil, `#!/bin/sh
-for arg do
-	printf '%%s\n' "$arg"
-done > %s
-`, strconv.Quote(capture)), 0600))
-	require.NoError(t, os.Chmod(fakeGit, 0700))
+	var args []string
+	git := gitutil.NewGitCLI(gitutil.WithExec(func(ctx context.Context, cmd *exec.Cmd) error {
+		args = append([]string(nil), cmd.Args...)
+		return nil
+	}))
 
 	sharedURL := "file:///tmp/shared.git"
 	commit := "--upload-pack=/tmp/evil.sh"
-	err := fetchCommitForBundle(ctx, gitutil.NewGitCLI(gitutil.WithGitBinary(fakeGit)), sharedURL, commit)
+	err := fetchCommitForBundle(ctx, git, sharedURL, commit)
 	require.NoError(t, err)
-
-	buf, err := os.ReadFile(capture)
-	require.NoError(t, err)
-	args := strings.Split(strings.TrimSpace(string(buf)), "\n")
 
 	fetchIdx := -1
 	for i, arg := range args {
