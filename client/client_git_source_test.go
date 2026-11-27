@@ -50,7 +50,6 @@ import (
 //     git-commit material and the bundle-blob material are recorded.
 func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureOCILayout)
-	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -61,7 +60,10 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 		"git init -b master",
 		"git config --local user.email test@example.com",
 		"git config --local user.name test",
-		"echo hello > file.txt",
+	)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "file.txt"), []byte("hello\n"), 0644))
+	err = runInDir(gitDir,
 		"git add file.txt",
 		"git commit -m initial",
 		"git update-server-info",
@@ -233,6 +235,7 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 	// Provenance subtest: assert that the git-commit material and the
 	// bundle-blob material are both recorded.
 	t.Run("provenance", func(t *testing.T) {
+		integration.SkipOnPlatform(t, "windows", "Windows local exporter does not emit provenance.json for this scratch result")
 		workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 		destDir := t.TempDir()
 		st := llb.Scratch().File(
@@ -297,8 +300,6 @@ func testGitBundleRoundTrip(t *testing.T, sb integration.Sandbox) {
 // and then re-imported in Build 2.
 func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 	workers.CheckFeatureCompat(t, sb, workers.FeatureDirectPush)
-	integration.SkipOnPlatform(t, "windows")
-	requiresLinux(t)
 	ctx := sb.Context()
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -315,7 +316,10 @@ func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 		"git init -b master",
 		"git config --local user.email test@example.com",
 		"git config --local user.name test",
-		"echo hello > file.txt",
+	)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "file.txt"), []byte("hello\n"), 0644))
+	err = runInDir(gitDir,
 		"git add file.txt",
 		"git commit -m initial",
 		"git update-server-info",
@@ -383,6 +387,7 @@ func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 	})
 
 	t.Run("provenance", func(t *testing.T) {
+		integration.SkipOnPlatform(t, "windows", "Windows local exporter does not emit provenance.json for this scratch result")
 		workers.CheckFeatureCompat(t, sb, workers.FeatureProvenance)
 		destDir := t.TempDir()
 		st := llb.Scratch().File(
@@ -435,7 +440,6 @@ func testGitBundleRoundTripRegistry(t *testing.T, sb integration.Sandbox) {
 }
 
 func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	ctx := sb.Context()
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -446,17 +450,23 @@ func testGitResolveMutatedSource(t *testing.T, sb integration.Sandbox) {
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
-		"echo a > a",
+	}
+	err = runInDir(gitDir, gitCommands...)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "a"), []byte("a\n"), 0644))
+	err = runInDir(gitDir,
 		"git add a",
 		"git commit -m a",
 		"git tag -a v0.1 -m v0.1",
-		"echo b > b",
+	)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "b"), []byte("b\n"), 0644))
+	err = runInDir(gitDir,
 		"git add b",
 		"git commit -m b",
 		"git checkout -B v2",
 		"git update-server-info",
-	}
-	err = runInDir(gitDir, gitCommands...)
+	)
 	require.NoError(t, err)
 
 	cmd := exec.CommandContext(t.Context(), "git", "rev-parse", "v0.1")

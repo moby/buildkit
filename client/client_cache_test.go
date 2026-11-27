@@ -193,7 +193,7 @@ func (s *gatedCacheStore) Writer(ctx context.Context, opts ...content.WriterOpt)
 }
 
 func testBasicAzblobCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "azurite-blob is not installed in the Windows integration environment")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -901,7 +901,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "silo and mc are not installed in the Windows integration environment")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -945,7 +945,7 @@ func testBasicS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "silo and mc are not installed in the Windows integration environment")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -1019,7 +1019,7 @@ func testZstdS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testUncompressedS3CacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "silo and mc are not installed in the Windows integration environment")
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,
@@ -1138,7 +1138,7 @@ func getS3Object(t *testing.T, sb integration.Sandbox, s3c *s3.Client, bucket, k
 }
 
 func testCacheExportCacheDeletedContent(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "copying from a layered Windows image into scratch fails because Windows layers require exactly one lower mount")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1527,7 +1527,6 @@ func testImageManifestRegistryCacheImportExport(t *testing.T, sb integration.San
 }
 
 func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1537,8 +1536,13 @@ func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
 	cacheDir := filepath.Join(tmpdir.Name, "cache")
 
 	// Build 1: export cache for a simple build
-	st1 := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo build1 > /out"`)).Root()
-	def1, err := llb.Scratch().File(llb.Copy(st1, "/out", "/out")).Marshal(sb.Context())
+	imgName := integration.UnixOrWindows("alpine:latest", "nanoserver:latest")
+	st1 := llb.Image(imgName).Run(llb.Shlex(integration.UnixOrWindows(
+		`sh -c "echo build1 > /out"`,
+		`cmd /C echo build1 > C:/out`,
+	))).Root()
+	result1 := integration.UnixOrWindows(llb.Scratch().File(llb.Copy(st1, "/out", "/out")), st1)
+	def1, err := result1.Marshal(sb.Context())
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def1, SolveOpt{
@@ -1560,8 +1564,12 @@ func testLocalCacheExportReset(t *testing.T, sb integration.Sandbox) {
 	require.Greater(t, len(entries1), 0)
 
 	// Build 2: different build, export with reset=true
-	st2 := llb.Image("alpine:latest").Run(llb.Shlex(`sh -c "echo build2-different > /out2"`)).Root()
-	def2, err := llb.Scratch().File(llb.Copy(st2, "/out2", "/out2")).Marshal(sb.Context())
+	st2 := llb.Image(imgName).Run(llb.Shlex(integration.UnixOrWindows(
+		`sh -c "echo build2-different > /out2"`,
+		`cmd /C echo build2-different > C:/out2`,
+	))).Root()
+	result2 := integration.UnixOrWindows(llb.Scratch().File(llb.Copy(st2, "/out2", "/out2")), st2)
+	def2, err := result2.Marshal(sb.Context())
 	require.NoError(t, err)
 
 	_, err = c.Solve(sb.Context(), def2, SolveOpt{
@@ -2293,8 +2301,6 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
-
 	workers.CheckFeatureCompat(t, sb,
 		workers.FeatureCacheExport,
 		workers.FeatureCacheImport,

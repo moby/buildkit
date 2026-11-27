@@ -92,13 +92,17 @@ func testMissingCopySourceReleasesCache(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCanceledRunReleasesCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
 	f := getFrontend(t, sb)
-	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", []byte(`FROM busybox
+	dockerfile := []byte(integration.UnixOrWindows(`FROM busybox
 ARG BUST
 RUN echo "$BUST" > /parent && dd if=/dev/zero of=/a bs=1M count=1
 RUN dd if=/dev/zero of=/b bs=1M count=1 && echo CANCEL-READY && sleep 120
-`), 0600))
+`, `FROM nanoserver
+ARG BUST
+RUN echo %BUST%> C:\Windows\Temp\parent
+RUN echo data> C:\Windows\Temp\b && echo CANCEL-READY && ping -n 121 127.0.0.1 >NUL
+`))
+	dir := integration.Tmpdir(t, fstest.CreateFile("Dockerfile", dockerfile, 0600))
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -864,7 +868,7 @@ COPY --from=s1 unique2 /
 
 // moby/buildkit#5305
 func testCacheMountModeNoCache(t *testing.T, sb integration.Sandbox) {
-	integration.SkipOnPlatform(t, "windows")
+	integration.SkipOnPlatform(t, "windows", "Windows cache mounts are normalized to /C:cache and are not available at C:\\cache in the container")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
