@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -42,8 +43,40 @@ type cacheManager struct {
 	results CacheResultStorage
 }
 
-func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
+func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) (rerr error) {
+	start := time.Now()
 	visited := map[string]struct{}{}
+	var (
+		released           int
+		failed             int
+		firstReleaseErr    error
+		releaseDuration    time.Duration
+		maxReleaseDuration time.Duration
+	)
+	defer func() {
+		if failed > 0 {
+			bklog.G(ctx).WithError(firstReleaseErr).WithField("cache_manager", c.id).
+				Warnf("failed to release %d unreferenced cache results", failed)
+		}
+		fields := logrus.Fields{
+			"cache_manager": c.id,
+			"checked":       len(visited),
+			"released":      released,
+			"duration":      time.Since(start),
+		}
+		if released > 0 {
+			fields["release_duration"] = releaseDuration
+			fields["max_release_duration"] = maxReleaseDuration
+		}
+		if failed > 0 {
+			fields["failed"] = failed
+		}
+		lg := bklog.G(ctx).WithFields(fields)
+		if rerr != nil {
+			lg = lg.WithError(rerr)
+		}
+		lg.Debug("released unreferenced cache metadata")
+	}()
 	return c.backend.Walk(func(id string) error {
 		return c.backend.WalkResults(id, func(cr CacheResult) error {
 			if _, ok := visited[cr.ID]; ok {
@@ -51,7 +84,21 @@ func (c *cacheManager) ReleaseUnreferenced(ctx context.Context) error {
 			}
 			visited[cr.ID] = struct{}{}
 			if !c.results.Exists(ctx, cr.ID) {
-				c.backend.Release(cr.ID)
+				releaseStart := time.Now()
+				err := c.backend.Release(cr.ID)
+				d := time.Since(releaseStart)
+				if err != nil {
+					if !errors.Is(err, ErrNotFound) {
+						failed++
+						if firstReleaseErr == nil {
+							firstReleaseErr = err
+						}
+					}
+					return nil
+				}
+				released++
+				releaseDuration += d
+				maxReleaseDuration = max(maxReleaseDuration, d)
 			}
 			return nil
 		})

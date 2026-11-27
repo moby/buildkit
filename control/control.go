@@ -143,7 +143,12 @@ func NewController(opt Opt) (*Controller, error) {
 	}
 	c.throttledGC = throttle.After(time.Minute, c.gc)
 	// use longer interval for releaseUnreferencedCache deleting links quickly is less important
-	c.throttledReleaseUnreferenced = throttle.After(5*time.Minute, func() { c.releaseUnreferencedCache(context.TODO()) })
+	c.throttledReleaseUnreferenced = throttle.After(5*time.Minute, func() {
+		ctx := context.TODO()
+		if err := c.releaseUnreferencedCache(ctx); err != nil {
+			bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
+		}
+	})
 
 	if opt.TraceCollector != nil {
 		fwd, err := forwarder.New(context.Background(), opt.TraceCollector)
@@ -236,6 +241,9 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 }
 
 func (c *Controller) releaseUnreferencedCache(ctx context.Context) error {
+	if c.cache == nil {
+		return nil
+	}
 	return c.cache.ReleaseUnreferenced(ctx)
 }
 
@@ -256,12 +264,8 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	didPrune := false
 	defer func() {
 		if didPrune {
-			if c, ok := c.cache.(interface {
-				ReleaseUnreferenced(context.Context) error
-			}); ok {
-				if err := c.ReleaseUnreferenced(ctx); err != nil {
-					bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
-				}
+			if err := c.releaseUnreferencedCache(ctx); err != nil {
+				bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
 			}
 		}
 	}()
