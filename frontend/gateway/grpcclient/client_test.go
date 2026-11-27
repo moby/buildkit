@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -132,4 +133,13 @@ func TestMessageForwarderSerializesSends(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(context.Cause(ctx))
 	}
+}
+
+func TestReferenceLoadRequiresCap(t *testing.T) {
+	// no LLB bridge client: sending the request would panic
+	r := &reference{c: &grpcClient{caps: pb.Caps.CapSet(nil)}, id: "ref"}
+	err := r.Load(t.Context())
+	var capErr *apicaps.CapError
+	require.ErrorAs(t, err, &capErr)
+	require.Equal(t, pb.CapGatewayEvaluateLoad, capErr.ID)
 }

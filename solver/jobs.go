@@ -30,6 +30,7 @@ type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
 	Build(ctx context.Context, e Edge) (CachedResultWithProvenance, error)
+	Load(ctx context.Context, e Edge) error
 	InContext(ctx context.Context, f func(ctx context.Context, jobCtx JobContext) error) error
 	EachValue(ctx context.Context, key string, fn func(any) error) error
 }
@@ -407,6 +408,11 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResultWithProven
 	sb.exporters = append(sb.exporters, res.CacheKeys()[0]) // all keys already have full export chain
 	sb.mu.Unlock()
 	return &withProvenance{CachedResult: res}, nil
+}
+
+func (sb *subBuilder) Load(ctx context.Context, e Edge) error {
+	_, err := sb.solver.load(ctx, e.Vertex, sb.vtx, nil)
+	return err
 }
 
 func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, JobContext) error) error {
@@ -872,6 +878,23 @@ func (j *Job) Build(ctx context.Context, e Edge) (CachedResultWithProvenance, er
 	}
 
 	return &withProvenance{CachedResult: res, j: j, e: e}, nil
+}
+
+func (j *Job) Load(ctx context.Context, e Edge) error {
+	j.mu.Lock()
+	if j.discarded {
+		j.mu.Unlock()
+		return errors.Errorf("load on discarded job %s", j.id)
+	}
+	j.builds++ // keep states until loaded, like Build
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		j.span = span
+	}
+	j.mu.Unlock()
+	defer j.buildDone()
+
+	_, err := j.list.load(ctx, e.Vertex, nil, j)
+	return err
 }
 
 type withProvenance struct {

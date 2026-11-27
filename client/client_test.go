@@ -302,6 +302,10 @@ func TestClientGatewayIntegration(t *testing.T) {
 		// gateway_container_network_test.go
 		testClientGatewayContainerExtraHosts,
 
+		// gateway_load_test.go
+		testClientGatewayLoadNoSolve,
+		testClientGatewayLoadSessionSecret,
+
 		// gateway_container_security_test.go
 		testClientGatewayContainerInvalidSecurityMode,
 

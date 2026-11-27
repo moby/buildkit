@@ -66,6 +66,10 @@ const (
 
 	CapGatewayEvaluate apicaps.CapID = "gateway.evaluate"
 
+	// CapGatewayEvaluateLoad is the capability to load the vertices of a ref
+	// into the calling job without solving them (EvaluateRequest.LoadOnly).
+	CapGatewayEvaluateLoad apicaps.CapID = "gateway.evaluate.load"
+
 	// CapGatewayWarnings is the capability to log warnings from frontend
 	CapGatewayWarnings apicaps.CapID = "gateway.warnings"
 
@@ -235,6 +239,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewayEvaluate,
 		Name:    "gateway evaluate",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayEvaluateLoad,
+		Name:    "gateway evaluate load",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

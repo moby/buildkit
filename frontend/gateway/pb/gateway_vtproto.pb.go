@@ -881,6 +881,7 @@ func (m *EvaluateRequest) CloneVT() *EvaluateRequest {
 	}
 	r := new(EvaluateRequest)
 	r.Ref = m.Ref
+	r.LoadOnly = m.LoadOnly
 	if len(m.unknownFields) > 0 {
 		r.unknownFields = make([]byte, len(m.unknownFields))
 		copy(r.unknownFields, m.unknownFields)
@@ -2587,6 +2588,9 @@ func (this *EvaluateRequest) EqualVT(that *EvaluateRequest) bool {
 		return false
 	}
 	if this.Ref != that.Ref {
+		return false
+	}
+	if this.LoadOnly != that.LoadOnly {
 		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
@@ -5548,6 +5552,16 @@ func (m *EvaluateRequest) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.LoadOnly {
+		i--
+		if m.LoadOnly {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
 	if len(m.Ref) > 0 {
 		i -= len(m.Ref)
 		copy(dAtA[i:], m.Ref)
@@ -7599,6 +7613,9 @@ func (m *EvaluateRequest) SizeVT() (n int) {
 	l = len(m.Ref)
 	if l > 0 {
 		n += 1 + l + protohelpers.SizeOfVarint(uint64(l))
+	}
+	if m.LoadOnly {
+		n += 2
 	}
 	n += len(m.unknownFields)
 	return n
@@ -14091,6 +14108,26 @@ func (m *EvaluateRequest) UnmarshalVT(dAtA []byte) error {
 			}
 			m.Ref = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LoadOnly", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.LoadOnly = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

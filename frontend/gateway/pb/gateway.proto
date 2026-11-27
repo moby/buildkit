@@ -290,6 +290,7 @@ message StatFileResponse {
 
 message EvaluateRequest {
 	string Ref = 1;
+	bool LoadOnly = 2;
 }
 
 message EvaluateResponse {

@@ -471,6 +471,13 @@ func (r *ref) Evaluate(ctx context.Context) error {
 	return nil
 }
 
+func (r *ref) Load(ctx context.Context) error {
+	if err := r.resultProxy.Load(ctx); err != nil {
+		return r.c.wrapSolveError(err)
+	}
+	return nil
+}
+
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
 	root, err := r.getMount(ctx)
 	if err != nil {

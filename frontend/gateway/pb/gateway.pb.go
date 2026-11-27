@@ -2277,6 +2277,7 @@ func (x *StatFileResponse) GetStat() *types.Stat {
 type EvaluateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ref           string                 `protobuf:"bytes,1,opt,name=Ref,proto3" json:"Ref,omitempty"`
+	LoadOnly      bool                   `protobuf:"varint,2,opt,name=LoadOnly,proto3" json:"LoadOnly,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2316,6 +2317,13 @@ func (x *EvaluateRequest) GetRef() string {
 		return x.Ref
 	}
 	return ""
+}
+
+func (x *EvaluateRequest) GetLoadOnly() bool {
+	if x != nil {
+		return x.LoadOnly
+	}
+	return false
 }
 
 type EvaluateResponse struct {
@@ -3643,9 +3651,10 @@ const file_github_com_moby_buildkit_frontend_gateway_pb_gateway_proto_rawDesc = 
 	"MountIndex\x18\x03 \x01(\x05R\n" +
 	"MountIndex\":\n" +
 	"\x10StatFileResponse\x12&\n" +
-	"\x04stat\x18\x01 \x01(\v2\x12.fsutil.types.StatR\x04stat\"#\n" +
+	"\x04stat\x18\x01 \x01(\v2\x12.fsutil.types.StatR\x04stat\"?\n" +
 	"\x0fEvaluateRequest\x12\x10\n" +
-	"\x03Ref\x18\x01 \x01(\tR\x03Ref\"\x12\n" +
+	"\x03Ref\x18\x01 \x01(\tR\x03Ref\x12\x1a\n" +
+	"\bLoadOnly\x18\x02 \x01(\bR\bLoadOnly\"\x12\n" +
 	"\x10EvaluateResponse\"\r\n" +
 	"\vPingRequest\"\xd6\x01\n" +
 	"\fPongResponse\x12J\n" +
