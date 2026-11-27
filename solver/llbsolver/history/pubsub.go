@@ -21,10 +21,18 @@ func (p *pubsub[T]) Subscribe() *channel[T] {
 
 func (p *pubsub[T]) Send(v T) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	for c := range p.m {
-		go c.send(v)
+		if len(c.pending) == 0 {
+			select {
+			case c.ch <- v:
+				continue
+			default:
+			}
+			go c.drain(v)
+		}
+		c.pending = append(c.pending, v)
 	}
-	p.mu.Unlock()
 }
 
 func (p *pubsub[T]) Close() {
@@ -44,12 +52,26 @@ type channel[T any] struct {
 	ch        chan T
 	done      chan struct{}
 	closeOnce sync.Once
+	pending   []T // protected by ps.mu; only the first send starts a drainer
 }
 
-func (p *channel[T]) send(v T) {
-	select {
-	case p.ch <- v:
-	case <-p.done:
+func (p *channel[T]) drain(v T) {
+	for {
+		select {
+		case p.ch <- v:
+		case <-p.done:
+			return
+		}
+		p.ps.mu.Lock()
+		clear(p.pending[:1])
+		p.pending = p.pending[1:]
+		if len(p.pending) == 0 {
+			p.pending = nil
+			p.ps.mu.Unlock()
+			return
+		}
+		v = p.pending[0]
+		p.ps.mu.Unlock()
 	}
 }
 

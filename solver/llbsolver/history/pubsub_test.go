@@ -3,6 +3,7 @@ package history
 import (
 	"sync"
 	"testing"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/require"
 )
@@ -95,9 +96,29 @@ func TestPubsubConcurrent(t *testing.T) {
 
 	for i := range numSubs {
 		require.Len(t, received[i], numMsgs)
+		for j, v := range received[i] {
+			require.Equal(t, j, v)
+		}
 	}
 
 	for _, sub := range subs {
 		sub.close()
 	}
+}
+
+func TestPubsubSlowSubscriber(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ps := &pubsub[int]{m: map[*channel[int]]struct{}{}}
+		sub := ps.Subscribe()
+		defer sub.close()
+		stalled := ps.Subscribe()
+		for i := range 2 * cap(sub.ch) {
+			ps.Send(i)
+		}
+		synctest.Wait()
+		stalled.close()
+		for i := range 2 * cap(sub.ch) {
+			require.Equal(t, i, <-sub.ch)
+		}
+	})
 }
