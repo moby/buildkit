@@ -1596,6 +1596,32 @@ The result is the union of:
 > as a compressed file and doesn't generate any kind of decompression error
 > message, rather the file will simply be copied to the destination.
 
+#### Ownership of extracted files
+
+Files extracted from an archive keep the user and group IDs recorded in the
+archive. This applies to local archives, and to remote archives added with
+[`ADD --unpack`](#add---unpack). Directories that `ADD` itself creates to hold
+them are owned by UID and GID 0.
+
+The builder may be unable to use the recorded IDs. In
+[rootless mode](https://docs.docker.com/engine/security/rootless/), for example,
+the build fails if an ID is outside the range mapped to your user:
+
+```text
+failed to Lchown "d/f" for UID 460880, GID 5001: lchownat d/f: invalid argument
+```
+
+Use [`--chown`](#add---chown) to set the ownership yourself, in place of the
+recorded IDs:
+
+```dockerfile
+ADD --chown=0:0 --unpack https://example.com/archive.tar.gz /download
+```
+
+> [!NOTE]
+> Applying `--chown` to extracted files requires BuildKit 0.23.0 or later.
+> Earlier versions ignore it for the contents of archives.
+
 #### Adding files from a URL
 
 In the case where source is a remote file URL, the destination will have
@@ -1746,6 +1772,9 @@ See [`COPY --chmod`](#copy---chmod).
 ### ADD --chown
 
 See [`COPY --chown`](#copy---chown).
+
+For files extracted from an archive, see
+[Ownership of extracted files](#ownership-of-extracted-files).
 
 ### ADD --link
 
