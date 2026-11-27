@@ -109,39 +109,34 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 	items := IntersectAll(matchDeps)
 
 	if len(items) > 1 {
-		var main *item
+		// Only merge candidates that are not descendants of another
+		// candidate. Merging related items would create cycles (and
+		// non-terminating walks), and picking which one survives at random
+		// would make the resulting graph depend on map iteration order.
+		// Unrelated candidates are merged completely, which is symmetric, so
+		// the result doesn't depend on which of them is kept.
+		var tops []*item
 		for it := range items {
-			main = it
-			break
+			top := true
+			for other := range items {
+				if other != it && other.reaches(it) {
+					top = false
+					break
+				}
+			}
+			if top {
+				tops = append(tops, it)
+			}
 		}
-		for it := range items {
-			if it == main {
-				continue
+		if len(tops) == 0 {
+			for it := range items {
+				tops = append(tops, it)
+				break
 			}
-			for l, m := range it.children {
-				if main.children == nil {
-					main.children = map[unique.Handle[linkv2]]map[*item]struct{}{}
-				}
-				if _, ok := main.children[l]; !ok {
-					main.children[l] = map[*item]struct{}{}
-				}
-				for ch := range m {
-					main.children[l][ch] = struct{}{}
-					for i, links := range ch.parents {
-						newlinks := map[link]struct{}{}
-						for l := range links {
-							if l.src == it {
-								l.src = main
-							}
-							newlinks[l] = struct{}{}
-						}
-						ch.parents[i] = newlinks
-					}
-				}
-			}
-			for _, rr := range it.results {
-				main.addResult(rr)
-			}
+		}
+		main := tops[0]
+		for _, it := range tops[1:] {
+			main.absorb(it)
 		}
 		items = map[*item]struct{}{main: {}}
 	}
@@ -160,10 +155,10 @@ func (c *CacheChains) Add(dgst digest.Digest, deps [][]solver.CacheLink, results
 		}, map[*item]struct{}{}); err != nil {
 			return nil, false, errors.Wrapf(err, "failed to walk children of %s", dgst)
 		}
-		for i, dd := range deps {
+		for _, dd := range deps {
 			for j, d := range dd {
 				if _, ok := allChildren[d.Src.(*item)]; ok {
-					deps[i][j].Src = nil
+					dd[j].Src = nil
 				}
 			}
 		}
@@ -316,6 +311,74 @@ type link struct {
 	src      *item
 	selector string
 }
+
+// absorb merges it into c: c takes over its children, its parents and its
+// results, and it is detached from the graph.
+func (c *item) absorb(it *item) {
+	for l, m := range it.children {
+		for ch := range m {
+			if ch == c || ch.reaches(c) {
+				continue // would create a cycle
+			}
+			if c.children == nil {
+				c.children = map[unique.Handle[linkv2]]map[*item]struct{}{}
+			}
+			if _, ok := c.children[l]; !ok {
+				c.children[l] = map[*item]struct{}{}
+			}
+			c.children[l][ch] = struct{}{}
+			for i, links := range ch.parents {
+				newlinks := map[link]struct{}{}
+				for pl := range links {
+					if pl.src == it {
+						pl.src = c
+					}
+					newlinks[pl] = struct{}{}
+				}
+				ch.parents[i] = newlinks
+			}
+		}
+	}
+	it.children = nil
+
+	for idx, links := range it.parents {
+		for pl := range links {
+			p := pl.src
+			h := unique.Make(linkv2{selector: pl.selector, index: idx, digest: it.dgst})
+			if m, ok := p.children[h]; ok {
+				delete(m, it)
+				if len(m) == 0 {
+					delete(p.children, h)
+				}
+			}
+			if p == c || c.reaches(p) {
+				continue // would create a cycle
+			}
+			p.addChild(c, idx, pl.selector)
+		}
+	}
+	it.parents = nil
+
+	for _, rr := range it.results {
+		c.addResult(rr)
+	}
+	it.results = nil
+}
+
+// reaches reports whether target is a descendant of c.
+func (c *item) reaches(target *item) bool {
+	found := false
+	_ = c.walkChildren(func(i *item) error {
+		if i == target {
+			found = true
+			return errStopWalk
+		}
+		return nil
+	}, map[*item]struct{}{})
+	return found
+}
+
+var errStopWalk = errors.New("stop walk")
 
 func (c *item) addChild(src *item, index int, selector string) {
 	if c.children == nil {
