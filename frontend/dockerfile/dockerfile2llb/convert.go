@@ -427,14 +427,15 @@ func (dctx *dispatchContext) buildDispatchStates(stages []instructions.Stage) er
 		st.BaseName = nameMatch.Result
 
 		ds := &dispatchState{
-			stage:          st,
-			deps:           make(map[*dispatchState]instructions.Command),
-			ctxPaths:       make(map[string]struct{}),
-			paths:          make(map[string]struct{}),
-			stageName:      st.Name,
-			prefixPlatform: dctx.opt.MultiPlatformRequested,
-			outline:        dctx.outline.clone(),
-			epoch:          dctx.epoch,
+			stage:                 st,
+			deps:                  make(map[*dispatchState]instructions.Command),
+			ctxPaths:              make(map[string]struct{}),
+			paths:                 make(map[string]struct{}),
+			stageName:             st.Name,
+			prefixPlatform:        dctx.opt.MultiPlatformRequested,
+			outline:               dctx.outline.clone(),
+			epoch:                 dctx.epoch,
+			baseNameUndefinedArgs: undefinedFromArgs(argKeys, nameMatch.Unmatched),
 		}
 
 		if v := st.Platform; v != "" {
@@ -644,7 +645,18 @@ func (dctx *dispatchContext) resolveBaseImage(ctx context.Context, d *dispatchSt
 	origName := d.stage.BaseName
 	ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
+		msg := fmt.Sprintf("failed to parse stage name %q", d.stage.BaseName)
+		if len(d.baseNameUndefinedArgs) > 0 {
+			// Undefined args expand to an empty string, so the expanded name
+			// alone does not show which part of the FROM expression was lost.
+			decls := make([]string, 0, len(d.baseNameUndefinedArgs))
+			for _, arg := range d.baseNameUndefinedArgs {
+				decls = append(decls, "ARG "+arg)
+			}
+			msg += fmt.Sprintf(" (FROM refers to undefined build args %s; add %s before the first FROM)",
+				strings.Join(d.baseNameUndefinedArgs, ", "), strings.Join(decls, ", "))
+		}
+		return errors.Wrap(err, msg)
 	}
 	platform := d.platform
 	if platform == nil {
@@ -1220,6 +1232,11 @@ type dispatchState struct {
 	entrypoint  instructionTracker
 	cmd         instructionTracker
 	healthcheck instructionTracker
+
+	// baseNameUndefinedArgs are the sorted variables referenced by the FROM
+	// expression that have no ARG declaration and therefore expand to an empty
+	// string. The resulting name may no longer parse as a reference.
+	baseNameUndefinedArgs []string
 }
 
 func (ds *dispatchState) asyncLocalOpts() []llb.LocalOption {
@@ -2235,6 +2252,19 @@ func toPBLocation(sourceIndex int, location []parser.Range) pb.Location {
 		SourceIndex: int32(sourceIndex),
 		Ranges:      loc,
 	}
+}
+
+// undefinedFromArgs returns the sorted names in unmatched that are not declared
+// as args, and so always expand to an empty string.
+func undefinedFromArgs(testArgKeys map[string]struct{}, unmatched map[string]struct{}) []string {
+	var undefined []string
+	for arg := range unmatched {
+		if _, ok := testArgKeys[arg]; !ok {
+			undefined = append(undefined, arg)
+		}
+	}
+	slices.Sort(undefined)
+	return undefined
 }
 
 func unusedFromArgsCheckKeys(env shell.EnvGetter, args map[string]argInfo) map[string]struct{} {

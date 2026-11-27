@@ -100,6 +100,40 @@ COPY --from=0 f2 /
 	require.Error(t, err)
 }
 
+func TestFromUndefinedArgError(t *testing.T) {
+	t.Parallel()
+
+	// An undefined arg expands to an empty string, so the name left to parse no
+	// longer contains it and the error has to name it instead.
+	df := `FROM some-image:${VERSION}`
+	_, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.ErrorContains(t, err, `failed to parse stage name "some-image:"`)
+	require.ErrorContains(t, err, "(FROM refers to undefined build args VERSION; add ARG VERSION before the first FROM)")
+	require.ErrorContains(t, err, "invalid reference format")
+
+	df = `FROM some-image:${VERSION}-${REVISION}`
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.ErrorContains(t, err, "(FROM refers to undefined build args REVISION, VERSION; add ARG REVISION, ARG VERSION before the first FROM)")
+
+	// A declared but empty arg expands the same way, but it is not undefined.
+	df = `ARG VERSION
+FROM some-image:${VERSION}`
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.ErrorContains(t, err, `failed to parse stage name "some-image:"`)
+	require.NotContains(t, err.Error(), "undefined build args")
+
+	// Only the undefined args are named when a defined one is also empty.
+	df = `ARG VERSION
+FROM some-image:${VERSION}-${REVISION}`
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.ErrorContains(t, err, "(FROM refers to undefined build args REVISION; add ARG REVISION before the first FROM)")
+
+	// An undefined arg is not an error as long as the name still parses.
+	df = `FROM scratch${SUFFIX}`
+	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	require.NoError(t, err)
+}
+
 func TestDockerfileParsingMarshal(t *testing.T) {
 	t.Parallel()
 	df := `FROM scratch

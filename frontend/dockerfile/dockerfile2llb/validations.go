@@ -209,14 +209,14 @@ func reportUnmatchedVariables(cmd instructions.Command, buildArgs []instructions
 }
 
 func reportUnusedFromArgs(testArgKeys map[string]struct{}, unmatched map[string]struct{}, location []parser.Range, lint *linter.Linter) {
+	if len(unmatched) == 0 {
+		return
+	}
 	var argKeys []string
 	for arg := range testArgKeys {
 		argKeys = append(argKeys, arg)
 	}
-	for arg := range unmatched {
-		if _, ok := testArgKeys[arg]; ok {
-			continue
-		}
+	for _, arg := range undefinedFromArgs(testArgKeys, unmatched) {
 		suggest, _ := suggest.Search(arg, argKeys, true)
 		msg := linter.RuleUndefinedArgInFrom.Format(arg, suggest)
 		lint.Run(&linter.RuleUndefinedArgInFrom, location, msg)
