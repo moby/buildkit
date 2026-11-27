@@ -301,8 +301,8 @@ Keys supported by image output:
 * `unpack=true`: unpack image after creation (for use with containerd)
 * `dangling-name-prefix=<value>`: name image with `prefix@<digest>`, used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
-* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
-* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression=<uncompressed|gzip|estargz|zstd|zstd:chunked>`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`. zstd:chunked requires `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd, zstd:chunked (0-22)
 * `rewrite-timestamp=true`: rewrite the file timestamps to the `SOURCE_DATE_EPOCH` value.
    See [`docs/build-repro.md`](docs/build-repro.md) for how to specify the `SOURCE_DATE_EPOCH` value.
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers)
@@ -475,18 +475,19 @@ BuildKit supports the following cache exporters:
 All standalone cache exporters (`registry`, `local`, `gha`, `s3`, and `azblob`)
 support these compression options on `--export-cache`:
 
-* `compression=<uncompressed|gzip|estargz|zstd>`: compression for newly created
-  layers (default: `gzip`).
+* `compression=<uncompressed|gzip|estargz|zstd|zstd:chunked>`: compression for
+  newly created layers (default: `gzip`).
 * `compression-level=<value>`: compression level for gzip and estargz (0-9),
-  or zstd (0-22).
+  or zstd and zstd:chunked (0-22).
 * `force-compression=true`: apply the selected compression to existing layers
   as well.
 
 Invalid compression options fail export configuration even with
 `ignore-error=true`. These options do not apply to `--import-cache`. Inline
 cache uses the image exporter's compression settings, configured on `--output`.
-The `gha`, `s3`, and `azblob` backends do not preserve eStargz annotations, so
-selecting `estargz` does not enable lazy pulling from these caches.
+The `gha`, `s3`, and `azblob` backends do not preserve eStargz or zstd:chunked
+annotations, so selecting `estargz` or `zstd:chunked` does not enable lazy or
+partial pulling from these caches.
 
 In most case you want to use the `inline` cache exporter.
 However, note that the `inline` cache exporter only supports `min` cache mode.
@@ -528,8 +529,8 @@ buildctl build ... \
 * `ref=<ref>`: specify repository reference to store cache, e.g. `docker.io/user/image:tag`
 * `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `true` since BuildKit `v0.21`, must be used with `oci-mediatypes=true`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default: `true`, since BuildKit `v0.8`)
-* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`
-* `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression=<uncompressed|gzip|estargz|zstd|zstd:chunked>`: choose compression type for layers newly created and cached, gzip is default value. estargz, zstd and zstd:chunked should be used with `oci-mediatypes=true`
+* `compression-level=<value>`: choose compression level for gzip, estargz (0-9) and zstd, zstd:chunked (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 
@@ -555,8 +556,8 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `tag=<tag>`: specify custom tag of image to write to local index (default: `latest`)
 * `image-manifest=<true|false>`: whether to export cache manifest as an OCI-compatible image manifest rather than a manifest list/index (default: `true` since BuildKit `v0.21`, must be used with `oci-mediatypes=true`)
 * `oci-mediatypes=<true|false>`: whether to use OCI mediatypes in exported manifests (default `true`, since BuildKit `v0.8`)
-* `compression=<uncompressed|gzip|estargz|zstd>`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
-* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `compression=<uncompressed|gzip|estargz|zstd|zstd:chunked>`: choose compression type for layers newly created and cached, gzip is default value. estargz, zstd and zstd:chunked should be used with `oci-mediatypes=true`.
+* `compression-level=<value>`: compression level for gzip, estargz (0-9) and zstd, zstd:chunked (0-22)
 * `force-compression=true`: forcibly apply `compression` option to all layers
 * `ignore-error=<false|true>`: specify if error is ignored in case cache export fails (default: `false`)
 * `reset=<true|false>`: remove any blobs in the cache directory that are not referenced by the current manifests in `index.json` (default: `false`). This is useful for keeping the local cache directory from growing indefinitely. Cleanup is skipped when the store is busy.
