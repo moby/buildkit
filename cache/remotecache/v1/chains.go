@@ -343,25 +343,21 @@ func (c *item) addChild(src *item, index int, selector string) {
 }
 
 func (c *item) addResult(r solver.CacheExportResult) {
-	var exists bool
 	for _, rr := range c.results {
-		if !rr.CreatedAt.Equal(r.CreatedAt) {
-			continue
+		if rr.CreatedAt.Equal(r.CreatedAt) && sameDescriptors(rr.Result, r.Result) {
+			return
 		}
-		if len(rr.Result.Descriptors) != len(r.Result.Descriptors) {
-			continue
-		}
-		for i, d := range rr.Result.Descriptors {
-			if d.Digest != r.Result.Descriptors[i].Digest {
-				continue
-			}
-		}
-		exists = true
-		break
 	}
-	if !exists {
-		c.results = append(c.results, r)
+	c.results = append(c.results, r)
+}
+
+func sameDescriptors(a, b *solver.Remote) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
+	return slices.EqualFunc(a.Descriptors, b.Descriptors, func(x, y ocispecs.Descriptor) bool {
+		return x.Digest == y.Digest
+	})
 }
 
 func (c *item) computeID() {
