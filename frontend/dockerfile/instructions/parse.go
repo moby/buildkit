@@ -999,9 +999,11 @@ func validateDefinitionDescription(instruction string, argKeys []string, descCom
 	if len(descComments) == 0 || len(argKeys) == 0 {
 		return
 	}
-	descCommentParts := strings.Split(descComments[len(descComments)-1], " ")
-	if slices.Contains(argKeys, descCommentParts[0]) {
-		return
+	for _, comment := range descComments {
+		key, _, _ := strings.Cut(comment, " ")
+		if slices.Contains(argKeys, key) {
+			return
+		}
 	}
 	exampleKey := argKeys[0]
 	if len(argKeys) > 1 {

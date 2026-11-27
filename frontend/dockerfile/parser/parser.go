@@ -321,11 +321,11 @@ func Parse(rwc io.Reader) (*Result, error) {
 		}
 		if isComment(bytesRead) {
 			comment := strings.TrimSpace(string(bytesRead[1:]))
-			if comment == "" {
-				comments = nil
-			} else {
+			if comment != "" {
 				comments = append(comments, comment)
 			}
+		} else if isEmptyContinuationLine(bytesRead) {
+			comments = nil
 		}
 		var directiveOk bool
 		bytesRead, directiveOk, err = processLine(d, bytesRead, true)
