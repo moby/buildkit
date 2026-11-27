@@ -49,7 +49,7 @@ jobs:
           fields: platforms
 
   binaries:
-    uses: docker/github-builder/.github/workflows/bake.yml@a31d2311da4d55e21b978c1c52bab82ba97d51ee # v1.19.0
+    uses: docker/github-builder/.github/workflows/bake.yml@bb1eb9fb69408ac52395fb21f49c6b52d564529a # v1.20.0
     permissions:
       contents: read # same as global permission
       id-token: write # for signing attestation(s) with GitHub OIDC Token
@@ -222,7 +222,7 @@ jobs:
             core.setOutput('includes', JSON.stringify(matrix));
 
   image:
-    uses: docker/github-builder/.github/workflows/bake.yml@a31d2311da4d55e21b978c1c52bab82ba97d51ee # v1.19.0
+    uses: docker/github-builder/.github/workflows/bake.yml@bb1eb9fb69408ac52395fb21f49c6b52d564529a # v1.20.0
     needs:
       - image-prepare
       - test
