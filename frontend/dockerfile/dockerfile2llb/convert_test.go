@@ -3,6 +3,7 @@ package dockerfile2llb
 import (
 	"bytes"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	digest "github.com/opencontainers/go-digest"
@@ -567,6 +569,46 @@ func TestCopyLinkChownByName(t *testing.T) {
 			}
 			require.ErrorContains(t, err, tc.err)
 			require.ErrorContains(t, err, "--link")
+		})
+	}
+}
+
+func TestAddGitMTime(t *testing.T) {
+	t.Parallel()
+
+	caps := pb.Caps.CapSet(pb.Caps.All())
+	const url = "https://github.com/moby/buildkit.git?ref=v0.10.0"
+	for _, tc := range []struct {
+		name     string
+		df       string
+		caps     *apicaps.CapSet
+		expected string
+	}{
+		{name: "default", df: "FROM scratch\nADD " + url + " /co\n", caps: &caps},
+		{name: "query commit", df: "FROM scratch\nADD " + url + "&mtime=commit /co\n", caps: &caps, expected: "commit"},
+		{name: "query checkout", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nADD " + url + "&mtime=checkout /co\n", caps: &caps, expected: "checkout"},
+		{name: "epoch", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nADD " + url + " /co\n", caps: &caps, expected: "commit"},
+		{name: "epoch unsupported", df: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nADD " + url + " /co\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			res, err := Dockerfile2LLB(appcontext.Context(), []byte(tc.df), ConvertOpt{LLBCaps: tc.caps})
+			require.NoError(t, err)
+			def, err := res.State.Marshal(t.Context())
+			require.NoError(t, err)
+
+			var found bool
+			for _, dt := range def.Def {
+				var op pb.Op
+				require.NoError(t, op.UnmarshalVT(dt))
+				src, ok := op.Op.(*pb.Op_Source)
+				if !ok || !strings.HasPrefix(src.Source.Identifier, "git://") {
+					continue
+				}
+				found = true
+				require.Equal(t, tc.expected, src.Source.Attrs[pb.AttrGitMTime])
+			}
+			require.True(t, found)
 		})
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/moby/buildkit/util/testutil/workers"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 )
@@ -26,6 +27,7 @@ var addGitTests = integration.TestFuncs(
 	testAddGitChecksumCache,
 	testGitQueryString,
 	testGitAdviceBuildArg,
+	testAddGitMTime,
 )
 
 func init() {
@@ -873,4 +875,76 @@ func applyTemplate(tmpl string, x any) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// testAddGitMTime checks that ADD <git url> honors the mtime query parameter
+// and defaults to the commit time when SOURCE_DATE_EPOCH is set.
+func testAddGitMTime(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows", "Git source handler submodule update not supported on Windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureOCIExporter)
+	f := getFrontend(t, sb)
+
+	const commitTime = 978307200 // 2001-01-01T00:00:00Z
+	gitDir := t.TempDir()
+	err := runShell(gitDir,
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo foo >foo",
+		"git add foo",
+		"GIT_COMMITTER_DATE=2001-01-01T00:00:00Z GIT_AUTHOR_DATE=2001-01-01T00:00:00Z git commit -m v0.0.1",
+		"git tag v0.0.1",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Clean(gitDir))))
+	defer server.Close()
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, tc := range []struct {
+		name       string
+		dockerfile string
+	}{
+		{
+			name:       "query",
+			dockerfile: "FROM scratch\nADD " + server.URL + "/.git?ref=v0.0.1&mtime=commit /co\n",
+		},
+		{
+			name:       "source date epoch",
+			dockerfile: "ARG SOURCE_DATE_EPOCH=42\nFROM scratch\nADD " + server.URL + "/.git?ref=v0.0.1 /co\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := integration.Tmpdir(t,
+				fstest.CreateFile("Dockerfile", []byte(tc.dockerfile), 0600),
+			)
+			out := filepath.Join(t.TempDir(), "out.tar")
+			outW, err := os.Create(out)
+			require.NoError(t, err)
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				Exports: []client.ExportEntry{{
+					Type:   client.ExporterOCI,
+					Output: fixedWriteCloser(outW),
+				}},
+				LocalMounts: map[string]fsutil.FS{
+					dockerui.DefaultLocalNameDockerfile: dir,
+					dockerui.DefaultLocalNameContext:    dir,
+				},
+			}, nil)
+			require.NoError(t, err)
+
+			dt, err := os.ReadFile(out)
+			require.NoError(t, err)
+			mfst := readOCIManifest(t, dt)
+			require.Len(t, mfst.Layers, 1)
+			layer := readOCILayerMap(t, dt, mfst.Layers[0])
+			item, ok := layer["co/foo"]
+			require.True(t, ok, "co/foo not found in %v", layer)
+			require.Equal(t, int64(commitTime), item.Header.ModTime.Unix())
+		})
+	}
 }
