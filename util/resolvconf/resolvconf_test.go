@@ -317,6 +317,40 @@ nameserver 8.8.4.4
 `,
 		},
 		{
+			name:  "IPv4 routeable, IPv6 link-local with zone, ipv6 enabled",
+			input: "nameserver 10.0.0.1\nnameserver fe80::1%eth0",
+			ipv6:  true,
+			expContent: `nameserver 10.0.0.1
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
+		},
+		{
+			name:  "IPv6 link-local only, ipv6 enabled",
+			input: "nameserver fe80::1%eth0\nnameserver fe80::2",
+			ipv6:  true,
+			expContent: `nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 2001:4860:4860::8888
+nameserver 2001:4860:4860::8844
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Used default nameservers.
+# Overrides: []
+`,
+		},
+		{
+			name:  "IPv4 link-local is kept",
+			input: "nameserver 169.254.169.253",
+			ipv6:  true,
+			expContent: `nameserver 169.254.169.253
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+`,
+		},
+		{
 			name:       "Override nameservers",
 			input:      "nameserver 127.0.0.53",
 			overrideNS: []string{"127.0.0.1", "::1"},
