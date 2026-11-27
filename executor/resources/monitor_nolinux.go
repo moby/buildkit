@@ -5,3 +5,7 @@ package resources
 func isCgroup2() bool {
 	return false
 }
+
+func prepareCgroupControllers() error {
+	return nil
+}
