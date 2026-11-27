@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/snapshot"
@@ -766,7 +767,11 @@ func checksumAlgo(algo MetadataChecksumAlgo) (digest.Algorithm, error) {
 }
 
 func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s session.Group) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {
-	newRef, err := hs.cache.New(ctx, nil, s, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("http url %s", urlutil.RedactCredentials(hs.src.URL))))
+	newRef, err := hs.cache.New(ctx, nil, s,
+		cache.CachePolicyRetain,
+		cache.WithRecordType(client.UsageRecordTypeHTTP),
+		cache.WithDescription(fmt.Sprintf("http url %s", urlutil.RedactCredentials(hs.src.URL))),
+	)
 	if err != nil {
 		return nil, "", err
 	}

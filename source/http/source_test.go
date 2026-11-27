@@ -361,6 +361,136 @@ func TestHTTPChecksum(t *testing.T) {
 	ref = nil
 }
 
+// TestHTTPSourceRecordType covers ADD --checksum downloads. Those snapshots are
+// source.http so prune filters can select them, while an ordinary cache record
+// stays regular.
+func TestHTTPSourceRecordType(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	cm, err := newCacheManager(t)
+	require.NoError(t, err)
+
+	mutable, err := cm.New(ctx, nil, nil, cache.CachePolicyRetain, cache.WithDescription("regular build cache"))
+	require.NoError(t, err)
+	mount, err := mutable.Mount(ctx, false, nil)
+	require.NoError(t, err)
+	lm := snapshot.LocalMounter(mount)
+	_, err = lm.Mount()
+	require.NoError(t, err)
+	require.NoError(t, lm.Unmount())
+	regularRef, err := mutable.Commit(ctx)
+	require.NoError(t, err)
+	defer func() {
+		if regularRef != nil {
+			regularRef.Release(context.WithoutCancel(ctx))
+		}
+	}()
+
+	content := []byte("pinned-download")
+	resp := &httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: content,
+	}
+	server := httpserver.NewTestServer(map[string]*httpserver.Response{
+		"/pinned.tar": resp,
+	})
+	defer server.Close()
+
+	hs, err := NewSource(Opt{CacheAccessor: cm})
+	require.NoError(t, err)
+
+	id := &HTTPIdentifier{
+		URL:      server.URL + "/pinned.tar",
+		Checksum: digest.FromBytes(content),
+	}
+	h, err := hs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	// Checksummed ADD resolves the pin without downloading, then Snapshot
+	// stores the bytes. Both steps are what the solver does for ADD --checksum.
+	_, _, _, _, err = h.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, 0, server.Stats("/pinned.tar").AllRequests)
+
+	httpRef, err := h.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer func() {
+		if httpRef != nil {
+			httpRef.Release(context.WithoutCancel(ctx))
+		}
+	}()
+	require.Equal(t, 1, server.Stats("/pinned.tar").AllRequests)
+	require.NotEmpty(t, httpRef.ID())
+
+	const regularDesc = "regular build cache"
+	httpDesc := "http url " + id.URL
+
+	// Prune selects reclaimable records. Release the snapshots so disk usage
+	// reports those records, which is where the source record type is kept.
+	require.NoError(t, regularRef.Release(ctx))
+	regularRef = nil
+	require.NoError(t, httpRef.Release(ctx))
+	httpRef = nil
+
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Equal(t, client.UsageRecordTypeHTTP, usageByDescription(t, du, httpDesc).RecordType)
+	require.Equal(t, client.UsageRecordTypeRegular, usageByDescription(t, du, regularDesc).RecordType)
+
+	// buildx rewrites `type=source.http` to `type==source.http` before prune.
+	// `type!=source.http` is forwarded unchanged.
+	httpOnly, err := cm.DiskUsage(ctx, client.DiskUsageInfo{Filter: []string{"type==source.http"}})
+	require.NoError(t, err)
+	require.Len(t, httpOnly, 1)
+	require.Equal(t, client.UsageRecordTypeHTTP, httpOnly[0].RecordType)
+	require.Equal(t, httpDesc, httpOnly[0].Description)
+
+	notHTTP, err := cm.DiskUsage(ctx, client.DiskUsageInfo{Filter: []string{"type!=source.http"}})
+	require.NoError(t, err)
+	require.Len(t, notHTTP, 1)
+	require.Equal(t, client.UsageRecordTypeRegular, notHTTP[0].RecordType)
+	require.Equal(t, regularDesc, notHTTP[0].Description)
+
+	regularOnly, err := cm.DiskUsage(ctx, client.DiskUsageInfo{Filter: []string{"type==regular"}})
+	require.NoError(t, err)
+	require.Len(t, regularOnly, 1)
+	require.Equal(t, client.UsageRecordTypeRegular, regularOnly[0].RecordType)
+	require.Equal(t, regularDesc, regularOnly[0].Description)
+
+	for _, filter := range []string{"type==source.local", "type==source.git.checkout"} {
+		matched, err := cm.DiskUsage(ctx, client.DiskUsageInfo{Filter: []string{filter}})
+		require.NoError(t, err)
+		require.Empty(t, matched)
+	}
+
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{Filter: []string{"type!=source.http"}}))
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Len(t, du, 1)
+	require.Equal(t, client.UsageRecordTypeHTTP, du[0].RecordType)
+	require.Equal(t, httpDesc, du[0].Description)
+
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{Filter: []string{"type==source.http"}}))
+	du, err = cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	require.NoError(t, err)
+	require.Empty(t, du)
+}
+
+func usageByDescription(t *testing.T, du []*client.UsageInfo, desc string) *client.UsageInfo {
+	t.Helper()
+	var found *client.UsageInfo
+	for _, info := range du {
+		if info.Description != desc {
+			continue
+		}
+		require.Nil(t, found, "duplicate usage record %q", desc)
+		found = info
+	}
+	require.NotNil(t, found, "missing usage record %q", desc)
+	return found
+}
+
 func TestHTTPSignatureVerification(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
