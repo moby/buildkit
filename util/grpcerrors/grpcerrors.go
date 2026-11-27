@@ -76,9 +76,13 @@ func ToGRPC(ctx context.Context, err error) error {
 // a different message or additional details than the Status.
 func errorHasMoreContext(err error, st *status.Status) bool {
 	if errMessage := err.Error(); len(errMessage) > len(st.Message()) {
-		// check if the longer message in errMessage is only due to
-		// prepending with the status code
+		// Decoding adds status and typed-error text. Only copy additional
+		// caller context, not text rebuilt from the existing status details.
 		if grpcStatusError, ok := errors.AsType[*grpcStatusError](err); ok {
+			decoded, ok := errors.AsType[*decodedError](err)
+			if !ok || errMessage != decoded.Error() {
+				return true
+			}
 			return st.Code() != grpcStatusError.st.Code() || st.Message() != grpcStatusError.st.Message()
 		}
 		return true
@@ -260,7 +264,14 @@ func FromGRPC(err error) error {
 		stack.Helper()
 	}
 
-	return stack.Enable(err)
+	return stack.Enable(&decodedError{error: err})
+}
+
+// decodedError marks the complete error rebuilt from a gRPC status and details.
+type decodedError struct{ error }
+
+func (e *decodedError) Unwrap() error {
+	return e.error
 }
 
 type grpcStatusError struct {
