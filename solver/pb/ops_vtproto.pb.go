@@ -909,6 +909,7 @@ func (m *FileActionCopy) CloneVT() *FileActionCopy {
 	r.Timestamp = m.Timestamp
 	r.AlwaysReplaceExistingDestPaths = m.AlwaysReplaceExistingDestPaths
 	r.ModeStr = m.ModeStr
+	r.TimestampOnlyCreatedDirs = m.TimestampOnlyCreatedDirs
 	if rhs := m.IncludePatterns; rhs != nil {
 		tmpContainer := make([]string, len(rhs))
 		copy(tmpContainer, rhs)
@@ -2711,6 +2712,9 @@ func (this *FileActionCopy) EqualVT(that *FileActionCopy) bool {
 		if vx != vy {
 			return false
 		}
+	}
+	if this.TimestampOnlyCreatedDirs != that.TimestampOnlyCreatedDirs {
+		return false
 	}
 	return string(this.unknownFields) == string(that.unknownFields)
 }
@@ -5450,6 +5454,18 @@ func (m *FileActionCopy) MarshalToSizedBufferVT(dAtA []byte) (int, error) {
 		i -= len(m.unknownFields)
 		copy(dAtA[i:], m.unknownFields)
 	}
+	if m.TimestampOnlyCreatedDirs {
+		i--
+		if m.TimestampOnlyCreatedDirs {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x88
+	}
 	if len(m.RequiredPaths) > 0 {
 		for iNdEx := len(m.RequiredPaths) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.RequiredPaths[iNdEx])
@@ -7345,6 +7361,9 @@ func (m *FileActionCopy) SizeVT() (n int) {
 			l = len(s)
 			n += 2 + l + protohelpers.SizeOfVarint(uint64(l))
 		}
+	}
+	if m.TimestampOnlyCreatedDirs {
+		n += 3
 	}
 	n += len(m.unknownFields)
 	return n
@@ -14049,6 +14068,26 @@ func (m *FileActionCopy) UnmarshalVT(dAtA []byte) error {
 			}
 			m.RequiredPaths = append(m.RequiredPaths, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
+		case 17:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TimestampOnlyCreatedDirs", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return protohelpers.ErrIntOverflow
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TimestampOnlyCreatedDirs = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := protohelpers.Skip(dAtA[iNdEx:])

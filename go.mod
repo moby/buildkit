@@ -249,3 +249,5 @@ tool (
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
+
+replace github.com/tonistiigi/fsutil => github.com/fenollp/fsutil v0.0.0-20261107185037-e49a6ad82671

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -382,6 +383,76 @@ func TestFileCopy(t *testing.T) {
 	require.Equal(t, "/etc/foo", copy.Src)
 	require.Equal(t, "/tmp/bar", copy.Dest)
 	require.Equal(t, int64(-1), copy.Timestamp)
+}
+
+func TestFileOpCaps(t *testing.T) {
+	t.Parallel()
+
+	st := Scratch().File(
+		Copy(Image("bar"), "foo", "/a/", &CopyInfo{IncludePatterns: []string{"*.txt"}, Mode: &ChmodOpt{ModeStr: "u+x"}}).
+			Symlink("/a", "/b"),
+	)
+	def, err := st.Marshal(t.Context())
+	require.NoError(t, err)
+
+	var caps map[string]bool
+	for _, dt := range def.Def {
+		var op pb.Op
+		require.NoError(t, op.UnmarshalVT(dt))
+		if _, ok := op.Op.(*pb.Op_File); ok {
+			caps = map[string]bool{}
+			for k, v := range def.Metadata[digest.FromBytes(dt)].Caps {
+				caps[string(k)] = v
+			}
+		}
+	}
+	require.True(t, caps[string(pb.CapFileBase)])
+	require.True(t, caps[string(pb.CapFileCopyIncludeExcludePatterns)])
+	require.True(t, caps[string(pb.CapFileSymlinkCreate)])
+	require.True(t, caps[string(pb.CapFileCopyModeStringFormat)])
+
+	// a daemon rejects ops requiring capabilities it doesn't know
+	daemonCaps := pb.Caps.CapSet(pb.Caps.All())
+	for c := range caps {
+		require.NoError(t, daemonCaps.Supports(apicaps.CapID(c)))
+	}
+}
+
+func TestFileCopyCreatedDirsTime(t *testing.T) {
+	t.Parallel()
+
+	tm := time.Unix(42, 0)
+	for _, tc := range []struct {
+		name      string
+		opts      []CopyOption
+		timestamp int64
+		onlyDirs  bool
+	}{
+		{name: "none", timestamp: -1},
+		{name: "created dirs", opts: []CopyOption{WithCreatedDirsTime(tm)}, timestamp: tm.UnixNano(), onlyDirs: true},
+		{name: "created time wins", opts: []CopyOption{WithCreatedDirsTime(tm), WithCreatedTime(time.Unix(7, 0))}, timestamp: time.Unix(7, 0).UnixNano()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := Scratch().File(Copy(Image("bar"), "foo", "/a/b/", tc.opts...))
+			def, err := st.Marshal(t.Context())
+			require.NoError(t, err)
+
+			var copy *pb.FileActionCopy
+			var hasCap bool
+			for _, dt := range def.Def {
+				var op pb.Op
+				require.NoError(t, op.UnmarshalVT(dt))
+				if f, ok := op.Op.(*pb.Op_File); ok {
+					copy = f.File.Actions[0].Action.(*pb.FileAction_Copy).Copy
+					_, hasCap = def.Metadata[digest.FromBytes(dt)].Caps[pb.CapFileCopyTimestampOnlyCreatedDirs]
+				}
+			}
+			require.NotNil(t, copy)
+			require.Equal(t, tc.timestamp, copy.Timestamp)
+			require.Equal(t, tc.onlyDirs, copy.TimestampOnlyCreatedDirs)
+			require.Equal(t, tc.onlyDirs, hasCap)
+		})
+	}
 }
 
 func TestFileCopyFromAction(t *testing.T) {

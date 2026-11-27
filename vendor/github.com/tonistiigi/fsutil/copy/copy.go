@@ -86,10 +86,10 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, opts ...Opt) e
 		if ci.Mode != nil {
 			perm = *ci.Mode
 		}
-		if createdDirs, err := MkdirAll(ensureDstPath, os.FileMode(perm), ci.Chown, ci.Utime); err != nil {
+		if createdDirs, err := MkdirAll(ensureDstPath, os.FileMode(perm), ci.Chown, ci.createdDirsUtime()); err != nil {
 			return err
 		} else {
-			defer fixCreatedParentDirs(createdDirs, ci.Utime)
+			defer fixCreatedParentDirs(createdDirs, ci.createdDirsUtime())
 		}
 	}
 
@@ -112,6 +112,7 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, opts ...Opt) e
 		return err
 	}
 	c.testHookLstat = ci.testHookLstat
+	c.createdDirsUtime = ci.CreatedDirsUtime
 	srcs := []string{src}
 
 	if ci.AllowWildcards {
@@ -134,7 +135,7 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, opts ...Opt) e
 		if err != nil {
 			return err
 		}
-		defer fixCreatedParentDirs(createdDirs, ci.Utime)
+		defer fixCreatedParentDirs(createdDirs, ci.createdDirsUtime())
 		if err := c.copy(ctx, srcFollowed, "", dst, false, patternmatcher.MatchInfo{}, patternmatcher.MatchInfo{}); err != nil {
 			return err
 		}
@@ -170,10 +171,22 @@ func (c *copier) prepareTargetDir(srcFollowed, src, destPath string, copyDirCont
 	if c.mode != nil {
 		mode = *c.mode
 	}
-	if dirs, err := MkdirAll(target, os.FileMode(mode), c.chown, c.utime); err != nil {
+	dirsUtime := c.utime
+	if dirsUtime == nil {
+		dirsUtime = c.createdDirsUtime
+	}
+	if dirs, err := MkdirAll(target, os.FileMode(mode), c.chown, dirsUtime); err != nil {
 		return "", nil, err
 	} else {
 		createdDirs = dirs
+	}
+	// When copying the contents of a directory to a new path, that path is
+	// the copy of the source directory and gets its metadata, unless Utime
+	// overrides it.
+	if c.utime == nil && target == destPath {
+		if n := len(createdDirs); n > 0 && createdDirs[n-1] == target {
+			createdDirs = createdDirs[:n-1]
+		}
 	}
 
 	return destPath, createdDirs, nil
@@ -189,10 +202,16 @@ type Chowner func(*User) (*User, error)
 type XAttrErrorHandler func(dst, src, xattrKey string, err error) error
 
 type CopyInfo struct {
-	Chown          Chowner
-	Utime          *time.Time
-	AllowWildcards bool
-	Mode           *int
+	Chown Chowner
+	// Utime sets the timestamps of all copied files and created directories.
+	Utime *time.Time
+	// CreatedDirsUtime sets the timestamps of the directories created
+	// implicitly to hold the copied files, like the missing parents of the
+	// destination path, while copied files keep their timestamps. Utime
+	// takes precedence when set.
+	CreatedDirsUtime *time.Time
+	AllowWildcards   bool
+	Mode             *int
 	// ModeStr is mode in non-octal format. Overrides Mode if non-empty.
 	ModeStr           string
 	XAttrErrorHandler XAttrErrorHandler
@@ -210,6 +229,13 @@ type CopyInfo struct {
 
 	// testHookLstat is called before each os.Lstat if non-nil (for testing only)
 	testHookLstat func(path string)
+}
+
+func (ci *CopyInfo) createdDirsUtime() *time.Time {
+	if ci.Utime != nil {
+		return ci.Utime
+	}
+	return ci.CreatedDirsUtime
 }
 
 type Opt func(*CopyInfo)
@@ -266,6 +292,7 @@ func WithChangeNotifier(fn fsutil.ChangeFunc) Opt {
 type copier struct {
 	chown                          Chowner
 	utime                          *time.Time
+	createdDirsUtime               *time.Time
 	mode                           *int
 	modeSet                        *mode.Set
 	inodes                         map[uint64]string

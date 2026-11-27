@@ -69,6 +69,10 @@ The build arg value is used for:
 - the `org.opencontainers.image.created` annotation in the [OCI Image Index](https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys)
 - the timestamp of the files exported with the `local` exporter
 - the timestamp of the files exported with the `tar` exporter
+- the timestamp of the directories created by `WORKDIR`, and of the directories
+  created implicitly by `COPY` and `ADD` (missing parents of the destination,
+  directories missing from an unpacked archive). Copied files keep their own
+  timestamps.
 
 To apply the build arg value to the timestamps of the files inside the image, specify `rewrite-timestamp=true` as an image exporter option:
 ```

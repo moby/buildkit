@@ -584,6 +584,11 @@ type CopyInfo struct {
 	ChownOpt                       *ChownOpt
 	CreatedTime                    *time.Time
 	AlwaysReplaceExistingDestPaths bool
+	// CreatedDirsTime sets the timestamps of the directories created
+	// implicitly by the copy (missing parents of the destination, directories
+	// missing from an unpacked archive), while copied files keep their own.
+	// CreatedTime takes precedence when set.
+	CreatedDirsTime *time.Time
 }
 
 func (mi *CopyInfo) SetCopyOption(mi2 *CopyInfo) {
@@ -621,6 +626,10 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 		Timestamp:                        marshalTime(a.info.CreatedTime),
 		AlwaysReplaceExistingDestPaths:   a.info.AlwaysReplaceExistingDestPaths,
 	}
+	if a.timestampOnlyCreatedDirs() {
+		c.Timestamp = marshalTime(a.info.CreatedDirsTime)
+		c.TimestampOnlyCreatedDirs = true
+	}
 	if a.info.Mode != nil {
 		if a.info.Mode.ModeStr != "" {
 			c.ModeStr = a.info.Mode.ModeStr
@@ -652,7 +661,14 @@ func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
 	return path.Join(dir, p), nil
 }
 
+func (a *fileActionCopy) timestampOnlyCreatedDirs() bool {
+	return a.info.CreatedTime == nil && a.info.CreatedDirsTime != nil
+}
+
 func (a *fileActionCopy) addCaps(f *FileOp) {
+	if a.timestampOnlyCreatedDirs() {
+		addCap(&f.constraints, pb.CapFileCopyTimestampOnlyCreatedDirs)
+	}
 	if len(a.info.IncludePatterns) != 0 || len(a.info.ExcludePatterns) != 0 {
 		addCap(&f.constraints, pb.CapFileCopyIncludeExcludePatterns)
 	}
@@ -662,7 +678,7 @@ func (a *fileActionCopy) addCaps(f *FileOp) {
 	if a.info.AlwaysReplaceExistingDestPaths {
 		addCap(&f.constraints, pb.CapFileCopyAlwaysReplaceExistingDestPaths)
 	}
-	if a.info.Mode.ModeStr != "" {
+	if a.info.Mode != nil && a.info.Mode.ModeStr != "" {
 		addCap(&f.constraints, pb.CapFileCopyModeStringFormat)
 	}
 }
@@ -687,6 +703,19 @@ func (c CreatedTime) SetSymlinkOption(si *SymlinkInfo) {
 
 func (c CreatedTime) SetCopyOption(mi *CopyInfo) {
 	mi.CreatedTime = (*time.Time)(&c)
+}
+
+// CreatedDirsTime is a CopyOption setting CopyInfo.CreatedDirsTime.
+type CreatedDirsTime time.Time
+
+// WithCreatedDirsTime sets the timestamps of the directories created
+// implicitly by a copy, while copied files keep their own timestamps.
+func WithCreatedDirsTime(t time.Time) CreatedDirsTime {
+	return CreatedDirsTime(t)
+}
+
+func (c CreatedDirsTime) SetCopyOption(mi *CopyInfo) {
+	mi.CreatedDirsTime = (*time.Time)(&c)
 }
 
 func marshalTime(t *time.Time) int64 {
@@ -849,6 +878,10 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	state := newMarshalState(ctx)
+	_, err := state.add(f.action, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
 	for _, st := range state.actions {
 		if adder, isCapAdder := st.action.(capAdder); isCapAdder {
 			adder.addCaps(f)
@@ -859,11 +892,6 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	pop.Platform = nil // file op is not platform specific
 	pop.Op = &pb.Op_File{
 		File: pfo,
-	}
-
-	_, err := state.add(f.action, c)
-	if err != nil {
-		return "", nil, nil, nil, err
 	}
 	pop.Inputs = state.inputs
 
