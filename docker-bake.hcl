@@ -372,11 +372,22 @@ target "validate-dockerfile" {
   call = "check"
 }
 
-target "vendor" {
+group "vendor" {
+  targets = ["vendor-modules", "vendor-files"]
+}
+
+target "vendor-modules" {
   inherits = ["_common"]
   dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
-  target = "update"
+  target = "update-modules"
   output = ["."]
+}
+
+target "vendor-files" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/vendor.Dockerfile"
+  target = "update-vendor"
+  output = ["type=local,dest=./vendor,mode=delete"]
 }
 
 target "generated-files" {
