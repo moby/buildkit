@@ -81,6 +81,105 @@ func TestRmPathRemovesSymlinkItself(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestCopyWildcardDestination(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		src           string
+		dest          string
+		existing      string
+		attemptUnpack bool
+		wantErr       bool
+	}{
+		{name: "multiple files to new file", src: "*.txt", dest: "/test.txt", wantErr: true},
+		{name: "multiple files to existing file", src: "*.txt", dest: "/test.txt", existing: "file", wantErr: true},
+		{name: "multiple files with unpack to file", src: "*.txt", dest: "/test.txt", attemptUnpack: true, wantErr: true},
+		{name: "multiple files to symlink to file", src: "*.txt", dest: "/test", existing: "symlink to file", wantErr: true},
+		{name: "multiple files to new directory", src: "*.txt", dest: "/test/"},
+		{name: "multiple files to directory dot", src: "*.txt", dest: "/test/."},
+		{name: "multiple files to root", src: "*.txt", dest: "/"},
+		{name: "multiple files to nested directory", src: "*.txt", dest: "/parent/test/"},
+		{name: "multiple files to existing directory", src: "*.txt", dest: "/test", existing: "directory"},
+		{name: "multiple files to symlink to directory", src: "*.txt", dest: "/test", existing: "symlink to directory"},
+		{name: "single wildcard match to file", src: "test1.*", dest: "/test.txt"},
+		{name: "single source to file", src: "test1.txt", dest: "/test.txt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src, dest := t.TempDir(), t.TempDir()
+			for _, name := range []string{"test1.txt", "test2.txt"} {
+				require.NoError(t, os.WriteFile(filepath.Join(src, name), []byte(name), 0o644))
+			}
+			p := filepath.Join(dest, filepath.FromSlash(tc.dest))
+			switch tc.existing {
+			case "file":
+				require.NoError(t, os.WriteFile(p, []byte("existing"), 0o644))
+			case "directory":
+				require.NoError(t, os.MkdirAll(p, 0o755))
+			case "symlink to file":
+				require.NoError(t, os.WriteFile(filepath.Join(dest, "target"), []byte("existing"), 0o644))
+				require.NoError(t, os.Symlink("target", p))
+			case "symlink to directory":
+				require.NoError(t, os.Mkdir(filepath.Join(dest, "target"), 0o755))
+				require.NoError(t, os.Symlink("target", p))
+			}
+
+			err := docopy(t.Context(), src, dest, &pb.FileActionCopy{
+				Src:                              tc.src,
+				Dest:                             tc.dest,
+				Mode:                             -1,
+				Timestamp:                        -1,
+				AllowWildcard:                    true,
+				FollowSymlink:                    true,
+				DirCopyContents:                  true,
+				CreateDestPath:                   true,
+				AttemptUnpackDockerCompatibility: tc.attemptUnpack,
+			}, nil, nil)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "destination must be a directory")
+				return
+			}
+			require.NoError(t, err)
+			fi, err := os.Stat(p)
+			require.NoError(t, err)
+			if fi.IsDir() {
+				for _, name := range []string{"test1.txt", "test2.txt"} {
+					dt, err := os.ReadFile(filepath.Join(p, name))
+					require.NoError(t, err)
+					require.Equal(t, name, string(dt))
+				}
+			} else {
+				dt, err := os.ReadFile(p)
+				require.NoError(t, err)
+				require.Equal(t, "test1.txt", string(dt))
+			}
+		})
+	}
+}
+
+func TestCopyWildcardDirectories(t *testing.T) {
+	src, dest := t.TempDir(), t.TempDir()
+	for _, name := range []string{"dir1", "dir2"} {
+		require.NoError(t, os.Mkdir(filepath.Join(src, name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(src, name, name), []byte(name), 0o644))
+	}
+
+	err := docopy(t.Context(), src, dest, &pb.FileActionCopy{
+		Src:             "dir*",
+		Dest:            "/merged",
+		Mode:            -1,
+		Timestamp:       -1,
+		AllowWildcard:   true,
+		FollowSymlink:   true,
+		DirCopyContents: true,
+		CreateDestPath:  true,
+	}, nil, nil)
+	require.NoError(t, err)
+	for _, name := range []string{"dir1", "dir2"} {
+		dt, err := os.ReadFile(filepath.Join(dest, "merged", name))
+		require.NoError(t, err)
+		require.Equal(t, name, string(dt))
+	}
+}
+
 func TestArchivePathNeedsXz(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("PATH", root)
