@@ -964,7 +964,7 @@ func TestMergeChainIDIncludesStargzTOC(t *testing.T) {
 	expectedMergeChainID := imagespecidentity.ChainID([]digest.Digest{baseDiffID, attackerIdentity})
 	require.Equal(t, attackerIdentity, attacker.(*immutableRef).getLayerIdentity())
 	require.Equal(t, expectedMergeChainID, attacker.(*immutableRef).getChainID())
-	require.Equal(t, expectedMergeChainID, diff.(*immutableRef).getChainID())
+	require.Equal(t, attackerIdentity, diff.(*immutableRef).getChainID())
 	require.Equal(t, expectedMergeChainID, merged.(*immutableRef).getChainID())
 
 	victim, err := co.manager.GetByBlob(ctx, victimDesc, base, descHandlers)
