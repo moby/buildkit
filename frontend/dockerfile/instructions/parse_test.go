@@ -207,6 +207,28 @@ ARG bar baz=123
 	require.Equal(t, "is something else", st.Commands[1].(*ArgCommand).Args[1].DocComment)
 }
 
+func TestDocCommentParagraphs(t *testing.T) {
+	dt := `# GO_VERSION sets the version of Go to use
+#
+# renovate: datasource=docker depName=golang
+ARG GO_VERSION=1.26
+
+# base defines the base stage
+#
+# Lorem ipsum dolor sit amet.
+FROM busybox AS base
+`
+
+	ast, err := parser.Parse(strings.NewReader(dt))
+	require.NoError(t, err)
+
+	stages, meta, err := Parse(ast.AST, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, "sets the version of Go to use", meta[0].Args[0].DocComment)
+	require.Equal(t, "defines the base stage", stages[0].DocComment)
+}
+
 func TestErrorCases(t *testing.T) {
 	cases := []struct {
 		name          string
