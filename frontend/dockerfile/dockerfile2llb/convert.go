@@ -1157,6 +1157,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			cmdToPrint:      c,
 			chown:           c.Chown,
 			chmod:           c.Chmod,
+			mtime:           c.Mtime,
 			link:            c.Link,
 			parents:         c.Parents,
 			location:        c.Location(),

@@ -296,6 +296,39 @@ func TestResetDisabled(t *testing.T) {
 	require.ErrorContains(t, err, "unknown flag: --reset")
 }
 
+func TestMtimeDisabled(t *testing.T) {
+	if mtimeEnabled {
+		t.Skip("--mtime is enabled in this build")
+	}
+	ast, err := parser.Parse(strings.NewReader("COPY --mtime=0 a /b"))
+	require.NoError(t, err)
+	_, err = ParseInstruction(ast.AST.Children[0])
+	require.ErrorContains(t, err, "unknown flag: --mtime")
+}
+
+func TestParseMtime(t *testing.T) {
+	if !mtimeEnabled {
+		t.Skip("--mtime is disabled in this build")
+	}
+	ast, err := parser.Parse(strings.NewReader("COPY --mtime=$SOURCE_DATE_EPOCH a /b\nADD --mtime=@42 c /d\n"))
+	require.NoError(t, err)
+
+	cpCmd, err := ParseInstruction(ast.AST.Children[0])
+	require.NoError(t, err)
+	cp := cpCmd.(*CopyCommand)
+	require.Equal(t, "$SOURCE_DATE_EPOCH", cp.Mtime)
+	require.NoError(t, cp.Expand(func(w string) (string, error) {
+		if w == "$SOURCE_DATE_EPOCH" {
+			return "1704067200", nil
+		}
+		return w, nil
+	}))
+	require.Equal(t, "1704067200", cp.Mtime)
+
+	_, err = ParseInstruction(ast.AST.Children[1])
+	require.ErrorContains(t, err, "unknown flag: --mtime")
+}
+
 func TestRunCmdFlagsUsed(t *testing.T) {
 	dockerfile := "RUN --mount=type=tmpfs,target=/foo/ echo hello"
 	r := strings.NewReader(dockerfile)

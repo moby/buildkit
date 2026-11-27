@@ -39,6 +39,7 @@ var (
 var (
 	unsetEnabled = false
 	resetEnabled = false
+	mtimeEnabled = false
 )
 
 // ResetAll is the FROM --reset value that resets all ResetKeys.
@@ -388,6 +389,13 @@ func parseSourcesAndDest(req parseRequest, command string) (*SourcesAndDest, err
 	}, nil
 }
 
+func addMtimeFlag(req parseRequest) *Flag {
+	if !mtimeEnabled {
+		return nil
+	}
+	return req.flags.AddString("mtime", "")
+}
+
 func parseAdd(req parseRequest) (*AddCommand, error) {
 	if len(req.args) < 2 {
 		return nil, errNoDestinationArgument("ADD")
@@ -442,6 +450,7 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 	flChown := req.flags.AddString("chown", "")
 	flFrom := req.flags.AddString("from", "")
 	flChmod := req.flags.AddString("chmod", "")
+	flMtime := addMtimeFlag(req)
 	flLink := req.flags.AddBool("link", false)
 	flExcludes := req.flags.AddStrings("exclude")
 	flParents := req.flags.AddBool("parents", false)
@@ -455,12 +464,18 @@ func parseCopy(req parseRequest) (*CopyCommand, error) {
 		return nil, err
 	}
 
+	var mtime string
+	if flMtime != nil {
+		mtime = flMtime.Value
+	}
+
 	return &CopyCommand{
 		withNameAndCode: newWithNameAndCode(req),
 		SourcesAndDest:  *sourcesAndDest,
 		From:            flFrom.Value,
 		Chown:           flChown.Value,
 		Chmod:           flChmod.Value,
+		Mtime:           mtime,
 		Link:            flLink.Value == "true",
 		Parents:         flParents.Value == "true",
 		ExcludePatterns: flExcludes.StringValues,
