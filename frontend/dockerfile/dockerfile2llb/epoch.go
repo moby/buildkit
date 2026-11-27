@@ -228,6 +228,9 @@ func sourceDateEpochAddSource(cmd *instructions.AddCommand, env *llb.EnvList, sh
 		if gitRef.Submodules != nil && !*gitRef.Submodules {
 			gitOptions = append(gitOptions, llb.GitSkipSubmodules())
 		}
+		if gitRef.FetchByCommit {
+			gitOptions = append(gitOptions, llb.GitFetchByCommit())
+		}
 		st := llb.Git(gitRef.Remote, "", gitOptions...)
 		return &st, nil
 	}

@@ -407,15 +407,11 @@ ADD $URL /
 func TestDockerfileGitOptionsADD(t *testing.T) {
 	t.Parallel()
 
-	df := []byte(`
-FROM scratch
-ADD https://github.com/moby/buildkit.git#master /
-`)
-
 	for _, tc := range []struct {
 		name             string
 		gitAdvice        bool
 		gitDebugCommands bool
+		fetchByCommit    bool
 	}{
 		{
 			name: "default",
@@ -433,9 +429,19 @@ ADD https://github.com/moby/buildkit.git#master /
 			gitAdvice:        true,
 			gitDebugCommands: true,
 		},
+		{
+			name:          "fetch by commit",
+			fetchByCommit: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
+			url := "https://github.com/moby/buildkit.git?ref=master"
+			if tc.fetchByCommit {
+				url += "&fetch-by-commit=true"
+			}
+			df := []byte("FROM scratch\nADD " + url + " /\n")
 
 			res, err := Dockerfile2LLB(appcontext.Context(), df, ConvertOpt{
 				Config: dockerui.Config{
@@ -462,6 +468,7 @@ ADD https://github.com/moby/buildkit.git#master /
 				for attr, enabled := range map[string]bool{
 					pb.AttrGitAdvice:        tc.gitAdvice,
 					pb.AttrGitDebugCommands: tc.gitDebugCommands,
+					pb.AttrGitFetchByCommit: tc.fetchByCommit,
 				} {
 					if enabled {
 						require.Equal(t, "true", op.Attrs[attr])
