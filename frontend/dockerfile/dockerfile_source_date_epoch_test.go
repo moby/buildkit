@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1084,4 +1086,95 @@ func readImage(t *testing.T, ctx context.Context, ref string) (ocispecs.Descript
 	var img ocispecs.Image
 	require.NoError(t, json.Unmarshal(imgDt, &img))
 	return desc, manifest, img
+}
+
+// testSourceDateEpochCacheExport checks that the exported cache (config and
+// manifest) does not depend on the time of the build when SOURCE_DATE_EPOCH
+// is set, here through the Dockerfile global ARG default.
+func testSourceDateEpochCacheExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipOnPlatform(t, "windows")
+	workers.CheckFeatureCompat(t, sb, workers.FeatureCacheExport, workers.FeatureCacheBackendLocal, workers.FeatureSourceDateEpoch)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG SOURCE_DATE_EPOCH=42
+FROM scratch
+COPY foo /
+`)
+	dir := integration.Tmpdir(
+		t,
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foo"), 0600),
+	)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	build := func(attrs map[string]string) string {
+		cacheDir := t.TempDir()
+		cacheAttrs := map[string]string{"dest": cacheDir, "mode": "max"}
+		maps.Copy(cacheAttrs, attrs)
+		_, err := f.Solve(sb.Context(), c, client.SolveOpt{
+			CacheExports: []client.CacheOptionsEntry{{Type: "local", Attrs: cacheAttrs}},
+			LocalMounts: map[string]fsutil.FS{
+				dockerui.DefaultLocalNameDockerfile: dir,
+				dockerui.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+		ensurePruneAll(t, c, sb)
+		return cacheDir
+	}
+
+	readCache := func(cacheDir string) map[string]string {
+		m := map[string]string{}
+		fsys := os.DirFS(cacheDir)
+		err := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			dt, err := fs.ReadFile(fsys, p)
+			if err != nil {
+				return err
+			}
+			m[p] = string(dt)
+			return nil
+		})
+		require.NoError(t, err)
+		return m
+	}
+
+	cache1 := readCache(build(nil))
+	time.Sleep(2 * time.Second)
+	cache2 := readCache(build(nil))
+	require.Equal(t, cache1, cache2)
+
+	var cfg struct {
+		Records []struct {
+			Layers []struct {
+				CreatedAt time.Time `json:"createdAt"`
+			} `json:"layers"`
+		} `json:"records"`
+	}
+	var found bool
+	for _, dt := range cache1 {
+		if !strings.Contains(dt, `"records"`) {
+			continue
+		}
+		require.NoError(t, json.Unmarshal([]byte(dt), &cfg))
+		for _, r := range cfg.Records {
+			for _, l := range r.Layers {
+				require.Equal(t, int64(42), l.CreatedAt.Unix())
+				found = true
+			}
+		}
+	}
+	require.True(t, found, "no cache result found in %v", cache1)
+
+	// an empty source-date-epoch disables clamping
+	cache3 := readCache(build(map[string]string{"source-date-epoch": ""}))
+	time.Sleep(2 * time.Second)
+	cache4 := readCache(build(map[string]string{"source-date-epoch": ""}))
+	require.NotEqual(t, cache3, cache4)
 }

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 	"unique"
 
 	"github.com/cespare/xxhash/v2"
@@ -227,6 +228,9 @@ func (c *CacheChains) Marshal(ctx context.Context) (*cacheimporttypes.CacheConfi
 		Layers:  st.layers,
 		Records: st.records,
 	}
+	if tm := sourceDateEpochFromContext(ctx); tm != nil {
+		clampTimestamps(&cc, st.descriptors, *tm)
+	}
 	sortConfig(&cc)
 
 	return &cc, st.descriptors, nil
@@ -439,4 +443,68 @@ func (c *item) walkAllResults(fn func(i *item) error, visited map[*item]struct{}
 		}
 	}
 	return nil
+}
+
+type sourceDateEpochKey struct{}
+
+// WithSourceDateEpoch returns a context that makes Marshal clamp the
+// timestamps of the exported cache to tm: the creation time of each cache
+// result and the "buildkit/createdat" annotation of each layer descriptor.
+// Without it, the cache config and manifest change on every build, even when
+// all the layers are identical. A nil tm disables clamping.
+//
+// Timestamps only matter to importers for picking the most recent of several
+// results for the same cache key: clamped results compare equal, and ties are
+// then broken on the remaining fields of the records.
+func WithSourceDateEpoch(ctx context.Context, tm *time.Time) context.Context {
+	return context.WithValue(ctx, sourceDateEpochKey{}, tm)
+}
+
+func sourceDateEpochFromContext(ctx context.Context) *time.Time {
+	tm, _ := ctx.Value(sourceDateEpochKey{}).(*time.Time)
+	return tm
+}
+
+// annotationCreatedAt is the layer descriptor annotation holding the creation
+// time of the layer, see (*cache.immutableRef).ociDesc.
+const annotationCreatedAt = "buildkit/createdat"
+
+func clampTimestamps(cc *cacheimporttypes.CacheConfig, descs DescriptorProvider, tm time.Time) {
+	tm = tm.UTC()
+	clamp := func(t *time.Time) {
+		if t.After(tm) {
+			*t = tm
+		}
+	}
+	for i := range cc.Records {
+		for j := range cc.Records[i].Results {
+			clamp(&cc.Records[i].Results[j].CreatedAt)
+		}
+		for j := range cc.Records[i].ChainedResults {
+			clamp(&cc.Records[i].ChainedResults[j].CreatedAt)
+		}
+	}
+	for i := range cc.Layers {
+		if cc.Layers[i].Annotations != nil {
+			clamp(&cc.Layers[i].Annotations.CreatedAt)
+		}
+	}
+	tmText, err := tm.MarshalText()
+	if err != nil {
+		return
+	}
+	for dgst, pair := range descs {
+		v, ok := pair.Descriptor.Annotations[annotationCreatedAt]
+		if !ok {
+			continue
+		}
+		var t time.Time
+		if err := t.UnmarshalText([]byte(v)); err == nil && !t.After(tm) {
+			continue
+		}
+		// the annotations map is shared with the descriptors of the ref
+		pair.Descriptor.Annotations = maps.Clone(pair.Descriptor.Annotations)
+		pair.Descriptor.Annotations[annotationCreatedAt] = string(tmText)
+		descs[dgst] = pair
+	}
 }

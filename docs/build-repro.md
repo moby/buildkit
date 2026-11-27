@@ -69,6 +69,12 @@ The build arg value is used for:
 - the `org.opencontainers.image.created` annotation in the [OCI Image Index](https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys)
 - the timestamp of the files exported with the `local` exporter
 - the timestamp of the files exported with the `tar` exporter
+- the `createdAt` timestamps of the cache records and the `buildkit/createdat`
+  annotation of the layers in exported caches (including the inline cache),
+  clamped so that timestamps older than `SOURCE_DATE_EPOCH` are kept. Use the
+  `source-date-epoch` cache exporter option to override the value
+  (`--cache-to type=registry,ref=...,source-date-epoch=1704067200`), or set it
+  to an empty value to keep the original timestamps.
 
 To apply the build arg value to the timestamps of the files inside the image, specify `rewrite-timestamp=true` as an image exporter option:
 ```
