@@ -76,6 +76,8 @@ func testAddGit(t *testing.T, sb integration.Sandbox, format string) {
 	gitCommands = append(gitCommands, makeCommit("v0.0.2")...)
 	gitCommands = append(gitCommands, makeCommit("v0.0.3")...)
 	gitCommands = append(gitCommands, "git update-server-info")
+	// Serve the repository at a path without the ".git" suffix too
+	gitCommands = append(gitCommands, "ln -s .git noext")
 	err := runShell(gitDir, gitCommands...)
 	require.NoError(t, err)
 
@@ -214,6 +216,36 @@ RUN [ ! -d /nogitdir/.git ]
 		LocalMounts: map[string]fsutil.FS{
 			dockerui.DefaultLocalNameDockerfile: dir4,
 			dockerui.DefaultLocalNameContext:    dir4,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Additional test: ADD from a Git URL without the ".git" suffix,
+	// using the "git+" scheme prefix to mark it as a Git URL
+	dockerfileGitPlus, err := applyTemplate(`
+	FROM alpine
+	ADD {{.ServerURL}}/noext /http
+	RUN [ -f /http ]
+	ADD git+{{.ServerURL}}/noext#v0.0.2 /nogitdir
+	RUN [ "$(cat /nogitdir/foo)" = "foo of v0.0.2" ]
+	RUN [ ! -d /nogitdir/.git ]
+	ADD --keep-git-dir --checksum={{.Checksum}} git+{{.ServerURL}}/noext#v0.0.3 /gitdir
+	RUN [ "$(cat /gitdir/foo)" = "foo of v0.0.3" ]
+	RUN [ -d /gitdir/.git ]
+	`, map[string]string{
+		"ServerURL": serverURL,
+		"Checksum":  commitHashV3,
+	})
+	require.NoError(t, err)
+
+	dirGitPlus := integration.Tmpdir(t,
+		fstest.CreateFile("Dockerfile", []byte(dockerfileGitPlus), 0600),
+	)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalMounts: map[string]fsutil.FS{
+			dockerui.DefaultLocalNameDockerfile: dirGitPlus,
+			dockerui.DefaultLocalNameContext:    dirGitPlus,
 		},
 	}, nil)
 	require.NoError(t, err)

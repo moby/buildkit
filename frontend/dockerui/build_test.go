@@ -169,3 +169,33 @@ func TestGitContextDebugCommands(t *testing.T) {
 		})
 	}
 }
+
+func TestGitPlusHTTPSContext(t *testing.T) {
+	t.Parallel()
+
+	const ref = "git+https://git.sr.ht/~foo/bar#main"
+	bc := &Client{bopts: client.BuildOpts{
+		Opts: map[string]string{
+			DefaultLocalNameContext: ref,
+		},
+		Caps: pb.Caps.CapSet(pb.Caps.All()),
+	}}
+	require.NoError(t, bc.init())
+
+	bctx, err := bc.initContext(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, bctx.sourceOp)
+
+	nc := &NamedContext{bc: bc, input: ref}
+	st, _, err := nc.Load(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, st)
+	op, err := sourceOpFromState(t.Context(), st)
+	require.NoError(t, err)
+	require.NotNil(t, op)
+
+	for _, source := range []*pb.SourceOp{bctx.sourceOp, op} {
+		require.Equal(t, "git://git.sr.ht/~foo/bar#main", source.Identifier)
+		require.Equal(t, "https://git.sr.ht/~foo/bar", source.Attrs[pb.AttrFullRemoteURL])
+	}
+}
